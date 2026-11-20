@@ -166,7 +166,9 @@ The shell has three navigation contexts:
   module-level `unmount()` (required for multi-mounted views such as markdown).
   `views/common.mjs` carries shared helpers and the workspace bus;
   `theme.css` carries the AA semantic tokens of the three built-in themes
-  (White, Solarized, Dark); a fourth choice, This computer, shows the host's
+  (White, Solarized, Dark, the last in the prototype's Tokyo Night hues) and
+  the shared spacing, type and radius scale (`--space-*`, `--text-*`,
+  `--radius-*`, `--row-h`) the Workspace pages use; a fourth choice, This computer, shows the host's
   theme on a built-in base (renderer/README.md);
   `loading.mjs` / `loading.css` are the shared loading-state primitive
   (skeletons, refreshing, stale and failed; see renderer/README.md). Bare ESM deps

@@ -66,16 +66,16 @@ export const CONTENTS_COPY = Object.freeze({
 /** The Contents card's grammar (contents-reader.mjs), shared with the soul page's Instructions, and the warnings above it. */
 export const capabilityContentsCSS = `${contentsCardCSS}${capabilityWarningsCSS}
 /* Skills (slice 3b): a row per skill, its name and one line; Enter opens the whole skill. */
-.cap-skills-list { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
-.cap-skills-list > li { display:flex; min-width:0; }
-.cap-skills-list > li + li { border-top:1px solid var(--tag-bg); }
-.oats-view button.cap-skill-row, .cap-skill-row { appearance:none; -webkit-appearance:none; display:flex; flex-direction:column; gap:2px; flex:1; width:100%; min-width:0; height:auto; min-height:44px; margin:0; padding:8px 14px; border:0; border-radius:0; background:var(--surface); color:var(--fg); font:inherit; font-family:var(--ui-font,system-ui); text-align:left; box-sizing:border-box; }
+/* The skills: the capability list's rows (slice 3c, the prototype's look): no box, a hairline under each row. */
+.cap-skills-list { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; }
+.cap-skills-list > li { display:flex; min-width:0; border-bottom:1px solid var(--border); }
+.oats-view button.cap-skill-row, .cap-skill-row { appearance:none; -webkit-appearance:none; display:flex; flex-direction:column; justify-content:center; gap:2px; flex:1; width:100%; min-width:0; height:auto; min-height:var(--row-h); margin:var(--space-1) 0; padding:6px var(--space-3); border:0; border-radius:var(--radius-control); background:transparent; color:var(--fg); font:inherit; font-family:var(--ui-font,system-ui); text-align:left; box-sizing:border-box; }
 .oats-view button.cap-skill-row { cursor:pointer; }
 .oats-view button.cap-skill-row:hover { background:var(--surface-2); }
 .oats-view button.cap-skill-row:focus-visible { background:var(--sel); }
-.cap-skill-name { font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.cap-skill-desc { color:var(--muted); font-size:12.5px; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.cap-skills-note { margin:0; color:var(--muted); font-size:12.5px; }
+.cap-skill-name { font-weight:var(--name-weight); font-size:var(--text-name); line-height:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cap-skill-desc { color:var(--muted); font-size:var(--text-meta); line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cap-skills-note { margin:0; color:var(--muted); font-size:var(--text-meta); }
 .cap-skills-skeleton { display:flex; flex-direction:column; gap:10px; padding:10px 14px; }
 .cap-skills-skeleton .skeleton-line { height:11px; width:60%; }
 /* The whole skill, in the pane in place of the capability's body. */

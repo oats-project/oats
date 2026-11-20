@@ -71,8 +71,10 @@ test('03 (F7): a soul opens as a page in the main area — it replaces the grid,
   assert.equal(u.css('.workspace-soul-page').padding, '0px', 'Workspace v4 (W4): the page bar is flush; its body pads itself');
   assert.equal(header.hidden, true, 'the page bar replaces the Workspace header while the page is open');
   assert.ok(page.querySelector('.page-bar .inspector-back'), 'the back control lives in the page bar');
-  // The page's title (slice 2b: "Workspace › Souls") sits above the header, and hides with it under a page's own bar.
-  assert.equal(main.firstElementChild, u.get('.workspace-title')); assert.equal(main.firstElementChild.nextElementSibling, header);
+  // The page's title (slice 2b: "Workspace › Souls") sits above the header, and hides with it under a page's own bar; its
+  // row holds the Souls tab's Grid | Table beside it (slice 3c), hidden with it.
+  assert.equal(main.firstElementChild, u.get('.workspace-title-row')); assert.equal(main.firstElementChild.firstElementChild, u.get('.workspace-title'));
+  assert.equal(main.firstElementChild.nextElementSibling, header); assert.equal(u.get('.souls-view').hidden, true);
   assert.equal(u.get('.workspace-title').hidden, true, "the soul's page keeps its own breadcrumb");
   // No "On <deployment>" line under the header: the Workspace pages do not name the deployment they read (the
   // product owner, 2026-10-23; #482's rule, docs/desktop-deployment-model.md); the side panel and Deployments do.
@@ -85,7 +87,8 @@ test('03 (F7): a soul opens as a page in the main area — it replaces the grid,
   // Between the toolbar and the cards: the page's first line (what a soul is; slice 3a, in place of About souls), then
   // the grid's stale-line host (desktop/loading-states), empty and display:none while the read is good.
   assert.equal(u.get('.souls-bar').nextElementSibling, u.get('.souls-lede'), 'the first line under the toolbar');
-  assert.equal(u.get('.souls-lede').textContent, spawn.SOULS_LEDE);
+  assert.ok(u.get('.souls-lede').textContent.startsWith(spawn.SOULS_LEDE.split('. ')[0]), 'what a soul is');
+  assert.match(u.get('.souls-lede').textContent, / You have \d+ souls?, (?:\d+|none) with agents running, grouped by where they come from; /, 'with the real counts (slice 3c)');
   assert.equal(u.get('.souls-lede').nextElementSibling, u.get('.souls-notice'), 'no repo-heading row before the cards');
   assert.equal(u.get('.souls-notice').childElementCount, 0); assert.equal(u.css('.souls-notice').display, 'none');
   assert.equal(u.get('.souls-notice').nextElementSibling, u.get('.souls-grid'));
@@ -106,13 +109,15 @@ test('03 (F7): a soul opens as a page in the main area — it replaces the grid,
   page.querySelector('.inspector-back').click(); await tick();
   assert.equal(u.get('.souls-grid').hidden, false); assert.equal(header.hidden, false, 'back restores the Workspace header');
   assert.equal(u.css('.souls-grid').padding, '0px 20px 16px', 'Workspace v4: groups start under the view toolbar');
-  // Slice 3a: search first, then Grid | Table (v); no Group by and no "About souls" i. Every group header opens its own section.
-  assert.deepEqual([...u.get('.souls-bar').children].map(el => el.className), ['ws-search', 'ws-toolbar-lead souls-bar-lead', 'ws-segmented souls-view', 'souls-sum workspace-sr-only', 'loading-status loading-sr souls-status']);
+  // Slice 3a: search first; no Group by and no "About souls" i. Grid | Table (v) sits beside the page's title since slice
+  // 3c. Every group header opens its own section.
+  assert.deepEqual([...u.get('.souls-bar').children].map(el => el.className), ['ws-search', 'ws-toolbar-lead souls-bar-lead', 'souls-sum workspace-sr-only', 'loading-status loading-sr souls-status']);
+  assert.equal(u.get('.souls-view').parentElement, u.get('.workspace-title-row'));
   assert.deepEqual([...u.get('.souls-view').querySelectorAll('button')].map(b => [b.textContent, b.getAttribute('aria-pressed'), b.getAttribute('aria-keyshortcuts')]), [['Grid', 'true', 'V'], ['Table', 'false', 'V']], 'the grid is the default');
   assert.equal(u.get('.souls-bar-lead').childElementCount, 0, 'no group heading in the toolbar');
   const first = u.get('.souls-grid .souls-group');
   assert.equal(first.firstElementChild, first.querySelector('.souls-group-title')); assert.equal(first.getAttribute('aria-labelledby'), first.firstElementChild.id);
-  assert.equal(u.css('.souls-group-cards').gap, '12px');
+  assert.equal(u.css('.souls-group-cards').gap, '10px');
   assert.equal(u.get('.souls-bar').parentElement, main, 'the toolbar belongs to the view, not the header');
   assert.equal(header.querySelector('.souls-bar, input'), null, 'the header keeps only the tabs');
   assert.equal(u.get('.wssel').parentElement, header);
@@ -141,7 +146,7 @@ test('03 (slice 3a): a card is one button: its name, what it does, its agents an
   assert.equal(card.querySelector('button'), null, 'no control nested inside the card button');
   assert.equal(card.parentElement.className, 'souls-group-cards', 'no tile: the card is the grid cell');
   assert.equal(u.get('.soul-spawn, .soul-tile, .glyph, .runtime-badge, .schip'), null);
-  assert.equal(u.css('.sdesc').fontSize, '13px'); assert.equal(u.css('.sdesc').webkitLineClamp || u.css('.sdesc').getPropertyValue('-webkit-line-clamp'), '2', 'two lines at most');
+  assert.equal(u.css('.sdesc').fontSize, 'var(--text-desc)'); assert.equal(u.css('.sdesc').webkitLineClamp || u.css('.sdesc').getPropertyValue('-webkit-line-clamp'), '2', 'two lines at most');
   card.focus(); card.dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await tick();
   for (const text of ['New agent', 'Files', 'Schedule…']) assert.ok([...u.get('.workspace-soul-page').querySelectorAll('button')].find(b => b.textContent === text), text);
   for (const text of ['Edit defaults', 'Edit instructions', 'Spawn']) assert.equal([...u.get('.workspace-soul-page').querySelectorAll('button')].some(b => b.textContent === text), false, `no ${text}`);
@@ -222,17 +227,18 @@ test("a soul's Schedule… asks the shell for the Automations page, which opens 
 });
 
 // The Desktop UI rework, slice 3b (replaces W5's grid): one list of calm rows, names in the chrome's sans (D2).
-test('slice 3b: the capability list is one bordered column of rows — name, tags, who made it, one line; no grid, tiles, marks or pills', async t => {
+test('slice 3b: the capability list is one column of rows — name, tags, who made it, one line; no grid, tiles, marks or pills', async t => {
   const u = await fixture(t, { cli: V2_CLI, sync: () => catalogReply() });
   u.get('#workspace-tab-capabilities').click(); await tick(); await tick();
   assert.equal(u.get('.discovery-tools'), null, 'no classic "Filter & scope" selector remains');
   assert.equal(u.get('.readiness-view, .deployment-inventory, .workspace-readiness-entry'), null, 'the 0.24 readiness/inventory blocks are gone');
   const header = u.get('.workspace-header');
   assert.equal(u.get('.ws-sync').closest('.workspace-header'), header, 'sync lives in the Workspace header (Setup tools)');
-  assert.equal(u.css('.cap-list').display, 'flex'); assert.equal(u.css('.cap-list').borderRadius, '10px');
-  assert.equal(u.css('button.cap-row').minHeight, '54px'); assert.equal(u.css('button.cap-row').padding, '9px 16px');
+  // Slice 3c (the prototype's look): no box around the list, rows on the page with a hairline under each.
+  assert.equal(u.css('.cap-list').display, 'flex'); assert.equal(u.css('button.cap-row').background, 'rgba(0, 0, 0, 0)');
+  assert.equal(u.css('button.cap-row').minHeight, 'var(--row-h)'); assert.equal(u.css('button.cap-row').borderRadius, 'var(--radius-control)');
   const name = u.css('.cap-row-name');
-  assert.deepEqual([name.fontWeight, name.fontSize], ['600', '13.5px']);
+  assert.deepEqual([name.fontWeight, name.fontSize], ['var(--name-weight)', 'var(--text-name)']);
   assert.equal(u.get('.cap-list .identity-mark, .cap-list .catalog-tile, .cap-list .source-chip'), null, 'no marks, tiles or package chips');
   assert.equal(u.get('.workspace-discovery').querySelectorAll('select, .catalog-pills, .capability-nav').length, 0, 'no dropdown, pills or section jump');
   assert.equal(u.css('.workspace-discovery[data-tab=capabilities] > *').maxWidth, '880px', 'one centred column');

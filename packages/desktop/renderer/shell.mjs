@@ -276,7 +276,7 @@ const openInstanceStart = createInstanceStarter(document, ctx);
 // app, with the three most useful keys for where the focus is (statusKeys) and one-line messages. Its y/n questions
 // for Stop, Start and Restart were taken out of this slice (the lead, after five review rounds): those keep their
 // dialogs, and the line may ask in a later slice with a design of its own.
-const statusLine = createStatusLine({ doc: document, host: document.body, before: document.getElementById("ws-modal"), keysFor: () => statusKeys() });
+const statusLine = createStatusLine({ doc: document, host: document.body, before: document.getElementById("ws-modal"), keysFor: () => statusKeys(), max: 4 });
 window.addEventListener('pagehide', () => statusLine.dispose(), { once: true });
 
 // Background spawns (Spec C): a confirmed press in the spawn dialog is handed here and the dialog
@@ -394,6 +394,9 @@ stageHost.addEventListener("keydown", (e) => {
   e.preventDefault();
   void showStageFocused("home");
 });
+// The status line's keys follow the page (slice 3c): a click or a key on it can change what it shows (v, a page opened
+// or closed) without moving the focus.
+for (const type of ["click", "keyup"]) stageHost.addEventListener(type, () => statusLine.refresh());
 let stage = null;           // { name, life, el, mod }
 let stageOp = 0;            // switch generation — a slow mount must not paint over a newer switch
 
@@ -3594,11 +3597,30 @@ function statusKeys() {
   const key = id => { const chord = getBinding(id, isMac); return chord ? formatChord(chord, isMac) : null; };
   const region = focusRegions?.regionOfFocus?.() ?? null;
   const inTerminal = !!document.activeElement?.closest?.(".xterm");
-  const rows = region === "roster" ? [["Enter", "open"], [key("sidebar.key.stop"), "stop"], [key("app.palette"), "palette"]]
+  const page = workspacePageKeys(key);
+  const rows = page ? page
+    : region === "roster" ? [["Enter", "open"], [key("sidebar.key.stop"), "stop"], [key("app.palette"), "palette"]]
     : region === "workspaces" ? [["Enter", "show"], ["↑↓", "move"], [key("app.palette"), "palette"]]
     : inTerminal ? [[key("app.leader"), "prefix"], [key("tabs.close"), "close tab"], [key("app.palette"), "palette"]]
     : [[key("app.palette"), "palette"], [key("app.leader"), "prefix"], [key("app.quickOpenSouls"), `new ${DESKTOP_NOUNS.instance}`]];
   return rows.filter(([keys]) => keys).map(([keys, label]) => ({ keys, label }));
+}
+/** The Workspace page's own keys (the Desktop UI rework, slice 3c, as the prototype's status line): on Souls "↑↓ move ·
+ * Enter open · v table · Esc Home" (v grid in the table), on Capabilities the same without v, and on a soul's, a
+ * capability's or a team's page "↑↓ move · Enter open · Esc back". Only while that page is shown with the focus on it
+ * (or nowhere); null elsewhere, where the three of slice 4 stand. */
+function workspacePageKeys(key) {
+  if (stage?.name !== "spawn" || tabLayerVisible || !stage.el) return null;
+  const host = stage.el, active = document.activeElement;
+  if (active && active !== document.body && !host.contains(active)) return null;
+  const shown = selector => { const el = host.querySelector(selector); return el && !el.closest("[hidden]") ? el : null; };
+  if (shown(".workspace-soul-page") || shown(".workspace-cap-page") || shown(".workspace-team-page")) return [["↑↓", "move"], ["Enter", "open"], ["Esc", "back"]];
+  if (shown(".souls-grid")) {
+    const chord = key("spawn.view"), v = chord && /^[A-Z]$/.test(chord) ? chord.toLowerCase() : chord;
+    return [["↑↓", "move"], ["Enter", "open"], [v, host.querySelector(".souls-grid .souls-table") ? "grid" : "table"], ["Esc", "Home"]];
+  }
+  if (shown(".workspace-discovery")?.dataset.tab === "capabilities") return [["↑↓", "move"], ["Enter", "open"], ["Esc", "Home"]];
+  return null;
 }
 onKeymapChange(() => statusLine.refresh());
 /** The help sheet's title and rows (leader-hint.mjs showHelp): the leader's keys that apply where you are now. */

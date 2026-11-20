@@ -1,12 +1,24 @@
 /* oats desktop — shared design tokens + view styles.
    White follows the supplied Desktop/Sidebar specification with orange accents;
-   Solarized restores the prior warm-paper palette, and Dark is retained.
+   Solarized restores the prior warm-paper palette, and Dark takes the prototype's
+   Tokyo Night hues (the Desktop UI rework, slice 3c; its terminal colours are kept).
    All three hold WCAG AA (≥4.5:1) for text
    on their inventoried surfaces. Views under renderer/views/ style themselves
    with these semantic tokens only — never raw colors or text transparency. */
 /* Shared rhythm (every theme): a section title to its content, and one section to
    the next. Similar components use these, so forms, inspectors and panels line up. */
 :root { --title-gap: 10px; --section-gap: 20px; }
+/* The prototype's scale (the Desktop UI rework, slice 3c: the Workspace pages, frame A of the prototype), shared by
+   every theme. Spacing in 4px steps; one type size per role: a small uppercase label (a group or section heading, a
+   pill), a meta line (what a row does, its counts), a card's description, the chrome's body, a row's name, a card's
+   name, a page's title; the label's tracking and weight, a name's weight; radii for a pill, a control and a card; a
+   list row's height. */
+:root {
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 28px;
+  --text-label: 11px; --text-meta: 12px; --text-desc: 12.5px; --text-body: 13px; --text-name: 13.5px; --text-card-name: 15px; --text-title: 17px;
+  --label-tracking: .06em; --label-weight: 600; --name-weight: 600;
+  --radius-tag: 4px; --radius-control: 6px; --radius-card: 8px; --row-h: 44px;
+}
 /* The default monospace face, bundled so it is the same on every machine
    (Inconsolata, SIL OFL 1.1: fonts/README.md). The terminal and the UI's code,
    paths and chord hints share it, ahead of the OS stack. `block`: text waits for
@@ -23,27 +35,28 @@
 
 :root, [data-theme="dark"] {
   color-scheme: dark;     /* native lists, scrollbars and pickers follow the theme */
-  --bg: #0e1116;          /* app background */
-  --surface: #161b22;     /* cards, sidebar */
-  --surface-2: #1c2129;   /* hover / raised */
-  --border: #2d333c;
-  --tree-line: #3d444d; --tree-link: #6e7681; /* decorative tree edges / the dotted sibling link */
-  --tree-stroke: #6e7681; /* the sidebar's solid lines for related work: 3:1 on surface, surface-2, sel */
-  --fg: #e6edf3;          /* primary text  (13.9:1 on bg) */
-  --muted: #9aa4b2;       /* secondary text (5.6:1 on surface) */
-  --faint: #8b949e;       /* tertiary/disabled; AA where also used as metadata */
-  --nav-fg: #909baa;    /* subtly darker than muted; AA on nav surfaces */
-  --accent: #4493f8;      /* interactive */
-  --accent-fg: #ffffff;
-  --primary-bg: #e6edf3; --primary-fg: #0e1116; /* existing opaque dark pair */
-  --violet: #c297ff;
-  --ok: #3fb950; --warn: #d29922; --danger: #f85149;
-  --chip-bg: #21262e; --chip-fg: #adb6c2;
-  --sel: #1b2b40;         /* opaque selected surface; contrast is testable */
+  --bg: #1a1b26;          /* app background */
+  --surface: #1f2130;     /* cards, sidebar */
+  --surface-2: #24273a;   /* hover / raised */
+  --border: #2f3244;
+  --tree-line: #3b3f57; --tree-link: #7880a8; /* decorative tree edges / the dotted sibling link */
+  --tree-stroke: #7880a8; /* the sidebar's solid lines for related work: 3:1 on surface, surface-2, sel */
+  --fg: #c0caf5;          /* primary text  (10.6:1 on bg) */
+  --muted: #9aa2c8;       /* secondary text (6.4:1 on surface); the prototype's #6b7394 dim is 3.4:1, lifted to AA */
+  --faint: #9098bf;       /* tertiary/disabled; AA where also used as metadata */
+  --nav-fg: #8d95bb;    /* subtly darker than muted; AA on nav surfaces */
+  --accent: #7aa2f7;      /* interactive */
+  --accent-fg: #16161e;
+  --primary-bg: #c0caf5; --primary-fg: #1a1b26; /* the opaque ink/canvas pair */
+  --violet: #bb9af7;
+  --ok: #9ece6a; --warn: #e0af68; --danger: #f7768e;
+  --chip-bg: #292e42; --chip-fg: #a9b1d6;
+  --sel: #262c45;         /* opaque selected surface; contrast is testable */
   /* Workspace v4: running dot (graphic only), amber attention (text is --warn), neutral
      reason/tag fill, and the soft border of a selected card. */
-  --live: #4493f8; --attn-bg: #332a14; --attn-border: #6b5424; --tag-bg: #242a33; --sel-border: #2f5286; --attn-dot: #d29922;
+  --live: #7aa2f7; --attn-bg: #2f2b22; --attn-border: #6b5a30; --tag-bg: #292e42; --sel-border: #3d59a1; --attn-dot: #e0af68;
   --bar-h: 48px;          /* one top-bar height everywhere — borders align across panes */
+  /* The terminal's colours stay as they were (slice 3c changes the chrome only; terminals are out of its scope). */
   --term-bg: #0a0d12;     /* transcript surface follows the theme */
   --term-fg: #e6edf3;
   --term-sel: #2f6496;    /* a drag's selection: 3:1 on --term-bg (a UI state, WCAG 1.4.11), its text 4.5:1 */
@@ -65,7 +78,7 @@
   /* ── component tokens (thin aliases — themes rarely override) ── */
   --md-code-bg: #ffffff10; --md-rule: #ffffff2e;
   /* --graph-edge draws connectors, which are meaningful graphics: ≥3:1 on bg/surface/surface-2 (WCAG 1.4.11). */
-  --graph-edge: #636c79; --graph-edge-coord: #4493f8;
+  --graph-edge: #6f77a0; --graph-edge-coord: #7aa2f7;
   /* Opaque identity pairs: fixed names only, never CSS supplied by a soul. */
   /* --instance-<colour>: an instance's colour on its dot (#1421), its soul's -fg here; "This computer" holds it at 3:1
      on every fill (host-theme.mjs), leaving the soul pair as calibrated. */
@@ -81,8 +94,8 @@
      pi.dev badge in its own dark-scheme #f6f6f6 on a quiet tile. Codex: an
      inverse tile, light here, dark in the light themes. */
   --runtime-claude-bg: #b4532f; --runtime-claude-fg: #fff7ea;
-  --runtime-pi-bg: #262c35; --runtime-pi-fg: #f6f6f6;
-  --runtime-codex-bg: #e6edf3; --runtime-codex-fg: #161b22;
+  --runtime-pi-bg: #292e42; --runtime-pi-fg: #f6f6f6;
+  --runtime-codex-bg: #c0caf5; --runtime-codex-fg: #1a1b26;
   --runtime-unknown-bg: #5f5f5a; --runtime-unknown-fg: #ffffff;
 }
 [data-theme="light"] {

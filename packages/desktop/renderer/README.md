@@ -26,8 +26,8 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   then packages with their pinned version, then external souls) and, inside a
   group, in kind order (`packages/client/soul-role.mjs` `compareSoulsByRole`: maintainers,
   experts, developers, operations, the rest; a name rule until the kernel reports a
-  role). They show as cards or as a table (`v`, `spawn.view`, or the toolbar's
-  Grid | Table; `rememberSoulsView` keeps the choice per view id in localStorage,
+  role). They show as cards or as a table (`v`, `spawn.view`, or the
+  Grid | Table beside the page's title, in `.workspace-title-row` since slice 3c; `rememberSoulsView` keeps the choice per view id in localStorage,
   `oats.desktop.soulsView`). A card is one button: the name, the description
   clamped to two lines, and a foot with its agents (*N agents running*, *No agents
   running · N stopped*, through `DESKTOP_NOUNS`) and its kind; a soul a spawn here
@@ -36,7 +36,12 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   model and Ready (`soulReadiness`: *Ready*, the refusal, or *—* without
   `desktop-facts`). Cards and rows' names share one roving tab stop (`.soul-item`).
   No Spawn on a card, no team grouping or chips, no "About souls" (slice 3a): the
-  page's first line (`SOULS_LEDE`) says what a soul is.
+  page's first line (`SOULS_LEDE`, then `soulsLede` with the counts once the souls are read) says what a soul is,
+  how many there are and how many have agents running. Slice 3c drew the page in the prototype's look: the grid at
+  three columns at most, cards and rows in theme.css's `--space-*` / `--text-*` / `--radius-*` scale, group heads in
+  small capitals (group-heading.mjs); Capabilities' rows (workspace-catalog.mjs) sit on the page with no box, opened
+  by `capabilityIntro`'s sentence. While a Workspace page has the focus, the status line shows its own keys
+  (shell.mjs `workspacePageKeys`, four at most).
   Selection opens the soul's page — read-only: a v2 soul is edited in its
   repository and the inspector never writes it in place; there are no layer bindings
   (`oats use` was removed by workspace model v2). Its New agent action opens the Spawn dialog

@@ -137,7 +137,8 @@ test("slice2b workspace page title", () => {
   // Above the tab bar, where you are: "Home › Workspace › Souls" (Amendment 1, E: the title is the trail), the section
   // the page's h1, in Home's head type; a soul's, capability's or team's page hides it (its own bar has the trail).
   // test/workspace-composition.test.mjs runs it mounted ("slice2b breadcrumb on every workspace page").
-  assert.match(spawnSource, /<nav class="workspace-title" aria-label="Breadcrumb">.*<h1 aria-current="page">Souls<\/h1><\/nav>\s*<header class="workspace-header"><\/header>/,
+  // Slice 3c: the trail shares its row with the Souls tab's Grid | Table, beside the h1 (the prototype's "Souls [grid | table]").
+  assert.match(spawnSource, /<div class="workspace-title-row"><nav class="workspace-title" aria-label="Breadcrumb">.*<h1 aria-current="page">Souls<\/h1><\/nav><div class="ws-segmented souls-view"[^\n]*<\/div><\/div>\s*<header class="workspace-header"><\/header>/,
     "the page's first line, above the tab bar");
   assert.match(spawnSource, /onTab: tab => \{\n      syncWorkspaceTitle\(s\);/, "it follows the tab");
   assert.match(spawnSource, /applyWorkspaceTab\(s\);\n  syncWorkspaceTitle\(s\);/, "and says the tab the page opened on");
@@ -249,9 +250,11 @@ test("slice2b Home's colours are inventory pairs in every theme", async () => {
   for (const pair of [["muted", "surface"], ["fg", "surface"]]) assert.ok(has(TEXT_PAIRS, pair), pair.join(" on "));
   // The Workspace defaults part (workspace-catalog.mjs): titles on --bg, slot words on the list's --surface.
   const { catalogCSS } = await import("../renderer/workspace-catalog.mjs");
-  assert.match(catalogCSS, /\.cap-part-title \{[^}]*color:var\(--fg\)/); assert.match(catalogCSS, /\.cap-group-title \{[^}]*color:var\(--muted\)/);
-  assert.match(catalogCSS, /\.cap-slot-label \{[^}]*color:var\(--muted\)[^}]*background:var\(--surface\)/);
-  for (const pair of [["fg", "bg"], ["muted", "bg"], ["muted", "surface"]]) assert.ok(has(TEXT_PAIRS, pair), pair.join(" on "));
+  // Slice 3c: the parts' titles and the slots' words in the small uppercase label (--muted), the groups in --fg, all on
+  // the page's --bg (the list has no box).
+  assert.match(catalogCSS, /\.cap-part-title \{[^}]*color:var\(--muted\)/); assert.match(catalogCSS, /\.cap-group-title \{[^}]*color:var\(--fg\)/);
+  assert.match(catalogCSS, /\.cap-slot-label \{[^}]*color:var\(--muted\)/); assert.doesNotMatch(catalogCSS.match(/\.cap-slot-label \{[^}]*\}/)[0], /background/);
+  for (const pair of [["fg", "bg"], ["muted", "bg"]]) assert.ok(has(TEXT_PAIRS, pair), pair.join(" on "));
 });
 
 // Amendment 1, B (Pepe, 2026-11-20: "que la llista de running agents estigui cropped i sigui expandible").
@@ -302,11 +305,15 @@ test("slice2b soul card type hierarchy", () => {
   const dom = new JSDOM(`<style>${rules}</style><button class="soul-card"><span class="stitle">dev</span><p class="sdesc">Build and review</p>
     <span class="sfoot"><span class="sactivity running">2 agents running</span><span class="skind">· other</span></span></button>`);
   const style = (sel) => dom.window.getComputedStyle(dom.window.document.querySelector(sel));
-  const px = (sel) => parseFloat(style(sel).fontSize);
-  assert.deepEqual([style(".stitle").fontSize, style(".stitle").fontWeight], ["17px", "700"], "the name: the card title's 17 / 700");
+  // Slice 3c: the sizes are the theme's type tokens (the prototype's scale), read here from theme.css's shared :root.
+  const theme = readFileSync(new URL("theme.css", renderer), "utf8");
+  const scale = new Map([...theme.matchAll(/:root \{([^}]*)\}/g)].flatMap((m) => [...m[1].matchAll(/--([\w-]+):\s*([^;]+);/g)].map((d) => [d[1], d[2].trim()])));
+  const px = (sel) => parseFloat(scale.get(style(sel).fontSize.match(/^var\(--([\w-]+)\)$/)[1]));
+  assert.deepEqual([style(".stitle").fontSize, style(".stitle").fontWeight], ["var(--text-card-name)", "var(--name-weight)"], "the name: the card title (slice 3c: 15 / 600)");
+  assert.deepEqual([scale.get("text-card-name"), scale.get("name-weight")], ["15px", "600"]);
   assert.doesNotMatch(rules.match(/\.soul-card \.stitle \{[^}]*\}/)[0], /color:/, "the name keeps the card's --fg");
-  assert.deepEqual([style(".sdesc").fontSize, style(".sdesc").color], ["13px", "var(--muted)"], "what it does: body, muted");
-  assert.deepEqual([style(".sfoot").fontSize, style(".sfoot").color], ["12px", "var(--muted)"], "the meta line: secondary, muted");
+  assert.deepEqual([style(".sdesc").fontSize, style(".sdesc").color], ["var(--text-desc)", "var(--muted)"], "what it does: body, muted");
+  assert.deepEqual([style(".sfoot").fontSize, style(".sfoot").color], ["var(--text-meta)", "var(--muted)"], "the meta line: secondary, muted");
   assert.deepEqual([style(".sactivity.running").color, style(".sactivity.running").fontWeight], ["var(--muted)", "400"], "its count is meta, the name leads");
   assert.ok(px(".stitle") > px(".sdesc") && px(".sdesc") > px(".sfoot"), "three steps: name, body, meta");
   dom.window.close();

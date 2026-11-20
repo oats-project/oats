@@ -385,14 +385,16 @@ test("White uses neutral surfaces, ink primaries and AA-safe orange distinct fro
   assert.equal(light.get("graph-edge-coord"), light.get("accent"));
 });
 
-test("dark color palette is preserved; primary is an existing opaque ink/surface pair", () => {
+// Slice 3c of the Desktop UI rework: the chrome takes the prototype's Tokyo Night hues (muted, faint and the nav ink
+// lifted to AA); the terminal's colours are kept.
+test("dark color palette is the prototype's Tokyo Night; primary is an existing opaque ink/surface pair", () => {
   const expected = {
-    bg: "#0e1116", surface: "#161b22", "surface-2": "#1c2129", border: "#2d333c",
-    fg: "#e6edf3", muted: "#9aa4b2", faint: "#8b949e", accent: "#4493f8", "accent-fg": "#ffffff",
-    violet: "#c297ff", ok: "#3fb950", warn: "#d29922", danger: "#f85149",
-    "chip-bg": "#21262e", "chip-fg": "#adb6c2", sel: "#1b2b40",
+    bg: "#1a1b26", surface: "#1f2130", "surface-2": "#24273a", border: "#2f3244",
+    fg: "#c0caf5", muted: "#9aa2c8", faint: "#9098bf", accent: "#7aa2f7", "accent-fg": "#16161e",
+    violet: "#bb9af7", ok: "#9ece6a", warn: "#e0af68", danger: "#f7768e",
+    "chip-bg": "#292e42", "chip-fg": "#a9b1d6", sel: "#262c45",
     "term-bg": "#0a0d12", "term-fg": "#e6edf3", "term-sel": "#2f6496", "term-sel-fg": "#f5f9ff",
-    "md-code-bg": "#ffffff10", "md-rule": "#ffffff2e", "graph-edge": "#636c79", "graph-edge-coord": "#4493f8",
+    "md-code-bg": "#ffffff10", "md-rule": "#ffffff2e", "graph-edge": "#6f77a0", "graph-edge-coord": "#7aa2f7",
   };
   for (const [key, value] of Object.entries(expected)) assert.equal(dark.get(key), value, key);
   assert.deepEqual(ansi.map(key => dark.get(key)), [
@@ -552,13 +554,15 @@ for (const [name] of palettes) test(`${name}: workspace catalog, sources and syn
   doc.querySelector('main').append(sheet);
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
-    // Slice 3b: the defaults sentence on the page; each capability a row (surface) with its name, its dim tags, who made
-    // it (the official mark's check in --fg, "by <source>" in --muted) and its one line; the boxed source chip (the page).
-    ['.cap-lead', '.oats-view', 'muted', 'bg'], ['.cap-lead b', '.oats-view', 'fg', 'bg'],
-    ['.cap-row-name', 'button.cap-row', 'fg', 'surface'],
-    ['.cap-row-desc', 'button.cap-row', 'muted', 'surface'],
-    ['.cap-tag[data-tag=core]', 'button.cap-row', 'muted', 'surface'], ['.cap-tag[data-tag=private]', 'button.cap-row', 'muted', 'surface'], ['.cap-tag[data-tag=default]', 'button.cap-row', 'muted', 'surface'],
-    ['.cap-origin:not([data-official])', 'button.cap-row', 'muted', 'surface'], ['.cap-official', 'button.cap-row', 'fg', 'surface'],
+    // Slice 3b: the defaults sentence on the page; each capability a row with its name, its dim tags, who made it (the
+    // official mark's check, "by <source>" in --muted) and its one line; the boxed source chip (the page). Slice 3c: the
+    // rows sit on the page's --bg (no box), the check in --accent, "default" on its --tag-bg fill.
+    ['.cap-lead', '.oats-view', 'muted', 'bg'], ['.cap-lead b', '.oats-view', 'fg', 'bg'], ['.cap-intro', '.oats-view', 'muted', 'bg'],
+    ['.cap-part-title', '.oats-view', 'muted', 'bg'], ['.cap-group-title', '.oats-view', 'fg', 'bg'], ['.cap-slot-label', '.oats-view', 'muted', 'bg'],
+    ['.cap-row-name', '.oats-view', 'fg', 'bg'],
+    ['.cap-row-desc', '.oats-view', 'muted', 'bg'],
+    ['.cap-tag[data-tag=core]', '.oats-view', 'muted', 'bg'], ['.cap-tag[data-tag=private]', '.oats-view', 'muted', 'bg'], ['.cap-tag[data-tag=default]', '.cap-tag[data-tag=default]', 'muted', 'tag-bg'],
+    ['.cap-origin:not([data-official])', '.oats-view', 'muted', 'bg'], ['.cap-official', '.oats-view', 'accent', 'bg'],
     ['.source-chip', '.source-chip.boxed', 'muted', 'surface'], ['.source-chip-name', '.source-chip.boxed', 'fg', 'surface'],
     ['.catalog-note.warn', '.oats-view', 'warn', 'bg'], ['.catalog-note:not(.warn)', '.oats-view', 'muted', 'bg'],
     // Workspace v4 Setup (W1/W2), the 2026-10-14 redesign: the lede and its summary on the page, the overview card
@@ -635,7 +639,7 @@ for (const [name] of palettes) test(`${name}: Workspace defaults and the About d
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
     ['.cap-lead', '.oats-view', 'muted', 'bg'], ['.cap-lead b', '.oats-view', 'fg', 'bg'], ['.cap-lead .cap-lead-name', '.oats-view', 'fg', 'bg'],
-    ['.cap-tag[data-tag=default]', 'button.cap-row', 'muted', 'surface'], ['.cap-tag[data-tag=default-off]', 'button.cap-row', 'muted', 'surface'],
+    ['.cap-tag[data-tag=default]', '.cap-tag[data-tag=default]', 'muted', 'tag-bg'], ['.cap-tag[data-tag=default-off]', '.cap-tag[data-tag=default-off]', 'muted', 'tag-bg'],
     ['.ws-info-button', '.ws-info-button', 'muted', 'surface'],
     ['.about-dialog h2', '.about-dialog', 'fg', 'surface'], ['.about-dialog > p', '.about-dialog', 'fg', 'surface'],
     ['.about-dialog .lifecycle-mark', '.about-dialog .lifecycle-mark', 'accent', 'surface-2'],
@@ -1508,7 +1512,7 @@ for (const [name] of palettes) test(`${name}: v4 page bar, cards, facts, used-by
     ['.page-crumbs', '.page-bar', 'muted', 'surface'],
     ['.page-crumb-current', '.page-bar', 'fg', 'surface'],
     ['button.page-back', 'button.page-back', 'fg', 'surface'],
-    ['.page-tag', '.page-tag', 'fg', 'chip-bg'],
+    ['.page-tag', '.oats-view', 'muted', 'bg'],
     ['.page-card-title', '.page-card', 'muted', 'surface'],
     ['.page-card .page-kv dt', '.page-card', 'muted', 'surface'],
     // Slice 3b: the capability page's origin line, its paragraph and its folds sit on the page's --bg.
@@ -1563,7 +1567,7 @@ for (const [name] of palettes) test(`${name}: the Souls grid, its table and a so
   t.after(() => dom.window.close());
   const doc = dom.window.document, spawnCSS = spawnViewCSS();
   for (const source of [css, readFileSync(new URL('shell.css', renderer), 'utf8'), spawnCSS, inspectorCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
-  // The soul page's capability rows are the Capabilities page's (slice 3b: capabilityRowElement, on the list's --surface).
+  // The soul page's capability rows are the Capabilities page's (slice 3b: capabilityRowElement; slice 3c: on the page's --bg).
   const capRows = doc.createElement('ul'); capRows.className = 'cap-list';
   for (const origin of [{ official: false, by: 'oats.okf', reason: null }, { official: true, by: 'OATS', reason: 'oats-repo' }]) {
     const item = doc.createElement('li');
@@ -1580,8 +1584,8 @@ for (const [name] of palettes) test(`${name}: the Souls grid, its table and a so
     ['.souls-table td.agents.muted', 'muted', 'bg'], ['.souls-table td.problem', 'warn', 'bg'], ['.souls-table button.soul-row-open', 'fg', 'bg'], ['.souls-lede', 'muted', 'bg'],
     ['.soul-top dt', 'muted', 'bg'], ['.soul-top dd .strong', 'fg', 'bg'], ['.soul-top dd .muted', 'muted', 'bg'], ['.soul-top .soul-top-note', 'muted', 'bg'],
     ['.soul-ready-line.problem', 'warn', 'bg'], ['.soul-ready-details > summary', 'muted', 'bg'], ['.soul-capabilities-note', 'muted', 'bg'],
-    ['.soul-capabilities .cap-row-name', 'fg', 'surface'], ['.soul-capabilities .cap-origin:not([data-official])', 'muted', 'surface'], ['.soul-capabilities .cap-official', 'fg', 'surface'],
-    ['.soul-capabilities .cap-tag[data-tag=core]', 'muted', 'surface'], ['.soul-capabilities .cap-row-desc', 'muted', 'surface'],
+    ['.soul-capabilities .cap-row-name', 'fg', 'bg'], ['.soul-capabilities .cap-origin:not([data-official])', 'muted', 'bg'], ['.soul-capabilities .cap-official', 'accent', 'bg'],
+    ['.soul-capabilities .cap-tag[data-tag=core]', 'muted', 'bg'], ['.soul-capabilities .cap-row-desc', 'muted', 'bg'],
   ]) {
     const el = doc.querySelector(selector); assert.ok(el, selector);
     const color = dom.window.getComputedStyle(el).color;
@@ -1589,8 +1593,8 @@ for (const [name] of palettes) test(`${name}: the Souls grid, its table and a so
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${selector}: ${fg} on ${bg}`);
     for (let p = el; p; p = p.parentElement) assert.equal(dom.window.getComputedStyle(p).opacity, '1');
   }
-  // A hovered table row and a hovered or focused capability row: their text on --surface and --sel.
-  for (const [fg, bg] of [['fg', 'surface'], ['muted', 'surface'], ['warn', 'surface'], ['fg', 'sel'], ['muted', 'sel'], ['warn', 'sel']])
+  // A hovered table row and a hovered or focused capability row: their text on --surface, --surface-2 and --sel.
+  for (const [fg, bg] of [['fg', 'surface'], ['muted', 'surface'], ['warn', 'surface'], ['fg', 'surface-2'], ['muted', 'surface-2'], ['accent', 'surface-2'], ['fg', 'sel'], ['muted', 'sel'], ['warn', 'sel'], ['accent', 'sel']])
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${fg} on ${bg}`);
 });
 
@@ -1993,7 +1997,7 @@ for (const [name] of palettes) test(`${name}: capability Contents navigation, re
   for (const fold of page.querySelectorAll('details.cap-fold')) fold.open = true;
   const skillRow = page.querySelector('button.cap-skill-row');
   for (const [selector, painted, fg, bg] of [['.provides-chip', '.provides-chip', 'fg', 'tag-bg'], ['.provides-items .page-note', '.oats-view', 'muted', 'bg'],
-    ['.cap-skill-name', 'button.cap-skill-row', 'fg', 'surface'], ['.cap-skill-desc', 'button.cap-skill-row', 'muted', 'surface']]) {
+    ['.cap-skill-name', '.oats-view', 'fg', 'bg'], ['.cap-skill-desc', '.oats-view', 'muted', 'bg']]) {
     const el = page.querySelector(selector), surface = page.querySelector(painted) || doc.querySelector(painted); assert.ok(el && surface, selector);
     const color = dom.window.getComputedStyle(el).color;
     assert.ok(color === `var(--${fg})` || (fg === 'fg' && ['', 'var(--fg)'].includes(color)), `${selector}: ${color}`);

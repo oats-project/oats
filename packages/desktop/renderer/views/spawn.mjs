@@ -71,6 +71,11 @@ const CSS = `
   padding:24px calc(20px + var(--main-trail-inset, 0px)) 12px calc(20px + var(--main-lead-inset, 0px));
   font-size:24px; font-weight:700; line-height:30px; color:var(--muted); font-family:var(--ui-font, system-ui); }
 .workspace-title[hidden] { display:none; }
+/* The title row (slice 3c, the prototype's "Souls [grid | table]"): the trail, then the Souls tab's Grid | Table inline
+   beside its h1, on the title's baseline row. */
+.workspace-title-row { flex:none; display:flex; align-items:center; flex-wrap:wrap; gap:0 var(--space-3); min-width:0; }
+.workspace-title-row > .souls-view { margin-top:var(--space-3); }
+.workspace-title-row > .souls-view[hidden] { display:none; }
 .oats-view .workspace-title button.workspace-crumb, .workspace-title button.workspace-crumb { appearance:none; height:auto; min-height:0; margin:0; padding:0 4px; border:0;
   border-radius:6px; background:transparent; color:var(--muted); font:inherit; line-height:inherit; cursor:pointer; }
 .oats-view .workspace-title button.workspace-crumb:hover, .workspace-title button.workspace-crumb:hover { color:var(--fg); text-decoration:underline; }
@@ -78,7 +83,7 @@ const CSS = `
 .souls-sum { color:var(--muted); font-size:12px; }
 /* The grid's stale line (desktop/loading-states) sits between the toolbar and the scroller; nothing when empty. */
 .souls-notice { flex:none; padding:0 20px; }
-.souls-lede { flex:none; margin:0 0 12px; padding:0 20px; max-width:80ch; color:var(--muted); font-size:12.5px; line-height:1.45; }
+.souls-lede { flex:none; margin:0 0 var(--space-4); padding:0 20px; max-width:96ch; color:var(--muted); font-size:var(--text-body); line-height:1.5; }
 .souls-lede[hidden] { display:none; }
 .souls-notice:empty, .souls-notice[hidden] { display:none; }
 .souls-notice .loading-notice { margin:0 0 10px; }
@@ -93,50 +98,53 @@ const CSS = `
 /* Souls (the Desktop UI rework, slice 3a): grouped by where a soul comes from (the workspace's repository,
    then each package), each group in kind order (packages/client/soul-role.mjs), as cards or as a table
    (v, or the toolbar's Grid | Table). Souls of a member that has not joined are listed apart, with the reason. */
-.souls-grid { position:relative; flex:1; min-height:0; min-width:0; overflow-y:auto; overscroll-behavior:contain; padding:0 20px 16px; display:flex; flex-direction:column; gap:14px; border-top:1px solid transparent; }
+.souls-grid { position:relative; flex:1; min-height:0; min-width:0; overflow-y:auto; overscroll-behavior:contain; padding:0 20px 16px; display:flex; flex-direction:column; gap:var(--space-5); border-top:1px solid transparent; }
 /* The bar above is outside this scroller, so it never moves; once cards scroll under it, a 1px edge (spec G, sticky-top.mjs). */
 .souls-grid.is-scrolled { border-top-color:var(--border); }
-.souls-group { display:flex; flex-direction:column; gap:12px; min-width:0; }
-.souls-group + .souls-group { padding-top:12px; }
+.souls-group { display:flex; flex-direction:column; gap:var(--space-2); min-width:0; }
 /* The group heading (icon, monospace name, muted qualifier) is group-heading.mjs's, shared with Capabilities. */
 ${groupHeadingCSS}
-.souls-group-cards { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(min(240px, 100%), 1fr)); align-content:start; }
-/* A card: the name, what it does (two lines at most; the soul's page has the whole text), then its agents and kind.
-   Its type follows the information's role (chrome-typography-follows-information-role; slice 2b, Amendment 1, C:
-   Pepe, 2026-11-20, "mes font hierarchy en els soul cards"): the name is a card title (17 / 700, foreground), what
-   it does is body (13, muted), and its agents and kind are one secondary meta line (12, muted). */
-.soul-card { display:flex; flex-direction:column; gap:6px; min-width:0; padding:14px 16px; box-sizing:border-box; background:var(--surface); border:1px solid var(--border); border-radius:10px;
+.souls-group-cards { display:grid; gap:10px; grid-template-columns:repeat(auto-fill, minmax(max(min(240px, 100%), calc((100% - 20px) / 3)), 1fr)); align-content:start; }
+/* A card (slice 3c, the prototype's look): a raised tile with a hairline edge, the name, what it does (two lines at
+   most; the soul's page has the whole text), then one meta line, its agents and its kind. Its type follows the
+   information's role (chrome-typography-follows-information-role; slice 2b, Amendment 1, C): the name leads (a
+   strong --fg), what it does is muted body, and the meta line is the smallest step. Hover raises the tile; the
+   open card wears the accent edge on the selected fill. */
+.soul-card { display:flex; flex-direction:column; gap:3px; min-width:0; min-height:96px; padding:var(--space-3) 14px; box-sizing:border-box; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-card);
              cursor:pointer; text-align:left; font:inherit; color:var(--fg); }
-.oats-view .souls button.soul-card { height:auto; min-height:0; font-weight:400; line-height:normal; }
-.soul-card:hover { border-color:var(--sel-border); }
-.soul-card.open { border-color:var(--sel-border); box-shadow:0 0 0 1px var(--sel-border); }
+.oats-view .souls button.soul-card { height:auto; min-height:96px; font-weight:400; line-height:normal; }
+.soul-card:hover { background:var(--surface-2); }
+.soul-card.open { border-color:var(--accent); background:var(--sel); }
 .soul-card.unavailable { cursor:default; }
-.soul-card .stitle { font-size:17px; font-weight:700; line-height:22px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.soul-card .stitle { font-size:var(--text-card-name); font-weight:var(--name-weight); line-height:20px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .soul-card.unavailable .stitle { color:var(--muted); }
-.soul-card .sdesc { margin:0; color:var(--muted); font-size:13px; line-height:1.45; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow-wrap:anywhere; }
+.soul-card .sdesc { margin:0; color:var(--muted); font-size:var(--text-desc); line-height:1.45; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow-wrap:anywhere; }
 .soul-card .sdesc:empty { display:none; }
-.soul-card .sfoot { display:flex; align-items:center; gap:0; min-width:0; margin-top:auto; padding-top:4px; color:var(--muted); font-size:12px; line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.soul-card .sfoot { display:flex; align-items:center; gap:0; min-width:0; margin-top:auto; padding-top:var(--space-2); color:var(--muted); font-size:var(--text-meta); line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .soul-card .sactivity { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .soul-card .sactivity.running { color:var(--muted); font-weight:400; } /* the dot says running; the name leads */
 .soul-card .sactivity.running::before { content:""; display:inline-block; width:7px; height:7px; margin-right:6px; border-radius:50%; background:var(--live); vertical-align:1px; }
 .soul-card .skind { flex:none; margin-left:.35em; }
-.soul-card .sproblem { display:block; min-width:0; margin-top:auto; padding-top:4px; color:var(--warn); font-size:12px; font-weight:600; line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* The refusal, kept but quiet: one line in --warn at the meta size and weight, its whole sentence in the title and on
+   the soul's page. */
+.soul-card .sproblem { display:block; min-width:0; margin-top:auto; padding-top:var(--space-2); color:var(--warn); font-size:var(--text-meta); font-weight:400; line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .soul-card .sproblem + .sfoot { margin-top:0; padding-top:2px; }
 /* The table: the same souls as rows, the same groups as heading rows. The name is the row's one button. */
-.souls-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12.5px; color:var(--fg); }
-.souls-table th, .souls-table td { padding:7px 10px; text-align:left; vertical-align:top; border-bottom:1px solid var(--border); overflow:hidden; text-overflow:ellipsis; }
-.souls-table thead th { position:sticky; top:0; z-index:1; background:var(--bg); color:var(--muted); font-size:11.5px; font-weight:600; }
+.souls-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:var(--text-desc); color:var(--fg); }
+.souls-table th, .souls-table td { padding:var(--space-2) 10px; text-align:left; vertical-align:top; line-height:18px; border-bottom:1px solid var(--border); overflow:hidden; text-overflow:ellipsis; }
+/* Column heads in the small-label type (slice 3c): uppercase, tracked, muted. */
+.souls-table thead th { position:sticky; top:0; z-index:1; background:var(--bg); color:var(--muted); font-size:var(--text-label); font-weight:var(--label-weight); letter-spacing:var(--label-tracking); text-transform:uppercase; line-height:28px; padding-top:0; padding-bottom:0; }
 .souls-table col.c-name { width:22%; } .souls-table col.c-kind { width:10%; } .souls-table col.c-agents { width:9%; }
 .souls-table col.c-launch { width:17%; } .souls-table col.c-ready { width:14%; }
-.souls-table tbody th.souls-table-group { padding-top:16px; border-bottom:0; color:var(--fg); font-weight:400; }
+.souls-table tbody th.souls-table-group { padding:var(--space-5) 10px var(--space-1); border-bottom:0; color:var(--fg); font-weight:400; }
 .souls-table tbody th.souls-table-group .souls-group-title { padding:0; }
 .souls-table tbody tr.soul-row:hover td { background:var(--surface); }
 .souls-table td.what { color:var(--fg); white-space:normal; overflow-wrap:anywhere; }
 .souls-table td.muted, .souls-table td .muted { color:var(--muted); }
-.souls-table td.problem { color:var(--warn); font-weight:600; white-space:normal; overflow-wrap:anywhere; }
+.souls-table td.problem { color:var(--warn); font-weight:400; white-space:normal; overflow-wrap:anywhere; }
 /* Two lines at most: the full sentence is the cell's title and the soul's page. */
 .souls-table td.problem .clamp { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
-.oats-view .souls .souls-table button.soul-row-open { display:block; max-width:100%; height:auto; min-height:0; margin:0; padding:0; border:0; background:none; color:var(--fg); font:inherit; font-weight:650; text-align:left;
+.oats-view .souls .souls-table button.soul-row-open { display:block; max-width:100%; height:auto; min-height:0; margin:0; padding:0; border:0; background:none; color:var(--fg); font:inherit; font-weight:var(--name-weight); text-align:left;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
 .oats-view .souls .souls-table button.soul-row-open:hover { text-decoration:underline; }
 .souls-table tr.open td { background:var(--sel); }
@@ -156,9 +164,17 @@ ${groupHeadingCSS}
 
 let state = null;
 
-/** The Souls page's first line: what a soul is, and how the page is ordered (it replaces "About souls"). */
-export const SOULS_LEDE = `A soul is what an ${DESKTOP_NOUNS.instance} is made of: its instructions, its skills and capabilities, and the knowledge it keeps. `
-  + "Grouped by where each comes from; maintainers first, then experts, developers and operations.";
+/** The Souls page's first line: what a soul is, and how the page is ordered (it replaces "About souls"). Until the
+ * souls are read it says no counts; then `soulsLede` says them (slice 3c, the prototype's sentence). */
+const SOULS_WHAT = `A soul is what an ${DESKTOP_NOUNS.instance} is made of: its instructions, its skills and capabilities, and the knowledge it keeps.`;
+const SOULS_ORDER = "maintainers first, then experts, developers, operations. Enter opens one.";
+export const SOULS_LEDE = `${SOULS_WHAT} Grouped by where they come from; ${SOULS_ORDER}`;
+/** The first line with the real counts: every soul listed here, and how many of them have an agent running. */
+export function soulsLede({ souls, running }) {
+  const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+  const live = running ? `${running} with ${DESKTOP_NOUNS.instances} running` : `none with ${DESKTOP_NOUNS.instances} running`;
+  return `${SOULS_WHAT} You have ${n(souls, "soul", "souls")}, ${live}, grouped by where they come from; ${SOULS_ORDER}`;
+}
 
 /* Quick Open selects a soul for inspection; launch remains explicit. */
 let pendingPreselect = null;
@@ -379,6 +395,7 @@ function showPage(s, mode) {
   const souls = (s.discovery?.tab ?? "souls") === "souls";
   s.q("souls-grid").hidden = !!mode || !souls;
   s.q("souls-bar").hidden = !!mode || !souls;
+  s.q("souls-view").hidden = !!mode || !souls; // the title's Grid | Table is the Souls tab's
   s.q("souls-notice").hidden = !!mode || !souls; // the grid's stale line belongs to the grid
   s.q("souls-lede").hidden = !!mode || !souls;
   // Machines' Map is the Deployments view's panel; its List is the discovery's (slice 3b).
@@ -592,14 +609,13 @@ ${spawnDialogCSS}</style>
       <div class="souls">
         <div class="souls-body">
           <section class="workspace-main" aria-label="Workspace discovery">
-            <nav class="workspace-title" aria-label="Breadcrumb"><button type="button" class="workspace-crumb" data-to="home">Home</button><span aria-hidden="true">›</span><button type="button" class="workspace-crumb" data-to="workspace">Workspace</button><span aria-hidden="true">›</span><h1 aria-current="page">Souls</h1></nav>
+            <div class="workspace-title-row"><nav class="workspace-title" aria-label="Breadcrumb"><button type="button" class="workspace-crumb" data-to="home">Home</button><span aria-hidden="true">›</span><button type="button" class="workspace-crumb" data-to="workspace">Workspace</button><span aria-hidden="true">›</span><h1 aria-current="page">Souls</h1></nav><div class="ws-segmented souls-view" role="group" aria-label="Show souls as"><button type="button" data-view="grid" aria-pressed="true" aria-keyshortcuts="V" title="Grid (V)">Grid</button><button type="button" data-view="table" aria-pressed="false" aria-keyshortcuts="V" title="Table (V)">Table</button></div></div>
             <header class="workspace-header"></header>
             <select class="field wssel" aria-label="Workspace" style="display:none"></select>
             <div class="workspace-recovery" hidden></div>
             <div class="souls-bar ws-toolbar">
               <label class="ws-search"><span class="workspace-sr-only">Search souls</span><input class="field filter" type="search" placeholder="Search souls" autocomplete="off"></label>
               <div class="ws-toolbar-lead souls-bar-lead"></div>
-              <div class="ws-segmented souls-view" role="group" aria-label="Show souls as"><button type="button" data-view="grid" aria-pressed="true" aria-keyshortcuts="V" title="Grid (V)">Grid</button><button type="button" data-view="table" aria-pressed="false" aria-keyshortcuts="V" title="Table (V)">Table</button></div>
               <span class="souls-sum workspace-sr-only" role="status"></span>
             </div>
             <p class="souls-lede">${SOULS_LEDE}</p>
@@ -695,7 +711,7 @@ ${spawnDialogCSS}</style>
     onTab: tab => {
       syncWorkspaceTitle(s);
       s.spawnOp++; closeSpawnModal(s); s.inspector.close(); closeCapability(s); closeTeam(s); s.page.close();
-      s.q("souls-bar").hidden = tab !== "souls"; s.q("souls-notice").hidden = tab !== "souls"; s.q("souls-lede").hidden = tab !== "souls";
+      s.q("souls-bar").hidden = tab !== "souls"; s.q("souls-view").hidden = tab !== "souls"; s.q("souls-notice").hidden = tab !== "souls"; s.q("souls-lede").hidden = tab !== "souls";
       syncMachines(s);
     },
   });
@@ -719,7 +735,7 @@ ${spawnDialogCSS}</style>
   syncWorkspaceTitle(s);
   // The page opens on Souls unless a handoff chose another tab: then the Souls bar and its notice wait for Souls, and
   // on Machines its view mounts (onTab runs on changes only).
-  if (s.discovery.tab !== "souls") { s.q("souls-bar").hidden = true; s.q("souls-notice").hidden = true; s.q("souls-lede").hidden = true; }
+  if (s.discovery.tab !== "souls") { s.q("souls-bar").hidden = true; s.q("souls-view").hidden = true; s.q("souls-notice").hidden = true; s.q("souls-lede").hidden = true; }
   syncMachines(s);
   applyCapability(s); // a handoff made before the mount: its tab now, its page when the catalog lands
   s.q("filter").addEventListener("input", (e) => { s.filterText = e.target.value; renderGrid(s); });
@@ -990,6 +1006,11 @@ function renderGrid(s, { restoreFocus = true } = {}) {
   const list = s.souls.agents.filter((a) => matches(s, a));
   s.q("souls-sum").classList?.add("workspace-sr-only");
   s.q("souls-sum").textContent = `${list.length} of ${s.souls.agents.length} souls${cliProbePending() ? " · Checking CLI…" : ""}`;
+  // The first line's counts (slice 3c): every soul listed, and those with an agent running, once the souls are read.
+  const read = s.gridState ? s.gridState.hasData : true, lede = s.q("souls-lede");
+  if (lede) lede.textContent = read && s.souls.agents.length
+    ? soulsLede({ souls: s.souls.agents.length, running: s.souls.agents.filter((a) => soulInstances(s, a).some((i) => i.running === true)).length })
+    : SOULS_LEDE;
   if (typeof grid.append !== "function") return; // non-DOM host (tests observe s.souls)
   // One consistent degradation card ABOVE the roster when the CLI is KNOWN
   // unavailable — reads (the soul cards, brain) stay fully usable below it.

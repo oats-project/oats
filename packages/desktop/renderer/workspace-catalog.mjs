@@ -16,24 +16,30 @@ import { capabilityList, workspaceDefaultsSections } from '../../client/capabili
 import { ORIGIN_COPY } from '../../client/capability-origin.mjs';
 
 export const catalogCSS = `
-/* The list (slice 3b): one bordered column of rows, a 1px rule between them. Names in the chrome's sans (D2). */
-.cap-list { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
-.cap-list > li { display:flex; min-width:0; }
-.cap-list > li + li { border-top:1px solid var(--tag-bg); }
-/* A row is one button (no nested controls); the UA button is reset. Two lines: name, tags and origin; then what it does. */
-.oats-view button.cap-row, button.cap-row, .cap-row { appearance:none; -webkit-appearance:none; display:flex; flex-direction:column; justify-content:center; gap:3px; flex:1; width:100%; min-width:0; height:auto; min-height:54px; margin:0; padding:9px 16px; border:0; border-radius:0; background:var(--surface); color:var(--fg); font:inherit; font-family:var(--ui-font,system-ui); text-align:left; box-sizing:border-box; }
+/* The list (slice 3b; slice 3c drew it as the prototype's): a column of rows on the page, no box around them, a hairline
+   under each. Names in the chrome's sans (D2). */
+.cap-list { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; }
+.cap-list > li { display:flex; min-width:0; border-bottom:1px solid var(--border); }
+/* A row is one button (no nested controls); the UA button is reset. Two lines: the name, its mark and its pills; then
+   what it does. Quiet states: hover raises it to --surface-2, keyboard focus is the shell's tint under the accent edge. */
+.oats-view button.cap-row, button.cap-row, .cap-row { appearance:none; -webkit-appearance:none; display:flex; flex-direction:column; justify-content:center; gap:2px; flex:1; width:100%; min-width:0; height:auto; min-height:var(--row-h); margin:var(--space-1) 0; padding:6px var(--space-3); border:0; border-radius:var(--radius-control); background:transparent; color:var(--fg); font:inherit; font-family:var(--ui-font,system-ui); text-align:left; box-sizing:border-box; }
 .oats-view button.cap-row { cursor:pointer; }
 .oats-view button.cap-row:hover { background:var(--surface-2); }
 /* Keyboard focus: the shell's tint (rule 2) under the global accent edge. */
 .oats-view button.cap-row:focus-visible { background:var(--sel); }
-.cap-row-line { display:flex; align-items:center; gap:8px; min-width:0; }
-.cap-row-name { min-width:0; color:var(--fg); font-weight:600; font-size:13.5px; line-height:1.35; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-/* Dim tags: muted words in a hairline frame, never a tint. */
-.cap-tag { flex:none; display:inline-flex; align-items:center; height:18px; padding:0 6px; border:1px solid var(--border); border-radius:4px; color:var(--muted); font-weight:500; font-size:11px; line-height:normal; white-space:nowrap; box-sizing:border-box; }
-.cap-origin { flex:none; display:inline-flex; align-items:center; gap:5px; margin-left:auto; padding-left:12px; color:var(--muted); font-size:12px; white-space:nowrap; }
-/* The official mark: a check in a circle, its meaning in the title and the accessible name. */
-.cap-official { display:inline-grid; place-items:center; width:16px; height:16px; border:1px solid var(--muted); border-radius:50%; color:var(--fg); box-sizing:border-box; }
-.cap-row-desc { min-width:0; color:var(--muted); font-size:12.5px; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* The line reads as the prototype's: the name, the official mark or "by <source>" right after it, then the pills (the
+   markup keeps name, pills, origin, the reading order slice 3b pinned). */
+.cap-row-line { display:flex; align-items:center; gap:var(--space-2); min-width:0; }
+.cap-row-name { order:0; min-width:0; color:var(--fg); font-weight:var(--name-weight); font-size:var(--text-name); line-height:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cap-row-line > .cap-origin { order:1; }
+.cap-row-line > .cap-tag { order:2; }
+/* Pills: "core" in a hairline frame, "default" on a quiet fill; muted words, never a tint. */
+.cap-tag { flex:none; display:inline-flex; align-items:center; height:17px; padding:0 6px; border:1px solid var(--border); border-radius:var(--radius-tag); color:var(--muted); font-weight:400; font-size:var(--text-label); line-height:normal; letter-spacing:.02em; white-space:nowrap; box-sizing:border-box; }
+.cap-tag[data-tag=default], .cap-tag[data-tag=default-off] { border-color:var(--tag-bg); background:var(--tag-bg); }
+.cap-origin { flex:none; display:inline-flex; align-items:center; gap:5px; color:var(--muted); font-size:var(--text-meta); white-space:nowrap; }
+/* The official mark: a check in a small circle, its meaning in the title and the accessible name. */
+.cap-official { display:inline-grid; place-items:center; width:15px; height:15px; border:1px solid var(--muted); border-radius:50%; color:var(--accent); box-sizing:border-box; }
+.cap-row-desc { min-width:0; color:var(--muted); font-size:var(--text-meta); line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .source-chip { display:inline-flex; align-items:center; gap:7px; min-width:0; color:var(--muted); font-weight:normal; font-size:12px; line-height:normal; font-family:var(--mono,monospace); }
 .source-chip .shell-icon { flex:none; }
 .source-chip-name { color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
@@ -41,13 +47,18 @@ export const catalogCSS = `
 .source-chip.boxed { height:24px; padding:0 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface); font-size:11.5px; box-sizing:border-box; }
 .source-note { color:var(--warn); font-weight:600; font-size:11px; line-height:normal; font-family:var(--ui-font,system-ui); white-space:nowrap; }
 .catalog-empty { margin:0; padding:24px 16px; color:var(--muted); line-height:1.5; }
-/* The tab's two parts (slice 2b, Amendment 1, D): Workspace defaults, then All capabilities, each a box title. */
-.cap-part { margin:0 0 24px; }
-.cap-part-title { margin:0 0 10px; color:var(--fg); font-size:15px; font-weight:650; line-height:20px; }
-.cap-group-title { margin:14px 0 6px; color:var(--muted); font-size:12px; font-weight:600; line-height:16px; }
+/* The page's first line (slice 3c): what a capability is, what the mark, "core" and "default" say, with the counts. */
+.cap-intro { margin:0 0 var(--space-5); max-width:96ch; color:var(--muted); font-size:var(--text-body); line-height:1.55; }
+.cap-intro .cap-official { display:inline-grid; vertical-align:-3px; margin:0 1px; }
+.cap-intro b { color:var(--fg); font-weight:600; }
+/* The tab's two parts (slice 2b, Amendment 1, D): Workspace defaults, then All capabilities, each titled in the small
+   uppercase label (slice 3c), its groups and slots one step quieter. */
+.cap-part { margin:0 0 var(--space-6); }
+.cap-part-title { margin:0 0 var(--space-2); color:var(--muted); font-size:var(--text-label); font-weight:var(--label-weight); letter-spacing:var(--label-tracking); text-transform:uppercase; line-height:16px; }
+.cap-group-title { margin:var(--space-4) 0 0; color:var(--fg); font-size:var(--text-meta); font-weight:var(--label-weight); line-height:16px; }
 .cap-slot { display:flex; flex-direction:column; min-width:0; }
-.cap-slot-label { padding:8px 16px 0; color:var(--muted); font-size:12px; font-weight:600; line-height:16px; background:var(--surface); }
-.cap-slot-none { padding:2px 16px 10px; color:var(--muted); font-size:12.5px; line-height:1.4; background:var(--surface); }
+.cap-slot-label { padding:var(--space-2) var(--space-3) 0; color:var(--muted); font-size:var(--text-label); font-weight:400; letter-spacing:var(--label-tracking); text-transform:uppercase; line-height:16px; }
+.cap-slot-none { padding:2px var(--space-3) 10px; color:var(--muted); font-size:var(--text-meta); line-height:1.4; }
 .catalog-notes { display:grid; gap:4px; margin:0 0 14px; }
 .catalog-notes:empty { display:none; }
 .catalog-note { margin:0; color:var(--muted); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
@@ -161,6 +172,29 @@ function workspaceDefaultsPart(doc, { status, rows, onOpen }) {
   return part;
 }
 
+/** The page's first line (the Desktop UI rework, slice 3c: the prototype's sentence, on the official rule of
+ * packages/client/capability-origin.mjs): what a capability is, how many the workspace has and how many are official,
+ * then what the mark, "core" and "default" say. "default" is said only where the kernel reports defaults. */
+export const INTRO_COPY = Object.freeze({
+  what: 'A capability is a bundle a soul is composed with: instructions, skills, hooks and commands.',
+  have: (n, official) => ` You have ${n} ${n === 1 ? 'capability' : 'capabilities'}, ${official} official: the mark `,
+  mark: 'means official (in the OATS catalog, or from the OATS repository); the others say who made them.',
+  core: ' “core” fills one of the three places every soul has: knowledge, messaging, tasks;',
+  noDefaults: ' “core” fills one of the three places every soul has: knowledge, messaging, tasks.',
+  defaults: ' “default” is what this workspace gives a soul unless it says otherwise.',
+});
+function capabilityIntro(doc, { rows, status }) {
+  const all = capabilityList(rows, status);
+  if (!all.length) return null;
+  const p = node(doc, 'p', null, 'cap-intro');
+  const mark = node(doc, 'span', null, 'cap-official'); mark.setAttribute('aria-hidden', 'true'); mark.append(iconElement(doc, 'check', { size: 10 }));
+  const said = node(doc, 'span', '✓', 'workspace-sr-only');
+  const hasDefaults = !!(status && typeof status === 'object' && status.defaults && typeof status.defaults === 'object');
+  p.append(INTRO_COPY.what, INTRO_COPY.have(all.length, all.filter(entry => entry.origin?.official).length), mark, said, ' ', INTRO_COPY.mark,
+    hasDefaults ? INTRO_COPY.core : INTRO_COPY.noDefaults, ...(hasDefaults ? [INTRO_COPY.defaults] : []));
+  return p;
+}
+
 /** The Capabilities tab: the Workspace defaults part (when the kernel reports defaults), then All capabilities.
  * `rows`: the catalog (`oats capabilities`); `query` narrows by name; `onOpen(row)` opens a row's page (a row with no
  * opener is a plain line). A declared default the catalog does not list is said in the sentence, not as a row.
@@ -168,6 +202,9 @@ function workspaceDefaultsPart(doc, { status, rows, onOpen }) {
 export function renderCapabilityList(host, { rows, status, query = '', onOpen = null, label = 'Capabilities' }) {
   const doc = host.ownerDocument;
   host.replaceChildren();
+  // The page's first line, over the whole catalog: never narrowed by the search.
+  const intro = capabilityIntro(doc, { rows, status });
+  if (intro) host.append(intro);
   const defaults = workspaceDefaultsPart(doc, { status, rows, onOpen });
   let target = host;
   if (defaults) {

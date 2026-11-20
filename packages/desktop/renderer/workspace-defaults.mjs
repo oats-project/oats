@@ -18,7 +18,7 @@ import { DESKTOP_NOUNS } from './desktop-terms.mjs';
 
 export const defaultsCSS = `
 /* The defaults sentence: one paragraph above the list, at a readable width. */
-.cap-lead { margin:0 0 14px; max-width:80ch; color:var(--muted); font-size:13px; line-height:1.55; }
+.cap-lead { margin:0 0 var(--space-2); max-width:96ch; color:var(--muted); font-size:var(--text-body); line-height:1.55; }
 .cap-lead b { color:var(--fg); font-weight:600; }
 .cap-lead .cap-lead-name { color:var(--fg); }
 `;

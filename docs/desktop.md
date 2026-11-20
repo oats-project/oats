@@ -341,7 +341,10 @@ the commands and `+` only the souls.
 
 **The status line** runs along the bottom of the window. It shows the three
 keys most useful where you are (in the roster: Enter, Stop and the palette;
-in a terminal: the leader, close tab and the palette), says in one line why a
+in a terminal: the leader, close tab and the palette); on the Workspace pages,
+their own keys: **↑↓ move · Enter open · v table · Esc Home** on Souls (**v
+grid** in the table), the same without **v** on Capabilities, and **↑↓ move ·
+Enter open · Esc back** on a soul's, a capability's or a team's page. It says in one line why a
 key could not act (the leader's line is drawn there), says what was just done
 ("Workspace onboarded. The lock is written."), says when the terminal in front
 loses its server and when it is back (the pane keeps its countdown and its
@@ -373,7 +376,8 @@ hear the new size once, when you let go.
 
 **Appearance.** The palette's **Appearance…** and ⇧⌘Space / Ctrl+Shift+Space
 open the Appearance sheet, with three parts. **Theme**: System (Omarchy's theme on a computer that runs Omarchy, else
-the system's light or dark setting; it was "This computer"), Dark, Light, and
+the system's light or dark setting; it was "This computer"), Dark (Tokyo Night's
+blues and greys in the window; the terminals keep their own colours), Light, and
 More themes… (Solarized). **Font**, the terminals' font (the window's own
 text is always the system's interface font):
 
@@ -525,18 +529,24 @@ other window.
 ## Capabilities and spawning
 
 **Workspace › Capabilities** lists every capability of the workspace as one
-list of rows. Core capabilities (knowledge, messaging and tasks) come first,
+list of rows. Its first line says what a capability is, how many the workspace
+has and how many are official, and what the ✓, **core** and **default** say
+(**default** only where the workspace reports its defaults). Core capabilities
+(knowledge, messaging and tasks) come first,
 in that order, each with a dim **core** tag; every other capability follows by
-name. There are no sections, repository groups or colour marks. Each row
+name. There are no sections, repository groups or colour marks. The rows sit
+on the page, a thin rule under each, with no box around them; a row lightens
+under the pointer and takes the selection tint when focused. Each row
 shows:
 
 - the capability's name;
-- who made it: a small ✓ in a circle for an official one (its tooltip says
+- who made it, right after the name: a small ✓ in a circle for an official one (its tooltip says
   which fact made it official: **Official: in the OATS catalog** or **Official:
   from the OATS repository**), or **by** its source (a member repository's
   name, or a git package's repository);
 - one line of what it does (the manifest's description, cut to one line);
-- its tags: **core**, **default** for one the workspace gives every soul,
+- its tags, as small pills (**core** in a thin frame, **default** on a quiet
+  fill): **core**, **default** for one the workspace gives every soul,
   **default · off** for one the workspace turns off, and **repo only** for one
   only its own repository's souls can use.
 
@@ -554,7 +564,8 @@ name and version are not on this list: **Setup**'s Packages box shows them,
 and so does the capability's page.
 
 Above the list, **Workspace defaults** shows what the workspace gives every
-soul, so its agents share one way of working. One sentence says what defaults
+soul, so its agents share one way of working. Its title and **All
+capabilities**' are in small capitals, as the Souls groups' are. One sentence says what defaults
 are (a soul can turn a default off and choose its own instead); then **Core**,
 one line each for Knowledge, Messaging and Tasks with the capability that fills
 it (its name alone when the list doesn't hold it, or "No default"), and **Additional**, every other default, a turned-off one
@@ -600,7 +611,12 @@ one off and name its own in its place.
 tab or the workspace closes it too.
 
 **Workspace › Souls** lists the souls the workspace offers. Its first line says
-what a soul is. The souls are grouped by where they come from: the workspace's
+what a soul is, how many the workspace has and how many have agents running,
+and how the page is ordered ("You have 10 souls, 4 with agents running, grouped
+by where they come from; maintainers first, then experts, developers,
+operations. Enter opens one.").
+Each group's heading is its name in small capitals and its count
+("AGENTS · member repo · host · 6 souls"). The souls are grouped by where they come from: the workspace's
 own repository first, then its other member repositories, then each package,
 then the external souls. Inside a group they are in kind order: maintainers,
 experts, developers, operations, then the rest, each by name. The kind is read
@@ -611,11 +627,12 @@ reports no role for a soul yet, so the name is the rule until it does
 ([#1980](https://github.com/oats-project/oats/issues/1980)).
 
 The souls show as a grid of cards or as a table: **v** (or **Grid** | **Table**
-in the toolbar) switches between them, and each window remembers its choice,
-also after a restart. A card shows the soul's name, large and bold, what it
-does, in muted body text, and a smaller line with how many of its agents run
-and its kind; a soul a spawn here would refuse also says why,
-above its count. The table has the same souls as rows: name, what it does, kind,
+beside the page's title) switches between them, and each window remembers its choice,
+also after a restart. The grid has three columns at most, fewer in a narrow
+window. A card shows the soul's name, in semibold, what it
+does, in muted text on two lines at most, and a smaller line with how many of its agents run
+and its kind; a soul a spawn here would refuse also says why, in one quiet
+line above its count, the whole sentence on its page. The table has the same souls as rows: name, what it does, kind,
 agents running, harness · model, and **Ready** (or why a spawn here would be
 refused; **—** when this OATS does not report it). A card or a row's name
 opens the soul's page. A new agent of a soul starts from **New agent** on its
@@ -623,8 +640,10 @@ page, from Quick Open, or from the palette. Souls of a member repository that
 has not confirmed its membership are listed last, under **Not available**,
 with the reason; they open nothing.
 
-A soul's page (open a soul from **Workspace › Souls**) is one column. Under its
-name and what it does, a block of facts: **Harness · model** (what a spawn here
+A soul's page (open a soul from **Workspace › Souls**) is one column, in the
+same type and spacing as the lists: its name as the page's one large line, the
+section titles in small capitals, the capability rows as Capabilities' rows.
+Under its name and what it does, a block of facts: **Harness · model** (what a spawn here
 runs, and where that choice came from), **Teams** (the teams its agents may
 join, the default marked; with team model v2, **Teams on this computer** folds
 out the editable list), **Knowledge** (the nodes it owns and reads, when it
