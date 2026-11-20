@@ -1154,7 +1154,7 @@ The same lines show whether a group is open or closed: closed, the dotted
 line joins the top-level dots; open, it runs on beside the children, whose
 own lines are drawn. Both lines hold 3:1 contrast on every row fill.
 
-The flag comes from the instances' OATS ([Related work](desktop-cli-api.md#same-work-as-the-parent-oats-instance-same-work)).
+The flag comes from the instances' OATS ([Related work](desktop-cli-api.md#related-work-oats-instance-related-work)).
 An OATS with `instance-related-work` reports it for a child and for a
 sibling. An older OATS, with `instance-same-work` only, reports it for a
 child only (set with `--same-work`), so its siblings get no dotted line. An

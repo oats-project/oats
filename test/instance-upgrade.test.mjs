@@ -18,7 +18,7 @@ import { readEvents } from "../lib/instance-events.mjs";
 import { readInstanceBackground, writeInstanceBackground } from "../lib/instance-background.mjs";
 import { readInstancePin, writeInstancePin } from "../lib/instance-pin.mjs";
 import { readBoardDocument, setBoardFact } from "../lib/instance-board.mjs";
-import { readSameWork, writeSameWork } from "../lib/instance-same-work.mjs";
+import { readRelatedWork, writeRelatedWork } from "../lib/instance-related-work.mjs";
 
 const json = p => JSON.parse(readFileSync(p, "utf8"));
 function pkg(version, mode = "adopt", names = ["acme.one"], launch = false) {
@@ -846,13 +846,13 @@ test("package upgrade regression: clean home retires without recovery", async t 
   assert.equal(retired.removedDir, true);
 });
 
-test("package upgrade regression: the same-work flag (#1577) is kept, is no home change, and the home still retires without recovery", async t => {
+test("package upgrade regression: the related-work flag (#1577) is kept, is no home change, and the home still retires without recovery", async t => {
   const f = await fixture(t, { oldMode: "no-upgrade", nextMode: "no-upgrade" });
-  writeSameWork(f.home, "lead");
+  writeRelatedWork(f.home, { parent: "lead" });
   const shown = await f.plan();
   assert.equal(shown.homeChangedSinceSpawn, false, "the flag's record is kernel presentation, not a home change");
-  await f.apply({ planRevision: shown.planRevision, idempotencyKey: "same-work" });
-  assert.equal(readSameWork(f.home), "lead", "the upgrade keeps the record");
+  await f.apply({ planRevision: shown.planRevision, idempotencyKey: "related-work" });
+  assert.deepEqual(readRelatedWork(f.home), { parent: "lead" }, "the upgrade keeps the record");
   const retired = await f.fx.inEnv(() => retireInstance(f.fx.root, "seat", { tmuxSession: "oats-test-nosuch" }));
   assert.equal(retired.workRecovery, undefined);
   assert.equal(retired.removedDir, true);
