@@ -60,12 +60,15 @@ if (result === undefined) result = defaults[req.verb](req.input);
 process.stdout.write(JSON.stringify({ ...echo, ...(b.echo ?? {}), ok: true, result }) + "\\n");
 `;
 
-const HOOK_SCRIPT = `import { appendFileSync, mkdirSync } from "node:fs";
+const HOOK_SCRIPT = `import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 const dir = join(process.env.HOME, "fake-session");
 mkdirSync(dir, { recursive: true });
 appendFileSync(join(dir, "calls.log"), JSON.stringify({ hook: process.env.OATS_EVENT, instance: process.env.OATS_INSTANCE, backend: process.env.OATS_BACKEND ?? null, harness: process.env.OATS_HARNESS ?? null, preview: process.env.OATS_LAUNCH_PREVIEW ?? null }) + "\\n");
-process.stdout.write(JSON.stringify({ env: { ACME_FAKE_TOKEN_FILE: "/nowhere/token" } }) + "\\n");
+// hook-launch.json, when a test wrote it (fx.hookLaunch): the hook's launch arguments, by harness.
+let launch;
+try { launch = JSON.parse(readFileSync(join(dir, "hook-launch.json"), "utf8")); } catch (e) { if (e.code !== "ENOENT") throw e; }
+process.stdout.write(JSON.stringify({ env: { ACME_FAKE_TOKEN_FILE: "/nowhere/token" }, ...(launch ? { launch } : {}) }) + "\\n");
 `;
 
 /** What a provider answers for a session that is gone. */
@@ -100,6 +103,8 @@ export function providerDeployment(t, { manifest = fakeManifest(), capabilities 
   mkdirSync(fx.fake, { recursive: true });
   /** What the provider answers from now on (see the top of this file). */
   fx.control = (control) => writeFileSync(join(fx.fake, "control.json"), JSON.stringify(control));
+  /** The launch arguments the capability's hooks answer from now on: `{ <harness>: "<arguments>" }`. */
+  fx.hookLaunch = (launch) => writeFileSync(join(fx.fake, "hook-launch.json"), JSON.stringify(launch));
   /** Every call and hook run so far, oldest first. */
   fx.calls = () => (existsSync(join(fx.fake, "calls.log")) ? readFileSync(join(fx.fake, "calls.log"), "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
   /** The provider's calls (never the hooks'), optionally of one verb. */

@@ -2091,7 +2091,9 @@ In:
 - `pathPrepend` is the home's kernel shim directory. Put it first on the
   agent's `PATH`, so its plain `oats` is the kernel that launched it.
 - `args` is the launch configuration's arguments, then the capabilities'
-  launch arguments for the harness. The kernel's own choices are never in
+  launch arguments for the harness, as the words a shell would hand it
+  (arguments the kernel cannot read as words are refused,
+  `E_BACKEND_LAUNCH_ARG`, naming the capability). The kernel's own choices are never in
   it: they are `model` (null: the harness's default), `yolo` (`true`,
   `false`, or `null` when nobody chose) and the prompt.
 - `promptFile` is the home's `TASK.md`: the briefing a fresh conversation
@@ -2130,6 +2132,10 @@ exactly those keys.
 | there, and the provider cannot tell a live idle session from a settled one | true | `unknown` | null |
 | gone: missing, deleted, or in error with nothing running | false | `stopped` | false |
 | the harness ended and something else holds the session, as a terminal left at its shell | true | `shell` | false |
+
+A session that is not there (`present: false`) is `stopped` and runs nothing:
+any other answer with `present: false` is outside the table, and is read as
+no answer (unavailable), like a word outside the contract.
 
 Map only what the product shows; never infer. **A session that is gone on a
 home OATS did not stop is a lost session**: OATS resumes it through `input`,

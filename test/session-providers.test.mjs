@@ -167,6 +167,8 @@ test("T3: inspect relays the provider's answer; a malformed, failing or slow one
     ["a refusal", { inspect: { error: { code: "E_BACKEND_NOT_READY", message: "the server is down" } } }],
     ["a word outside the contract", { inspect: { result: { present: true, state: "running", running: true } } }],
     ["an unknown key", { inspect: { result: { present: true, state: "unknown", running: true, pane: "%1" } } }],
+    ["a row outside the table: a session that is gone and runs", { inspect: { result: { present: false, state: "unknown", running: true } } }],
+    ["a row outside the table: a session that is gone and not stopped", { inspect: { result: { present: false, state: "shell", running: false } } }],
     ["an open link that is no http URL", { inspect: { result: { present: true, state: "unknown", running: true, open: { label: "x", url: "javascript:alert(1)" } } } }],
     ["a slow provider", both({ sleepMs: 5000 }), { OATS_TEST_SESSION_PROVIDER_TIMEOUT_MS: "400" }],
   ]) {
@@ -786,6 +788,27 @@ test("the launch input marks a launch configuration's secret, so a provider can 
   assert.equal(existsSync(join(fx.root, "dev", "instances", "wrapped")), false);
 });
 
+test("a capability's launch arguments arrive in the launch input's args, after the configuration's; ones that are no words are refused", async (t) => {
+  const fx = providerDeployment(t, { local: { "launch-configs": { claude: { harness: "claude" }, keyed: { harness: "claude", args: ["--verbose"] } } } });
+  fx.hookLaunch({ claude: "--channels plugin:aweb@awebai '--settings' '/a b/settings.json'", codex: "--never" });
+  const { home } = await fx.launch("withargs", { launchConfig: "keyed" });
+  assert.deepEqual(fx.verbs("launch")[0].request.input.args, ["--verbose", "--channels", "plugin:aweb@awebai", "--settings", "/a b/settings.json"], "the harness's own, as the words a window's shell would hand it");
+  // A restart hands them over again.
+  fx.clearCalls();
+  await fx.inEnv(() => startInstanceSession(home, { restart: true }));
+  assert.deepEqual(fx.verbs("launch")[0].request.input.args, ["--verbose", "--channels", "plugin:aweb@awebai", "--settings", "/a b/settings.json"]);
+
+  // Arguments the kernel cannot read as words: refused, naming the capability; nothing is created.
+  fx.hookLaunch({ claude: "--settings 'unclosed" });
+  fx.clearCalls();
+  const refused = fx.cli(["spawn", "dev", "--name", "nowords", "--backend", "fake", "--launch-config", "claude", "--json"]).json();
+  assert.equal(refused.error.code, "E_BACKEND_LAUNCH_ARG");
+  assert.match(refused.error.message, new RegExp(`the claude launch arguments of ${FAKE_CAPABILITY.replace(".", "\\.")} \\("--settings 'unclosed"\\) cannot be read as words`));
+  assert.deepEqual(refused.error.details, { field: "args", capabilities: [FAKE_CAPABILITY] });
+  assert.equal(existsSync(join(fx.root, "dev", "instances", "nowords")), false);
+  assert.deepEqual(fx.verbs(), [], "the provider was never called");
+});
+
 test("the authority check: a record that disagrees with the receipt is refused, with the provider's field labels", async (t) => {
   const fx = providerDeployment(t);
   const { home } = await fx.launch("drifted");
@@ -1001,6 +1024,11 @@ test("a requires row with `backends` and `when` applies only where both hold, al
   assert.deepEqual(applicableRequirements("claude", [cap(["session-provider"], "channel")], "tmux"), [], "nor is a provider's row a tmux launch's");
   assert.deepEqual(applicableRequirements("claude", [cap(["session-provider"], "channel")], "fake"), [{ capability: "x", package: "needed@acme-market" }]);
   assert.deepEqual(applicableRequirements("claude", [cap(["tmux"], "session")], "tmux"), [], "a `when` that does not hold");
+  // A `when` that is no object applies, as before the contract: the probe is what refuses it.
+  for (const when of [null, false, "", 0, "channel", ["channel"]]) {
+    const malformed = [{ id: "x", manifest: { requires: [{ harness: "claude", package: "needed@acme-market", when }] }, settings: {} }];
+    assert.deepEqual(applicableRequirements("claude", malformed, "tmux"), [{ capability: "x", package: "needed@acme-market" }], JSON.stringify(when));
+  }
   const preview = (soul, config, ...backend) => { const a = fx.cli(["spawn", soul, ...backend, "--launch-config", config, "--preview", "--json"]).json(); return a.ok ? "ok" : a.error.code; };
   const onProvider = ["--backend", "fake"];
   // With arguments: refused only where the row is a requirement of that backend.

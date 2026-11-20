@@ -526,7 +526,8 @@ function scopeSouls(ctx, { extraRoots = [] } = {}) {
   const roots = [...new Set([findRoot(ctx), ...extraRoots].filter(Boolean).map((p) => realOrResolved(resolve(p))))];
   const souls = [];
   for (const root of roots) {
-    for (const a of listInstances(root)) {
+    // Names only: no session provider is asked.
+    for (const a of listInstances(root, undefined, undefined, { askProviders: false })) {
       const soul = findAgent(root, a.name) || a;
       const e = soulEntry(soul, root);
       e.instances = (a.instances || []).map((i) => i.instance);
