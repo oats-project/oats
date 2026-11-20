@@ -95,6 +95,7 @@ import { custodyPreflight } from "../lib/grant-custody.mjs";
 import { registryEnv, registryOrigin as configuredRegistryOrigin, registryMigration, registryShellAssignment, registryShellValue } from "../lib/registry-setting.mjs";
 import { promptHidden } from "../lib/hidden-prompt.mjs";
 import { channelCacheNote, clearChannelFailure, recordedClaudeConfigDir } from "../lib/claude-channel.mjs";
+import { MAIL_AW_MIN, parseMailArgs, readMail } from "../lib/mail-read.mjs";
 import { selectClaudeChannel, launchChannelWarning, brokerDelivers, joinedTeamsPolled, recordedBackend, recordedRuntime, recordedStart, sessionProviderBackend, statusListsHome, wakeBackendHint, wakeBrokerRefusal, wakeRegistration } from "../lib/wake-receive.mjs";
 
 /** Run a command as ARGV — never a shell string. Team ids, aliases, instance
@@ -229,7 +230,7 @@ function onPath(cmd) {
 // error:{code, message}} with a nonzero exit. Under OATS_OPERATION every other
 // stdout write goes to stderr and every way out answers one envelope. Without
 // it (`oats aweb teams --json` from a shell) the bare document is unchanged.
-const OPERATION_COMMANDS = ["teams", "join", "leave"];
+const OPERATION_COMMANDS = ["teams", "join", "leave", "mail"];
 const operation = process.env.OATS_OPERATION && OPERATION_COMMANDS.includes(process.env.OATS_EVENT || process.argv[2]) ? process.env.OATS_OPERATION : undefined;
 let operationAnswered = false;
 let lastStderr = "";
@@ -372,7 +373,7 @@ catch (error) {
     process.exit(1);
   }
   if (operation) operationFail("E_SETTINGS", error.message);
-  if (["roster", "connect", "teams", "join", "leave"].includes(event)) {
+  if (["roster", "connect", "teams", "join", "leave", "mail"].includes(event)) {
     console.error(`oats aweb ${event}: ${error.message}`);
     process.exit(1);
   }
@@ -529,7 +530,7 @@ async function ensureAw({ install, version, min }) {
 }
 
 const AW_INSTALL = "install the aw CLI first — see https://aweb.ai/docs (or `oats aweb setup` for guided onboarding)";
-const isCommand = ["roster", "setup", "connect", "teams", "join", "leave"].includes(event);
+const isCommand = ["roster", "setup", "connect", "teams", "join", "leave", "mail"].includes(event);
 const invalidConfiguredTeamId = invalidAwebTeamId();
 if (invalidConfiguredTeamId && (isCommand || ["spawn", "launch"].includes(event))) {
   if (isCommand) { console.error(`oats aweb ${event}: ${AWEB_TEAM_ID_MESSAGE}`); process.exit(1); }
@@ -549,7 +550,9 @@ if ((isCommand && !setupHandlesAw) || event === "spawn") {
   const floor = await awFloorObservation({ timeout: hookTimeout(10000) });
   const floorProblem = floor.message;
   spawnAwVersion = floor.version;
-  if (floorProblem) {
+  // mail refuses every aw below its own, higher floor with E_AW_TOO_OLD
+  // (runMailCommand), the provider's floor included, when the version reads.
+  if (floorProblem && !(event === "mail" && floor.version)) {
     if (isCommand) { console.error(`oats aweb ${event}: ${floorProblem}`); process.exit(1); }
     fatal(`${floorProblem}, so no identity could be minted and this instance would not meet the messaging contract`);
   }
@@ -2245,6 +2248,48 @@ function runTeamsCommand(kind) {
   outputTeamsDocument(doc, args.json);
 }
 
+/** `oats aweb mail` and the operation messaging:mail: this home's own mail,
+ *  received and sent, newest first, read without acknowledging anything
+ *  (lib/mail-read.mjs). Read from the primary identity and every joined
+ *  team's identity home; each aw call runs as that identity. */
+const MAIL_AW_TIMEOUT_MS = 30 * 1000;
+function awMailRead(identityHome, args) {
+  const argv = ["--identity-home", identityHome, ...args];
+  return new Promise((settle) => {
+    let child;
+    try { child = spawn("aw", argv, { cwd: home, env: childEnvFor({ argv }), stdio: ["ignore", "pipe", "pipe"], timeout: MAIL_AW_TIMEOUT_MS }); }
+    catch (e) { settle({ status: null, stdout: "", stderr: String(e.message || e) }); return; }
+    let stdout = "", stderr = "";
+    // Decode as one stream: a UTF-8 character may cross a pipe chunk.
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (d) => { stdout += d; });
+    child.stderr.on("data", (d) => { stderr += d; });
+    child.on("error", (e) => settle({ status: null, stdout, stderr: String(e.message || e) }));
+    child.on("close", (status, signal) => settle({ status: signal ? null : status, stdout, stderr: signal ? `killed by ${signal}` : stderr }));
+  });
+}
+async function runMailCommand() {
+  const args = parseMailArgs(stripForwardedSoul());
+  if (args.home) { home = resolve(args.home); process.env.OATS_HOME = home; }
+  if (!versionAtLeast(spawnAwVersion, MAIL_AW_MIN)) {
+    const error = new Error(`aw ${spawnAwVersion || "unreadable"} cannot list mail threads, so mail can't be read without acknowledging it: messaging:mail needs aw >= ${MAIL_AW_MIN}; upgrade with \`npm i -g @awebai/aw@latest\``);
+    error.code = "E_AW_TOO_OLD";
+    error.details = { version: spawnAwVersion || null, needs: MAIL_AW_MIN };
+    throw error;
+  }
+  const meta = readCapabilityMeta();
+  const team = defaultTeamObject(meta);
+  const identities = [
+    { team: team?.label || team?.team || "default", identityHome: primaryIdentityHomeOf(meta), primary: true },
+    ...joinedTeamsOf(meta).map((j) => ({ team: j.label, identityHome: j.identityHome, primary: false })),
+  ];
+  const result = await readMail({ identities, limit: args.limit, cursor: args.cursor, conversation: args.conversation, aw: awMailRead, exists: (p) => typeof p === "string" && isAbsolute(p) && existsSync(p) });
+  if (operation) operationOk(result);
+  if (args.json) console.log(JSON.stringify(result));
+  else console.log(result.documents[0].text);
+}
+
 /** The primary identity's team comes only from the kernel's team-model v2
  *  default env. Never fall back to the root's active team. */
 function resolvePrimaryTeam() {
@@ -2833,6 +2878,13 @@ if (event === "launch") {
   catch (e) {
     console.error(e.code ? `${e.code}: ${e.message}` : `oats aweb ${event}: ${e.message || e}`);
     if (operation) operationFail(e.code, e.message || String(e), e.partial ? { ...e.partial, joined: teamsDocument(readCapabilityMeta()).joined } : undefined);
+    process.exit(1);
+  }
+} else if (event === "mail") {
+  try { await runMailCommand(); process.exit(0); }
+  catch (e) {
+    console.error(e.code ? `${e.code}: ${e.message}` : `oats aweb mail: ${e.message || e}`);
+    if (operation) operationFail(e.code, e.message || String(e), e.details);
     process.exit(1);
   }
 } else if (event === "roster") {
