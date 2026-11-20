@@ -116,7 +116,7 @@ test('slice3c souls grid at most 3 columns at 1280', t => {
   for (const decl of ['padding:var(--space-3) 14px', 'background:var(--surface)', 'border:1px solid var(--border)', 'border-radius:var(--radius-card)']) assert.ok(cardRule.includes(decl), decl);
   assert.match(ruleBody(spawnCSS(), '.soul-card:hover'), /background:var\(--surface-2\)/, 'hover raises the tile');
   assert.match(ruleBody(spawnCSS(), '.soul-card.open'), /border-color:var\(--accent\); background:var\(--sel\)/, 'the open card: the accent edge on the selected fill');
-  assert.deepEqual([card.css('.stitle').fontSize, card.css('.stitle').fontWeight], ['var(--text-card-name)', 'var(--name-weight)']);
+  assert.deepEqual([card.css('.stitle').fontSize, card.css('.stitle').fontWeight], ['var(--text-card-name)', 'var(--card-name-weight)']);
   assert.deepEqual([card.css('.sdesc').fontSize, card.css('.sdesc').color, card.css('.sdesc').getPropertyValue('-webkit-line-clamp')], ['var(--text-desc)', 'var(--muted)', '2']);
   assert.deepEqual([card.css('.sfoot').fontSize, card.css('.sfoot').color], ['var(--text-meta)', 'var(--muted)']);
   // The refusal, kept but quiet: one line at the meta size and weight, an ellipsis.
@@ -247,7 +247,7 @@ test('slice3c tokens not page-local', () => {
   // The prototype's scale lives in theme.css, shared by every theme; the dark palette is its Tokyo Night hues.
   for (const [token, value] of [['space-1', '4px'], ['space-2', '8px'], ['space-3', '12px'], ['space-4', '16px'], ['space-5', '24px'], ['space-6', '28px'],
     ['text-label', '11px'], ['text-meta', '12px'], ['text-desc', '12.5px'], ['text-body', '13px'], ['text-name', '13.5px'], ['text-card-name', '15px'], ['text-title', '17px'],
-    ['radius-tag', '4px'], ['radius-control', '6px'], ['radius-card', '8px'], ['row-h', '44px']]) assert.equal(scale.get(token), value, token);
+    ['radius-tag', '4px'], ['radius-control', '6px'], ['radius-card', '8px'], ['row-h', '40px']]) assert.equal(scale.get(token), value, token);
   for (const [token, value] of [['bg', '#1a1b26'], ['surface', '#1f2130'], ['surface-2', '#24273a'], ['fg', '#c0caf5'], ['accent', '#7aa2f7'], ['ok', '#9ece6a'], ['warn', '#e0af68'], ['danger', '#f7768e'], ['violet', '#bb9af7']])
     assert.equal(dark.get(token), value, `dark --${token}`);
   // The rows, cards, pages and labels this slice drew read those tokens, not literal sizes.

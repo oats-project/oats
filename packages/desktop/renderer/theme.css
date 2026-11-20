@@ -11,13 +11,13 @@
 /* The prototype's scale (the Desktop UI rework, slice 3c: the Workspace pages, frame A of the prototype), shared by
    every theme. Spacing in 4px steps; one type size per role: a small uppercase label (a group or section heading, a
    pill), a meta line (what a row does, its counts), a card's description, the chrome's body, a row's name, a card's
-   name, a page's title; the label's tracking and weight, a name's weight; radii for a pill, a control and a card; a
-   list row's height. */
+   name, a page's title; the label's tracking and weight, a row's and a card's name weight; radii for a pill, a
+   control and a card; a list row's height. */
 :root {
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 28px;
   --text-label: 11px; --text-meta: 12px; --text-desc: 12.5px; --text-body: 13px; --text-name: 13.5px; --text-card-name: 15px; --text-title: 17px;
-  --label-tracking: .06em; --label-weight: 600; --name-weight: 600;
-  --radius-tag: 4px; --radius-control: 6px; --radius-card: 8px; --row-h: 44px;
+  --label-tracking: .06em; --label-weight: 600; --name-weight: 600; --card-name-weight: 650;
+  --radius-tag: 4px; --radius-control: 6px; --radius-card: 8px; --row-h: 40px;
 }
 /* The default monospace face, bundled so it is the same on every machine
    (Inconsolata, SIL OFL 1.1: fonts/README.md). The terminal and the UI's code,

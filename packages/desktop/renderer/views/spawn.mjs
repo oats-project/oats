@@ -116,7 +116,7 @@ ${groupHeadingCSS}
 .soul-card:hover { background:var(--surface-2); }
 .soul-card.open { border-color:var(--accent); background:var(--sel); }
 .soul-card.unavailable { cursor:default; }
-.soul-card .stitle { font-size:var(--text-card-name); font-weight:var(--name-weight); line-height:20px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.soul-card .stitle { font-size:var(--text-card-name); font-weight:var(--card-name-weight); line-height:20px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .soul-card.unavailable .stitle { color:var(--muted); }
 .soul-card .sdesc { margin:0; color:var(--muted); font-size:var(--text-desc); line-height:1.45; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow-wrap:anywhere; }
 .soul-card .sdesc:empty { display:none; }
@@ -133,7 +133,7 @@ ${groupHeadingCSS}
 .souls-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:var(--text-desc); color:var(--fg); }
 .souls-table th, .souls-table td { padding:var(--space-2) 10px; text-align:left; vertical-align:top; line-height:18px; border-bottom:1px solid var(--border); overflow:hidden; text-overflow:ellipsis; }
 /* Column heads in the small-label type (slice 3c): uppercase, tracked, muted. */
-.souls-table thead th { position:sticky; top:0; z-index:1; background:var(--bg); color:var(--muted); font-size:var(--text-label); font-weight:var(--label-weight); letter-spacing:var(--label-tracking); text-transform:uppercase; line-height:28px; padding-top:0; padding-bottom:0; }
+.souls-table thead th { position:sticky; top:0; z-index:1; background:var(--bg); color:var(--muted); font-size:var(--text-label); font-weight:var(--label-weight); letter-spacing:var(--label-tracking); text-transform:uppercase; line-height:16px; padding-top:6px; padding-bottom:6px; vertical-align:bottom; }
 .souls-table col.c-name { width:22%; } .souls-table col.c-kind { width:10%; } .souls-table col.c-agents { width:9%; }
 .souls-table col.c-launch { width:17%; } .souls-table col.c-ready { width:14%; }
 .souls-table tbody th.souls-table-group { padding:var(--space-5) 10px var(--space-1); border-bottom:0; color:var(--fg); font-weight:400; }

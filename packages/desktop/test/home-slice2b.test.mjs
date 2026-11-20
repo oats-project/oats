@@ -309,8 +309,8 @@ test("slice2b soul card type hierarchy", () => {
   const theme = readFileSync(new URL("theme.css", renderer), "utf8");
   const scale = new Map([...theme.matchAll(/:root \{([^}]*)\}/g)].flatMap((m) => [...m[1].matchAll(/--([\w-]+):\s*([^;]+);/g)].map((d) => [d[1], d[2].trim()])));
   const px = (sel) => parseFloat(scale.get(style(sel).fontSize.match(/^var\(--([\w-]+)\)$/)[1]));
-  assert.deepEqual([style(".stitle").fontSize, style(".stitle").fontWeight], ["var(--text-card-name)", "var(--name-weight)"], "the name: the card title (slice 3c: 15 / 600)");
-  assert.deepEqual([scale.get("text-card-name"), scale.get("name-weight")], ["15px", "600"]);
+  assert.deepEqual([style(".stitle").fontSize, style(".stitle").fontWeight], ["var(--text-card-name)", "var(--card-name-weight)"], "the name: the card title (slice 3c: 15 / 650)");
+  assert.deepEqual([scale.get("text-card-name"), scale.get("card-name-weight")], ["15px", "650"]);
   assert.doesNotMatch(rules.match(/\.soul-card \.stitle \{[^}]*\}/)[0], /color:/, "the name keeps the card's --fg");
   assert.deepEqual([style(".sdesc").fontSize, style(".sdesc").color], ["var(--text-desc)", "var(--muted)"], "what it does: body, muted");
   assert.deepEqual([style(".sfoot").fontSize, style(".sfoot").color], ["var(--text-meta)", "var(--muted)"], "the meta line: secondary, muted");
@@ -343,8 +343,9 @@ test("slice2b capabilities shows workspace defaults", async () => {
   const dom = new JSDOM('<main class="oats-view"><div class="caps"></div></main>');
   const doc = dom.window.document, host = doc.querySelector(".caps"), opened = [];
   renderCapabilityList(host, { rows, status, query: "runbook", onOpen: (row) => opened.push(row.name) });
-  const parts = [...host.children].map((el) => el.dataset.part);
-  assert.deepEqual(parts, ["defaults", "all"], "the defaults above the list");
+  // Slice 3c: the page's first line (what a capability is, its counts) opens the tab, before the two parts.
+  const parts = [...host.children].map((el) => el.dataset.part ?? el.className);
+  assert.deepEqual(parts, ["cap-intro", "defaults", "all"], "the defaults above the list");
   const defaults = host.querySelector("[data-part=defaults]");
   assert.deepEqual([...defaults.querySelectorAll("h3, h4")].map((h) => h.textContent), ["Workspace defaults", "Core", "Additional"]);
   assert.deepEqual([...defaults.querySelectorAll(".cap-slot")].map((s) => [s.dataset.slot, s.querySelector(".cap-slot-label").textContent,

@@ -22,7 +22,7 @@ export const catalogCSS = `
 .cap-list > li { display:flex; min-width:0; border-bottom:1px solid var(--border); }
 /* A row is one button (no nested controls); the UA button is reset. Two lines: the name, its mark and its pills; then
    what it does. Quiet states: hover raises it to --surface-2, keyboard focus is the shell's tint under the accent edge. */
-.oats-view button.cap-row, button.cap-row, .cap-row { appearance:none; -webkit-appearance:none; display:flex; flex-direction:column; justify-content:center; gap:2px; flex:1; width:100%; min-width:0; height:auto; min-height:var(--row-h); margin:var(--space-1) 0; padding:6px var(--space-3); border:0; border-radius:var(--radius-control); background:transparent; color:var(--fg); font:inherit; font-family:var(--ui-font,system-ui); text-align:left; box-sizing:border-box; }
+.oats-view button.cap-row, button.cap-row, .cap-row { appearance:none; -webkit-appearance:none; display:flex; flex-direction:column; justify-content:center; gap:2px; flex:1; width:100%; min-width:0; height:auto; min-height:var(--row-h); margin:2px 0; padding:5px var(--space-3); border:0; border-radius:var(--radius-control); background:transparent; color:var(--fg); font:inherit; font-family:var(--ui-font,system-ui); text-align:left; box-sizing:border-box; }
 .oats-view button.cap-row { cursor:pointer; }
 .oats-view button.cap-row:hover { background:var(--surface-2); }
 /* Keyboard focus: the shell's tint (rule 2) under the global accent edge. */

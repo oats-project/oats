@@ -69,7 +69,7 @@ export const capabilityContentsCSS = `${contentsCardCSS}${capabilityWarningsCSS}
 /* The skills: the capability list's rows (slice 3c, the prototype's look): no box, a hairline under each row. */
 .cap-skills-list { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; }
 .cap-skills-list > li { display:flex; min-width:0; border-bottom:1px solid var(--border); }
-.oats-view button.cap-skill-row, .cap-skill-row { appearance:none; -webkit-appearance:none; display:flex; flex-direction:column; justify-content:center; gap:2px; flex:1; width:100%; min-width:0; height:auto; min-height:var(--row-h); margin:var(--space-1) 0; padding:6px var(--space-3); border:0; border-radius:var(--radius-control); background:transparent; color:var(--fg); font:inherit; font-family:var(--ui-font,system-ui); text-align:left; box-sizing:border-box; }
+.oats-view button.cap-skill-row, .cap-skill-row { appearance:none; -webkit-appearance:none; display:flex; flex-direction:column; justify-content:center; gap:2px; flex:1; width:100%; min-width:0; height:auto; min-height:var(--row-h); margin:2px 0; padding:5px var(--space-3); border:0; border-radius:var(--radius-control); background:transparent; color:var(--fg); font:inherit; font-family:var(--ui-font,system-ui); text-align:left; box-sizing:border-box; }
 .oats-view button.cap-skill-row { cursor:pointer; }
 .oats-view button.cap-skill-row:hover { background:var(--surface-2); }
 .oats-view button.cap-skill-row:focus-visible { background:var(--sel); }

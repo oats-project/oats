@@ -552,7 +552,9 @@ test('slice2b breadcrumb on every workspace page', async t => {
   // A tab: Home › Workspace › Souls, above the tab bar; the section is the page's h1.
   const head = u.get('.workspace-title');
   assert.equal(head.tagName, 'NAV'); assert.equal(head.getAttribute('aria-label'), 'Breadcrumb');
-  assert.equal(head.nextElementSibling, u.get('.workspace-header'), 'above the tab bar');
+  // Slice 3c: the trail's row also holds the Souls tab's Grid | Table, beside the h1; the row sits above the tab bar.
+  assert.equal(head.parentElement.className, 'workspace-title-row'); assert.equal(head.nextElementSibling, u.get('.souls-view'));
+  assert.equal(head.parentElement.nextElementSibling, u.get('.workspace-header'), 'above the tab bar');
   assert.deepEqual(trail(head), [['Home', 'link'], ['Workspace', 'link'], ['Souls', 'here']]);
   assert.equal(head.querySelector('h1').getAttribute('aria-current'), 'page');
   u.get('#workspace-tab-capabilities').click(); await tick();

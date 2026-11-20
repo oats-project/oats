@@ -629,7 +629,7 @@ reports no role for a soul yet, so the name is the rule until it does
 The souls show as a grid of cards or as a table: **v** (or **Grid** | **Table**
 beside the page's title) switches between them, and each window remembers its choice,
 also after a restart. The grid has three columns at most, fewer in a narrow
-window. A card shows the soul's name, in semibold, what it
+window. A card shows the soul's name, larger and bold, what it
 does, in muted text on two lines at most, and a smaller line with how many of its agents run
 and its kind; a soul a spawn here would refuse also says why, in one quiet
 line above its count, the whole sentence on its page. The table has the same souls as rows: name, what it does, kind,
