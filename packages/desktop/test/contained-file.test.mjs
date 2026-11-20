@@ -86,6 +86,8 @@ test('contained file: directories, FIFOs, sockets and devices are refused withou
   await new Promise((ok, reject) => { server.once('error', reject); server.listen(socket, ok); });
   t.after(() => new Promise(ok => server.close(ok)));
   refused(reader([f.base]), socket, 400);
+  const link = join(f.root, 'socket-link'); fs.symlinkSync(socket, link);
+  refused(reader([f.base]), link, 400);
   refused(reader(['/dev']), '/dev/null', 400);
 });
 

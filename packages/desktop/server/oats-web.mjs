@@ -1141,8 +1141,7 @@ function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null
           const g = resolveGuardedFile(requested, allowedRoots, io);
           if (g.error) return g;
           fd = io.openSync(g.real, flags);
-        } else if (["ENXIO", "ENODEV", "EISDIR", "EOPNOTSUPP", "ENOTSUP"].includes(e.code)) return notFile;
-        else return missing;
+        } else throw e;
       }
       const st = io.fstatSync(fd);
       const g = resolveGuardedFile(requested, allowedRoots, io);
@@ -1163,7 +1162,9 @@ function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null
     } finally {
       if (fd !== undefined) io.closeSync(fd);
     }
-  } catch { return missing; }
+  } catch (e) {
+    return ["ENXIO", "ENODEV", "EISDIR", "EOPNOTSUPP", "ENOTSUP"].includes(e.code) ? notFile : missing;
+  }
 }
 /* OATSWEB_FILEGUARD_END */
 
