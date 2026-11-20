@@ -2109,7 +2109,8 @@ In:
   "promptFile": "/abs/home/TASK.md",
   "previous": null,
   "sandbox": { "domains": [], "write": [ { "path": "/abs/deployment/.agents/events", "reason": "oats events" } ], "missing": [] },
-  "trees": ["/abs/home/work", "/abs/home/.work-docs"] }
+  "trees": ["/abs/home/work", "/abs/home/.work-docs"],
+  "protected": ["/abs/deployment/agents/dev/instances/.oats-retirement"] }
 ```
 
 - `env` is every variable the launch sets, in the order a tmux launch sets
@@ -2150,6 +2151,21 @@ In:
   common Git directory, so a session that can write there can take a tree
   off the list, and that tree is then no longer sent. `<home>/work` always
   is.
+- `protected` is the kernel's own state for this home, as absolute paths of
+  directories: **paths a sandboxed agent must never write, and that a
+  provider must not block reading or executing.** Today it is one entry,
+  `<instances>/.oats-retirement/`, which holds the kernel's copies of the
+  home's modules (what it runs, and what the home's hooks hand the harness
+  to run), the receipts, the lifecycle claims and the records of provider
+  commands in flight
+  ([What the kernel trusts in a provider home](#what-the-kernel-trusts-in-a-provider-home)).
+  The kernel makes each directory before it asks you anything, so one that
+  is missing is a fault, not a first launch. It is never derived from the
+  home. A provider that runs its harness in a sandbox denies writes to each
+  entry, leaves it readable and executable at the same path, and refuses a
+  launch it would sandbox when `protected` is absent or an entry is not an
+  absolute path of a directory. (`trees` and `protected` were added to wire
+  1.3 without a new version only because no release carries a provider yet.)
 
 **A provider that cannot carry an env entry, an argument or `unset`
 refuses, naming it** (`E_BACKEND_LAUNCH_ENV`, `E_BACKEND_LAUNCH_ARG`). It
@@ -2239,8 +2255,8 @@ started by a killed spawn is ever stopped.
 
 The provider's readiness. In: `{ "home": "/abs/home" | null, "soul": "<name>" | null, "settings": { … } }`:
 a home, or, before any home exists, a soul; and, before a launch,
-`"launch": { "harness", "yolo", "args", "sandbox", "trees" }`, the launch that is
-planned: the harness, yolo, the allowances and the trees as its launch input will
+`"launch": { "harness", "yolo", "args", "sandbox", "trees", "protected" }`, the launch that is
+planned: the harness, yolo, the allowances, the trees and the protected paths as its launch input will
 carry them, and in `args` the launch configuration's own arguments. **The
 arguments a capability's hooks contribute are not in it**: the check runs
 before any hook, and those reach the launch input only. Out:
@@ -2337,8 +2353,11 @@ takes no capability setting from it**:
 
 Your own part, if you sandbox: **keep `<instances>/.oats-retirement/`
 unwritable from the session**, by the harness's shell and by its file tools
-alike. The session never needs to read it either: nothing the harness runs
-is there. The
+alike, and **keep it readable, and its `modules/` executable**, from the
+session, at the same path: a hook records paths of its own files there for
+the harness to run (as `oats.core`'s launch hook hands Claude Code the
+script its hooks run), and the harness runs them inside the sandbox. The
+launch input names the directory in `protected` ([launch](#launch)). The
 directory holds the kernel's copies of the modules, the receipts (the
 composition above, the session's endpoint), the lifecycle claims and the
 kernel's records of provider commands in flight. A session that can write

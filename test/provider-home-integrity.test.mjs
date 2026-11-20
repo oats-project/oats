@@ -462,3 +462,24 @@ test("readiness of a provider home says which of the home's copies differ from t
   assert.deepEqual(readiness().kernelCopies, { store, differing: [{ capability: FAKE_CAPABILITY, differs: true }, { capability: HOOKED, differs: true }] });
   assert.equal(Object.hasOwn(rowOf(fx, "compared"), "kernelCopies"), false);
 });
+
+test("the launch input and the check's planned launch carry `protected`, the kernel's own state for the home, and the kernel has made that directory by the time it asks: on a deployment's first home, in every work mode", async (t) => {
+  // The provider's command says, in its log, whether each path it was handed is a directory then.
+  const files = fakeFiles();
+  files["bin/session.mjs"] = `import { appendFileSync as noteSeen, statSync as seen } from "node:fs";
+const asked = JSON.parse(await new Promise((done) => { let text = ""; process.stdin.on("data", (d) => { text += d; }); process.stdin.on("end", () => done(text)); }));
+const handed = asked.verb === "check" ? asked.input.launch?.protected : asked.verb === "launch" ? asked.input.protected : null;
+if (handed) noteSeen(process.env.HOME + "/fake-session/protected.log", JSON.stringify({ verb: asked.verb, protected: handed, directories: handed.map((path) => { try { return seen(path).isDirectory(); } catch { return false; } }) }) + "\\n");
+process.stdout.write(JSON.stringify({ schemaVersion: 1, phase: "session", capability: asked.capability, provider: asked.provider, verb: asked.verb, ok: true, result: asked.verb === "check" ? { status: "ready", problems: [] } : asked.verb === "launch" ? { endpoint: { server: "http://127.0.0.1:1", threadId: "thr_first_1" } } : asked.verb === "stop" ? { stopped: true } : {} }) + "\\n");
+`;
+  for (const work of ["directory", "worktree"]) {
+    const fx = providerDeployment(t, { capabilities: { [FAKE_CAPABILITY]: { manifest: fakeManifest({ fake: fakeProvider({ check: true, inspectMany: false }) }), files } } });
+    const kept = join(fx.root, "dev", "instances", ".oats-retirement");
+    assert.equal(existsSync(join(fx.root, "dev")) && existsSync(kept), false, "a fresh deployment: no home was ever spawned or retired here");
+    const { home } = await fx.launch("first", { work });
+    const seen = readFileSync(join(fx.fake, "protected.log"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    assert.deepEqual(seen, [{ verb: "check", protected: [kept], directories: [true] }, { verb: "launch", protected: [kept], directories: [true] }], work);
+    assert.equal(join(dirname(home), ".oats-retirement"), kept);
+    assert.equal(kernelModuleDir(home, FAKE_CAPABILITY).startsWith(`${kept}/`), true, "the kernel's copies are under it");
+  }
+});

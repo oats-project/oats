@@ -36,6 +36,11 @@
   home's `work/`, then every extra tree Git itself lists for the home, as
   absolute paths. A provider that sandboxes keeps each tree's Git pointer,
   configuration and hooks unwritable. Additive; the wire stays 1.3.
+- **The launch input and the check's planned launch carry `protected`**:
+  the kernel's own state for the home, today `<instances>/.oats-retirement/`:
+  paths a sandboxed agent must never write, and that a provider must not
+  block reading or executing. The kernel makes each directory before the
+  launch. Additive; the wire stays 1.3.
 - **`OATS_PREVIOUS_BACKEND`** for launch hooks: the backend the home was
   last launched on, as its receipt records it (`tmux` or a provider's
   name); absent at a first launch. A capability that keeps files of its own
@@ -77,8 +82,9 @@
   your own code.
 - **For a provider's author:** if your provider sandboxes its harness, keep
   `<instances>/.oats-retirement/` unwritable from the session (the kernel's
-  copies of the modules and the receipts are there; the session never needs
-  to read it), and deny writes to the Git pointer, configuration and hooks
+  copies of the modules and the receipts are there) and leave it readable,
+  and its `modules/` executable, at the same path (a hook hands the harness
+  scripts there); the launch input names it in `protected`, and deny writes to the Git pointer, configuration and hooks
   of each path in `trees`. Nothing in this release makes a provider's
   sandboxed mode a security boundary between an agent and the operator's
   account.
