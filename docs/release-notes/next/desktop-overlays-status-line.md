@@ -1,4 +1,4 @@
-### Desktop: the palette, the status line, sheets, help and Appearance
+## Changed
 
 - The command palette is the one place to reach everything: the agents that need you, your recent agents, the sections, the commands, and a **New agent: <soul>** row per soul. Quick Open's separate overlay is gone: ⌘P / Alt+P opens the palette on its souls (`+`).
 - A status line along the bottom of the window shows the three most useful keys for where you are, says why a key could not act, and says what was just done. Stop, Start and Restart keep their dialogs.

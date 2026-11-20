@@ -310,13 +310,14 @@ have.
 - **A workspace with no agents yet** shows what OATS does in two lines and
   three keys (New agent, the command palette, Home), then the overview.
 
-Home has no key of its own yet: the palette's **View: Home** opens it. The
+Home has no key of its own yet: the palette's **Home** (among its sections)
+opens it. The
 board never changes the roster's order: urgency is sorted on Home only.
 
 **The command palette** (⌘K / Alt+K) is the one place to reach everything.
 It lists, in order: the agents that need you (the newest first), your recent
 agents (the sidebar's tree, the one you used last on top), the sections
-(Workspace overview and its tabs, Automations, Connections), the commands,
+(Home, Workspace overview and its tabs, Automations, Connections), the commands,
 and one **New agent: <soul>** row per soul. Type to narrow it; `>` keeps only
 the commands and `+` only the souls.
 

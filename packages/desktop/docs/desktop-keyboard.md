@@ -359,7 +359,7 @@ The three Linux / Windows columns are [the chord families](#the-chord-families):
 | Split down (`split.horizontal`) | ⌘⇧\ | Alt+Shift+E | Ctrl+Alt+Shift+E | Ctrl+Shift+D | yes |
 | Focus the previous / next editor group (`split.focusPrevGroup`, `split.focusNextGroup`; the leader's Shift+Tab, Tab) | ⌥⇧← / ⌥⇧→ | Alt+Shift+← / Alt+Shift+→ | Ctrl+Alt+Shift+A / Ctrl+Alt+A | Ctrl+Alt+Shift+A / Ctrl+Alt+A | yes (in the Alt family, a named exception, principle 2) |
 | Close the split (`split.close`; no button since spec F) | ⌥⌘W | Ctrl+Shift+Alt+W | the same | the same | yes |
-| Home (`stage.home`, the palette's **View: Home**; its key comes with a later slice) | none | none | none | none | no |
+| Home (`stage.home`, the palette's **Home** section; its key comes with a later slice) | none | none | none | none | no |
 | Workspace › Machines / Workspace overview / Automations (`stage.hierarchy`: the Workspace page on its Machines tab, the palette's **View: Workspace › Machines**; `stage.spawn`, `stage.automations`) | ⌘1 / ⌘2 / ⌘3 | Ctrl+1 / Ctrl+2 / Ctrl+3 | the same | the same | yes (Ctrl+3 is ESC, which Esc still sends) |
 | Focus next / previous region (`focus.nextRegion`, `focus.prevRegion`) | F6 / ⇧F6 | F6 / Shift+F6 | the same | the same | no (mc, htop, nano) |
 | Leave the terminal for the next region (`focus.leaveTerminal`) | ⇧⌘F6 | Ctrl+Shift+F6 | the same | the same | yes |
@@ -1067,7 +1067,7 @@ control.
      agent of the window's workspace is listed once here, in the sidebar's
      deployment sections, relation groups and runs of independent agents,
      indented by depth (the sidebar's collapsed state is ignored).
-  3. **Sections**: Workspace overview, Automations, Workspace › Machines,
+  3. **Sections**: Home, Workspace overview, Automations, Workspace › Machines,
      Souls, Capabilities, Teams and Setup, and Connections.
   4. Up to twelve **commands** (among them Appearance… and Keyboard shortcuts…).
   5. **New agent**: one "New agent: <soul>" row per soul (`quickOpenRows`),

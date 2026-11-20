@@ -1049,7 +1049,9 @@ function retiredGhostRow(i) {
   wrap.className = "ctx-tree-row ctx-ghost";
   wrap.style.setProperty("--depth", String(i.depth || 0));
   const line = document.createElement("span"); line.className = "ctx-ghost-line";
-  const mark = document.createElement("span"); mark.className = "ctx-ghost-mark"; mark.setAttribute("aria-hidden", "true"); mark.textContent = "✕";
+  // The mark is Lucide's x (the renderer draws icons, never the text glyph: lucide-icons.test.mjs).
+  const mark = document.createElement("span"); mark.className = "ctx-ghost-mark"; mark.setAttribute("aria-hidden", "true");
+  mark.append(iconElement(document, "close", { size: 12 }));
   const name = document.createElement("span"); name.className = "ctx-ghost-name"; name.textContent = i.instance;
   line.append(mark, name, " · retired");
   wrap.append(line);

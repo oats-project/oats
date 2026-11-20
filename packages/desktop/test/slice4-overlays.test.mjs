@@ -9,7 +9,7 @@ import { createStatusLine } from "../renderer/status-line.mjs";
 import { createPalette } from "../renderer/palette.mjs";
 import { needsYouRows } from "../../client/waiting-on-you.mjs";
 import { createLifecycleDialog } from "../renderer/lifecycle-dialog.mjs";
-import { createRetireGhosts, GHOST_MS } from "../renderer/retire-ghosts.mjs";
+import { createRetireGhosts, GHOST_MS, ghostOf } from "../renderer/retire-ghosts.mjs";
 import { createLeaderHint, leaderHelpEnabled, setLeaderHelpEnabled } from "../renderer/leader-hint.mjs";
 import { createAppearanceSheet } from "../renderer/theme-picker.mjs";
 import { createKeybindingsEditor } from "../renderer/keybindings-editor.mjs";
@@ -134,6 +134,11 @@ function leaderHintFixture(t, storage = new Map()) {
   return { doc, hint, store };
 }
 const ROWS = [{ keys: "K or Space", label: "Open the command palette" }, { keys: "Z", label: "Focus mode" }];
+
+test("slice4 a retired pinned agent's ghost keeps its pin, so it stays where the agent was", () => {
+  assert.equal(ghostOf({ instance: "old-pin", agent: "smoke", pinned: true }).pinned, true);
+  assert.equal("pinned" in ghostOf({ instance: "new", agent: "smoke" }), false, "an unpinned row's ghost carries no pin");
+});
 
 test("slice4 help sheet on leader", t => {
   const f = leaderHintFixture(t);

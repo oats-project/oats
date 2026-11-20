@@ -875,7 +875,7 @@ body {
 /* A retired row's ghost (retire-ghosts.mjs; the Desktop UI rework, slice 4): dim by the muted ink, never opacity. */
 .ctx-tree-row.ctx-ghost { display: flex; align-items: center; color: var(--muted); font-size: 12.5px; }
 .ctx-ghost-line { display: inline-flex; gap: 6px; align-items: baseline; min-width: 0; padding-left: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ctx-ghost-mark { color: var(--muted); }
+.ctx-ghost-mark { color: var(--muted); display: inline-flex; align-self: center; }
 /* The Keyboard shortcuts sheet's leader choice (keybindings-editor.mjs; D18): the family choice's own rules, and its notes. */
 .kb-leader { margin: 0; padding: 8px 16px 0; border: 0; }
 .kb-leader-note, .kb-leader-own { margin: 4px 0 0; color: var(--muted); font-size: 12px; }

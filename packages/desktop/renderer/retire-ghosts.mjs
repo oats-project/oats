@@ -11,9 +11,10 @@ import { instanceId } from "../../client/instance-tree.mjs";
 
 export const GHOST_MS = 10_000;
 
-/** What a ghost keeps of the row: its identity and its place in the tree (relation, deployment, birth). */
+/** What a ghost keeps of the row: its identity and its place in the tree (relation, deployment, birth, and its pin,
+ * which ranks it where pins are shown, so a retired pinned agent's ghost stays where it was). */
 export function ghostOf(row) {
-  const keep = ["instance", "agent", "agentsRoot", "home", "server", "parentInstance", "siblingInstance", "createdAt", "deployment", "background"];
+  const keep = ["instance", "agent", "agentsRoot", "home", "server", "parentInstance", "siblingInstance", "createdAt", "deployment", "background", "pinned"];
   return { ...Object.fromEntries(keep.filter(key => row[key] !== undefined).map(key => [key, row[key]])), running: false, retiredGhost: true };
 }
 

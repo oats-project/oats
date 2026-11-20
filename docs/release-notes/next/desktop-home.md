@@ -6,7 +6,7 @@
   - **Home › Agents.** Every agent, running or stopped, with its soul, machine and state, and who started it.
   - **A new workspace** shows what OATS does in two lines and three keys.
 
-  The palette's **View: Home** opens Home; it has no key of its own yet. The roster's order doesn't change: urgency is sorted on Home only.
+  The palette's **Home** (among its sections) opens Home; it has no key of its own yet. The roster's order doesn't change: urgency is sorted on Home only.
 
 ## Changed
 
