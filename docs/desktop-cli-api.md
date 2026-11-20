@@ -7458,6 +7458,7 @@ before anything is created (a preview answers them too):
 | `E_BACKEND_AMBIGUOUS` | `{backend, capabilities}`; also from a start or a restart |
 | `E_BACKEND_HARNESS` | `{backend, capability, harness, harnesses}` |
 | `E_BACKEND_LAUNCH_ARG` | `{backend, launchConfig, field: "executable"}` |
+| `E_BACKEND_SANDBOX_HOST` | `{capability, setting, host, team?}`: a capability's `sandboxDomains` line that may not add a host; `setting` and `host` are null where there is none to name |
 | `E_BACKEND_NOT_READY`, any other `E_BACKEND_*` | the provider's readiness, or its own refusal of the launch: `{backend, capability}`; the spawn is rolled back |
 
 A launch that fails otherwise is `E_SESSION_START_FAILED`.
@@ -7575,6 +7576,23 @@ declares one, as a `providers` item: `subject: "<capability> session backend
 warnings}` relayed as given, or `result: null` with `problems` when the
 provider could not be asked. Required for a home on that backend; not
 required for a soul.
+
+**Sandbox allowances.** What a session provider may widen its harness's
+sandbox by for an instance ([capabilities.md](capabilities.md#sandbox-allowances-sandboxdomains-the-launch-inputs-sandbox)),
+as the kernel computes it from the deployment's configuration. One key,
+`sandbox`, only where the launch is a provider's (never for tmux):
+
+- a spawn preview (`oats spawn … --backend <name> --preview --json`):
+  `sandbox: {domains: [{host, capability, setting}], write: [{path, reason}],
+  missing: [{capability, setting, team, optional?}]}`. `domains`: each host with the capability and the
+  setting that asked for it. `write`: each path with its reason (the
+  kernel's own). `missing`: what a capability's line names and the
+  deployment does not hold (`team`: a team id, or null for a setting with no
+  value; `optional: true` only on a row of an optional line).
+
+`oats capabilities show <name> --json` carries `sandboxDomains` (the
+manifest's key, exactly as declared) and, only when there is one,
+`sandboxDomainProblems: [<message>]`.
 
 **The sweep.** A row of `oats session resume` for a provider home carries
 `backend`. Its outcomes: `resumed` (a lost session: the notice was sent),

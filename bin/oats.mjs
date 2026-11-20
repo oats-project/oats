@@ -2638,6 +2638,13 @@ async function capabilityShowCmd(bail) {
     }
     for (const p of doc.sessionProviderProblems ?? []) console.log(`  session provider problem: ${p.pointer} — ${safeText(p.message, 300)}`);
   }
+  if (doc.sandboxDomains !== undefined) {
+    // As declared, made safe to print: the settings whose hosts a session provider's sandbox may be widened by.
+    const { safeText } = await import("../lib/refused-text.mjs");
+    const lines = Array.isArray(doc.sandboxDomains) ? doc.sandboxDomains.map((l) => (typeof l?.setting === "string" ? safeText(l.setting, 80) : "?")) : null;
+    console.log(`  sandbox domains: ${lines ? `the host of ${lines.length === 1 ? "setting" : "settings"} ${lines.join(", ")}` : "(malformed — see sandbox domain problems)"}`);
+    for (const p of doc.sandboxDomainProblems ?? []) console.log(`  sandbox domain problem: ${safeText(p, 300)}`);
+  }
   for (const p of doc.problems) console.log(`  problem: ${p.code}${p.path ? ` ${p.path}` : ""} — ${p.message}`);
   for (const w of doc.warnings) console.log(`  warning  ${w.code}  ${w.message}`);
   console.log(`\n  a file's text: oats capabilities show ${doc.name}${doc.kind === "package" ? ` --package ${doc.package}` : ""} --file <path>`);

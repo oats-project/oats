@@ -353,6 +353,21 @@
       "additionalProperties": {"$ref":"#/$defs/OptionalHook"},
       "description": "Lifecycle events to commands. An event this kernel does not run (a newer kernel's) is accepted with a warning and ignored, unless it is declared required: that is refused. Kernels before 0.49.0 refuse every unknown event."
     },
+    "sandboxDomains": {
+      "description": "Sandbox allowances (docs/capabilities.md, Sandbox allowances): the hosts a session provider may add to its harness's sandbox for an instance whose messaging, knowledge or tasks slot this capability fills. Each entry names one of this capability's settings; the kernel reads the setting's value from the deployment's configuration (never from an instance home) and takes its host: a URL's host, a bare host, or, for a map from team id to one of those, the hosts of the instance's own teams. Only a capability that declares `layer` may carry the key, and only the capability that fills the slot contributes: on any other capability a session-provider launch is refused (E_BACKEND_SANDBOX_HOST), never the line dropped. A tmux launch does not read it. A kernel from before session providers ignores the key.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "required": ["setting"],
+        "properties": {
+          "setting": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$", "description": "The key of one of this capability's settings." },
+          "optional": { "type": "boolean", "description": "true: the session works without this host. A value the deployment does not hold is then reported and is no reason for a session provider to refuse a launch." }
+        },
+        "additionalProperties": false
+      }
+    },
     "settings": {
       "type": "object",
       "description": "Declared capability settings: name to { default, values?, description }. Documentation for the values a soul, oats-local.yaml or `oats spawn --provider` supplies; undeclared settings are still accepted.",
@@ -436,5 +451,6 @@
       "additionalProperties": false
     }
   },
+  "dependentRequired": { "sandboxDomains": ["layer"] },
   "additionalProperties": false
 }

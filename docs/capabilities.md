@@ -2088,7 +2088,8 @@ In:
   "pathPrepend": ["/abs/home/.oats/bin"],
   "args": ["--flag", "value"],
   "promptFile": "/abs/home/TASK.md",
-  "previous": null }
+  "previous": null,
+  "sandbox": { "domains": [], "write": [ { "path": "/abs/deployment/.agents/events", "reason": "oats events" } ], "missing": [] } }
 ```
 
 - `env` is every variable the launch sets, in the order a tmux launch sets
@@ -2115,6 +2116,8 @@ In:
   just before, always (a restart's stop, once more for a home OATS had
   stopped, and for a session you answered as gone too: an input that reached
   it since may have had you restart it).
+- `sandbox` is what you may widen your harness's sandbox by, and nothing
+  else: [Sandbox allowances](#sandbox-allowances-sandboxdomains-the-launch-inputs-sandbox).
 
 **A provider that cannot carry an env entry, an argument or `unset`
 refuses, naming it** (`E_BACKEND_LAUNCH_ENV`, `E_BACKEND_LAUNCH_ARG`). It
@@ -2217,6 +2220,68 @@ from, never print it.
   with the first problem's code when that is an `E_BACKEND_*` code, else
   `E_BACKEND_NOT_READY`, the message carrying your problems. A check that
   fails or answers outside these words is not ready.
+
+### Sandbox allowances (`sandboxDomains`, the launch input's `sandbox`)
+
+A provider may run its harness in a sandbox. What an instance needs from
+outside that sandbox is decided by the kernel, from the deployment's
+configuration, and handed to the provider with every launch:
+
+```json
+"sandbox": { "domains": [ { "host": "app.example.org", "capability": "oats.aweb", "setting": "services" } ],
+             "write":   [ { "path": "/abs/deployment/.agents/events", "reason": "oats events" } ],
+             "missing": [ { "capability": "oats.aweb", "setting": "services", "team": "ops:acme.example" } ] }
+```
+
+- **`domains`** are exact hosts (`host` or `host:port`, lower case; never a
+  wildcard, a scheme or a path), each with the capability and the setting
+  that asked for it. **Only the capability that fills the instance's
+  messaging, knowledge or tasks slot can ask**, and only through its
+  manifest:
+
+  ```json
+  "layer": "messaging",
+  "sandboxDomains": [ { "setting": "services" }, { "setting": "registryHost", "optional": true } ]
+  ```
+
+  Each line names one of the capability's own settings. Its value is a URL
+  (its host is taken), a bare host, or a map from team id to one of those,
+  of which only the entries of the instance's own teams are read (the teams
+  a spawn preview shows for the soul). A value that is set and gives no plain
+  host refuses the launch, `E_BACKEND_SANDBOX_HOST`, naming the capability
+  and the setting. So does the line on a capability that fills none of the
+  three slots: it is never dropped. `"optional": true` says the session
+  works without that host.
+- **`write`** are exact absolute paths, the kernel's own, never a
+  capability's: the deployment's events directory, where `oats instance
+  attention` appends. The kernel creates each before your launch: an
+  allowance on a path that does not exist does not let a sandboxed agent
+  create it.
+- **`missing`** is always there, `[]` when nothing is missing: what a line
+  names and the deployment's configuration does not hold. `team` is the id
+  of a team of the instance with no entry in a map, or `null` for a setting
+  with no value at all; a row of an optional line carries `"optional":
+  true`. The kernel adds no host for these and refuses nothing.
+
+**Nothing else adds a host or a path:** not hook output, not an environment
+variable, not a launch argument, not a task. The values come from the
+deployment's configuration as a spawn preview resolves it (the workspace,
+the deployment's own settings, the soul's payload), **never from a file in
+the instance home**, which a sandboxed agent can write.
+
+**What the provider does with it** is its own rule, because only it knows
+whether it sandboxes this launch: widen the sandbox by exactly `domains` and
+`write`; **refuse a launch you would sandbox** when `missing` holds a row
+that is not optional, with an `E_BACKEND_*` code; write nothing for a launch
+you do not sandbox.
+
+The allowances are handed to a spawn's launch. `oats spawn --preview` lists
+each host with who asked for it and each path with its reason. A tmux launch
+has no `sandbox`, and reads no `sandboxDomains`.
+
+**A kernel from before session providers ignores `sandboxDomains`**: it
+neither refuses the manifest nor acts on the line. The line costs an older
+deployment nothing and gives it nothing.
 
 ### Requirements by backend (`requires[].backends`)
 

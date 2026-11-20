@@ -11,7 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachInstanceSession, inputInstanceSession, inspectInstanceSession, listInstances, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
@@ -74,6 +74,8 @@ test("T1: a spawn with --backend fake launches through the provider and records 
       { name: "ACME_FAKE_TOKEN_FILE", value: "/nowhere/token", source: "capability", capability: FAKE_CAPABILITY },
     ],
     unset: [], pathPrepend: [join(home, ".oats", "bin")], args: [], promptFile: join(home, "TASK.md"), previous: null,
+    // The allowances (test/session-providers-sandbox.test.mjs): no capability here asks for a host.
+    sandbox: { domains: [], write: [{ path: join(realpathSync(fx.dep), ".agents", "events"), reason: "oats events" }], missing: [] },
   });
 
   // The records: instance.json and the independent receipt carry the endpoint; no tmux in either.
