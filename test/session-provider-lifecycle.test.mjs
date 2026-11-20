@@ -787,7 +787,7 @@ test("a retire that cannot record its stop does not ask the provider, and retire
   const { home } = await fx.launch("unfenced");
   const receipts = dirname(receiptPath(home));
   chmodSync(receipts, 0o500);
-  t.after(() => chmodSync(receipts, 0o700));
+  t.after(() => { if (existsSync(receipts)) chmodSync(receipts, 0o700); }); // (the fixture may have removed it by then)
   fx.clearCalls();
   const refused = JSON.parse(fx.cli(["retire", "unfenced", "--json"]).stdout);
   chmodSync(receipts, 0o700);
