@@ -4,7 +4,7 @@ Release: `v1.44.0`, peeled commit `5d1c6720bdf60a16379f8486c7d3f6f972294279`.
 Transfer merge: `dc90c9556e58d03a80da9c5b3e6ed6139f22471e`; `git merge-base --is-ancestor dc90c955 v1.44.0` exits 0 in the owned `.work-aweb-audit` tree.
 Original assertion inventory: kernel `3a5503c2993a307a0bb48d0b41dcab7d175adc27`.
 Released transfer manifest: [docs/kernel-test-transfer.md](https://github.com/awebai/oats-aweb/blob/v1.44.0/docs/kernel-test-transfer.md) (17 + 11 + 9 + 19 = 56 rows).
-This is a static assertion match, not a run of provider tests or a claim about a CI result. The 47 rows in hook-1-10, hook-1-12 and hook-1-13 retire here; hook-1-12-1's nine rows remain under the hold below.
+This is a static assertion match, not a run of provider tests or a claim about a CI result. Of the 47 original rows in hook-1-10, hook-1-12 and hook-1-13, three native opt-ins were already removed by PR #1992; this change retires the other 44. Hook-1-12-1's nine rows remain under the hold below.
 
 Package test files below are at that exact released commit. Titles/behaviour identify cases independently of line shifts. `hook13` means `test/oats-aweb-hook-1-13.test.mjs`; other short names are files under `test/` with `.test.mjs` suffix. The old kernel files run provider binaries directly and never the kernel hook runner.
 
@@ -98,7 +98,8 @@ The other eight rows are retained with it until that gate is satisfied.
 
 K1 #1950 merged as 6b69263e66bdb29f802c7f4b8aef75edfe057bc4. Keep `test/retire-hook-contract.test.mjs` unchanged; it exercises kernel consumption in ordinary retire, rollback, quarantine retry and outstanding hook debt.
 OATS #1989 merged as `6d3d282ede454567232c7ec0fca978773c03b84a`, this
-branch's base. The catalog pins `v1.44.0`. A read-only Git-object comparison
+branch's ancestor. The branch is rebased onto PR #1992 merge
+`e98b719563c24733322b77926b57e676f223970a`. The catalog pins `v1.44.0`. A read-only Git-object comparison
 matched all 70 mirrored blobs, their executable modes/symlink targets and the
 complete file/directory set to that release. No mirror bytes were edited.
 
