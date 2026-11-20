@@ -372,3 +372,22 @@ test("away and back: a tab whose home moved to a session provider while its work
   assert.deepEqual(s.detached, [1], "its viewer is detached, no other");
   assert.equal(s.c.activeTab, b.id, "the tab beside it is shown");
 });
+
+test("an open that races a home's move to a session provider says where it runs through the open's own say, never \"unknown instance\"; a retired one still says so", async t => {
+  const s = shell(t), said = [], notified = [];
+  const moved = { ...row("a"), backend: "bb", tmux: null, running: true, runtimeState: "unknown" };
+  const racing = async (later, options) => {
+    const done = s.openTerminalTabFlow(row("a"), message => notified.push(message), options);
+    const request = s.requests.at(-1);
+    await land(s, later);                       // a newer roster answer, judged while the open waits for its own read
+    request.resolve({ instances: [row("a")] }); // the open's own, older read still shows the tmux row
+    await done; await settle();
+  };
+  await racing(answer([moved]), { say: line => said.push(line) });
+  assert.deepEqual([said, notified], [["Runs in a bb thread; open it in bb."], []]);
+  await racing(answer([moved]));
+  assert.deepEqual([said.length, notified], [1, ["Runs in a bb thread; open it in bb."]], "with no say of its own, the open's notify is told the same sentence");
+  await racing(answer([row("a", T2)]), { say: line => said.push(line) });
+  assert.deepEqual([said.length, notified.at(-1)], [1, 'unknown instance "a"'], "another incarnation: retired, as before");
+  assert.deepEqual([s.c.tabs.size, s.attachments.length], [0, 0], "no tab and no viewer for any of them");
+});

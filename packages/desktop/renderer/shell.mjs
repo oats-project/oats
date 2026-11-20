@@ -2536,7 +2536,7 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
     if (pendingTerms.has(pending)) return; // an open for this key is already in flight
     pendingTerms.add(pending);
     try {
-      await openTerminalTabInner(inst, ws, key, owns, notify, commitDestination, read, options.focusContent !== false);
+      await openTerminalTabInner(inst, ws, key, owns, notify, commitDestination, read, options.focusContent !== false, options.say || notify);
     } finally {
       pendingTerms.delete(pending);
     }
@@ -2545,7 +2545,7 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
   }
 }
 
-async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert(msg), commitDestination = () => true, read = 0, focusContent = true) {
+async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert(msg), commitDestination = () => true, read = 0, focusContent = true, say = notify) {
   // inst is the RESOLVED roster instance (openTerminalTab resolves + keys
   // before dedup; review 7d740f9). Re-check ownership here — whenKeyFree
   // may have waited across a workspace switch.
@@ -2558,7 +2558,12 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
   // retired wins — no tab opens for a row the roster no longer has.
   const judged = judgedAnswer;
   if (judged && judged.read > read && judged.workspace === ws
-    && retiredTabs([[0, { kind: "terminal", workspace: ws, key, origin }]], judged.panel).length) return notify(`unknown instance "${name}"`);
+    && retiredTabs([[0, { kind: "terminal", workspace: ws, key, origin }]], judged.panel).length) {
+    // The newer answer may show the row moved to a session provider, not retired: it is there and has no terminal,
+    // which is said as any open of such a row says it (the open's own `say`: a notice, never an alert).
+    const now = resolveTerminalOpen(judged.panel.instances || [], inst, ws);
+    return now.error === "no-terminal" ? say(now.sentence) : notify(`unknown instance "${name}"`);
+  }
 
   if (!commitDestination()) return notify('The terminal destination changed. Select the instance again.');
   const wrap = document.createElement("div");

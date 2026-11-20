@@ -2340,7 +2340,9 @@ home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
   stopped; `home-board.mjs` `homeBoard`: running on `running: true` alone), since a
   provider's `runtimeState` is never "running" and a waiting agent is idle there.
 - **Start and Restart** are sent as for any row; `start-instance.mjs` waits for no
-  terminal and opens none after one.
+  terminal and opens none after one. A launched spawn whose row is a provider's is
+  complete once the roster shows it running (`spawn-jobs.mjs`: no tmux session to wait
+  for); the follow then opens no terminal and marks the row New.
 - **No terminal**: `resolveTerminalOpen` (`instance-tree-view.mjs`) answers such a
   row `no-terminal` before any key or tab is decided, so no open, split or
   take-over restore makes a tab for it. `workspace-tab-memory.mjs` never restores a

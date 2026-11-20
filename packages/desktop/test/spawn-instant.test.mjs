@@ -247,6 +247,23 @@ test('store: complete but not seen in the roster in time says so truthfully, and
   assert.equal(s.rows('northwind').length, 0); assert.equal(s.settling('northwind'), false);
 });
 
+// Session providers (spec C1): a row on one has no tmux session to wait for.
+test('store: a launched spawn whose row runs on a session provider is complete once the roster shows it running, with no tmux session; a stopped or unknown one is still awaited', async () => {
+  let clock = 0;
+  const { s, notes, spawned } = brokerStore({ apply: () => receipt(), now: () => clock, visibleWithinMs: 1000 });
+  await settle(10);
+  const bb = extra => realRow(created(), { backend: 'bb', tmux: null, runtimeState: 'unknown', session: { provider: 'oats.bb', threadId: 'thr_x' }, ...extra });
+  s.observe('northwind', [bb({ running: null })]);
+  s.observe('northwind', [bb({ running: false, runtimeState: 'stopped' })]);
+  assert.equal(notes.length + spawned.length, 0, 'not reported running yet: still awaited');
+  s.observe('northwind', [bb({ running: true })]);
+  assert.equal(spawned.length, 1, 'spawned, as a tmux row with its session is');
+  assert.equal(spawned[0].backend, 'bb');
+  assert.equal(notes.length, 0, 'and never “not yet visible as a running session”');
+  clock = 5000; s.observe('northwind', [bb({ running: true })]);
+  assert.equal(notes.length, 0);
+});
+
 test('store: partial (the wake was not saved) posts the kernel’s words with View schedules', async () => {
   const viewed = [];
   const { s, notes } = brokerStore({ viewSchedules: () => viewed.push(true), wake: { cron: '0 * * * *', tz: 'UTC', message: 'wake', enabled: false },
