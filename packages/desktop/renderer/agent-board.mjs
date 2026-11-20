@@ -403,7 +403,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       const body = ctx ? node(doc, 'p', 'agent-q-context-text', ctx) : node(doc, 'p', 'agent-q-context-none', words);
       // A long context scrolls inside its open fold (at most 12 lines tall), so its text takes the focus for the keys.
       if (ctx) { body.dir = 'auto'; body.tabIndex = 0; }
-      const contextKey = JSON.stringify([occurrence(q), current, detail?.state ?? null, ctx]);
+      // What the fold says is part of its key: the same occurrence can go from "sent no context" to "reading" and back.
+      const contextKey = JSON.stringify([occurrence(q), current, detail?.state ?? null, ctx, ctx ? null : words]);
       if (contextBody.dataset.key !== contextKey) { contextBody.dataset.key = contextKey; contextBody.replaceChildren(lead, body); }
     }
     if (context.dataset.question !== occurrence(q)) { context.open = false; context.dataset.question = occurrence(q); }
