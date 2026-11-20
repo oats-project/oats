@@ -157,15 +157,24 @@ test("step 9's own-server form checks the prerequisites read-only, then creates 
   const check = ownServer.indexOf('cd "D" && aw id namespace check-txt --domain ND --json; echo "exit=$?"');
   const create = ownServer.indexOf('cd "D" && AWEB_URL="U" oats aweb setup --soul S --create L --namespace ND --name A\n');
   assert.ok(check !== -1 && create !== -1 && check < create, "check-txt before the create");
-  // On a private registry the registry is recorded first (#1966), before the prerequisites and the create.
-  const record = ownServer.indexOf('cd "D" && oats aweb setup --soul S --registry RG\n');
-  assert.ok(record !== -1 && record < check, "--registry before check-txt and the create");
-  assert.ok(ownServer.includes("Skip this on the public registry."));
+  // On a private registry the registry is recorded first (#1966): before item 1's check, which a non-public
+  // AWID_REGISTRY_URL already in the environment refuses until the setting exists, and so before check-txt and the create.
+  const step9 = section("## 9. Messaging on this machine", "## 10. ");
+  const record = step9.indexOf('cd "D" && oats aweb setup --soul S --registry RG\n');
+  const item1 = step9.indexOf('cd "D" && oats aweb setup --soul S --check-only --json\n');
+  const at = (needle) => step9.indexOf(needle);
+  assert.ok(record !== -1 && item1 !== -1 && record < item1, "--registry before item 1's check");
+  assert.ok(record < at('cd "D" && aw id namespace check-txt --domain ND --json') && record < at('cd "D" && AWEB_URL="U" oats aweb setup --soul S --create L --namespace ND --name A\n'), "--registry before check-txt and the create");
+  assert.equal(skill.split('oats aweb setup --soul S --registry RG').length, 2, "one --registry command");
+  assert.ok(flat.includes("**Their own aweb server on a private registry (step 1): record it first,** before item 1, with `RG` written in. Skip this on the public registry and on hosted aweb."));
+  assert.ok(flat.includes("oats.aweb refuses a private registry given that way (`registry-setting-required`), item 1's check included, until this setting is recorded."));
+  // The provider's check-only reads the registry setting before anything else, and refuses an ambient non-public registry without it.
+  assert.match(provider, /const migration = effective \? undefined : registryMigration\(settings\);\n\s*if\(migration\) throw new Error\(migration\);/);
+  assert.match(read("mirrors/oats-aweb/lib/registry-setting.mjs"), /if \(Object\.hasOwn\(env, 'AWID_REGISTRY_URL'\) && env\.AWID_REGISTRY_URL !== '' && !publicRegistryLocator\(env\.AWID_REGISTRY_URL\)\) return REGISTRY_MIGRATION;/);
   assert.ok(skill.indexOf(ownServer) > skill.indexOf("## 9. Messaging on this machine"));
   assert.ok(flat.includes("On their own aweb server there is no signup: take \"Their own aweb server\", the last part of this item, instead."), "the hosted signup is skipped");
   // No ambient registry selector: a non-public AWID_REGISTRY_URL is refused from the oats.aweb release with --registry (registry-setting-required).
   assert.ok(!/AWID_REGISTRY_URL=|export AWID_REGISTRY_URL|AWID_REGISTRY_URL="/.test(skill), "the skill never sets AWID_REGISTRY_URL");
-  assert.ok(flat.includes("Never set `AWID_REGISTRY_URL` instead: oats.aweb refuses a private registry given that way (`registry-setting-required`)."));
   assert.ok(read("mirrors/oats-aweb/lib/registry-setting.mjs").includes("export const REGISTRY_MIGRATION='registry-setting-required: settings.oats.aweb.registry: `oats aweb setup --registry <origin>`;"), "the refusal the skill names");
   assert.ok(read("mirrors/oats-aweb/lib/registry-setting.mjs").includes("export const REGISTRY_SETTING='settings.oats.aweb.registry';"), "the setting the skill names");
   // The --registry act's answers are the provider's.

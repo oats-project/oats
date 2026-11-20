@@ -1024,6 +1024,30 @@ below; for another capability, follow its own setup skill, and stop if its
 readiness still reports a problem.
 
 **With aweb (`oats.aweb`):**
+
+**Their own aweb server on a private registry (step 1): record it first,**
+before item 1, with `RG` written in. Skip this on the public registry and
+on hosted aweb.
+
+```bash
+cd "D" && oats aweb setup --soul S --registry RG
+```
+
+It writes only `settings.oats.aweb.registry` in `D/oats-local.yaml`, the
+one setting that admits a private registry here: every later `oats aweb`
+command and every agent of `D` reads its registry from it. Never set
+`AWID_REGISTRY_URL` instead: oats.aweb refuses a private registry given
+that way (`registry-setting-required`), item 1's check included, until
+this setting is recorded. Success prints one line of JSON whose
+`registry` is `RG` as an origin (the host in lowercase, no trailing `/`).
+Its `next` lists "Restart resident serve" and "Restart wake": both are
+expected and need nothing from you, since this new deployment has no
+resident yet and item 6 installs the broker after this. An
+`E_SETUP_REGISTRY` refusal that starts `settings.oats.aweb.registry:`
+says what is wrong with the address (a path, `/api`, a query): ask the
+person for the registry's origin again and run this again. Anything
+else: stop, spawn nothing, and tell the person what it shows.
+
 1. **Check:**
 
    ```bash
@@ -1093,28 +1117,7 @@ readiness still reports a problem.
    - **Their own aweb server (step 1), in place of the signup.** Nothing for
      the person to type, and no key passes through you. `ND`, `U` and `A`
      come from step 1, and `L` is step 7's label.
-     - **On a private registry (step 1), first record it** for this
-       deployment, with `RG` written in. Skip this on the public registry.
-
-       ```bash
-       cd "D" && oats aweb setup --soul S --registry RG
-       ```
-
-       It writes only `settings.oats.aweb.registry` in `D/oats-local.yaml`,
-       the one setting that admits a private registry here: every later
-       `oats aweb` command and every agent of `D` reads its registry from
-       it. Never set `AWID_REGISTRY_URL` instead: oats.aweb refuses a
-       private registry given that way (`registry-setting-required`).
-       Success prints one line of JSON whose `registry` is `RG` as an
-       origin (the host in lowercase, no trailing `/`). Its `next` lists
-       "Restart resident serve" and "Restart wake": both are expected and
-       need nothing from you, since this new deployment has no resident
-       yet and item 6 installs the broker after this. An `E_SETUP_REGISTRY`
-       refusal that starts `settings.oats.aweb.registry:` says what is wrong
-       with the address (a path, `/api`, a query): ask the person for the
-       registry's origin again and run this again. Anything else: stop,
-       spawn nothing, and tell the person what it shows.
-     - **Then the prerequisites, read-only:**
+     - **First, the prerequisites, read-only:**
 
        ```bash
        cd "D" && aw id namespace check-txt --domain ND --json; echo "exit=$?"
