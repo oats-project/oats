@@ -16,7 +16,7 @@
 // its own `collapsedInstances` still closes rows; roster-disclosure-shell.test.mjs runs the default with a plain Set.
 // Slice 1 of the Desktop UI rework: a row's two lines (packages/client roster-row-facts.mjs) are pure and shared the
 // same way; the foot's count is inert (`sidebarFoot`, sidebar-foot-shell.test.mjs drives the shipped one), and the empty
-// roster's line is the shipped words with no chord bound. The relations in words (D26: no drawn lines) are pure too.
+// roster's line is the shipped words with no chord bound. The relations in words are pure too.
 // Feature instance-pin: the pin's order and mark are pure and shared the same way; a suite about other behaviour runs
 // without the feature (`pinsShown`), so nothing moves and no mark is drawn, and its row menu offers no pin item.
 // instance-pin-menu.test.mjs turns the feature on. The palette's Instance: Pin to top / Unpin carry their real labels

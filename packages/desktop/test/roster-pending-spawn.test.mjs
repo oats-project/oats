@@ -75,18 +75,23 @@ test("a pending spawn shows under its parent: “Spawning…” text and a spinn
 });
 
 // #1577: the Desktop's spawn never passes --same-work, so a pending row is never flagged; it takes its parent's
-// gate (same-work.mjs withParentGate), which still orders it after the joined children. Slice 1 (D26): the roster
-// draws no lines on any host; a pending child keeps its indent and says "under <parent>".
+// gate (same-work.mjs withParentGate), which still orders it after the joined children. Slice 1b (narrowing D26): the
+// roster draws a parent line only to a child its host flags as doing its parent's work, so the joined child has its
+// elbow and the pending child none on any host; it keeps its indent and says "under <parent>".
+const guidesOf = (u, name) => [...u.row(name).closest(".ctx-tree-row").querySelectorAll(".ctx-guide")]
+  .map(g => `${g.className.replace("ctx-guide ", "")}@${g.style.getPropertyValue("--guide-level")}`);
 test("a pending spawn under a parent: listed after the joined children, indented, said under its parent, no line on any host", async t => {
   const declared = roster.map(row => ({ ...row, sameWorkKnown: true, ...(row.instance === "child-a" ? { sameWork: true } : {}) }));
   const u = fixture(t, () => [pending()]);
   u.render(declared);
   const names = [...u.list.querySelectorAll(".ctx-name")].map(n => n.dataset.name);
   assert.deepEqual(names.slice(0, 3), ["root", "child-a", "dev-new"], "the joined child first, the pending row after it");
-  assert.equal(u.list.querySelector(".ctx-guide, .ctx-guides"), null, "no lines");
+  assert.deepEqual(["root", "child-a", "dev-new"].map(name => guidesOf(u, name)), [["down@0"], ["elbow@0"], []],
+    "the joined child's elbow and its parent's stem end there; the pending child has no line");
+  assert.equal(u.row("dev-new").closest(".ctx-tree-row").querySelector(".ctx-guides"), null, "no guides at all on a row with no line");
   assert.equal(u.row("dev-new").closest(".ctx-tree-row").style.getPropertyValue("--depth"), "1");
   assert.equal(u.row("dev-new").querySelector(".ctx-relation").textContent, ", under root");
-  // A host without the feature (no stamp on the parent): no lines either.
+  // A host without the feature (no stamp on the parent) flags no child: no lines at all.
   const today = fixture(t, () => [pending()]);
   today.render(roster);
   assert.equal(today.list.querySelector(".ctx-guide, .ctx-guides"), null);

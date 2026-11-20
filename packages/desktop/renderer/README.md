@@ -600,8 +600,11 @@ split into sections) is `packages/client/roster-sections.mjs`.
   a row with no terminal, until Details serves any row). A held
       home keeps its state and hint on its lines (a reported one setting up its worktree adds its soul and
   `rowFactsTitle` to its tooltip); a collapsed parent's roll-up takes line 2, which its description
-  then says. No lineage or sibling lines (D26, decided): `--depth` indents a child 18px a level, `.ctx-bundle-gap`
-  separates bundles, `stateSpan` says its state (", running", ", stopped", ", status unknown"; a held home's line says its own),
+  then says. Lines for same work only (slice 1b, narrowing D26's "no lines"; Joan, 2026-11-20, at Pepe's
+  request): `treeConnectors` with `joins: sameWorkFlagged` (packages/client/same-work.mjs) draws the solid elbow
+  and stem only to a child its host flags `sameWork`, and the dotted link between a bundle's top-level members
+  (declared siblings); a row with no line carries no `.ctx-guides`. `--depth` indents a child 18px a level,
+  `.ctx-bundle-gap` separates bundles, `stateSpan` says its state (", running", ", stopped", ", status unknown"; a held home's line says its own),
   and `relationSpan` (instance-tree-view.mjs) says ", under <parent>" (", same work" after it for a child its
   host reports `sameWork`) and siblingText's
   ", sibling of …" after the row's lines, resolved per deployment over its full roster as the palette's are.
@@ -2186,8 +2189,10 @@ or rendered acceptance.
 
 ## Editor groups (splits) and the hideable sidebar (shell-level)
 
-The roster draws no relationship guides since slice 1 of the Desktop UI rework (D26): its rows nest by an 18px step
-and say their relations in words (`relationSpan`); the command palette's rows still draw the guides. Compact outer gutters reserve more width for instance
+The roster draws relationship guides only for same work since slice 1b of the Desktop UI rework (narrowing D26): a
+solid elbow to a child its host flags `sameWork`, and the dotted link between declared siblings. Its rows nest by an
+18px step and say their relations in words (`relationSpan`); the command palette's rows draw the guides by
+`drawsParentLine`. Compact outer gutters reserve more width for instance
 names without changing relationship grouping, disclosure controls, 56px row
 height or the selected row's 8px content inset.
 

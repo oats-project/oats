@@ -29,7 +29,8 @@ import { splitControlsState } from "../renderer/split-controls.mjs";
 import { projectSplitDom } from "../renderer/split-dom.mjs";
 import * as instanceTreeShared from "../../client/instance-tree.mjs";
 import * as instanceTreeView from "../renderer/instance-tree-view.mjs";
-const instanceTree = { ...instanceTreeShared, ...instanceTreeView };
+import * as sameWork from "../../client/same-work.mjs";
+const instanceTree = { ...instanceTreeShared, ...instanceTreeView, ...sameWork };
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget, sameInstanceActionTarget } from '../renderer/instance-action-target.mjs';
 import { instanceSplitPlan, instanceSplitIdentity } from '../renderer/instance-split.mjs';
@@ -516,10 +517,10 @@ function ambiguousClusterGuides(t, ambiguity, shellSource = source) {
   const rows = [...s.document.querySelectorAll(".ctx-tree-row")];
   assert.equal(rows.length, full.length, "ambiguity must not hide a row");
   const row = name => rows.find(r => r.querySelector(".ctx-name").dataset.name === name);
-  // Slice 1 (D26): no drawn lines; a row's parent is its indent and its "under <parent>" words, decided on the full
-  // roster (an ambiguous parent name forges neither).
+  // Slice 1b: no row here is flagged same work, so none draws a line; a row's parent is its indent and its
+  // "under <parent>" words, decided on the full roster (an ambiguous parent name forges neither).
   const words = name => row(name).querySelector(".ctx-relation")?.textContent ?? "";
-  assert.equal(s.document.querySelector(".ctx-guide"), null, "the roster draws no lines");
+  assert.equal(s.document.querySelector(".ctx-guide"), null, "no line without the same-work flag");
   assert.doesNotMatch(words("worker"), /under/, "shipped caller must not forge an ambiguous parent");
   assert.equal(row("worker").style.getPropertyValue("--depth"), "0");
   assert.match(words("child"), /under worker/, "an unambiguous parent is still said");

@@ -202,10 +202,11 @@ function assertConnectors(u) {
     "the dot's ring hides the line under it, in the row's own solid colour");
 }
 
-// Slice 1 of the Desktop UI rework (D26, decided): the roster draws no lineage or sibling lines; indentation (18px a
-// level) and the gap before the next bundle show the tree, and each row says its relations in words. A parent wears
-// its disclosure on its name line (#1970). The connectors' rules stay for the command palette (assertConnectors).
-test("tree (non-layout): indentation, no lines, a parent's chevron on its name line; the connector rules stay for the palette", t => {
+// Slice 1 of the Desktop UI rework (D26): indentation (18px a level) and the gap before the next bundle show the tree,
+// and each row says its relations in words. Slice 1b narrows D26: lines only for a same-work child and between
+// declared siblings (sidebar-slice1b.test.mjs); these rows have neither, so they draw none. A parent wears its
+// disclosure on its name line (#1970). The connectors' rules are the sidebar's and the palette's (assertConnectors).
+test("tree (non-layout): indentation, no lines without same work, a parent's chevron on its name line; the connector rules", t => {
   const u = fixture(t);
   assertConnectors(u);
   assert.equal(u.rule(".ctx-tree-row").getPropertyValue("--tree-step"), "18px");
@@ -218,7 +219,7 @@ test("tree (non-layout): indentation, no lines, a parent's chevron on its name l
     assert.ok(row.querySelector(".ctx-name-line > .ctx-disclosure:first-child"), "first on the name line");
   }
   assert.deepEqual(u.rows.map(row => row.style.getPropertyValue("--depth")), ["0", "1", "2", "1", "2", "0"]);
-  assert.deepEqual(u.rows.map(row => row.querySelectorAll(".ctx-guide, .ctx-guides").length), [0, 0, 0, 0, 0, 0], "no lines on any row");
+  assert.deepEqual(u.rows.map(row => row.querySelectorAll(".ctx-guide, .ctx-guides").length), [0, 0, 0, 0, 0, 0], "no lines on any row: none is flagged same work, none has a declared sibling");
   assert.deepEqual(u.rows.map(row => row.querySelector(".ctx-relation")?.textContent ?? null),
     [null, ", under root", ", under child-a", ", under root", ", under child-b", null], "each child says its parent");
 });

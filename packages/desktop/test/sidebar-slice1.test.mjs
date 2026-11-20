@@ -191,7 +191,7 @@ test("slice1 context menu keeps every action", t => {
 
 test("slice1 lines and order unchanged (Amendment 1, D26: no lines; the tree, the order and the needs-input marks unchanged)", t => {
   const u = fixture(t);
-  // D26 (decided): the roster draws no lineage or sibling lines. The tree stays (indentation, the groups, the gap
+  // D26 (decided; narrowed by slice 1b, below): the roster draws no lineage or sibling lines. The tree stays (indentation, the groups, the gap
   // before the next bundle), its relations are said in words, and the order is spawn time, newest first
   // (rosters-order-by-spawn-time-newest-first): the shared order roster-order.test.mjs pins, untouched.
   const at = day => `2026-10-${String(day).padStart(2, "0")}T00:00:00.000Z`;
@@ -204,7 +204,11 @@ test("slice1 lines and order unchanged (Amendment 1, D26: no lines; the tree, th
   assert.deepEqual(drawn, order.map(tree.instanceId), "the shared cluster order: spawn time, newest first");
   assert.deepEqual(order.map(i => i.instance), ["solo-new", "solo-old", "needs", "p", "c", "b"],
     "newest bundle first (the sibling-linked pair is one bundle), a waiting row not moved up; the same-work child first under its parent");
-  assert.equal(u.list.querySelector(".ctx-guides, .ctx-guide"), null, "no lineage or sibling line anywhere in the roster");
+  // Slice 1b narrows D26 (Joan, 2026-11-20, at Pepe's request): lines return for a same-work child and between declared
+  // siblings only (sidebar-slice1b.test.mjs pins them). Here: c's elbow and p's stem, the siblings' dotted link; b
+  // (unflagged) and needs (alone) draw none.
+  const lined = [...u.list.querySelectorAll(".ctx-tree-row")].filter(r => r.querySelector(".ctx-guide")).map(r => r.querySelector(".ctx-inst").dataset.treeInstance);
+  assert.deepEqual(lined, ["solo-new", "solo-old", "p", "c"].map(n => tree.instanceId(rows.find(r => r.instance === n))), "lines only for same work and declared siblings");
   // Indentation keeps the tree: a child one step in, its parent at the top level.
   const depth = name => u.row(name).closest(".ctx-tree-row").style.getPropertyValue("--depth");
   assert.deepEqual(["p", "c", "b", "needs"].map(depth), ["0", "1", "1", "0"]);

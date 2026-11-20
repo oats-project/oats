@@ -425,7 +425,8 @@ test("a collapse hides only rows of its own section: another deployment's child 
     waiting = at("waiting-d2", "/d2", "lead", { waitingOnYou: claim() }), quiet = at("quiet-d2", "/d2", "lead");
   const rows = [lead, own, waiting, quiet], collapsed = new Set();
   const u = fixture(t, { context: { contextDeployments: [deployment("/d1"), deployment("/d2")], collapsedInstances: collapsed } });
-  // Slice 1 (D26: no drawn lines): the row's place in its tree is its indent and its relation words.
+  // Slice 1 (and 1b: no row here is flagged same work, so none draws a line): the row's place in its tree is its
+  // indent and its relation words.
   const guides = name => [u.row(name).closest(".ctx-tree-row").style.getPropertyValue("--depth"), u.row(name).querySelector(".ctx-relation")?.textContent ?? ""].join("|");
   u.render(rows);
   const open = { waiting: guides("waiting-d2"), quiet: guides("quiet-d2") };

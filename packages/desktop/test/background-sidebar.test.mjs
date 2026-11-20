@@ -273,11 +273,11 @@ test("the selected row in the closed section gives the heading the roster's tab 
   assert.deepEqual([...u.list.querySelectorAll('[tabindex="0"]')], [u.heading()]);
 });
 
-test("no relation crosses the parts: a section root is a root (no indent, no \"under\"), and the roster draws no lines", t => {
+test("no relation crosses the parts: a section root is a root (no indent, no \"under\"), and no line crosses into the section", t => {
   const u = fixture(t);
   u.render(ROSTER);
   u.s.setBackgroundOpen("A", true);
-  // Slice 1 (D26): no lineage or sibling lines; indentation and the relations in words show the tree.
+  // Slice 1b (narrowing D26): a line only for a child its host flags as doing its parent's work; none is flagged here.
   assert.equal(u.list.querySelector(".ctx-guide, .ctx-guides"), null, "no lines");
   const depth = name => u.rowEl(name).closest(".ctx-tree-row").style.getPropertyValue("--depth");
   const words = name => u.rowEl(name).querySelector(".ctx-relation")?.textContent ?? null;
@@ -286,6 +286,12 @@ test("no relation crosses the parts: a section root is a root (no indent, no \"u
   // maint is a root of the section: no indent, no "under lead"; expert is under it.
   assert.deepEqual([depth("maint"), words("maint")], ["0", null]);
   assert.deepEqual([depth("expert"), words("expert")], ["1", ", under maint"]);
+  // Flagged: maint, whose parent is in the main tree, draws none (a root of its part); expert, under maint inside
+  // the section, draws its elbow, and maint its stem.
+  const flagged = ROSTER.map(r => ({ ...r, sameWorkKnown: true, ...(["maint", "expert"].includes(r.instance) ? { sameWork: true } : {}) }));
+  u.render(flagged);
+  const guides = name => [...u.rowEl(name).closest(".ctx-tree-row").querySelectorAll(".ctx-guide")].map(g => g.className.replace("ctx-guide ", ""));
+  assert.deepEqual(["lead", "maint", "expert", "helper"].map(guides), [[], ["down"], ["elbow"], []], "no line crosses the parts");
 });
 
 test("two deployments: the section keeps the machine sub-headings, a level under the heading", t => {

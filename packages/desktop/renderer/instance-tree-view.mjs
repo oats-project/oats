@@ -33,8 +33,8 @@ export function stateSpan(doc, state) {
   return span;
 }
 
-/** A roster row's relations in words for assistive technology (the Desktop UI rework, slice 1, D26: the roster draws
- * no lineage or sibling lines), ", under p, sibling of s", visually hidden after its lines; null when it has none.
+/** A roster row's relations in words for assistive technology (the Desktop UI rework, slice 1; the roster's lines,
+ * drawn for same work and declared siblings only since slice 1b, are aria-hidden), ", under p, sibling of s", visually hidden after its lines; null when it has none.
  * The words are the command palette's ("under …", siblingText's "sibling of …"). */
 export function relationSpan(doc, words) {
   if (!words) return null;
@@ -80,10 +80,13 @@ export function clusterSeparator(doc, { label, count } = {}) {
  * `drawsParentLine`; the gate is stamped on each row by the panel): a child that does not keeps its indent and
  * gets no elbow, and its parent's stem and vertical do not reach it. The dotted links are siblinghood, not
  * parentage, and are drawn as before. Nothing else marks the flag: the line is its only sign, aria-hidden.
+ * `joins` (optional): which child draws its parent line, `drawsParentLine` by default (the command palette's). The
+ * sidebar passes same-work.mjs `sameWorkFlagged` (slice 1b: a line only for a child its host flags as doing its
+ * parent's work; where the host declares the feature the two agree, so the order still holds).
  * `items` is the rendered group order. */
-export function treeConnectors(items, item, allInstances = items) {
+export function treeConnectors(items, item, allInstances = items, { joins = drawsParentLine } = {}) {
   const at = items.indexOf(item), depth = item.depth || 0;
-  const segments = treeGuideSegments(items, item, allInstances);
+  const segments = treeGuideSegments(items, item, allInstances, { joins });
   const out = [];
   segments.forEach((segment, level) => {
     if (segment === "continue") out.push({ kind: "line", level });
@@ -95,7 +98,7 @@ export function treeConnectors(items, item, allInstances = items) {
   // The stem: an expanded parent's own line leaves its dot downward to the
   // first child's elbow (the child is the very next rendered item), when that child draws its line.
   const next = at >= 0 ? items[at + 1] : null;
-  if (next && (next.depth || 0) === depth + 1 && drawsParentLine(next)) out.push({ kind: "down", level: depth });
+  if (next && (next.depth || 0) === depth + 1 && joins(next)) out.push({ kind: "down", level: depth });
   const rootBefore = at > 0 && items.slice(0, at).some((i) => !(i.depth || 0));
   const rootAfter = at >= 0 && items.slice(at + 1).some((i) => !(i.depth || 0));
   if (!depth) {
@@ -152,13 +155,13 @@ export function resolveTerminalOpen(instances, ref, workspace) {
  * `continue` is an ancestor/sibling vertical; `branch` has a later sibling and
  * an elbow; `end` is the final sibling, stopping at its elbow; `none` suppresses
  * an exhausted ancestor line through deeper descendants, and the row's own segment when it does not draw
- * its parent line (#1577, `drawsParentLine`). A vertical counts only later siblings that draw theirs: under
+ * its parent line (#1577, `drawsParentLine`, or the `joins` treeConnectors passes). A vertical counts only later siblings that draw theirs: under
  * one parent those come first (instance-tree.mjs `clusterInstances`), so it ends at the last one.
  * Pass the full roster as allInstances when items is a cluster/filtered subset:
  * resolve parent names there first, using the same identity rules as clustering.
  * Then walk only visible ancestry and count only visible siblings — a hidden
  * parent stops the path, never falling back to a visible same-named twin. */
-export function treeGuideSegments(items, item, allInstances = items) {
+export function treeGuideSegments(items, item, allInstances = items, { joins = drawsParentLine } = {}) {
   const byName = new Map();
   for (const candidate of allInstances) {
     if (!byName.has(candidate.instance)) byName.set(candidate.instance, []);
@@ -184,11 +187,11 @@ export function treeGuideSegments(items, item, allInstances = items) {
   return chain.map((branch, index) => {
     const at = positions.get(branch);
     const hasLaterSibling = items.slice(at + 1)
-      .some((candidate) => parentIdOf.get(instanceId(candidate)) === parentIdOf.get(branch) && drawsParentLine(candidate));
+      .some((candidate) => parentIdOf.get(instanceId(candidate)) === parentIdOf.get(branch) && joins(candidate));
     const current = index === chain.length - 1;
     if (!current) return hasLaterSibling ? "continue" : "none";
     // No elbow; a later sibling that draws (never, in the roster's order) would still take the vertical past it.
-    if (!drawsParentLine(item)) return hasLaterSibling ? "continue" : "none";
+    if (!joins(item)) return hasLaterSibling ? "continue" : "none";
     return hasLaterSibling ? "branch" : "end";
   });
 }
