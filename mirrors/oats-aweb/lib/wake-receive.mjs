@@ -9,7 +9,10 @@
 //   identity, and the broker attaches only the joined homes, disjoint from the
 //   primary (aw's mixed mode).
 // Under delivery: channel a runtime with no native surface (Codex, unknown) is
-// an external-session home like any session home (brokerDelivers).
+// an external-session home like any session home (brokerDelivers), and so is
+// any runtime a session provider launches (`OATS_BACKEND` names one): no
+// channel launch argument or extension can reach a session that is not ours
+// to start.
 import {lstatSync, readFileSync, realpathSync, statSync} from 'node:fs';
 import {basename, dirname, isAbsolute, join, resolve} from 'node:path';
 import {approvedChannelPolicyWarning} from './claude-managed-policy.mjs';
@@ -22,23 +25,47 @@ const RECEIVE_OBSERVATION_WARN_AGE_MS = 30000;
 
 const NATIVE_CHANNEL_RUNTIMES = ['claude', 'pi'];
 
+/** Whether `backend` (the kernel's `OATS_BACKEND`, or what a start recorded
+ *  of it) names a session provider: a session backend a capability supplies.
+ *  `tmux` is the kernel's own backend, and a kernel that sets no backend runs
+ *  tmux. */
+export function sessionProviderBackend(backend) {
+  return typeof backend === 'string' && backend !== '' && backend !== 'tmux';
+}
+
+/** The `--backend` hint `aw wake register` takes for `backend`: aw accepts
+ *  only its own terminal backends there (a status label, which no delivery
+ *  decision reads), so a session provider's name is never passed. */
+export function wakeBackendHint(backend) {
+  return backend === 'tmux' ? 'tmux' : undefined;
+}
+
 /** Whether the host wake broker delivers the home's primary identity:
- *  delivery: session sends every runtime through it; delivery: channel only a
- *  runtime with no native channel (Claude has its channel plugin, pi its
- *  extension). The broker typing into a session that also has a live channel
- *  doubles every wake, so this is the one path, never both. */
-export function brokerDelivers({delivery, runtime}) {
-  return delivery === 'session' || !NATIVE_CHANNEL_RUNTIMES.includes(runtime);
+ *  delivery: session sends every runtime through it, and so does a session
+ *  provider's launch, whatever the setting and the runtime; delivery: channel
+ *  otherwise only a runtime with no native channel (Claude has its channel
+ *  plugin, pi its extension). The broker typing into a session that also has
+ *  a live channel doubles every wake, so this is the one path, never both. */
+export function brokerDelivers({delivery, runtime, backend}) {
+  return delivery === 'session' || sessionProviderBackend(backend) || !NATIVE_CHANNEL_RUNTIMES.includes(runtime);
 }
 
 /** What the kernel recorded for a home's last start: this provider's meta
- *  (capabilityMeta) and the harness it launched. Empty when unreadable. */
+ *  (capabilityMeta), the harness it launched and the session backend it
+ *  launched it on. Empty when unreadable. */
 export function recordedStart(home) {
   let doc;
   try { doc = JSON.parse(readFileSync(join(home, 'instance.json'), 'utf8')); } catch { return {}; }
   const meta = doc?.capabilityMeta?.['oats.aweb'];
   const harness = typeof doc?.launch?.harness === 'string' ? doc.launch.harness : typeof doc?.harness === 'string' ? doc.harness : undefined;
-  return {identityHome: doc?.launch?.hooks?.env?.AWEB_IDENTITY_HOME, meta: meta && typeof meta === 'object' && !Array.isArray(meta) ? meta : undefined, harness};
+  return {identityHome: doc?.launch?.hooks?.env?.AWEB_IDENTITY_HOME, meta: meta && typeof meta === 'object' && !Array.isArray(meta) ? meta : undefined, harness, backend: typeof doc?.backend === 'string' ? doc.backend : undefined};
+}
+
+/** The session backend a home's last start ran on: the session provider this
+ *  provider recorded (it records no other backend), else the kernel's own
+ *  record of the home's backend. */
+export function recordedBackend(meta, kernelBackend) {
+  return typeof meta?.backend === 'string' ? meta.backend : kernelBackend;
 }
 
 /** The runtime a home's last start ran under: what this provider recorded
@@ -153,28 +180,30 @@ function capturedClaudeChannel(meta, hooks, policy, launchPromptStatus) {
 }
 
 /** external-session | native-channel | native-pi. */
-export function runtimeDeliveryFor({delivery, runtime}) {
-  if (brokerDelivers({delivery, runtime})) return 'external-session';
+export function runtimeDeliveryFor({delivery, runtime, backend}) {
+  if (brokerDelivers({delivery, runtime, backend})) return 'external-session';
   return runtime === 'claude' ? 'native-channel' : 'native-pi';
 }
 
 /** Whether this home reads its joined teams at task boundaries instead of
  *  through the host wake broker: a Claude channel home does. */
-export function joinedTeamsPolled({delivery, runtime}) {
-  return runtimeDeliveryFor({delivery, runtime}) === 'native-channel';
+export function joinedTeamsPolled({delivery, runtime, backend}) {
+  return runtimeDeliveryFor({delivery, runtime, backend}) === 'native-channel';
 }
 
 /** The multi-identity registration document for this home, or null when it
  *  has no joined team: a native home then needs none, and an external-session
- *  home keeps the one-identity register. */
+ *  home keeps the one-identity register. `backend` decides the delivery with
+ *  the setting and the runtime; the document names it only as aw's hint. */
 export function wakeRegistration({home, primaryIdentityHome, delivery, runtime, joined = [], backend}) {
-  const rt = runtimeDeliveryFor({delivery, runtime});
+  const rt = runtimeDeliveryFor({delivery, runtime, backend});
   if (!joined.length) return null;
   const receive = joined.map((j) => ({identity_home: j.identityHome, label: j.label, event_classes: JOINED_EVENT_CLASSES}));
   const doc = rt === 'external-session'
     ? {home, delivery: 'session', runtime_delivery: rt, identity_home: primaryIdentityHome, receive_identities: [{identity_home: primaryIdentityHome, label: 'default', controls: true}, ...receive]}
     : {home, delivery: rt, runtime_delivery: rt, primary_identity_home: primaryIdentityHome, receive_identities: receive};
-  if (backend) doc.backend = backend;
+  const hint = wakeBackendHint(backend);
+  if (hint) doc.backend = hint;
   return doc;
 }
 
@@ -244,6 +273,7 @@ function receiveRecord(home) {
       // runtime metadata retains the empty-string external-broker meaning.
       [doc.launch?.harness, doc.harness].some(v => v !== undefined && (typeof v !== 'string' || !v.trim() || v !== v.trim())) ||
       (meta.delivery !== undefined && !['session', 'channel'].includes(meta.delivery)) ||
+      [doc.backend, meta.backend].some(v => v !== undefined && (typeof v !== 'string' || !v.trim() || v !== v.trim())) ||
       (doc.launch?.hooks !== undefined && !object(doc.launch.hooks)) ||
       (doc.launch?.hooks?.env !== undefined && !object(doc.launch.hooks.env))) return {error: 'captured delivery/runtime or credential metadata is malformed'};
   if (doc.launch?.harness !== undefined && doc.harness !== undefined && doc.launch.harness !== doc.harness) return {error: 'captured kernel launch.harness and harness are inconsistent'};
@@ -258,7 +288,9 @@ function receiveRecord(home) {
   // Kernel launch receipts govern readiness. Provider meta may precede a
   // failed launch; configuration names and caller env do not identify a start.
   // Lifecycle callers retain recordedRuntime's historical cleanup semantics.
-  return {meta, runtime: doc.launch?.harness ?? doc.harness ?? meta.runtime, identityHome: doc.launch?.hooks?.env?.AWEB_IDENTITY_HOME, hooks: doc.launch?.hooks, launchPromptStatus, startedAt};
+  // The backend is read the same way: the kernel's record of the home's
+  // session backend, else the session provider this provider recorded.
+  return {meta, runtime: doc.launch?.harness ?? doc.harness ?? meta.runtime, backend: doc.backend ?? meta.backend, identityHome: doc.launch?.hooks?.env?.AWEB_IDENTITY_HOME, hooks: doc.launch?.hooks, launchPromptStatus, startedAt};
 }
 
 /** Preserve valid retained facts even when a legacy record lacks ownership.
@@ -269,7 +301,7 @@ export function expectedReceive(home, {delivery = 'channel', policy} = {}) {
   const fail = message => ({problems: [problem('receive-record-unavailable', message)], warnings: []});
   if (captured.error) return fail(captured.error);
   if (!directory(home)) return fail('instance home is missing or unreadable; it is not a legacy record');
-  const {meta, runtime, identityHome: launchIdentity} = captured;
+  const {meta, runtime, backend, identityHome: launchIdentity} = captured;
   // Valid stale metadata may lag a join/leave, including removed directories;
   // malformed retained entries must not be reclassified as legacy absence.
   if (meta.joinedTeams !== undefined && (!Array.isArray(meta.joinedTeams) || meta.joinedTeams.some(j => !joinedShape(j)) ||
@@ -277,7 +309,7 @@ export function expectedReceive(home, {delivery = 'channel', policy} = {}) {
       new Set(meta.joinedTeams.map(j => canon(j.identityHome))).size !== meta.joinedTeams.length)) return fail('captured joined-team metadata is malformed');
   const incomplete = meta.delivery === undefined || runtime === undefined;
   const warnings = incomplete ? [problem('receive-ownership-unproven', 'legacy captured delivery/runtime is absent; settings supply prerequisites only, receive ownership and complete-set assurance remain unproven')] : [];
-  const runtimeDelivery = !incomplete ? runtimeDeliveryFor({delivery: meta.delivery, runtime}) : undefined;
+  const runtimeDelivery = !incomplete ? runtimeDeliveryFor({delivery: meta.delivery, runtime, backend}) : undefined;
   if (meta.identity !== undefined && (!object(meta.identity) || !['local', 'global'].includes(meta.identity.mode))) return fail('captured identity metadata is malformed');
   const grant = meta.identity?.grant;
   if (grant !== undefined && (!object(grant) || meta.identity?.mode !== 'global' || typeof grant.id !== 'string' || !grant.id.trim())) return fail('captured grant provenance is malformed');
@@ -307,13 +339,14 @@ export function expectedReceive(home, {delivery = 'channel', policy} = {}) {
   // Local commands update disk without rewriting launch metadata. Global modes
   // forbid joins, so contradictory recorded global joins cannot be discarded.
   if (meta.identity?.mode === 'global' && (joined.length || (meta.joinedTeams !== undefined && (!Array.isArray(meta.joinedTeams) || meta.joinedTeams.length)))) return fail('global identity records contain contradictory joined-team state');
-  const primaryBroker = runtime === 'codex' || (meta.delivery === undefined ? delivery === 'session' :
-    meta.delivery === 'session' || (runtime !== undefined && brokerDelivers({delivery: meta.delivery, runtime})));
+  // A session provider's home has no channel, whatever else was captured.
+  const primaryBroker = runtime === 'codex' || sessionProviderBackend(backend) || (meta.delivery === undefined ? delivery === 'session' :
+    meta.delivery === 'session' || (runtime !== undefined && brokerDelivers({delivery: meta.delivery, runtime, backend})));
   const native = meta.delivery === 'channel' && runtime !== undefined && !primaryBroker;
   // Validate mode against its own provider receipt; a valid Claude mode can
   // lag the kernel's Codex receipt just like meta.runtime. It cannot select
   // native delivery or suppress required broker checks.
-  if (meta.claudeChannelMode !== undefined && (meta.delivery !== 'channel' || (meta.runtime ?? runtime) !== 'claude')) return fail('captured Claude channel mode contradicts delivery/runtime');
+  if (meta.claudeChannelMode !== undefined && (meta.delivery !== 'channel' || (meta.runtime ?? runtime) !== 'claude' || sessionProviderBackend(meta.backend))) return fail('captured Claude channel mode contradicts delivery/runtime');
   if (native && runtime === 'claude') {
     let channelWarning;
     try { channelWarning = capturedClaudeChannel(meta, captured.hooks, policy, captured.launchPromptStatus); }

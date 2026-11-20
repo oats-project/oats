@@ -169,7 +169,10 @@ The intended receive path follows your runtime. Under the default `delivery:
 channel`, Claude Code takes mail through the aweb channel plugin and pi through
 its aweb extension, which push into the session; Codex (and any runtime without
 an aweb channel) is woken by the host wake broker. Under `delivery: session`
-the host wake broker wakes every runtime. A session is on one path, never both.
+the host wake broker wakes every runtime. A home that a session provider
+launched (a session backend other than tmux) is woken by the host wake broker
+too, whatever the setting and the runtime: its `Comms:` line says
+`Notification delivery: external`. A session is on one path, never both.
 
 | Your `Comms:` line / teams doc says | What wakes you |
 |---|---|
@@ -274,7 +277,8 @@ needs separate explicit operator authorization.
 For an unattended Claude home, the approved route is recommended.
 
 **The host wake broker** (`aw wake run`, one per host user) wakes every Codex
-home, every `delivery: session` home and every joined team, except a Claude
+home, every `delivery: session` home, every home a session provider launched
+and every joined team, except a Claude
 channel home's joined teams (below). The provider registers a home at spawn and
 launch. `aw wake register` accepts a
 registration even while the daemon is down, and the registration takes

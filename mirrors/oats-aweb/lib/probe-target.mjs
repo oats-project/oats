@@ -4,6 +4,7 @@ import {openSync, readSync, closeSync, realpathSync, lstatSync, fstatSync} from 
 import {basename, dirname, join} from 'node:path';
 import {canonicalArgument, parseProbeJson, PROBE_LIMITS, refuse} from './probe-runtime.mjs';
 import { sameAwebTeamId, teamKeyIn } from "./aweb-team-id.mjs";
+import { sessionProviderBackend } from "./wake-receive.mjs";
 const object = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const atom = v => typeof v === 'string' && v.length > 0 && v.length <= 256 && !/[\s\x00-\x1f\x7f]/.test(v);
 export function readProbeRecord(file) {
@@ -45,7 +46,7 @@ export function loadProbeTarget(home, deployment) {
   if (!['channel', 'session'].includes(meta.delivery) || (settings.delivery !== undefined && settings.delivery !== meta.delivery)) refuse('captured-delivery-unavailable');
   if (doc.launch?.hooks?.env?.AWEB_IDENTITY_HOME !== undefined && doc.launch.hooks.env.AWEB_IDENTITY_HOME !== identityHome) refuse('contradictory-identity-home');
   return {home, alias: id.alias, team: id.team, harness: meta.runtime,
-    delivery: meta.delivery === 'session' || meta.runtime === 'codex' ? 'broker' : 'channel',
+    delivery: meta.delivery === 'session' || meta.runtime === 'codex' || sessionProviderBackend(meta.backend ?? doc.backend) ? 'broker' : 'channel',
     rootHome, identityHome, primary, settings, captured: doc};
 }
 export function validateProbeInspect(envelope, target) {
