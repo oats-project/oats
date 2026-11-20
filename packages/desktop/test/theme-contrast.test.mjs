@@ -1574,8 +1574,8 @@ for (const [name] of palettes) test(`${name}: the Souls grid, its table and a so
   const root = dom.window.getComputedStyle(doc.documentElement);
   const painted = el => { for (let p = el; p; p = p.parentElement) { const bg = dom.window.getComputedStyle(p).background; if (/^var\(--/.test(bg)) return bg.slice(6, -1); } return 'bg'; };
   for (const [selector, fg, bg] of [
-    ['#refused .stitle', 'fg', 'surface'], ['#refused .sdesc', 'fg', 'surface'], ['#refused .sproblem', 'warn', 'surface'], ['#refused .skind', 'muted', 'surface'],
-    ['#running .sactivity.running', 'fg', 'surface'], ['#stopped .sactivity', 'muted', 'surface'],
+    ['#refused .stitle', 'fg', 'surface'], ['#refused .sdesc', 'muted', 'surface'], ['#refused .sproblem', 'warn', 'surface'], ['#refused .skind', 'muted', 'surface'],
+    ['#running .sactivity.running', 'muted', 'surface'], ['#stopped .sactivity', 'muted', 'surface'],
     ['.souls-table thead th', 'muted', 'bg'], ['.souls-table .souls-group-note', 'muted', 'bg'], ['.souls-table td.what', 'fg', 'bg'], ['.souls-table td.kind', 'fg', 'bg'],
     ['.souls-table td.agents.muted', 'muted', 'bg'], ['.souls-table td.problem', 'warn', 'bg'], ['.souls-table button.soul-row-open', 'fg', 'bg'], ['.souls-lede', 'muted', 'bg'],
     ['.soul-top dt', 'muted', 'bg'], ['.soul-top dd .strong', 'fg', 'bg'], ['.soul-top dd .muted', 'muted', 'bg'], ['.soul-top .soul-top-note', 'muted', 'bg'],

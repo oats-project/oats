@@ -141,7 +141,7 @@ test('03 (slice 3a): a card is one button: its name, what it does, its agents an
   assert.equal(card.querySelector('button'), null, 'no control nested inside the card button');
   assert.equal(card.parentElement.className, 'souls-group-cards', 'no tile: the card is the grid cell');
   assert.equal(u.get('.soul-spawn, .soul-tile, .glyph, .runtime-badge, .schip'), null);
-  assert.equal(u.css('.sdesc').fontSize, '12.5px'); assert.equal(u.css('.sdesc').webkitLineClamp || u.css('.sdesc').getPropertyValue('-webkit-line-clamp'), '2', 'two lines at most');
+  assert.equal(u.css('.sdesc').fontSize, '13px'); assert.equal(u.css('.sdesc').webkitLineClamp || u.css('.sdesc').getPropertyValue('-webkit-line-clamp'), '2', 'two lines at most');
   card.focus(); card.dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await tick();
   for (const text of ['New agent', 'Files', 'Schedule…']) assert.ok([...u.get('.workspace-soul-page').querySelectorAll('button')].find(b => b.textContent === text), text);
   for (const text of ['Edit defaults', 'Edit instructions', 'Spawn']) assert.equal([...u.get('.workspace-soul-page').querySelectorAll('button')].some(b => b.textContent === text), false, `no ${text}`);

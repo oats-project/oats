@@ -3,12 +3,13 @@
  * as the roster holds them; nothing here reorders the roster (needs-input-preserves-liveness-and-recognition: the
  * urgency order lives on Home only).
  *
- *   homeBoard(rows, { stale }) -> { needsYou: [{ row, claim }], counts: { agents, running, needYou, stopped, unknown } }
+ *   homeBoard(rows, { stale, pins }) -> { needsYou: [{ row, claim }], running: [row], counts: { agents, running, needYou, stopped, unknown } }
  *     needsYou: every row with a claim it may show (waiting-on-you.mjs `waitingClaim`, the one liveness gate,
  *               `stale(row)` the roster's held-stale rule), newest claim first (its `since`), then the roster's
  *               order.
- *     counts:   the summary line's numbers (slice 2b: Home lists no running agents, the sidebar does; Pepe,
- *               2026-11-20). agents: every row. needYou: the rows in needsYou. running: every other live row
+ *     running:  every other live row, in the roster's order (pinned first where `pins`, as homeAgents): Home shows
+ *               the first few, cropped and expandable (slice 2b, Amendment 1: Pepe, 2026-11-20).
+ *     counts:   the summary line's numbers. agents: every row. needYou: the rows in needsYou. running: every other live row
  *               (`running === true`, no reported state but `running`, a reached server). stopped: every other row
  *               that says `running: false`. unknown: the rest (no runtime fact, an unreached server, another
  *               reported state). Each row is counted once, so the four add up to agents. There is no working/idle
@@ -29,19 +30,19 @@ const rowsOf = (rows) => (Array.isArray(rows) ? rows.filter((row) => record(row)
 const since = (claim) => { const t = Date.parse(claim.since); return Number.isFinite(t) ? t : -Infinity; };
 const live = (row) => row.running === true && row.serverUnreached !== true && (row.runtimeState == null || row.runtimeState === 'running');
 
-export function homeBoard(rows, { stale = () => false } = {}) {
-  const needsYou = [], counts = { agents: 0, running: 0, needYou: 0, stopped: 0, unknown: 0 };
+export function homeBoard(rows, { stale = () => false, pins = false } = {}) {
+  const needsYou = [], running = [], counts = { agents: 0, running: 0, needYou: 0, stopped: 0, unknown: 0 };
   for (const row of rowsOf(rows)) {
     counts.agents++;
     const claim = waitingClaim(row, { stale: stale(row) === true });
     if (claim) needsYou.push({ row, claim });
-    else if (live(row)) counts.running++;
+    else if (live(row)) { counts.running++; running.push(row); }
     else if (row.running === false) counts.stopped++;
     else counts.unknown++;
   }
   needsYou.sort((a, b) => since(b.claim) - since(a.claim) || rosterOrder(a.row, b.row));
   counts.needYou = needsYou.length;
-  return { needsYou, counts };
+  return { needsYou, running: homeAgents(running, { pins }), counts };
 }
 
 export function homeAgents(rows, { pins = false } = {}) {

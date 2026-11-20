@@ -94,20 +94,23 @@ const CSS = `
 /* The group heading (icon, monospace name, muted qualifier) is group-heading.mjs's, shared with Capabilities. */
 ${groupHeadingCSS}
 .souls-group-cards { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(min(240px, 100%), 1fr)); align-content:start; }
-/* A card: the name, what it does (two lines at most; the soul's page has the whole text), then its agents and kind. */
+/* A card: the name, what it does (two lines at most; the soul's page has the whole text), then its agents and kind.
+   Its type follows the information's role (chrome-typography-follows-information-role; slice 2b, Amendment 1, C:
+   Pepe, 2026-11-20, "mes font hierarchy en els soul cards"): the name is a card title (17 / 700, foreground), what
+   it does is body (13, muted), and its agents and kind are one secondary meta line (12, muted). */
 .soul-card { display:flex; flex-direction:column; gap:6px; min-width:0; padding:14px 16px; box-sizing:border-box; background:var(--surface); border:1px solid var(--border); border-radius:10px;
              cursor:pointer; text-align:left; font:inherit; color:var(--fg); }
 .oats-view .souls button.soul-card { height:auto; min-height:0; font-weight:400; line-height:normal; }
 .soul-card:hover { border-color:var(--sel-border); }
 .soul-card.open { border-color:var(--sel-border); box-shadow:0 0 0 1px var(--sel-border); }
 .soul-card.unavailable { cursor:default; }
-.soul-card .stitle { font-size:13.5px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.soul-card .stitle { font-size:17px; font-weight:700; line-height:22px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .soul-card.unavailable .stitle { color:var(--muted); }
-.soul-card .sdesc { margin:0; color:var(--fg); font-size:12.5px; line-height:1.45; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow-wrap:anywhere; }
+.soul-card .sdesc { margin:0; color:var(--muted); font-size:13px; line-height:1.45; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow-wrap:anywhere; }
 .soul-card .sdesc:empty { display:none; }
 .soul-card .sfoot { display:flex; align-items:center; gap:0; min-width:0; margin-top:auto; padding-top:4px; color:var(--muted); font-size:12px; line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .soul-card .sactivity { min-width:0; overflow:hidden; text-overflow:ellipsis; }
-.soul-card .sactivity.running { color:var(--fg); font-weight:600; }
+.soul-card .sactivity.running { color:var(--muted); font-weight:400; } /* the dot says running; the name leads */
 .soul-card .sactivity.running::before { content:""; display:inline-block; width:7px; height:7px; margin-right:6px; border-radius:50%; background:var(--live); vertical-align:1px; }
 .soul-card .skind { flex:none; margin-left:.35em; }
 .soul-card .sproblem { display:block; min-width:0; margin-top:auto; padding-top:4px; color:var(--warn); font-size:12px; font-weight:600; line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

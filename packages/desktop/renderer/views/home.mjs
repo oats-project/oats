@@ -1,17 +1,20 @@
 /* oats desktop — Home (the Desktop UI rework, slices 2 and 2b): what needs me, and what do I have, on one screen. A
    stage view on the shell's mount(el, ctx) contract, so a later slice can put it in a tab.
 
-   Top to bottom (slice 2b, Pepe, 2026-11-20: slice 2's board repeated the sidebar, and pushed the workspace off screen):
+   Top to bottom, in a centred column (slice 2b and its Amendment 1, Pepe, 2026-11-20: slice 2's board repeated the
+   sidebar in full, and pushed the workspace off screen):
    - Needs you: each agent with a live claim (the roster's waitingClaim gate), dot, name, soul · machine and its
      message, newest claim first, from the roster the sidebar shows (ctx.homeRoster, its paints through
      ctx.subscribeHomeRoster), grouped by the shared packages/client/home-board.mjs. NEEDS_YOU_SHOWN at most, then
-     "Show all N", which expands in place. None: one quiet line. Home lists no running agents: the sidebar does.
+     "Show all N", which expands in place. None: one quiet line.
    - One summary line: "24 agents · 21 running · 3 need you · 0 stopped", text, not a list. There is no working/idle
      fact (the activity contract isn't built) and none is inferred: a live row is "running".
    - The workspace, one row of compact tiles, each a button with its count: Agents (Home › Agents here), Souls,
      Capabilities, Teams, Machines (the Workspace page on its tab, ctx.openWorkspaceTab, whose Esc comes back to Home:
      shell.mjs) and Automations (its page, ctx.openPage), with the sidebar row's red mark while a run failed
      (ctx.automationsFailed, slice 1's reader). The Graph has no tile: it is frozen, and Machines keeps its List | Map.
+   - Running, under the tiles: the live agents that don't need you, RUNNING_SHOWN in the roster's order, then "Show
+     all N running" (and "Show fewer"). The heading says they run; no row repeats it.
    - Home › Agents: every agent, running or stopped, flat, in the roster's order (pins first where it shows them):
      name, soul · machine, state, who started it. Esc or Back returns.
    - First run (no agents): OATS in two lines, three keys, then the tiles.
@@ -47,6 +50,8 @@ export const TILES = Object.freeze([
 
 /** How many needs-you rows Home shows before "Show all N". */
 export const NEEDS_YOU_SHOWN = 8;
+/** How many running agents Home shows before "Show all N running" (Amendment 1, B). */
+export const RUNNING_SHOWN = 5;
 
 /** A tile's count as it reads: the number, "Counting…" while it is read (or pending), "Couldn't count" when that
  * failed, and "" when there is nothing to count (Teams without a team model, an OATS without automations). */
@@ -89,12 +94,14 @@ const L = HOME_LAYOUT;
 
 export const homeCSS = `
 .home { box-sizing:border-box; height:100%; overflow:auto; padding:${L.padTop}px 32px 32px; color:var(--fg); font-family:var(--ui-font, system-ui); }
-.home-inner { max-width:760px; }
+.home-inner { max-width:880px; margin:0 auto; } /* a centred, readable column (Amendment 1, A: Pepe, 2026-11-20) */
 .home h1 { margin:0 0 ${L.titleGap}px; font-size:24px; font-weight:700; line-height:${L.title}px; }
 /* The Workspace page's head (views/spawn.mjs .workspace-title) is this one's, so the two pages read alike. */
 .home h2 { margin:0 0 var(--title-gap); font-size:15px; font-weight:650; line-height:1.3; }
 .home-section { margin:0 0 var(--section-gap); }
 .home-section.home-needs { margin:0; } /* the summary line's own margins space it */
+.home-section.home-running { margin:var(--section-gap) 0 0; }
+.home h2.home-group-title { margin:0 0 ${L.headingGap}px; font-size:15px; line-height:${L.heading}px; }
 .home h2.home-needs-title { margin:0 0 ${L.headingGap}px; line-height:${L.heading}px; }
 .home-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:${L.rowGap}px; }
 .home-row { display:flex; align-items:center; gap:10px; width:100%; min-height:44px; padding:6px 10px; border:0; border-radius:6px;
@@ -154,7 +161,8 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   const inner = doc.createElement("div"); inner.className = "home-inner";
   root.append(style, inner);
   el.replaceChildren(root);
-  let view = "board", alive = true, expanded = false; // expanded: "Show all N" was chosen (until a workspace switch)
+  // expanded / runningExpanded: "Show all N" and "Show all N running" were chosen (until a workspace switch)
+  let view = "board", alive = true, expanded = false, runningExpanded = false;
   const counts = { souls: "loading", capabilities: "loading", teams: "loading", automations: "loading" };
   let gen = generation();
   const chord = (id) => (typeof ctx.chordText === "function" ? ctx.chordText(id) : "") || "";
@@ -237,7 +245,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
       if (data.phase === "unavailable" && data.note) s.append(node("p", "home-quiet", data.note));
       return [s];
     }
-    const { needsYou, counts: tally } = homeBoard(data.rows, { stale: data.stale });
+    const { needsYou, counts: tally } = homeBoard(data.rows, { stale: data.stale, pins: data.pins === true });
     const opts = { deployments: data.deployments, here: data.here };
     if (!needsYou.length) s.append(node("p", "home-quiet", "Nothing needs you."));
     else {
@@ -246,13 +254,39 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
       for (const { row, claim } of shown) { const li = node("li"); li.append(agentRow(row, { claim, ...opts })); ul.append(li); }
       s.append(ul);
       if (shown.length < needsYou.length) {
-        const more = node("button", "home-more", `Show all ${needsYou.length}`); more.type = "button"; more.dataset.homeMore = "";
+        const more = node("button", "home-more", `Show all ${needsYou.length}`); more.type = "button"; more.dataset.homeMore = "needs";
         // Expands in place; the focus goes to the first row it showed, so the keyboard carries on down the list.
         more.addEventListener("click", () => { expanded = true; paint({ focus: { agent: instanceId(needsYou[NEEDS_YOU_SHOWN].row) } }); });
         s.append(more);
       }
     }
     return [s, node("p", "home-summary", summaryLine(tally, nouns))];
+  }
+
+  /** Running (Amendment 1, B: Pepe, 2026-11-20): under the tiles, the live agents that don't need you, in the roster's
+   * order, RUNNING_SHOWN at most until "Show all N running" (expands in place, and "Show fewer" folds it back). The
+   * heading says they run: no row says "running". None running: no group. */
+  function runningSection(data) {
+    const { running } = homeBoard(data.rows, { stale: data.stale, pins: data.pins === true });
+    if (!running.length) return null;
+    const s = node("section", "home-section home-running"); s.dataset.homeSection = "running";
+    const h = node("h2", "home-group-title", "Running"); h.id = "home-running-title"; s.append(h);
+    const opts = { deployments: data.deployments, here: data.here };
+    const shown = runningExpanded ? running : running.slice(0, RUNNING_SHOWN);
+    const ul = node("ul", "home-list"); ul.setAttribute("aria-labelledby", h.id);
+    for (const row of shown) { const li = node("li"); li.append(agentRow(row, opts)); ul.append(li); }
+    s.append(ul);
+    if (running.length > RUNNING_SHOWN) {
+      const more = node("button", "home-more", runningExpanded ? "Show fewer" : `Show all ${running.length} running`); more.type = "button";
+      more.dataset.homeMore = "running";
+      more.addEventListener("click", () => {
+        runningExpanded = !runningExpanded;
+        // Expanding focuses the first row it showed; folding keeps the focus on the toggle.
+        paint({ focus: runningExpanded ? { agent: instanceId(running[RUNNING_SHOWN]) } : { more: "running" } });
+      });
+      s.append(more);
+    }
+    return s;
   }
 
   function statusLine(text) { const p = node("p", "home-status", text); p.setAttribute("role", "status"); return p; }
@@ -309,7 +343,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
     if (!alive) return;
     const had = root.contains(doc.activeElement) ? doc.activeElement : null;
     const hadKey = had?.dataset?.homeOpen ? ["open", had.dataset.homeOpen] : had?.dataset?.homeAgent ? ["agent", had.dataset.homeAgent]
-      : had?.dataset?.homeMore != null ? ["more"] : null;
+      : had?.dataset?.homeMore ? ["more", had.dataset.homeMore] : null;
     const data = roster();
     const title = node("h1", null, view === "agents" ? `Home › ${cap(nouns.instances)}` : "Home");
     const parts = [title];
@@ -318,12 +352,14 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
       if (data.phase === "ready" && !data.rows.length) parts.push(firstRun());
       else parts.push(...needsSection(data));
       parts.push(tilesSection(data));
+      if (data.phase === "ready" && data.rows.length) { const running = runningSection(data); if (running) parts.push(running); }
     }
     inner.replaceChildren(...parts);
     const target = focus === "first" ? inner.querySelector(".home-back")
       : focus === "agents" ? inner.querySelector('[data-home-open="agents"]')
       : focus?.agent ? find("homeAgent", focus.agent)
-      : hadKey?.[0] === "more" ? inner.querySelector("[data-home-more]")
+      : focus?.more ? find("homeMore", focus.more)
+      : hadKey?.[0] === "more" ? find("homeMore", hadKey[1])
       : hadKey ? find(hadKey[0] === "open" ? "homeOpen" : "homeAgent", hadKey[1])
       : null;
     if (target) target.focus();
@@ -409,7 +445,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
    * switch, so Home follows it itself). */
   function workspaceChanged() {
     if (!alive || generation() === gen) return;
-    gen = generation(); view = "board"; expanded = false; returnTo = null; clearRetries();
+    gen = generation(); view = "board"; expanded = false; runningExpanded = false; returnTo = null; clearRetries();
     readCounts();
   }
 

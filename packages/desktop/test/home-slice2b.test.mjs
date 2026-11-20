@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { runInNewContext } from "node:vm";
 import { TAB_LABELS } from "../renderer/workspace-discovery.mjs";
-import { createHome, homeCSS, HOME_LAYOUT, NEEDS_YOU_SHOWN, TILES, summaryLine } from "../renderer/views/home.mjs";
+import { createHome, homeCSS, HOME_LAYOUT, NEEDS_YOU_SHOWN, RUNNING_SHOWN, TILES, summaryLine } from "../renderer/views/home.mjs";
 import { homeBoard, homeAgents } from "../../client/home-board.mjs";
 import { TEXT_PAIRS, GRAPHIC_PAIRS, TEXT_CONTRAST, GRAPHIC_CONTRAST } from "../renderer/contrast-inventory.mjs";
 
@@ -50,18 +50,20 @@ function fixture(t, { rows = [], phase = "ready", cli = () => ({ features: [] })
     fail(on) { mark = on; for (const fn of failedListeners) fn(on); },
     switchWorkspace() { ws.gen++; for (const fn of ws.listeners) fn(); },
     needs: () => [...el.querySelectorAll('[data-home-section="needs-you"] [data-home-agent]')].map((b) => b.dataset.homeAgent),
+    running: () => [...el.querySelectorAll('[data-home-section="running"] [data-home-agent]')].map((b) => b.dataset.homeAgent),
     tile: (key) => el.querySelector(`[data-home-open="${key}"]`),
     settle: () => new Promise((r) => setTimeout(r, 0)),
   };
 }
 
+// Amendment 1 (B, Pepe, 2026-11-20) keeps a Running group, cropped: this pinned test now holds what B keeps of it. Slice
+// 2's 21 running rows, each saying "running", are gone: RUNNING_SHOWN rows under one heading, and the summary line.
 test("slice2b home has no running list", (t) => {
   const u = fixture(t, { rows: pepe() });
-  // Every running agent is counted on one line, never listed: no row on Home for an agent that doesn't need you.
   assert.deepEqual(u.needs(), ["agent-02", "agent-01", "agent-00"], "the three waiting, newest claim first");
-  assert.equal(u.el.querySelectorAll("[data-home-agent]").length, 3, "no running rows");
-  assert.ok(![...u.el.querySelectorAll("h2, h3")].some((h) => /running/i.test(h.textContent)), "no Running group");
-  assert.doesNotMatch([...u.el.querySelectorAll("[data-home-agent]")].map((b) => b.textContent).join(" "), /\brunning\b/);
+  assert.equal(u.running().length, RUNNING_SHOWN, "never the whole running list until asked");
+  assert.equal(u.el.querySelectorAll("[data-home-agent]").length, 3 + RUNNING_SHOWN);
+  assert.doesNotMatch([...u.el.querySelectorAll("[data-home-agent]")].map((b) => b.textContent).join(" "), /\brunning\b/, "no row says running");
   const summary = u.el.querySelector(".home-summary");
   assert.equal(summary.textContent, "24 agents · 21 running · 3 need you · 0 stopped");
   assert.equal(summary.tagName, "P", "a line of text, not a list");
@@ -85,13 +87,14 @@ test("slice2b needs you first, capped at 8 with show all", (t) => {
   assert.equal(first.querySelector(".home-row-name").textContent, "Agent 10");
   assert.equal(first.querySelector(".home-row-meta").textContent, "oats-expert · falcon");
   assert.equal(first.querySelector(".home-row-message").textContent, "Question 10");
-  const more = u.el.querySelector("[data-home-more]");
+  const showAll = () => u.el.querySelector('[data-home-more="needs"]');
+  const more = showAll();
   assert.equal(more.textContent, "Show all 11"); assert.equal(more.tagName, "BUTTON");
   more.focus(); u.set({ rows: pepe(11) });
-  assert.equal(u.doc.activeElement, u.el.querySelector("[data-home-more]"), "a repaint keeps the focus on Show all");
-  u.el.querySelector("[data-home-more]").click();
+  assert.equal(u.doc.activeElement, showAll(), "a repaint keeps the focus on Show all");
+  showAll().click();
   assert.equal(u.needs().length, 11, "expands in place");
-  assert.equal(u.el.querySelector("[data-home-more]"), null);
+  assert.equal(showAll(), null);
   assert.equal(u.doc.activeElement.dataset.homeAgent, "agent-02", "focus on the first row it showed");
   u.set({ rows: pepe(11) }); assert.equal(u.needs().length, 11, "stays expanded on a repaint");
   u.switchWorkspace(); u.set({ rows: pepe(11) }); assert.equal(u.needs().length, 8, "another workspace starts folded");
@@ -99,7 +102,7 @@ test("slice2b needs you first, capped at 8 with show all", (t) => {
   u.el.querySelector('[data-home-agent="agent-05"]').click();
   assert.deepEqual(u.opened, ["agent-05"]);
   // Exactly 8: no Show all. None: one quiet line.
-  u.set({ rows: pepe(8) }); assert.equal(u.needs().length, 8); assert.equal(u.el.querySelector("[data-home-more]"), null);
+  u.set({ rows: pepe(8) }); assert.equal(u.needs().length, 8); assert.equal(showAll(), null);
   u.set({ rows: pepe(0) });
   assert.equal(u.el.querySelector('[data-home-section="needs-you"] .home-quiet').textContent, "Nothing needs you.");
 });
@@ -107,9 +110,10 @@ test("slice2b needs you first, capped at 8 with show all", (t) => {
 test("slice2b tiles visible without scrolling", async (t) => {
   const u = fixture(t, { rows: pepe(11) });
   await u.settle(); await u.settle();
-  // Layout order: the title, Needs you, the summary line, then the tiles; nothing after them, nothing between.
+  // Layout order: the title, Needs you, the summary line, then the tiles, and Running below them (Amendment 1: under the
+  // tiles, so the tiles stay in the first viewport); nothing between.
   const parts = [...u.el.querySelector(".home-inner").children];
-  assert.deepEqual(parts.map((n) => n.dataset.homeSection ?? n.className ?? n.tagName), ["", "needs-you", "home-summary", "workspace"]);
+  assert.deepEqual(parts.map((n) => n.dataset.homeSection ?? n.className ?? n.tagName), ["", "needs-you", "home-summary", "workspace", "running"]);
   assert.equal(parts[0].tagName, "H1");
   const tiles = [...parts[3].querySelectorAll("button")];
   assert.deepEqual(tiles.map((b) => b.dataset.homeOpen), ["agents", "souls", "capabilities", "teams", "machines", "automations"]);
@@ -185,8 +189,9 @@ test("slice2b the workspace tiles: buttons named with their counts, Automations 
 
 test("slice2b keyboard order: Needs you, then the tiles; first run keeps its two lines and three keys, then the tiles", (t) => {
   const u = fixture(t, { rows: pepe(11) });
-  const order = [...u.el.querySelectorAll("button")].map((b) => b.dataset.homeAgent ? "row" : b.dataset.homeMore != null ? "more" : b.dataset.homeOpen);
-  assert.deepEqual(order, [...Array(8).fill("row"), "more", "agents", "souls", "capabilities", "teams", "machines", "automations"]);
+  const order = [...u.el.querySelectorAll("button")].map((b) => b.dataset.homeAgent ? "row" : b.dataset.homeMore ? `more-${b.dataset.homeMore}` : b.dataset.homeOpen);
+  assert.deepEqual(order, [...Array(8).fill("row"), "more-needs", "agents", "souls", "capabilities", "teams", "machines", "automations",
+    ...Array(RUNNING_SHOWN).fill("row"), "more-running"], "then Running, under the tiles (Amendment 1)");
   for (const b of u.el.querySelectorAll("button")) assert.equal(b.getAttribute("tabindex"), null, "every one a Tab stop");
   const v = fixture(t, { rows: [] });
   const first = v.el.querySelector('[data-home-section="first-run"]');
@@ -233,4 +238,62 @@ test("slice2b Home's colours are inventory pairs in every theme", () => {
   // The Workspace page's title: --fg on the page's --bg.
   assert.match(spawnSource.match(/\.workspace-title \{[^}]*\}/)[0], /color:var\(--fg\)/);
   assert.ok(has(TEXT_PAIRS, ["fg", "bg"]));
+});
+
+// Amendment 1, B (Pepe, 2026-11-20: "que la llista de running agents estigui cropped i sigui expandible").
+test("slice2b running cropped at 5, show all expands and collapses", (t) => {
+  const pinnedRows = pepe(3).map((r, i) => (i === 20 ? { ...r, pinned: true } : r));
+  const u = fixture(t, { rows: pinnedRows, pins: true });
+  assert.equal(RUNNING_SHOWN, 5);
+  const section = u.el.querySelector('[data-home-section="running"]');
+  assert.equal(section.querySelector("h2").textContent, "Running");
+  // The roster's order: pinned first, then newest spawn first.
+  assert.deepEqual(u.running(), ["agent-20", "agent-23", "agent-22", "agent-21", "agent-19"]);
+  for (const b of section.querySelectorAll("[data-home-agent]")) {
+    assert.equal(b.querySelector(".home-row-side"), null, "no right-aligned state word");
+    assert.ok(b.querySelector(".home-dot.on"), "the running dot");
+  }
+  const toggle = () => u.el.querySelector('[data-home-more="running"]');
+  assert.equal(toggle().textContent, "Show all 21 running");
+  toggle().click();
+  assert.equal(u.running().length, 21, "expands in place");
+  assert.equal(u.doc.activeElement.dataset.homeAgent, "agent-18", "focus on the first row it showed");
+  assert.equal(toggle().textContent, "Show fewer");
+  u.set({ rows: pinnedRows }); assert.equal(u.running().length, 21, "stays expanded on a repaint");
+  toggle().click();
+  assert.equal(u.running().length, RUNNING_SHOWN, "folds back");
+  assert.equal(u.doc.activeElement, toggle(), "the focus stays on the toggle");
+  u.running(); u.el.querySelector('[data-home-agent="agent-23"]').click();
+  assert.deepEqual(u.opened, ["agent-23"], "a row opens as the roster's does");
+  // Five or fewer: no toggle. None running: no group.
+  u.set({ rows: pepe(3, 8) }); assert.equal(u.running().length, 5); assert.equal(toggle(), null);
+  u.set({ rows: pepe(3, 3) }); assert.equal(u.el.querySelector('[data-home-section="running"]'), null);
+  u.switchWorkspace(); u.set({ rows: pinnedRows }); assert.equal(u.running().length, RUNNING_SHOWN, "another workspace starts folded");
+});
+
+// Amendment 1, A (Pepe: "que vagi centered").
+test("slice2b home centered", (t) => {
+  const rule = homeCSS.match(/\.home-inner \{([^}]*)\}/)[1];
+  assert.match(rule, /max-width:880px/); assert.match(rule, /margin:0 auto/);
+  const u = fixture(t, { rows: pepe() });
+  u.tile("agents").click();
+  assert.ok(u.el.querySelector(".home-inner [data-home-section=agents]"), "Home › Agents is in the same centred column");
+});
+
+// Amendment 1, C (Pepe: "mes font hierarchy en els soul cards"): the Souls grid's card in the information-role scale
+// (chrome-typography-follows-information-role): the name a card title, what it does body and muted, the agents and
+// kind a secondary meta line.
+test("slice2b soul card type hierarchy", () => {
+  const rules = [...spawnSource.matchAll(/^\.soul-card (?:\.stitle|\.sdesc|\.sfoot|\.sactivity\.running) \{[^}]*\}/gm)].map((m) => m[0]).join("\n");
+  const dom = new JSDOM(`<style>${rules}</style><button class="soul-card"><span class="stitle">dev</span><p class="sdesc">Build and review</p>
+    <span class="sfoot"><span class="sactivity running">2 agents running</span><span class="skind">· other</span></span></button>`);
+  const style = (sel) => dom.window.getComputedStyle(dom.window.document.querySelector(sel));
+  const px = (sel) => parseFloat(style(sel).fontSize);
+  assert.deepEqual([style(".stitle").fontSize, style(".stitle").fontWeight], ["17px", "700"], "the name: the card title's 17 / 700");
+  assert.doesNotMatch(rules.match(/\.soul-card \.stitle \{[^}]*\}/)[0], /color:/, "the name keeps the card's --fg");
+  assert.deepEqual([style(".sdesc").fontSize, style(".sdesc").color], ["13px", "var(--muted)"], "what it does: body, muted");
+  assert.deepEqual([style(".sfoot").fontSize, style(".sfoot").color], ["12px", "var(--muted)"], "the meta line: secondary, muted");
+  assert.deepEqual([style(".sactivity.running").color, style(".sactivity.running").fontWeight], ["var(--muted)", "400"], "its count is meta, the name leads");
+  assert.ok(px(".stitle") > px(".sdesc") && px(".sdesc") > px(".sfoot"), "three steps: name, body, meta");
+  dom.window.close();
 });

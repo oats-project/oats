@@ -67,7 +67,7 @@ test("slice2 home is the landing surface", () => {
 });
 
 test("slice2 board groups", async (t) => {
-  // Slice 2b: Needs you only (slice 2's Running group is gone: the sidebar lists them); the rest is the summary line.
+  // Slice 2b: Needs you, the summary line, and (Amendment 1) a cropped Running group under the tiles.
   const rows = [
     row("waits-old", { waitingOnYou: claim("Old question", "2026-11-19T09:00:00.000Z"), createdAt: "2026-11-05T00:00:00.000Z" }),
     row("waits-new", { waitingOnYou: claim("Newer question", "2026-11-19T11:00:00.000Z"), createdAt: "2026-11-02T00:00:00.000Z" }),
@@ -80,11 +80,12 @@ test("slice2 board groups", async (t) => {
   const u = fixture(t, { rows });
   const needs = () => [...u.el.querySelectorAll('[data-home-section="needs-you"] [data-home-agent]')].map((b) => b.dataset.homeAgent);
   const summary = () => u.el.querySelector(".home-summary")?.textContent ?? null;
-  // Needs you, newest claim first, with its message; the running, stopped and unknown agents are counted, not listed.
+  // Needs you, newest claim first, with its message; Running in the roster's order; stopped and unknown are counted only.
   assert.deepEqual(needs(), ["waits-new", "waits-old"]);
   assert.match(u.agentButton("waits-new").textContent, /Newer question/);
   assert.match(u.agentButton("waits-new").textContent, /oats-expert · falcon/, "soul · machine, as the roster says it");
-  assert.equal(u.agentButton("runs-new"), undefined, "no running rows on Home");
+  assert.deepEqual([...u.el.querySelectorAll('[data-home-section="running"] [data-home-agent]')].map((b) => b.dataset.homeAgent), ["runs-new", "runs-old"]);
+  assert.doesNotMatch(u.agentButton("runs-new").textContent, /\brunning\b/, "the heading says it, not each row");
   assert.equal(summary(), "7 agents · 2 running · 2 need you · 1 stopped · 2 status unknown");
   // None needs you: one quiet line.
   u.set({ rows: [row("only-runs")] });
