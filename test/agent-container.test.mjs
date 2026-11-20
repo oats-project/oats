@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createTcpServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
@@ -205,12 +205,19 @@ test("agent Compose service retains the isolation contract", () => {
 });
 
 test("the entrypoint command structure hands PID-only tini the supervisor after NSS and key setup", () => {
-  const commands = read("entrypoint.sh").split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#")).map(line => line.split(/\s+/));
-  assert.deepEqual(commands.at(-1), ["exec", "node", "/usr/local/lib/agent-supervisor.mjs"]);
-  assert.equal(commands.filter(argv => argv[0] === "exec").length, 1);
-  assert.ok(commands.every(argv => !(argv[0] === "sshd" && argv.includes("-D"))), "the supervisor alone launches sshd");
-  assert.ok(commands.some(argv => isDeepStrictEqual(argv, ["export", "NSS_WRAPPER_PASSWD=/state/ssh/passwd"])));
-  assert.ok(commands.some(argv => isDeepStrictEqual(argv, ["ssh-keygen", "-q", "-t", "ed25519", "-N", "''", "-f", "/state/ssh/ssh_host_ed25519_key"])));
+  const checkEntrypoint = source => {
+    const commands = source.split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#")).map(line => line.split(/\s+/));
+    assert.deepEqual(commands.at(-1), ["exec", "node", "/usr/local/lib/agent-supervisor.mjs"]);
+    assert.equal(commands.filter(argv => argv[0] === "exec").length, 1);
+    assert.ok(commands.every(argv => !argv.some(word => basename(word.replace(/^['"]|['"]$/g, "")) === "sshd")), "the supervisor alone launches sshd");
+    assert.ok(commands.some(argv => isDeepStrictEqual(argv, ["export", "NSS_WRAPPER_PASSWD=/state/ssh/passwd"])));
+    assert.ok(commands.some(argv => isDeepStrictEqual(argv, ["ssh-keygen", "-q", "-t", "ed25519", "-N", "''", "-f", "/state/ssh/ssh_host_ed25519_key"])));
+  };
+  const source = read("entrypoint.sh");
+  checkEntrypoint(source);
+  for (const direct of ["/usr/sbin/sshd -D &", "nohup sshd -D &", "env PATH=/usr/sbin /usr/sbin/sshd -D &"]) {
+    assert.throws(() => checkEntrypoint(source.replace("exec node", direct + "\nexec node")), /supervisor alone/, direct);
+  }
   const copies = read("Dockerfile").split("\n").map(line => line.trim().split(/\s+/)).filter(words => words[0] === "COPY");
   assert.deepEqual(copies.find(words => words.includes("supervisor.mjs")), ["COPY", "--chmod=644", "supervisor.mjs", "/usr/local/lib/agent-supervisor.mjs"]);
 });
@@ -251,15 +258,19 @@ test("Claude auth orchestration uses a scratch cwd and only user settings", asyn
     [["exec", container, "sh", "-eu", "-c", null, "oats-claude-probe", home], "OATS_CONTAINER_AUTH_OK"],
     [program, "final scan fixture"],
   ];
-  const calls = [];
+  const calls = [], unexpected = [];
   const run = (executable, argv) => {
     const row = expected[calls.length];
     calls.push(argv);
     const matches = row && argv.length === row[0].length && row[0].every((value, at) => value === null ? typeof argv[at] === "string" : isDeepStrictEqual(argv[at], value));
-    if (executable !== "docker" || !matches) return { status: 2, stdout: "", stderr: `unexpected ${executable} ${JSON.stringify(argv)}` };
+    if (executable !== "docker" || !matches) {
+      unexpected.push({ executable, argv });
+      return { status: 2, stdout: "", stderr: `unexpected ${executable} ${JSON.stringify(argv)}` };
+    }
     return { status: 0, stdout: row[1], stderr: "" };
   };
-  main([container, "--evidence", "local", "--claude", home], env, { spawnSync: run });
+  try { main([container, "--evidence", "local", "--claude", home], env, { spawnSync: run }); }
+  finally { assert.deepEqual(unexpected, [], "unexpected Docker argv, including the auth path"); }
   assert.equal(calls.length, expected.length);
   const auth = calls.find(argv => argv.includes("oats-claude-probe"));
   assert.ok(auth, "the orchestration emits one auth probe");

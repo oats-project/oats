@@ -154,14 +154,6 @@ function runBindingCheck(bin, settings, context, env = {}) {
   return { ...r, doc };
 }
 
-function awAtLeast(text, floor) {
-  const parsed = /aw\s+v?(\d+)\.(\d+)\.(\d+)/.exec(text || "");
-  if (!parsed) return false;
-  const a = parsed.slice(1, 4).map(Number), b = floor.split(".").map(Number);
-  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
-  return true;
-}
-
 function spawnGrant(base, extraSettings = {}, extraEnv = {}) {
   const bin = fakeAw(base); const { root, home } = deployment(base); const custody = resident(base);
   const payload = { ...settings(custody), ...extraSettings, identity: { ...settings(custody).identity, ...(extraSettings.identity || {}) } };

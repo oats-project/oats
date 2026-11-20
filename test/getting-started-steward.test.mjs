@@ -3,8 +3,9 @@
 // catalog's oats.machine, its setup soul is oats.machine/steward, and the steward
 // gets a global, contacts-only aweb address through `oats aweb resident create`'s
 // root route, or a local team identity when that route is not there. The skill's
-// guidance is checked against the catalog and documented operator contracts.
-// Provider behaviour belongs to the package's executable tests.
+// guidance is checked against the catalog, documented operator contracts and
+// the remaining provider-source literals in mirrors/oats-aweb. Provider
+// behaviour belongs to the package's executable tests.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
