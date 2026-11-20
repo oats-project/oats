@@ -160,7 +160,7 @@ test("roster typography (non-layout): valid control family and supplied sidebar 
   assert.equal(u.rule(".ctx-meta.ctx-row-detail").fontFamily, "", "in the UI face");
   for (const row of u.rows) {
     const name = row.querySelector(".ctx-name"), meta = row.querySelector(".ctx-meta");
-    // A parent's name sits on its name line after the disclosure (the product owner, 2026-11-19).
+    // A parent's name leads its name line, the disclosure right after it (the product owner, 2026-11-19 and 2026-11-20).
     const first = row.querySelector(".ctx-disclosure") ? name.parentElement : name;
     assert.equal(first.nextElementSibling, meta, "both lines remain in the same vertical stack");
     assert.equal(meta.className, "ctx-meta ctx-row-detail");
@@ -211,11 +211,14 @@ test("tree (non-layout): indentation, no lines, a parent's chevron on its name l
   assert.equal(u.rule(".ctx-tree-row").getPropertyValue("--tree-step"), "18px");
   assert.equal(u.rule(".ctx-tree-row").paddingLeft, "calc(var(--depth) * var(--tree-step))");
   // The product owner, 2026-11-19, replacing Redesign v3's "no disclosure arrows" (#137): a row with children wears
-  // the disclosure first on its name line (roster-disclosure.mjs), and the guides stay as they were.
+  // the disclosure on its name line (roster-disclosure.mjs), right after the name since 2026-11-20 ("so that all
+  // instance names look aligned on the left"), and the guides stay as they were.
   assert.deepEqual(u.rows.map(row => row.querySelectorAll(".ctx-disclosure").length), [1, 1, 0, 1, 0, 0],
     "one on each row with children, none on a row without");
   for (const row of u.rows.filter(r => r.querySelector(".ctx-disclosure"))) {
-    assert.ok(row.querySelector(".ctx-name-line > .ctx-disclosure:first-child"), "first on the name line");
+    const line = row.querySelector(".ctx-name-line");
+    assert.equal(line.firstElementChild.className, "ctx-name", "the name leads the name line");
+    assert.equal(line.firstElementChild.nextElementSibling.className, "ctx-disclosure", "the disclosure right after the name");
   }
   assert.deepEqual(u.rows.map(row => row.style.getPropertyValue("--depth")), ["0", "1", "2", "1", "2", "0"]);
   assert.deepEqual(u.rows.map(row => row.querySelectorAll(".ctx-guide, .ctx-guides").length), [0, 0, 0, 0, 0, 0], "no lines on any row");
