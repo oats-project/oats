@@ -19,7 +19,8 @@
   - Values come from the deployment's configuration as a spawn preview
     resolves it, never from an instance home. A start and a restart resolve
     it again, for the deployment and the soul the home's path names (its
-    `instance.json` decides neither); when that cannot be done the launch input says `sandbox:
+    `instance.json` decides neither), without reaching any remote: the
+    workspace as this host last read it, and `oats-local.yaml` as it is now; when that cannot be done the launch input says `sandbox:
     {unavailable}`, and the provider refuses a launch it would sandbox.
   - A provider's `check` is handed the planned launch (`launch: {harness,
     yolo, args, sandbox}`) before every launch.

@@ -2,8 +2,9 @@
 // pinned in test/sandbox-allowances.test.mjs; this file pins what a spawn does with it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { homeSandboxSource } from "../lib/instance-resolution.mjs";
 import { FAKE_CAPABILITY, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
 const MSG = "acme.msg";
@@ -65,6 +66,7 @@ test("S6: readiness of a provider home lists the same entries, what is missing, 
   assert.equal(Object.hasOwn(fx.cli(["readiness", "--home", tmux.home, "--json"]).json().result, "sandbox"), false);
   // The deployment no longer offers the soul: readiness says that none could be computed, and why.
   fx.commit({ "souls/dev/soul.yaml": null });
+  assert.equal(readWorkspace(fx).json().error.code, "E_SOUL_UNKNOWN");
   const lost = fx.cli(["readiness", "--home", home, "--json"]).json().result.sandbox;
   assert.deepEqual(Object.keys(lost), ["unavailable"]);
   assert.match(lost.unavailable, /^E_SOUL_UNKNOWN: /);
@@ -126,12 +128,24 @@ test("oats capabilities show lists the line as declared, and what is wrong with 
 // ------------------------------------------------------------ start and restart of an existing home
 
 const startCli = (fx, home, verb = "start") => fx.cli(["session", verb, "--home", home, "--json"]).json();
+/** A command that reads the workspace from its remotes, as any `oats status` or preview does: it
+ *  brings the workspace's current commits to this host, which is what a start then resolves. */
+const readWorkspace = (fx) => fx.cli(["spawn", "dev", "--backend", "fake", "--launch-config", "claude", "--preview", "--json"]);
 
-test("a start and a restart resolve the deployment's configuration again: a setting changed there reaches the home", async (t) => {
+test("a start and a restart resolve the deployment's configuration again, as this host last read it and without reaching a remote", async (t) => {
   const fx = deployment(t);
-  const { home } = await fx.launch("one");
-  // The deployment's host moves; the home's own record still says the old one.
+  // Spawned as an operator spawns it, through the CLI: that read of the workspace is what this host has.
+  const spawned = fx.cli(["spawn", "dev", "--name", "one", "--backend", "fake", "--launch-config", "claude", "--json"]).json();
+  assert.equal(spawned.ok, true, JSON.stringify(spawned));
+  const home = spawned.result.home;
+  // The workspace's host moves, in its remote. No command of this host has read that yet: a
+  // restart resolves what the host last read, and reaches no remote to learn more.
   fx.commit({ "souls/dev/soul.yaml": { yaml: { schemaVersion: 2, name: "dev", description: "dev fixture soul.", work: "directory", capabilities: { [FAKE_CAPABILITY]: { from: "here" }, [MSG]: { from: "here" } }, messaging: { server: "https://new.example.org" } } } });
+  fx.clearCalls();
+  assert.equal(startCli(fx, home, "restart").ok, true);
+  assert.deepEqual(fx.verbs("launch")[0].request.input.sandbox.domains.map((d) => d.host), ["app.example.org"], "as this host last read it");
+  // Any command that reads the workspace brings it here; the next launch has it. The home's own record still says the old one.
+  assert.equal(readWorkspace(fx).json().ok, true);
   fx.clearCalls();
   const restarted = startCli(fx, home, "restart");
   assert.equal(restarted.ok, true, JSON.stringify(restarted));
@@ -155,8 +169,9 @@ test("the deployment's slot provider that is not one of the home's modules adds 
     souls: { dev: { soul: { capabilities: soul(MSG).capabilities, messaging: soul(MSG).messaging } } },
   });
   const { home } = await fx.launch("one");
-  // The workspace moves the soul to another messaging provider; the home still has the first.
+  // The workspace moves the soul to another messaging provider (and this host reads that); the home still has the first.
   fx.commit({ "souls/dev/soul.yaml": { yaml: soul("acme.msg2") } });
+  assert.equal(readWorkspace(fx).json().ok, true);
   fx.clearCalls();
   const restarted = startCli(fx, home, "restart");
   assert.equal(restarted.ok, true, JSON.stringify(restarted));
@@ -182,8 +197,9 @@ test("a start that cannot resolve the deployment's configuration says so in the 
   assert.deepEqual(planned, { harness: "claude", yolo: null, args: [], sandbox: fx.verbs("launch")[0].request.input.sandbox });
   assert.deepEqual(planned.sandbox.domains, [{ host: "app.example.org", capability: MSG, setting: "server" }]);
 
-  // The workspace stops offering the soul: nothing resolves for this home any more.
+  // The workspace stops offering the soul (and this host reads that): nothing resolves for this home any more.
   fx.commit({ "souls/dev/soul.yaml": null });
+  assert.equal(readWorkspace(fx).json().error.code, "E_SOUL_UNKNOWN");
   fx.clearCalls();
   // 1. A provider that takes it (it would not sandbox the session): the launch says why there are no allowances.
   const restarted = startCli(fx, home, "restart");
@@ -270,4 +286,31 @@ test("the events directory handed as writable is a real directory at its own pat
   assert.match(refused.error.message, /the session's sandbox may not be allowed to write .+\/\.agents\/events: it is reached through a symbolic link, or is no directory/);
   assert.deepEqual(fx.verbs("launch"), [], "the provider was never asked to launch");
   assert.equal(existsSync(join(fx.root, "dev", "instances", "nope")), false, "and the spawn was rolled back");
+});
+
+test("the deployment's own oats-local.yaml is read as it is now, and a repository this host's cache does not hold is named", async (t) => {
+  const fx = deployment(t, { settings: {} });
+  const { home } = await fx.launch("one");
+  assert.deepEqual(fx.verbs("launch")[0].request.input.sandbox.missing, [{ capability: MSG, setting: "server", team: null }]);
+  assert.equal(readWorkspace(fx).json().ok, true, "this host has read the workspace, as any CLI command does");
+  // What a setup command writes to the deployment's own file reaches the home at its next launch,
+  // with no read of any remote in between.
+  const localPath = join(fx.dep, "oats-local.yaml");
+  writeFileSync(localPath, `${readFileSync(localPath, "utf8").trimEnd()}\nsettings:\n  ${MSG}:\n    server: https://set-up.example.org\n`);
+  fx.clearCalls();
+  assert.equal(startCli(fx, home, "restart").ok, true);
+  assert.deepEqual(fx.verbs("launch")[0].request.input.sandbox, { domains: [{ host: "set-up.example.org", capability: MSG, setting: "server" }], write: [{ path: eventsOf(fx), reason: "oats events" }], missing: [] });
+
+  // This host's cache is gone: the read fetches nothing to make up for it, and says which repository it lacks.
+  // (Asked of the read itself: the start around it reads the workspace's teams live, as every start does.)
+  rmSync(fx.env.OATS_REMOTE_CACHE, { recursive: true, force: true });
+  const source = await fx.inEnv(() => homeSandboxSource(home, { remoteOptions: fx.remoteOptions }));
+  assert.deepEqual(Object.keys(source), ["unavailable"]);
+  assert.match(source.unavailable, /^E_REMOTE_UNREADABLE: cannot read .+ws\.git without reaching it: this host has not observed it yet\. Any oats command that reads the workspace/);
+  const left = existsSync(fx.env.OATS_REMOTE_CACHE) ? readdirSync(fx.env.OATS_REMOTE_CACHE) : [];
+  assert.deepEqual(left.filter((entry) => !entry.startsWith(".")), [], "no repository was fetched into the cache");
+  // And a start says so in its launch input.
+  fx.clearCalls();
+  assert.equal(startCli(fx, home, "restart").ok, true);
+  assert.match(fx.verbs("launch")[0].request.input.sandbox.unavailable, /^E_REMOTE_UNREADABLE: cannot read .+ws\.git without reaching it/);
 });

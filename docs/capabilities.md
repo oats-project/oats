@@ -2303,8 +2303,15 @@ launch (`"launch": { "harness", "yolo", "args", "sandbox" }`, absent on a
 readiness read): the kernel asks it before a restart stops anything.
 
 **A start or a restart of an existing home** resolves the deployment's
-configuration again, for the home's soul, so a setting changed there reaches
-the home at its next launch. **Which deployment and which soul that is comes
+configuration again, for the home's soul, **without reaching any remote**:
+the workspace and each repository are read **as this host last read them**
+(the commits any `oats` command that reads the workspace last saw here, from
+this host's cache), and the deployment's own `oats-local.yaml` and lock as
+they are now. So a launch never waits on the network or fails with it; a
+setting a person or a setup command writes to `oats-local.yaml` reaches the
+home at its next launch; and a change committed to the workspace reaches it
+once a command on this host has read the workspace (`oats status`, a spawn
+preview). **Which deployment and which soul that is comes
 from where the home is, never from what is in it**: the deployment is the
 directory four levels above the home (`<deployment>/agents/<agent>/instances/<instance>`,
 as its real path) and must hold its own `oats-local.yaml`; the soul is the
@@ -2315,7 +2322,7 @@ leave a host of the deployment's list out, never add one. A slot's provider
 of the deployment that is not one of them adds none and is named (`skipped`,
 and a warning of the start). When
 the deployment's configuration cannot be resolved (a member repository that
-cannot be read, a soul the workspace no longer offers, a home whose real
+this host's cache does not hold, a soul the workspace no longer offers, a home whose real
 path is not under a deployment because its agents root is reached through a
 link), the launch input
 carries `"sandbox": { "unavailable": "<the cause>" }` in place of the three
