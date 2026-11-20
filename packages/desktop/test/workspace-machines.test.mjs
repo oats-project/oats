@@ -1,9 +1,10 @@
-// #517: the Setup tab's Registered machines box — this workspace's registrations with what the last check said,
-// one background check per machine per run, Check, Remove (confirmed) and Add a machine.
+// #517 and the Desktop UI rework's slice 3b: the Workspace's Machines section — this computer and this workspace's
+// registrations with what the last check said, one background check per machine per run, Enter opens one with Check
+// and Remove (confirmed), and Add a machine.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createWorkspaceMachines, resetMachineChecks } from '../renderer/workspace-machines.mjs';
+import { createWorkspaceMachines, resetMachineChecks, THIS_COMPUTER } from '../renderer/workspace-machines.mjs';
 
 const WS = 'ws:0123456789abcdef0123', KEY = 'github.com/example/ac', DEPLOYMENT = '/Users/alex/Agents/aweb';
 const machine = (id, extra = {}) => ({ id, label: id.split('-')[0], sshHost: id.split('-')[0], workspace: `/home/alex/${id}`, workspaceKey: KEY, check: null, ...extra });
@@ -11,7 +12,7 @@ const answer = (servers, extra = {}) => ({ servers, filtered: true, key: KEY, de
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setImmediate(r)); };
 
 function setup(t, routes, options = {}) {
-  const dom = new JSDOM('<!doctype html><html><body><div id="host"></div></body></html>', { pretendToBeVisual: true });
+  const dom = new JSDOM('<!doctype html><html><body><div id="host" class="oats-view"></div></body></html>', { pretendToBeVisual: true });
   const doc = dom.window.document, calls = [];
   const ctx = { api: async (path, opts = {}) => {
     const body = opts.body ? JSON.parse(opts.body) : undefined; calls.push({ path, body });
@@ -26,12 +27,122 @@ function setup(t, routes, options = {}) {
   doc.getElementById('host').append(ui.element);
   t.after(() => { ui.dispose(); dom.window.close(); });
   const q = s => doc.querySelector(s), qa = s => [...doc.querySelectorAll(s)];
-  const row = id => q(`[data-machine="${id}"]`);
-  const cells = id => [...row(id).querySelectorAll('.machine-cell')].map(c => c.textContent);
-  return { dom, doc, ui, calls, q, qa, row, cells };
+  const row = id => qa('[data-machine]').find(li => li.dataset.machine === id) ?? null;
+  const cells = id => [...row(id).querySelectorAll('.machine-row > .machine-cell')].map(c => c.textContent);
+  /** Enter on a machine's row (its button) opens it: Check and Remove. */
+  const open = id => row(id).querySelector('button.machine-row').click();
+  return { dom, doc, ui, calls, q, qa, row, cells, open };
 }
 
-test('lists this workspace\'s machines (name, host, folder, OATS version, reachable) and checks each unchecked one once in the background', async t => {
+// The Desktop UI rework, slice 3b: the Machines section lists the computers this workspace runs on — this computer, then
+// each registered machine — reachable or not and the OATS version; Enter opens one with Check and Remove. The agents per
+// machine are cut from this slice (the effort's lead): no count is shown.
+test('slice3b machines section lists servers', async t => {
+  const u = setup(t, {
+    '/api/servers': () => answer([machine('devbox-aweb', { check: { reachable: true, version: '0.69.20', error: null } }), machine('laptop-aweb', { check: { reachable: false, version: null, error: 'ssh to laptop failed: timeout' } })]),
+  }, { cli: () => ({ version: '0.69.21' }) });
+  await settle();
+  assert.equal(u.q('.machines-title').textContent, 'Machines');
+  assert.equal(u.q('.machines-lead').textContent, 'The computers this workspace runs on.');
+  assert.deepEqual(u.qa('[data-machine]').map(li => li.dataset.machine), [THIS_COMPUTER, 'devbox-aweb', 'laptop-aweb']);
+  // name | reachable | OATS version; no agent count anywhere.
+  assert.deepEqual(u.cells(THIS_COMPUTER), ['This computer', 'reachable', 'oats 0.69.21']);
+  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'reachable', 'oats 0.69.20']);
+  assert.deepEqual(u.cells('laptop-aweb'), ['laptop-aweb', 'not reachable', '']);
+  assert.equal(u.q('.agents'), null); assert.doesNotMatch(u.ui.element.textContent, /\bagents?\b/);
+  // This computer is not a registration: nothing to open, check or remove.
+  assert.equal(u.row(THIS_COMPUTER).querySelector('button'), null);
+  // A registered machine's row is one button: Enter opens it (native activation), with its facts, Check and Remove.
+  const button = u.row('devbox-aweb').querySelector('button.machine-row');
+  assert.equal(button.getAttribute('aria-expanded'), 'false'); assert.equal(u.row('devbox-aweb').querySelector('.machine-check'), null, 'closed: no actions yet');
+  button.focus(); button.click();
+  assert.equal(u.row('devbox-aweb').querySelector('button.machine-row').getAttribute('aria-expanded'), 'true');
+  assert.equal(u.doc.activeElement, u.row('devbox-aweb').querySelector('button.machine-row'), 'focus stays on the row');
+  const facts = Object.fromEntries([...u.row('devbox-aweb').querySelectorAll('.machine-facts dt')].map(dt => [dt.textContent, dt.nextElementSibling.textContent]));
+  assert.deepEqual(facts, { Name: 'devbox', 'ssh host': 'devbox', Folder: '/home/alex/devbox-aweb' });
+  assert.deepEqual([...u.row('devbox-aweb').querySelectorAll('.machine-acts button')].map(b => b.textContent), ['Check', 'Remove']);
+  // A repaint keeps the open machine open.
+  u.ui.sync();
+  assert.ok(u.row('devbox-aweb').querySelector('.machine-check'));
+  // "Add a machine" is today's dialog.
+  assert.equal(u.q('.machines-add').textContent, 'Add a machine to this workspace…');
+  // A view with no deployment on this computer (a remote-only one): no "This computer"; its machines' deployments, from
+  // the panel's facts, with no version claimed.
+  const remote = setup(t, { '/api/servers': () => ({ servers: [], filtered: true, key: null, deployment: null, aweb: false, reason: 'No deployment of this workspace on this computer.' }) },
+    { here: () => false, elsewhere: () => [{ id: 'r1', machine: 'devbox', path: '/srv/team', local: false, reachable: true }, { id: 'r2', machine: 'lab', local: false, reachable: false }],
+      cli: () => ({ version: '0.69.21' }) });
+  await settle();
+  assert.deepEqual(remote.qa('[data-machine]').map(li => [...li.querySelectorAll('.machine-row > .machine-cell')].map(c => c.textContent)),
+    [['devbox', 'reachable', ''], ['lab', 'not reachable', '']]);
+  assert.equal(remote.row(THIS_COMPUTER), null);
+  assert.equal(remote.q('.machines-reason').textContent, 'No deployment of this workspace on this computer.');
+  assert.equal(remote.q('.machines-add'), null);
+});
+
+// This computer's deployment, read or not: pending reads, unreadable says why in the observation's own words.
+test('this computer says whether its deployment was read: reading, not read with why, reachable', async t => {
+  const state = { local: { status: 'pending' } };
+  const u = setup(t, { '/api/servers': () => answer([]) }, { localObservation: () => state.local, cli: () => ({ version: '0.69.21' }) });
+  await settle();
+  assert.deepEqual(u.cells(THIS_COMPUTER), ['This computer', 'reading…', 'oats 0.69.21']);
+  state.local = { status: 'unavailable', text: 'E_CLI_FAILED: roster command failed' }; u.ui.sync();
+  assert.deepEqual(u.cells(THIS_COMPUTER).slice(1, 2), ['not read']);
+  assert.equal(u.row(THIS_COMPUTER).querySelector('.machine-state').title, 'E_CLI_FAILED: roster command failed');
+  assert.equal(u.q('.machines-notes .machines-reason').textContent, 'E_CLI_FAILED: roster command failed', 'why, in the observation\'s words');
+  state.local = { status: 'observed' }; u.ui.sync();
+  assert.deepEqual(u.cells(THIS_COMPUTER).slice(1, 2), ['reachable']);
+  assert.equal(u.q('.machines-notes .machines-reason'), null);
+});
+
+// Whole-surface review: the first list read has a loading state; a failed one keeps focus on its Retry across repaints.
+test('the first list read says it is reading; a failed read keeps focus on Retry across a repaint', async t => {
+  let release, fail = false;
+  const u = setup(t, { '/api/servers': () => fail ? { httpStatus: 500, body: { error: 'boom' } } : new Promise(r => { release = () => r(answer([machine('devbox-aweb')])); }) });
+  await settle();
+  const loading = u.q('.machines-loading');
+  assert.equal(loading.textContent, 'Reading the machines of this workspace…'); assert.equal(loading.getAttribute('role'), 'status');
+  assert.equal(u.q('.machines-list').getAttribute('aria-busy'), 'true');
+  assert.deepEqual(u.qa('[data-machine]').map(li => li.dataset.machine), [THIS_COMPUTER], 'this computer stands meanwhile');
+  release(); await settle();
+  assert.equal(u.q('.machines-loading'), null); assert.equal(u.q('.machines-list').getAttribute('aria-busy'), null);
+  assert.ok(u.row('devbox-aweb'));
+  // A failed read: its Retry keeps focus while the failure stands, across a repaint.
+  const f = setup(t, { '/api/servers': () => ({ httpStatus: 500, body: { error: 'boom' } }) });
+  await settle();
+  f.q('.machines-retry').focus(); f.ui.sync();
+  assert.equal(f.doc.activeElement, f.q('.machines-retry'));
+  // Retry pressed: the read runs again (reading), and focus never falls to <body>.
+  f.q('.machines-retry').click();
+  assert.notEqual(f.doc.activeElement, f.doc.body);
+  await settle();
+  assert.equal(f.doc.activeElement, f.q('.machines-retry'), 'failed again: back on Retry');
+});
+
+// Delta review: Retry's focus goes to a control that is in the section and enabled, else to the heading, never <body>:
+// a Retry that succeeds without Add (no deployment here), and one whose Add is held back above the tested bound.
+test('a Retry that succeeds lands focus on an enabled control in the section, else the heading', async t => {
+  let mode = 'list';
+  const u = setup(t, { '/api/servers': () => mode === 'error' ? { httpStatus: 500, body: { error: 'boom' } }
+    : mode === 'nodeploy' ? { servers: [], filtered: true, key: null, deployment: null, aweb: false, reason: 'No deployment here.' } : answer([]) });
+  await settle();
+  assert.ok(u.q('.machines-add'), 'Add offered');
+  mode = 'error'; u.ui.refresh(); await settle();
+  mode = 'nodeploy'; u.q('.machines-retry').focus(); u.q('.machines-retry').click(); await settle();
+  assert.equal(u.q('.machines-add'), null);
+  assert.equal(u.doc.activeElement, u.q('.machines-title'), 'no Add any more: the heading, not <body>');
+  // Above the tested bound Add is held back (disabled): a successful Retry lands on the heading too.
+  const cs = await import('../renderer/views/cli-status.mjs');
+  await cs.refreshCli({ api: async () => ({ ok: true, bin: '/oats', version: '0.70.1', source: 'path', required: { desktopApi: 1, range: '>=0.26.0, tested through 0.69' }, tried: [], features: [], aboveTested: true, testedThrough: '0.69' }) });
+  t.after(() => cs.resetCliStateForTests());
+  let fail = true;
+  const v = setup(t, { '/api/servers': () => fail ? { httpStatus: 500, body: { error: 'boom' } } : answer([]) });
+  await settle();
+  fail = false; v.q('.machines-retry').focus(); v.q('.machines-retry').click(); await settle();
+  assert.equal(v.q('.machines-add').disabled, true);
+  assert.equal(v.doc.activeElement, v.q('.machines-title'));
+});
+
+test('lists this workspace\'s machines and checks each unchecked one once in the background', async t => {
   let released;
   const gate = new Promise(r => { released = r; });
   const u = setup(t, {
@@ -39,22 +150,16 @@ test('lists this workspace\'s machines (name, host, folder, OATS version, reacha
     '/api/server-check': async body => { await gate; return { id: body.id, check: { reachable: true, version: '0.39.0', error: null } }; },
   });
   await settle();
-  assert.equal(u.q('.setup-box-head h4').textContent, 'Registered machines');
-  // A solid card (Setup's This computer zone says it is not shared): no scope chip, Add at the end of its head.
-  assert.ok(u.ui.element.classList.contains('setup-box'));
-  assert.equal(u.q('.setup-scope'), null);
-  assert.deepEqual([...u.q('.setup-box-head').children].map(c => c.className), ['', 'setup-box-lead', 'machines-add']);
   assert.deepEqual(u.calls.map(c => c.path), [`/api/servers?ws=${encodeURIComponent(WS)}`, `/api/server-check?ws=${encodeURIComponent(WS)}`]);
-  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'devbox', '/home/alex/devbox-aweb', '', 'checking…']);
-  assert.deepEqual(u.cells('laptop-aweb'), ['laptop-aweb', 'laptop', '/home/alex/laptop-aweb', '', 'not reachable'], 'a held check is shown, not re-run');
+  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'checking…', '']);
+  assert.deepEqual(u.cells('laptop-aweb'), ['laptop-aweb', 'not reachable', ''], 'a held check is shown, not re-run');
   assert.equal(u.row('laptop-aweb').querySelector('.machine-state').title, 'ssh to laptop failed: timeout');
   assert.equal(u.row('laptop-aweb').querySelector('.machine-state').dataset.reachable, 'false', 'the warn chip');
-  // Narrow rows hide the ssh host, folder and version: the name's title keeps them.
-  assert.equal(u.row('laptop-aweb').querySelector('.machine-cell.name').title, 'laptop-aweb · laptop · laptop · /home/alex/laptop-aweb');
+  // The row's title keeps the facts a narrow row hides.
+  assert.equal(u.row('laptop-aweb').querySelector('.machine-row').title, 'laptop-aweb · laptop · laptop · /home/alex/laptop-aweb');
   released(); await settle();
-  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'devbox', '/home/alex/devbox-aweb', 'oats 0.39.0', 'reachable']);
+  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'reachable', 'oats 0.39.0']);
   assert.ok(u.row('devbox-aweb').querySelector('.machine-state[data-reachable=true] svg'), 'reachable: a check and a muted word');
-  assert.equal(u.row('devbox-aweb').querySelector('.machine-cell.name').title, 'devbox-aweb · devbox · devbox · /home/alex/devbox-aweb · oats 0.39.0');
   u.ui.refresh(); await settle();
   assert.equal(u.calls.filter(c => c.path.startsWith('/api/server-check')).length, 1, 'once per machine per run');
 });
@@ -67,11 +172,12 @@ test('Check re-runs the check for that machine and shows what it said', async t 
   });
   await settle();
   assert.equal(u.calls.length, 1, 'checked already: no background check');
+  u.open('devbox-aweb');
   const check = u.row('devbox-aweb').querySelector('.machine-check');
   assert.equal(check.getAttribute('aria-label'), 'Check devbox-aweb');
   check.click(); await settle();
   assert.deepEqual(u.calls.at(-1), { path: `/api/server-check?ws=${encodeURIComponent(WS)}`, body: { id: 'devbox-aweb' } });
-  assert.equal(u.cells('devbox-aweb')[4], 'not reachable');
+  assert.equal(u.cells('devbox-aweb')[1], 'not reachable');
   assert.equal(u.doc.activeElement, u.row('devbox-aweb').querySelector('.machine-check'), 'focus stays on Check');
 });
 
@@ -82,9 +188,10 @@ test('Remove asks first; Cancel keeps it; confirming removes it through the CLI 
     '/api/server-remove': body => { servers = []; return { schemaVersion: 1, ok: true, result: { removed: body.id, remoteInstancesStillTracked: [] } }; },
   });
   await settle();
+  u.open('devbox-aweb');
   u.row('devbox-aweb').querySelector('.machine-remove').click();
   const confirm = u.row('devbox-aweb').querySelector('.machine-confirm');
-  assert.equal(confirm.querySelector('p').textContent, 'Remove devbox-aweb? Instances spawned there keep running and can still be retired from here.');
+  assert.equal(confirm.querySelector('p').textContent, 'Remove devbox-aweb? Agents started there keep running and can still be retired from here.');
   assert.equal(u.doc.activeElement, confirm.querySelector('.machine-confirm-cancel'));
   confirm.querySelector('.machine-confirm-cancel').click();
   assert.equal(u.row('devbox-aweb').querySelector('.machine-confirm'), null);
@@ -94,7 +201,7 @@ test('Remove asks first; Cancel keeps it; confirming removes it through the CLI 
   u.row('devbox-aweb').querySelector('.machine-confirm-remove').click(); await settle();
   assert.deepEqual(u.calls.find(c => c.path.startsWith('/api/server-remove')).body, { id: 'devbox-aweb' });
   assert.equal(u.row('devbox-aweb'), null);
-  assert.equal(u.q('.setup-empty').textContent, 'No machine runs this workspace yet.');
+  assert.equal(u.q('.machines-empty').textContent, 'No other machine runs this workspace yet.');
   assert.equal(u.doc.activeElement, u.q('.machines-add'));
 });
 
@@ -104,6 +211,7 @@ test('a refused Remove is said in the row, in the CLI\'s words', async t => {
     '/api/server-remove': () => ({ schemaVersion: 1, ok: false, error: { code: 'E_SERVERS_UNREADABLE', message: 'servers.json is not valid JSON' } }),
   });
   await settle();
+  u.open('devbox-aweb');
   u.row('devbox-aweb').querySelector('.machine-remove').click();
   u.row('devbox-aweb').querySelector('.machine-confirm-remove').click(); await settle();
   assert.equal(u.row('devbox-aweb').querySelector('.machine-error').textContent, 'servers.json is not valid JSON (E_SERVERS_UNREADABLE)');
@@ -117,7 +225,7 @@ test('Add a machine opens the dialog for this workspace; an added machine is lis
     '/api/server-check': body => ({ id: body.id, check: { reachable: true, version: '0.39.0', error: null } }),
   });
   await settle();
-  assert.equal(u.q('.setup-empty').textContent, 'No machine runs this workspace yet.');
+  assert.equal(u.q('.machines-empty').textContent, 'No other machine runs this workspace yet.');
   u.q('.machines-add').click();
   assert.ok(u.q('.machine-dialog'));
   assert.equal(u.q('.machine-folder').value, '', 'no folder is suggested');
@@ -129,7 +237,7 @@ test('Add a machine opens the dialog for this workspace; an added machine is lis
   assert.equal(u.doc.activeElement, u.q('.machines-add'));
 });
 
-test('no workspace key: the box says why and offers nothing; gates off: no box at all', async t => {
+test('no workspace key: the section says why and offers nothing; gates off: this computer only, nothing to add', async t => {
   const reason = 'This deployment reports no workspace key, so no other machine can be matched to it.';
   const u = setup(t, { '/api/servers': () => ({ servers: [], filtered: true, key: null, deployment: null, aweb: false, reason }) });
   await settle();
@@ -137,7 +245,14 @@ test('no workspace key: the box says why and offers nothing; gates off: no box a
   assert.equal(u.q('.machines-add'), null);
   const off = setup(t, { '/api/servers': () => ({ servers: [{ id: 'devbox-web', label: 'devbox', sshHost: 'devbox', workspace: '/srv' }] }) });
   await settle();
-  assert.equal(off.ui.element.hidden, true);
+  // An unfiltered answer (a route without the gates) lists no registered machine.
+  assert.deepEqual(off.qa('[data-machine]').map(li => li.dataset.machine), [THIS_COMPUTER]);
+  assert.equal(off.q('.machines-add'), null);
+  // Without the gates nothing is read at all.
+  const ungated = setup(t, {}, { gated: false });
+  await settle();
+  assert.deepEqual(ungated.calls, []);
+  assert.deepEqual(ungated.qa('[data-machine]').map(li => li.dataset.machine), [THIS_COMPUTER]);
 });
 
 test('a list that cannot be read says so, with Retry', async t => {
@@ -146,7 +261,7 @@ test('a list that cannot be read says so, with Retry', async t => {
   await settle();
   assert.match(u.q('.machines-reason').textContent, /could not be read/);
   fail = false; u.q('.machines-retry').click(); await settle();
-  assert.equal(u.q('.setup-empty').textContent, 'No machine runs this workspace yet.');
+  assert.equal(u.q('.machines-empty').textContent, 'No other machine runs this workspace yet.');
 });
 
 // Review round 1.
@@ -154,19 +269,18 @@ test('the registry could not be read (the route\'s own answer): the CLI\'s words
   let fail = true;
   const u = setup(t, { '/api/servers': () => fail ? answer([], { error: { code: 'E_SERVERS_UNREADABLE', message: 'servers.json is not valid JSON' } }) : answer([]) });
   await settle();
-  assert.equal(u.ui.element.hidden, false);
   assert.match(u.q('.machines-reason').textContent, /could not be read: servers\.json is not valid JSON/);
   assert.ok(u.q('.machines-add'));
   fail = false; u.q('.machines-retry').click(); await settle();
-  assert.equal(u.q('.setup-empty').textContent, 'No machine runs this workspace yet.');
+  assert.equal(u.q('.machines-empty').textContent, 'No other machine runs this workspace yet.');
 });
 
-test('while the server learns unknown keys the box reads again, and shows the machines it found', async t => {
+test('while the server learns unknown keys the section reads again, and shows the machines it found', async t => {
   const answers = [answer([machine('devbox-aweb', { check: { reachable: true, version: '0.39.0', error: null } })], { backfilling: true }),
     answer([machine('devbox-aweb', { check: { reachable: true, version: '0.39.0', error: null } }), machine('legacy', { check: { reachable: true, version: '0.38.0', error: null } })])];
   const u = setup(t, { '/api/servers': () => answers.length > 1 ? answers.shift() : answers[0] }, { backfillDelay: 0 });
   for (let i = 0; i < 4; i++) { await settle(); await new Promise(r => setTimeout(r, 0)); }
-  assert.deepEqual(u.qa('[data-machine]').map(r => r.dataset.machine), ['devbox-aweb', 'legacy']);
+  assert.deepEqual(u.qa('[data-machine]').map(r => r.dataset.machine), [THIS_COMPUTER, 'devbox-aweb', 'legacy']);
   assert.equal(u.calls.filter(c => c.path.startsWith('/api/servers')).length, 2);
 });
 
@@ -177,6 +291,7 @@ test('a Check that answers late leaves focus where a newer press put it', async 
     '/api/server-check': () => new Promise(r => { release = () => r({ id: 'devbox-aweb', check: { reachable: true, version: '0.39.0', error: null } }); }),
   });
   await settle();
+  u.open('devbox-aweb');
   u.row('devbox-aweb').querySelector('.machine-check').click(); await settle();
   u.row('devbox-aweb').querySelector('.machine-remove').click();
   assert.equal(u.doc.activeElement.className, 'machine-confirm-cancel');
@@ -212,6 +327,7 @@ test('#1879: above the tested bound Add, Check and Remove are held back with the
     '/api/server-check': body => ({ id: body.id, check: { reachable: true, version: '0.70.1', error: null } }),
   });
   await settle();
+  u.open('devbox-aweb');
   const notice = cs.cliHeldBack('POST /api/server-connect');
   assert.match(notice, /^This Desktop was tested with oats CLIs up to 0\.69; the installed CLI is 0\.70\.1\. /);
   const controls = () => ['.machines-add', '.machine-check', '.machine-remove'].map(s => [u.q(s).disabled, u.q(s).title]);

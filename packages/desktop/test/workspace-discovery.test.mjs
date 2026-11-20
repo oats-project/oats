@@ -156,7 +156,7 @@ test('the declared soul is read-only; its page is stable under roster polling', 
   const u = await setup(t);
   u.doc.querySelector('.soul-card').click(); await tick();
   const inspector = u.doc.querySelector('.workspace-soul-page');
-  assert.match(inspector.textContent, /Capabilities/); assert.ok(inspector.querySelector('.soul-capabilities .cap-line'));
+  assert.match(inspector.textContent, /Capabilities/); assert.ok(inspector.querySelector('.soul-capabilities .cap-row'));
   assert.doesNotMatch(inspector.textContent, /Edit this soul/);
   assert.equal(inspector.querySelector('form, textarea, input'), null, 'no in-place editor');
   const main = inspector.querySelector('.inspector-main');
@@ -348,28 +348,79 @@ test('Souls group by repository, and unconfirmed members explain their hidden so
   assert.equal(u.doc.querySelectorAll('.souls-table .soul-row-open[tabindex="0"]').length, 1, 'one roving row');
 });
 
-// #517: the Setup tab lists the workspace's machines when the CLI connects machines to a workspace.
-test('Setup: the Registered machines box follows the gates; it is read for this window and kept across repaints', async t => {
+// #517 and the Desktop UI rework's slice 3b: the Machines tab lists the workspace's computers; with the CLI's machine
+// gates, the machines registered to this workspace too.
+test('Machines: the list follows the gates; it is read for this window and kept across repaints; Setup holds no machines', async t => {
   const gated = { ...CLI, features: [...CLI.features, 'servers-per-workspace', 'server-connect'] };
   const machine = { id: 'devbox-team', label: 'devbox', sshHost: 'devbox', workspace: '/home/alex/team', workspaceKey: 'github.com/acme/team', check: { reachable: true, version: '0.39.0', error: null } };
   const u = await setup(t, { cli: gated, servers: () => ({ servers: [machine], filtered: true, key: 'github.com/acme/team', deployment: '/team', aweb: false }) });
-  u.tab('sources'); for (let i = 0; i < 6; i++) await tick();
-  const box = u.doc.querySelector('.setup .setup-machines');
-  assert.ok(box, 'the Registered machines box');
-  assert.deepEqual([...box.querySelectorAll('[data-machine]')].map(r => r.dataset.machine), ['devbox-team']);
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const list = u.doc.querySelector('.workspace-discovery section.machines');
+  assert.ok(list, 'the Machines list');
+  assert.deepEqual([...list.querySelectorAll('[data-machine]')].map(r => r.dataset.machine), [':here', 'devbox-team']);
   assert.ok(u.calls.some(c => c.path === `/api/servers?ws=${encodeURIComponent('/team')}`));
-  assert.equal(box.querySelector('.machines-add').textContent, 'Add a machine to this workspace…');
-  u.click('Graph'); await tick();
-  assert.equal(u.doc.querySelector('.setup .setup-machines'), box, 'the same box, in either view');
+  assert.equal(list.querySelector('.machines-add').textContent, 'Add a machine to this workspace…');
+  u.tab('souls'); await tick(); u.tab('machines'); await tick();
+  assert.equal(u.doc.querySelector('.workspace-discovery section.machines'), list, 'the same list across repaints');
+  u.tab('sources'); for (let i = 0; i < 6; i++) await tick();
+  assert.equal(u.doc.querySelector('.setup section.machines, .setup .setup-machines'), null, 'not in Setup');
 });
 
-test('Setup: without servers-per-workspace and server-connect there is no Registered machines box and no Add a machine', async t => {
+// Review round 1: the list stays mounted across the page's repaints, so a roster poll never drops focus from a row or a
+// machine's control; and a view with no deployment on this computer never lists "This computer".
+test('Machines: a roster poll keeps focus on the focused machine\'s row and on its open controls', async t => {
+  const gated = { ...CLI, features: [...CLI.features, 'servers-per-workspace', 'server-connect'] };
+  const machine = { id: 'devbox-team', label: 'devbox', sshHost: 'devbox', workspace: '/home/alex/team', workspaceKey: 'github.com/acme/team', check: { reachable: true, version: '0.39.0', error: null } };
+  let instances = [];
+  const u = await setup(t, { cli: gated, servers: () => ({ servers: [machine], filtered: true, key: 'github.com/acme/team', deployment: '/team', aweb: false }) });
+  u.setLoaders(null, () => ({ ...u.panel(), instances }));
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const rowButton = () => u.doc.querySelector('[data-machine="devbox-team"] button.machine-row');
+  rowButton().focus();
+  instances = [{ instance: 'dev-1', agent: 'dev', agentsRoot: '/team/one/agents', server: 'devbox-team', running: true }];
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  assert.equal(u.calls.filter(c => c.path.startsWith('/api/panel')).length > 1, true, 'the poll ran');
+  assert.equal(u.doc.activeElement, rowButton(), 'focus stays on the row');
+  rowButton().click();
+  const check = () => u.doc.querySelector('[data-machine="devbox-team"] .machine-check');
+  check().focus();
+  instances = [...instances, { instance: 'dev-2', agent: 'dev', agentsRoot: '/team/one/agents', server: 'devbox-team', running: false }];
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  assert.equal(u.doc.activeElement, check(), 'and on the open machine\'s Check');
+});
+
+test('Machines: a remote-only view lists its machine\'s deployment, never "This computer"', async t => {
+  const u = await setup(t, { workspace: { remote: true, server: 'devbox' }, instances: [{ instance: 'dev-1', agent: 'dev', server: 'devbox', deployment: { id: 'remote:devbox:/srv/team' } }] });
+  u.setLoaders(null, () => ({ ...u.panel(), deployments: [{ id: 'remote:devbox:/srv/team', machine: 'devbox', path: '/srv/team', local: false, reachable: true }] }));
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const rows = [...u.doc.querySelectorAll('.workspace-discovery section.machines [data-machine]')];
+  assert.deepEqual(rows.map(r => [...r.querySelectorAll('.machine-row > .machine-cell')].map(c => c.textContent)), [['devbox', 'reachable', '']], 'no version is claimed for it');
+  assert.equal(u.doc.querySelector('[data-machine=":here"]'), null);
+  assert.equal(u.doc.querySelector('.machines-empty'), null, 'it is not "no other machine"');
+});
+
+test('Machines: an unread deployment here says so and why; a good read clears it', async t => {
+  let failing = true;
+  const u = await setup(t, { deployment: () => failing ? { status: 'unavailable', reason: { code: 'E_CLI_FAILED', message: 'roster command failed' } } : observed() });
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const here = () => [...u.doc.querySelectorAll('[data-machine=":here"] .machine-row > .machine-cell')].map(c => c.textContent);
+  assert.deepEqual(here().slice(0, 2), ['This computer', 'not read']);
+  assert.match(u.doc.querySelector('.workspace-discovery section.machines .machines-reason').textContent, /E_CLI_FAILED: roster command failed/);
+  failing = false;
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  assert.deepEqual(here().slice(0, 2), ['This computer', 'reachable']);
+  assert.equal(u.doc.querySelector('.workspace-discovery section.machines .machines-reason'), null);
+});
+
+test('Machines: without servers-per-workspace and server-connect the list is this computer alone, with no Add a machine', async t => {
   const u = await setup(t);
-  u.tab('sources'); for (let i = 0; i < 6; i++) await tick();
-  assert.ok(u.doc.querySelector('.setup'));
-  assert.equal(u.doc.querySelector('.setup-machines'), null);
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const list = u.doc.querySelector('.workspace-discovery section.machines');
+  assert.deepEqual([...list.querySelectorAll('[data-machine]')].map(r => r.dataset.machine), [':here']);
   assert.equal([...u.doc.querySelectorAll('button')].some(b => b.textContent === 'Add a machine to this workspace…'), false);
-  assert.equal(u.calls.some(c => c.path.startsWith('/api/servers?')), false);
+  assert.equal(u.calls.some(c => c.path.startsWith('/api/servers?')), false, 'nothing to read');
 });
 
 // Review round 2: the soul page follows its roster row across polls: a refusal that appears or clears changes its
