@@ -14,7 +14,8 @@ import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachInstanceSession, inputInstanceSession, inspectInstanceSession, listInstances, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
 import { setWaiting } from "../lib/instance-events.mjs";
-import { PROVIDER_RESUME_NOTICE, RESUME_LIMIT } from "../lib/provider-resume.mjs";
+import { PROVIDER_RESUME_NOTICE, RESUME_LIMIT, RESUME_QUIET_WAIT_MS, resumeQuietWait } from "../lib/provider-resume.mjs";
+import { sessionProviderTimeout } from "../lib/session-providers.mjs";
 import { parseRemoteEnvelope, rosterGroups, writeServers } from "../lib/servers.mjs";
 import { FAKE_CAPABILITY, FAKE_SERVER, LOST, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
@@ -896,6 +897,7 @@ test("retire when the provider cannot stop the session: it goes on only when no 
   const still = fx.cli(["retire", "busy", "--json"]).json();
   assert.deepEqual([still.ok, still.error.code], [false, "E_RUNTIME_QUIESCE_FAILED"]);
   assert.match(still.error.message, new RegExp(`the fake session of busy stopped, and a process works in its home \\(.*${pid}`));
+  assert.match(still.error.message, /stop it, then retire again\. A shell named here may be your own: one whose working directory is in the home counts, and leaving the home's directory clears it/);
   assert.equal(existsSync(busy.home), true);
   process.kill(pid, "SIGKILL");
 });
@@ -930,6 +932,30 @@ test("inputs that run at the same time to a lost session pass the cap together n
   assert.equal(uncounted.error.code, "E_SESSION_NOT_RUNNING");
   assert.match(uncounted.error.message, /crowd lost its session, and its resume could not be counted \(.+\); nothing was sent/);
   assert.deepEqual(fx.verbs("input"), []);
+});
+
+test("the two test seams only shorten: a value above the kernel's own limit is that limit", (t) => {
+  const names = ["OATS_TEST_SESSION_PROVIDER_TIMEOUT_MS", "OATS_TEST_PROVIDER_RESUME_WAIT_MS"];
+  const saved = names.map((name) => process.env[name]);
+  t.after(() => names.forEach((name, i) => { if (saved[i] === undefined) delete process.env[name]; else process.env[name] = saved[i]; }));
+  const timeouts = () => [sessionProviderTimeout("launch"), sessionProviderTimeout("inspect"), sessionProviderTimeout("input"), sessionProviderTimeout("stop", { graceSeconds: 20 })];
+  const waits = () => [resumeQuietWait(), resumeQuietWait(RESUME_QUIET_WAIT_MS), resumeQuietWait(0)];
+  for (const name of names) delete process.env[name];
+  assert.deepEqual(timeouts(), [120_000, 20_000, 20_000, 40_000]);
+  assert.deepEqual(waits(), [150_000, 150_000, 0]);
+  // Below the limit: the seam's value. A resume that does not wait (an input) still does not.
+  for (const name of names) process.env[name] = "400";
+  assert.deepEqual(timeouts(), [400, 400, 400, 400]);
+  assert.deepEqual(waits(), [400, 400, 0]);
+  // Above it: the kernel's own, never longer.
+  for (const name of names) process.env[name] = "86400000";
+  assert.deepEqual(timeouts(), [120_000, 20_000, 20_000, 40_000]);
+  assert.deepEqual(waits(), [150_000, 150_000, 0]);
+  // No number, zero or less: no seam.
+  for (const value of ["", "soon", "0", "-5"]) {
+    for (const name of names) process.env[name] = value;
+    assert.deepEqual([timeouts(), waits()], [[120_000, 20_000, 20_000, 40_000], [150_000, 150_000, 0]], JSON.stringify(value));
+  }
 });
 
 // ----------------------------------------------------------------------- T12: nothing relayed

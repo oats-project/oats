@@ -1568,8 +1568,8 @@ lists the feature `session-providers`, in this order:
    otherwise. With a process working in the home, or when that cannot be
    told, the retire refuses `E_RUNTIME_QUIESCE_FAILED` at once, names the
    processes and keeps the home; its stop stays recorded. A shell whose
-   working directory is in the home counts too: run the retire from
-   elsewhere.
+   working directory is in the home counts too, and one named in the
+   refusal may be your own: leaving the home's directory clears it.
 4. The retire hooks run (the provider's own archives its session there), the
    work is preserved as for any home, and the home is removed.
 
