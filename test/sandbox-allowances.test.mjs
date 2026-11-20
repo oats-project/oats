@@ -7,7 +7,7 @@ import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { homeSoulEntry } from "../lib/instance-resolution.mjs";
+import { homeSoulEntry, unreadMembersCause } from "../lib/instance-resolution.mjs";
 import { MAX_SANDBOX_LINES, SETTING_FILE_MAX_BYTES, SETTING_FILE_MAX_HOSTS, ensureSandboxWritePaths, readSettingFileHosts, sandboxAllowances, sandboxDomainsOf, sandboxHostOf, sandboxLaunchInput, sandboxWritePathsRefusal } from "../lib/sandbox-allowances.mjs";
 
 const EVENTS = "/srv/acme/.agents/events";
@@ -359,4 +359,18 @@ test("which soul a home is of is told by its agent directory alone: two souls th
   assert.match(homeSoulEntry(entries, "gone").unavailable, /^E_SOUL_UNKNOWN: the workspace offers no soul whose agent directory is gone$/);
   const shared = homeSoulEntry([...entries, soul("dev", { kind: "member", key: "acme/other" })], "dev").unavailable;
   assert.match(shared, /^2 souls of this workspace share the agent directory dev \(.+\), so which one this home is of cannot be told: rename one of them, or take one out of the workspace$/);
+});
+
+test("a member of the workspace that this host did not read leaves the home's soul untold: the cause names the repository and the way out", () => {
+  const read = { key: "acme/ws", confirmed: true, souls: [{ name: "dev" }] };
+  const unread = { key: "acme/other", confirmed: false, reason: "cannot-read", detail: "cannot read example.org/acme/other (not-cached)", url: "example.org/acme/other" };
+  // Every member read: nothing to say. A member that was read and is no member is not unread.
+  assert.equal(unreadMembersCause({ members: [read] }), null);
+  assert.equal(unreadMembersCause({ members: [read, { key: "acme/gone", confirmed: false, reason: "no-backlink", detail: "acme/gone has no oats-membership.yaml" }] }), null);
+  // One unread: untold, even when the members that were read offer exactly one soul of that directory.
+  const cause = unreadMembersCause({ members: [read, unread] });
+  assert.match(cause, /^E_REMOTE_UNREADABLE: cannot read example\.org\/acme\/other \(not-cached\)\. A member that was not read can hold this home's soul, or another of its name/);
+  assert.match(cause, /oats status.*standalone: <member repository> in oats-local\.yaml/);
+  // A deployment that names its own source reads no workspace host: nothing is unread for it.
+  assert.equal(unreadMembersCause({ standalone: true, key: "acme/ws", members: [read, unread] }), null);
 });

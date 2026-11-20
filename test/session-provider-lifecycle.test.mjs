@@ -289,16 +289,17 @@ async function killedDuring(fx, args, name, verb) {
 const SPAWN = (name) => ["spawn", "dev", "--name", name, "--backend", "fake", "--launch-config", "claude", "--json"];
 const homeOf = (fx, name) => join(fx.root, "dev", "instances", name);
 
-test("a spawn killed before the mark (in the provider's check) leaves a planned home: the next start launches it", async (t) => {
+test("a spawn killed while its provider's readiness is asked ran no hook and sent nothing: its home reads as being spawned", async (t) => {
   const fx = providerDeployment(t, { manifest: fakeManifest({ fake: fakeProvider({ check: true }) }) });
   fx.control({ k: { check: { sleepMs: 1500 } } });
   await killedDuring(fx, SPAWN("k"), "k", "check");
   fx.control({});
-  fx.clearCalls();
+  // The check comes before the spawn's hooks: nothing ran but it, and no record was written.
+  assert.deepEqual(fx.calls().map((c) => c.hook ?? c.verb), ["check"]);
   const home = homeOf(fx, "k");
-  assert.equal(stateOf(home), "planned");
-  assert.equal(await answerOf(fx, "start", home), "launched");
-  assert.deepEqual([callsOf(fx), stateOf(home)], [["launch"], "running"]);
+  const inspected = JSON.parse(fx.cli(["session", "inspect", "--home", home, "--json"]).stdout);
+  assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"], JSON.stringify(inspected).slice(0, 300));
+  assert.match(inspected.error.message, /k is being spawned/);
 });
 
 test("a spawn killed while the provider launches leaves a sent home: unknown to reads, and the next stop settles it with the instant of the launch", async (t) => {
@@ -818,4 +819,21 @@ test("a spawn's record says it completed only after its launch's mark is gone: e
   assert.equal(died.signal, "SIGKILL", `${died.stdout}${died.stderr}`);
   const home = homeOf(fx, "keyed");
   assert.deepEqual([stateOf(home), recordOf(home).spawnCompleted], ["resent", false]);
+});
+
+test("a read of a home while it is being spawned answers that its session is not recorded yet, never that its records disagree", async (t) => {
+  const fx = providerDeployment(t);
+  // A directory home has its receipt (planned on the provider) before its spawn's hooks run, and
+  // its record after them: a read from a hook, or beside it, falls in between.
+  const died = spawnSync(process.execPath, [CLI, ...SPAWN("early").slice(0, -1), "--work", "directory", "--json"], { cwd: fx.dep, env: { ...fx.env, OATS_TEST_PROVIDER_DIE_AT: "spawn:hooks" }, encoding: "utf8" });
+  assert.equal(died.signal, "SIGKILL", `${died.stdout}${died.stderr}`);
+  const home = homeOf(fx, "early");
+  assert.deepEqual([runtimeOf(home), recordOf(home).backend, recordOf(home).session], [{ launched: false, backend: "fake", provider: FAKE_CAPABILITY }, undefined, undefined]);
+  const inspected = JSON.parse(fx.cli(["session", "inspect", "--home", home, "--json"]).stdout);
+  assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"], JSON.stringify(inspected).slice(0, 300));
+  assert.match(inspected.error.message, /early is being spawned: its session is planned on fake, and its record is not written yet/);
+  const row = JSON.parse(fx.cli(["status", "--json"]).stdout).agents.flatMap((a) => a.instances).find((r) => r.instance === "early");
+  assert.notEqual(row?.runtimeErrorCode ?? row?.runtimeError, "E_RUNTIME_AUTHORITY_MISMATCH");
+  assert.equal(JSON.stringify(row ?? {}).includes("E_RUNTIME_AUTHORITY_MISMATCH"), false, JSON.stringify(row).slice(0, 400));
+  assert.deepEqual(fx.calls(), [], "no hook ran and the provider was never called");
 });

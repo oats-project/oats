@@ -1170,13 +1170,18 @@ test("T12: relayed rows and routed answers for a provider home carry no session.
 
 // ------------------------------------------------------------------- readiness, before a launch
 
-test("a provider's check is asked right before every launch: a provider that is not ready is E_BACKEND_NOT_READY, and nothing is launched or stopped", async (t) => {
+test("a provider's check is asked before every launch, and before any hook: a provider that is not ready is E_BACKEND_NOT_READY, no hook runs, and nothing is launched or stopped", async (t) => {
   const fx = providerDeployment(t, { manifest: fakeManifest({ fake: fakeProvider({ check: true }) }) });
-  // Ready: the check, then the launch.
+  // A capability's hooks contribute launch arguments: they reach the launch, not the check.
+  fx.hookLaunch({ claude: "--from-a-hook" });
+  // Ready: the check, then the spawn's hooks, then the launch.
   const { home } = await fx.launch("checked");
-  assert.deepEqual(fx.calls().map((c) => c.hook ?? c.verb), ["spawn", "check", "launch"]);
-  // With the launch that is planned (test/session-providers-sandbox.test.mjs): what the launch input will carry.
+  assert.deepEqual(fx.calls().map((c) => c.hook ?? c.verb), ["check", "spawn", "launch"]);
+  // With the launch that is planned (test/session-providers-sandbox.test.mjs): the harness, yolo
+  // and the allowances as the launch input will carry them, and the launch configuration's own
+  // arguments (none here), without what a hook adds.
   assert.deepEqual(fx.verbs("check")[0].request.input, { home, soul: null, settings: {}, launch: { harness: "claude", yolo: null, args: [], sandbox: fx.verbs("launch")[0].request.input.sandbox } });
+  assert.deepEqual(fx.verbs("launch")[0].request.input.args, ["--from-a-hook"]);
 
   // Not ready at a spawn: refused with the provider's words, rolled back, no launch.
   fx.clearCalls();
@@ -1184,7 +1189,7 @@ test("a provider's check is asked right before every launch: a provider that is 
   const refused = fx.cli(["spawn", "dev", "--name", "unready", "--backend", "fake", "--launch-config", "claude", "--json"]).json();
   assert.deepEqual([refused.ok, refused.error.code, refused.error.details], [false, "E_BACKEND_NOT_READY", { backend: "fake", capability: FAKE_CAPABILITY }]);
   assert.match(refused.error.message, /acme\.fake's session provider fake is not ready \(unavailable\): claude-code-unauthenticated: bb's claude-code provider is unauthenticated/);
-  assert.deepEqual(fx.verbs().map((c) => c.verb), ["check"], "no launch was sent");
+  assert.deepEqual(fx.calls().map((c) => c.hook ?? c.verb), ["check"], "no hook ran, and no launch was sent");
   assert.equal(existsSync(join(fx.root, "dev", "instances", "unready")), false);
   // The provider's own E_BACKEND_* problem code is the refusal's.
   fx.control({ check: { result: { status: "needs-configuration", problems: [{ code: "E_BACKEND_VERSION", message: "bb 0.49.0 is not the pinned 0.50.1" }] } } });
@@ -1198,7 +1203,7 @@ test("a provider's check is asked right before every launch: a provider that is 
   fx.control({ check: { result: { status: "unavailable", problems: [{ code: "server-down", message: "the bb server does not answer" }] } } });
   fx.clearCalls();
   await assert.rejects(fx.inEnv(() => restartInstanceSession(home, {})), (e) => e.code === "E_BACKEND_NOT_READY" && /nothing was stopped or started/.test(e.message));
-  assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspect", "check"], "the session still runs: no stop, no launch");
+  assert.deepEqual(fx.calls().map((c) => c.hook ?? c.verb), ["inspect", "check"], "the session still runs: no launch hook, no stop, no launch");
   assert.equal(runtimeOf(home).stoppedAt, null);
 
   // `oats readiness` relays the same answer as a providers item: for the home, required.

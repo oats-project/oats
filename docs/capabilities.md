@@ -2218,9 +2218,12 @@ started by a killed spawn is ever stopped.
 ### check (optional)
 
 The provider's readiness. In: `{ "home": "/abs/home" | null, "soul": "<name>" | null, "settings": { … } }`:
-a home, or, before any home exists, a soul; and, right before a launch,
+a home, or, before any home exists, a soul; and, before a launch,
 `"launch": { "harness", "yolo", "args", "sandbox" }`, the launch that is
-planned, as its launch input will carry them. Out:
+planned: the harness, yolo and the allowances as its launch input will
+carry them, and in `args` the launch configuration's own arguments. **The
+arguments a capability's hooks contribute are not in it**: the check runs
+before any hook, and those reach the launch input only. Out:
 `{ "status": "ready" | "needs-configuration" | "authorization-required" | "unavailable", "problems": [ { "code", "message" } ], "warnings": [ { "code", "message" } ] }`
 (`warnings` optional; no problem on `ready`). Say where a credential comes
 from, never print it.
@@ -2229,11 +2232,14 @@ from, never print it.
   binding check's answer has: for a home, its own backend's, required; for a
   soul, each provider its capabilities offer, not required (the soul can
   launch on tmux).
-- **The kernel asks it right before every launch** (a spawn's, a start's, a
-  restart's before its stop). A status other than `ready` refuses the launch:
-  with the first problem's code when that is an `E_BACKEND_*` code, else
-  `E_BACKEND_NOT_READY`, the message carrying your problems. A check that
-  fails or answers outside these words is not ready.
+- **The kernel asks it before every launch, and before any hook runs** (a
+  spawn's before its spawn hooks, a start's and a restart's before their
+  launch hooks and before a restart's stop). A status other than `ready`
+  refuses the launch: with the first problem's code when that is an
+  `E_BACKEND_*` code, else `E_BACKEND_NOT_READY`, the message carrying your
+  problems. A refused spawn runs no hook and leaves no home; a refused
+  start or restart runs no hook and stops nothing. A check that fails or
+  answers outside these words is not ready.
 
 ### Sandbox allowances (`sandboxDomains`, the launch input's `sandbox`)
 
@@ -2316,7 +2322,8 @@ for your readiness: say what the agent cannot reach), or when `sandbox` is
 (below), with an `E_BACKEND_*` code; write nothing for a launch you do not
 sandbox. Answer those refusals in `check` too, which is handed the planned
 launch (`"launch": { "harness", "yolo", "args", "sandbox" }`, absent on a
-readiness read): the kernel asks it before a restart stops anything.
+readiness read): the kernel asks it before any hook runs and before a
+restart stops anything.
 
 **A start or a restart of an existing home** resolves the deployment's
 configuration again, for the home's soul, **without reaching any remote**:

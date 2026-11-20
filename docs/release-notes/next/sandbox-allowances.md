@@ -23,7 +23,13 @@
     workspace as this host last read it, and `oats-local.yaml` as it is now; when that cannot be done the launch input says `sandbox:
     {unavailable}`, and the provider refuses a launch it would sandbox.
   - A provider's `check` is handed the planned launch (`launch: {harness,
-    yolo, args, sandbox}`) before every launch.
+    yolo, args, sandbox}`) before every launch, and before any hook runs:
+    a spawn its backend refuses runs no hook and leaves no home, and a
+    refused start runs no hook and stops nothing. `args` are the launch
+    configuration's own; a hook's arguments reach the launch input only.
+  - A read of a home while it is being spawned (`oats session inspect`, a
+    status row) answers `E_SESSION_UNAVAILABLE`, "is being spawned", where
+    it answered that the home's records disagree. For a tmux home too.
   - `oats spawn --preview`, a start's answer and `oats readiness --home`
     list each host with who asked for it and each path with its reason;
     `oats capabilities show` lists `sandboxDomains` and its problems.
