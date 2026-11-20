@@ -642,7 +642,38 @@ test("routed instance related-work against a host with only instance-same-work: 
   assert.equal(r.status, 1);
   assert.deepEqual({ code: r.json().error.code, message: r.json().error.message }, { code: "E_REMOTE_INCOMPATIBLE", message: "remote oats 0.69.21 at build-host does not advertise instance-related-work, which a sibling binding needs (its instance-same-work binds a parent only); upgrade it there; nothing was sent" });
   assert.equal(host.calls().filter((c) => c.includes(" same-work ")).length, before, "nothing was sent");
+  // The lineage is read in the scope the verb is sent to: an explicit --dir names another deployment there.
+  const HOME_O = "/srv/other/agents/dev/instances/dev-o";
+  writeFileSync(join(dir, "remote-oats"), readFileSync(join(dir, "remote-oats"), "utf8").replace("case \"$*\" in\n", `case "$*" in\n  *${JSON.stringify("status --json --dir /srv/other")}*) printf '%s' '${JSON.stringify({ root: "/srv/other/agents", agents: [{ name: "dev", instances: [{ instance: "dev-o", home: HOME_O, running: false, siblingInstance: "boss" }] }] })}';;\n`));
+  r = cli(env, ["instance", "related-work", "dev-o", "on", "--home", HOME_O, "--dir", "/srv/other", "--server", "build", "--json"]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(r.json().error.code, "E_REMOTE_INCOMPATIBLE");
+  assert.ok(host.calls().some((c) => c.includes("status --json --dir /srv/other")), host.calls().join("\n"));
+  assert.equal(host.calls().filter((c) => c.includes(" same-work ")).length, before, "nothing was sent for the explicit scope either");
   assert.equal(host.calls().filter((c) => c.includes(" related-work ")).length, 0, "the new name is never sent to that host");
+});
+
+test("routed oats status --server --json: each instance row carries relatedWork by the roster's rule, an older host's sameWork: true as relatedWork: true, and no row carries sameWork", () => {
+  const statusOf = (features) => ({ schemaVersion: 1, ok: true, result: { root: `${WS}/agents`, ...(features ? { features } : {}), agents: [{ name: "dev", instances: [
+    { instance: "dev-old", home: homeOf("dev", "dev-old"), running: false, parentInstance: "boss", sameWork: true },
+    { instance: "dev-odd", home: homeOf("dev", "dev-odd"), running: false, parentInstance: "boss", sameWork: "true", relatedWork: "true" },
+    { instance: "dev-false", home: homeOf("dev", "dev-false"), running: false, parentInstance: "boss", sameWork: false, relatedWork: false },
+    { instance: "dev-new", home: homeOf("dev", "dev-new"), running: false, siblingInstance: "boss", relatedWork: true, color: "sage" }] }] } });
+  for (const [features, old] of [[["instance-same-work"], true], [["instance-related-work"], false], [["instance-same-work", "instance-related-work"], false], [null, false]]) {
+    const dir = mkdtempSync(join(base, "status-rw-"));
+    const host = fakeHost(dir, { probe: FULL_PROBE, answers: { [`status --dir ${WS} --json`]: { stdout: JSON.stringify(statusOf(features)) }, [`status --json --dir ${WS}`]: { stdout: JSON.stringify(statusOf(features)) } } });
+    const env = cliEnv(dir, host);
+    mkdirSync(env.OATS_HOME_DIR, { recursive: true });
+    writeFileSync(join(env.OATS_HOME_DIR, "servers.json"), JSON.stringify({ servers: { build: { sshHost: "build-host", workspace: WS, oatsPath: host.oatsPath } } }));
+    const r = cli(env, ["status", "--server", "build", "--json"]);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.doesNotMatch(r.stdout, /"sameWork"/, `${JSON.stringify(features)}: no sameWork key`);
+    const rows = Object.fromEntries(r.json().result.agents[0].instances.map((i) => [i.instance, i]));
+    const flag = (name) => (Object.hasOwn(rows[name], "relatedWork") ? rows[name].relatedWork : "absent");
+    assert.deepEqual({ old: flag("dev-old"), odd: flag("dev-odd"), false: flag("dev-false"), new: flag("dev-new") }, { old: old ? true : "absent", odd: "absent", false: "absent", new: true }, JSON.stringify(features));
+    assert.equal(rows["dev-new"].color, "sage", "the rest of the row is the host's");
+    assert.equal(rows["dev-old"].parentInstance, "boss");
+  }
 });
 
 test("routed Desktop reads and plans: a host without the feature is refused before anything is sent; a bad home is refused here or relayed from the host", () => {

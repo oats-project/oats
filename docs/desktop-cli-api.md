@@ -4205,7 +4205,10 @@ route target:
   true`. Any other value, a host whose kernel predates both features, and a
   saved route the host did not list carry no key, and no roster row carries
   `sameWork` ([`relatedWork`](#row-related-work)). `oats status --server
-  <id> --json` relays the host's answer verbatim, its keys included.
+  <id> --json` relays the host's answer as it gave it, except for this one
+  key: each instance row carries `relatedWork` by the same rule (an older
+  host's `sameWork: true` as `relatedWork: true`), and no row carries
+  `sameWork`.
 - **`sessionEnd`** (feature `session-resume`; relayed from 0.69.5) is on a row only
   when the host's row has the key, with the host's value: a host whose kernel
   predates the feature, a row the host reports without it (one that runs,
