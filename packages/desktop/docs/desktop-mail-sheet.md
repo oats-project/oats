@@ -87,6 +87,7 @@ computer's OATS can route operations there.
 | No messaging layer in the agent's home (`E_OPERATION_UNAVAILABLE`) | This agent has no messaging layer, so it has no mail. |
 | This computer's aw is older than the provider needs (`E_AW_TOO_OLD`) | This computer's aw is too old to read mail: and the provider's own message, which names the version it needs. |
 | One identity can't be read (`identities[].error`) | Mail from *team* can't be read: and its error, with what it means for oats.aweb's `identity-missing`, `identity-unreadable`, `no-mail-read`, `threads-unreadable`, `conversation-unreadable`, `too-many-threads`; any other as given); the rest of the mail shows. |
+| Some of one identity's conversations can't be read (`conversation-unreadable`, with `unreadableConversations`) | Mail from *team*: N conversations can't be read, then each by the title a shown message gives it, else unnamed with its id in the tooltip. N counts what the provider names, which may be fewer than failed. That identity's other messages show as usual. |
 | No identity can be read (`E_MAIL_UNREADABLE`) | None of this agent's mail identities could be read. |
 | A server's OATS can't run operations (`E_REMOTE_INCOMPATIBLE`) | The OATS on *server* is too old to read this agent's mail. |
 | The answer can't fit its 256 KiB bound even with no messages (`E_MAIL_TOO_LARGE`) | Couldn't read the agent's mail, with the provider's message under Details. |

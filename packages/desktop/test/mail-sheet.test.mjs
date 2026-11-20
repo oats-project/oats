@@ -365,3 +365,34 @@ test('modal: a real shortcut that focuses the roster behind the scrim (Alt+F) le
   ok.focus();
   assert.equal(u.sheet.isOpen(), false); assert.equal(u.doc.activeElement, ok);
 });
+
+test('an identity with an error AND its own messages shows both; unreadableConversations are counted and named', async t => {
+  const unreadable = (list) => fixture(d => { d.identities[1].error = 'conversation-unreadable'; if (list) d.identities[1].unreadableConversations = list; });
+  // The decoder: the key only with conversation-unreadable, an array of ids, possibly empty.
+  assert.ok(mailAnswer(unreadable(['c-2', 'c-x'])));
+  assert.ok(mailAnswer(unreadable([])), 'empty: a message with no conversation is not named');
+  assert.ok(mailAnswer(unreadable(null)), 'absent with the error too');
+  assert.equal(mailAnswer(fixture(d => { d.identities[1].error = 'no-mail-read'; d.identities[1].unreadableConversations = ['c-2']; })), null, 'only with conversation-unreadable');
+  assert.equal(mailAnswer(fixture(d => { d.identities[1].error = null; d.identities[1].unreadableConversations = []; })), null);
+  assert.equal(mailAnswer(fixture(d => { d.identities[1].error = 'conversation-unreadable'; d.identities[1].unreadableConversations = 'c-2'; })), null);
+  assert.equal(mailAnswer(fixture(d => { d.identities[1].error = 'conversation-unreadable'; d.identities[1].unreadableConversations = ['']; })), null);
+  // The sheet: product's own messages (m-2, m-1) stay, beside the line that some of its mail couldn't be read.
+  const u = rig(t, { answer: () => unreadable(['c-2', 'c-x']) });
+  u.sheet.open(row, 'ws-1'); await settle();
+  const box = u.one('[data-mail-identity="product"]');
+  assert.equal(box.querySelector('p').textContent, 'Mail from product: 2 conversations can\'t be read');
+  const named = [...box.querySelectorAll('li')];
+  assert.deepEqual(named.map(li => li.textContent), ['Mount', MAIL_WORDS.unnamedConversation], 'a shown message gives the title');
+  assert.equal(named[0].title, ''); assert.equal(named[1].title, 'c-x', 'else the id in the tooltip');
+  assert.deepEqual(u.all('.mail-item').map(li => JSON.parse(li.dataset.mailKey)), [['default', 'm-3'], ['product', 'm-2'], ['product', 'm-1']],
+    "the erroring identity's own messages are shown");
+  // An empty list: the error's own line, and the messages.
+  const e = rig(t, { answer: () => unreadable([]) });
+  e.sheet.open(row, 'ws-1'); await settle();
+  assert.match(e.one('[data-mail-identity="product"]').textContent, /^Mail from product can't be read: conversation-unreadable — /);
+  assert.equal(e.all('.mail-item').length, 3);
+  // One conversation: singular.
+  const one = rig(t, { answer: () => unreadable(['c-x']) });
+  one.sheet.open(row, 'ws-1'); await settle();
+  assert.equal(one.one('[data-mail-identity="product"] p').textContent, "Mail from product: 1 conversation can't be read");
+});

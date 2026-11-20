@@ -64,6 +64,8 @@ export const MAIL_WORDS = Object.freeze({
   failed: `Couldn't read the ${agent}'s mail.`,
   identityFailed: (team, code) => `Mail from ${team} can't be read: ${mailLine(code)}${IDENTITY_ERRORS[code] ? ` — ${IDENTITY_ERRORS[code]}` : ''}`,
   noIdentity: `None of this ${agent}'s mail identities could be read.`,
+  unreadableConversations: (team, n) => `Mail from ${team}: ${n} ${n === 1 ? 'conversation' : 'conversations'} can't be read`,
+  unnamedConversation: 'A conversation whose title is not shown',
   received: 'From', sent: 'To',
   encrypted: 'Encrypted', unread: `Not read by the ${agent} yet`, high: 'High priority',
   unverified: 'Unverified sender', signatureFailed: 'Signature failed',
@@ -93,6 +95,7 @@ export const mailSheetCSS = `
 .mail-sheet-body { flex:1; min-height:0; overflow-y:auto; padding:6px 0 12px; }
 .mail-sheet-problem { margin:8px 16px; padding-left:8px; border-left:2px solid var(--danger); color:var(--fg); font-size:12px; line-height:1.5; }
 .mail-sheet-problem > p { margin:0; }
+.mail-sheet-unreadable { margin:4px 0 0; padding-left:16px; color:var(--fg); }
 .mail-sheet-problem code { font-family:var(--mono, monospace); font-size:11.5px; }
 .mail-sheet-problem details { margin-top:4px; color:var(--muted); font-size:11.5px; }
 .mail-sheet-problem pre { margin:4px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; font-family:var(--mono, monospace); font-size:11px; color:var(--fg); }
@@ -221,6 +224,24 @@ export function createMailSheet({ doc, request, generation = () => 0, subscribeW
     return box;
   }
 
+  /** An identity whose read named the conversations it couldn't read: how many, and each one by the title a shown
+   * message gives it, else unnamed with its id in the tooltip. Its other messages are shown as usual. */
+  function unreadableBox(i, ids, messages) {
+    const box = node('div', 'mail-sheet-problem');
+    box.dataset.mailProblem = 'conversation-unreadable';
+    box.append(node('p', null, MAIL_WORDS.unreadableConversations(mailLine(i.team), ids.length)));
+    const list = node('ul', 'mail-sheet-unreadable');
+    for (const id of ids) {
+      const title = messages.find(m => m.conversationId === id && mailLine(m.threadTitle));
+      const li = node('li', null, title ? mailLine(title.threadTitle) : MAIL_WORDS.unnamedConversation);
+      if (!title) li.title = mailLine(id);
+      li.dataset.conversation = id;
+      list.append(li);
+    }
+    box.append(list);
+    return box;
+  }
+
   function item(m, { showTeam, partialNote }) {
     const key = messageKey(m), li = node('li', 'mail-item'), id = `mail-sheet-${ui.id}-${ui.items++}`;
     li.dataset.mailKey = key; li.dataset.direction = m.direction;
@@ -295,7 +316,9 @@ export function createMailSheet({ doc, request, generation = () => 0, subscribeW
     if (state.failure) ui.problems.append(problem(state.failure, 'problem:read'));
     // Identities that could not be read: said once each, the rest of the mail shown.
     for (const i of state.identities.filter(x => x.error)) {
-      const box = problem({ lines: [MAIL_WORDS.identityFailed(mailLine(i.team), i.error)], code: '', detail: null }, `problem:identity:${i.team}`);
+      const named = Array.isArray(i.unreadableConversations) ? i.unreadableConversations : [];
+      const box = named.length ? unreadableBox(i, named, state.messages)
+        : problem({ lines: [MAIL_WORDS.identityFailed(mailLine(i.team), i.error)], code: '', detail: null }, `problem:identity:${i.team}`);
       box.dataset.mailIdentity = i.team; ui.problems.append(box);
     }
     const showTeam = new Set(state.identities.map(i => i.team)).size > 1;

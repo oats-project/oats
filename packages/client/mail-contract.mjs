@@ -47,8 +47,14 @@ const utf8Bytes = s => {
 function party(p) {
   return exact(p, PARTY_KEYS) && opaque(p.alias) && (p.address === null || opaque(p.address)) && opaque(p.identity);
 }
+/** The conversations of one identity that couldn't be read (contract v2's details, Juan's side's ask): present only with
+ * the error `conversation-unreadable`, absent otherwise; opaque ids in the order the read met them. It may be empty (a
+ * message with no conversation isn't named) and may list fewer than failed (its tail goes first under the 256 KiB bound). */
+const UNREADABLE = 'unreadableConversations';
 function identity(i) {
-  return exact(i, IDENTITY_KEYS) && opaque(i.team) && opaque(i.alias) && opaque(i.identity) && typeof i.primary === 'boolean'
+  const listed = record(i) && Object.hasOwn(i, UNREADABLE);
+  if (listed && !(i.error === 'conversation-unreadable' && Array.isArray(i[UNREADABLE]) && i[UNREADABLE].every(opaque))) return false;
+  return exact(i, listed ? [...IDENTITY_KEYS, UNREADABLE] : IDENTITY_KEYS) && opaque(i.team) && opaque(i.alias) && opaque(i.identity) && typeof i.primary === 'boolean'
     // An identity's error: the provider's word for it (oats.aweb: identity-missing, identity-unreadable, no-mail-read,
     // threads-unreadable, conversation-unreadable, too-many-threads), opaque: a client words the ones it knows.
     && (i.error === null || opaque(i.error));
