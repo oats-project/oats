@@ -4,7 +4,7 @@
 import { createDataState, statusLine, skeleton, skeletonBlock, ROSTER_STALE_TITLE } from './loading.mjs';
 import { instanceId, resolveLinkId, findRosterInstance } from '../../client/instance-tree.mjs';
 import { instanceDisplayName } from '../../client/instance-display-name.mjs';
-import { drawsParentLine } from '../../client/same-work.mjs';
+import { drawsParentLine } from '../../client/related-work.mjs';
 import { iconElement } from './shell-icons.mjs';
 
 /** An instance row's name (0.68.1, the product owner): the words shown (instanceDisplayName: "Oats expert maintainer
@@ -76,7 +76,7 @@ export function clusterSeparator(doc, { label, count } = {}) {
  * sits on the dot column and the solid lineage just right of it (shell.css
  * --tree-branch-offset), so a row between two roots draws its own
  * `link-through` and never lets a solid line stand in for it (#1312).
- * The solid lineage joins only a child that draws its parent line (#1577, packages/client/same-work.mjs
+ * The solid lineage joins only a child that draws its parent line (#1577, packages/client/related-work.mjs
  * `drawsParentLine`; the gate is stamped on each row by the panel): a child that does not keeps its indent and
  * gets no elbow, and its parent's stem and vertical do not reach it. The dotted links are siblinghood, not
  * parentage, and are drawn as before. Nothing else marks the flag: the line is its only sign, aria-hidden.

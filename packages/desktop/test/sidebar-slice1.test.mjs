@@ -10,7 +10,7 @@ import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import { viewContext } from "./helpers/view-context.mjs";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/same-work.mjs";
+import * as sameWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget, sameInstanceActionTarget } from "../renderer/instance-action-target.mjs";
@@ -228,7 +228,7 @@ test("slice1 lines and order unchanged (Amendment 1, D26: no lines; the tree, th
   u.render([local("x", { createdAt: at(1) }), local("y", { createdAt: at(2) })]);
   assert.deepEqual([...u.list.children].map(el => el.className.split(" ")[0]), ["ctx-group", "ctx-tree-row", "ctx-bundle-gap", "ctx-tree-row"]);
   assert.equal(u.list.querySelector(".ctx-bundle-gap").getAttribute("aria-hidden"), "true");
-  for (const file of ["same-work-lines.test.mjs", "roster-order.test.mjs"]) assert.ok(existsSync(new URL(file, import.meta.url)), `${file} still runs`);
+  for (const file of ["related-work-lines.test.mjs", "roster-order.test.mjs"]) assert.ok(existsSync(new URL(file, import.meta.url)), `${file} still runs`);
 });
 
 test("slice1 switcher head has no show-only-current, add workspace reachable", t => {

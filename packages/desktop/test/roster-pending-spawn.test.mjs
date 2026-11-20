@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/same-work.mjs";
+import * as sameWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
 const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
@@ -75,7 +75,7 @@ test("a pending spawn shows under its parent: “Spawning…” text and a spinn
 });
 
 // #1577: the Desktop's spawn never passes --same-work, so a pending row is never flagged; it takes its parent's
-// gate (same-work.mjs withParentGate), which still orders it after the joined children. Slice 1 (D26): the roster
+// gate (related-work.mjs withParentGate), which still orders it after the joined children. Slice 1 (D26): the roster
 // draws no lines on any host; a pending child keeps its indent and says "under <parent>".
 test("a pending spawn under a parent: listed after the joined children, indented, said under its parent, no line on any host", async t => {
   const declared = roster.map(row => ({ ...row, sameWorkKnown: true, ...(row.instance === "child-a" ? { sameWork: true } : {}) }));

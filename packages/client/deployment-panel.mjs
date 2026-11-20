@@ -127,7 +127,7 @@ export function panelInstance(i) {
     // Session resume: how the last session ended, as deployment-data.mjs validated it (SESSION_ENDS); absent stays
     // absent. The resume trigger reads it (session-resume-trigger.mjs lostLocalHomes).
     ...(i.sessionEnd !== undefined ? { sessionEnd: i.sessionEnd } : {}),
-    // #1577: the kernel's same-work flag (deployment-data.mjs keeps it as true only); same-work.mjs reads it.
+    // #1577: the kernel's same-work flag (deployment-data.mjs keeps it as true only); related-work.mjs reads it.
     ...(i.sameWork === true ? { sameWork: true } : {}),
     ...(i.captured ? { captured: true } : {}),
     // Needs input (PR K): the validated claim (or null, unknown) as status reported it; absent stays absent.

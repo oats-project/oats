@@ -11,7 +11,7 @@ import { JSDOM } from "jsdom";
 import { viewContext } from "./helpers/view-context.mjs";
 import * as treeShared from "../../client/instance-tree.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
-import * as sameWork from "../../client/same-work.mjs";
+import * as sameWork from "../../client/related-work.mjs";
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget } from "../renderer/instance-action-target.mjs";
 import { instanceSplitPlan } from "../renderer/instance-split.mjs";

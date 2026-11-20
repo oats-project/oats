@@ -1071,7 +1071,7 @@ control.
   dot column, and the solid parent→child elbows and pass-throughs to its right.
     As the sidebar's order does (the sidebar itself draws no lines since slice 1
   of the Desktop UI rework), a solid line joins only a child that draws its parent line
-  (`drawsParentLine`, `packages/client/same-work.mjs`, #1577), and those
+  (`drawsParentLine`, `packages/client/related-work.mjs`, #1577), and those
   children are listed first under their parent, by recency within each part.
   Its dot is the sidebar's state dot: running, stopped or unknown. A context row
   keeps its lines; only its text is dimmed.

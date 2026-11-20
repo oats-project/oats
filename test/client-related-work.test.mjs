@@ -1,12 +1,12 @@
-// #1577, the clients' half: which parent→child lines a roster draws (packages/client/same-work.mjs), the order
+// #1577, the clients' half: which parent→child lines a roster draws (packages/client/related-work.mjs), the order
 // under one parent that follows from it, and how the kernel's `sameWork` flag and the gate's answer reach every
 // row through the shared readers (deployment-data.mjs, panelInstance, remotePanel, panel-views.mjs
-// deploymentPanel). The Desktop's connectors over these rows: packages/desktop/test/same-work-lines.test.mjs.
+// deploymentPanel). The Desktop's connectors over these rows: packages/desktop/test/related-work-lines.test.mjs.
 //
 // It imports packages/client only, so it runs on a root-only checkout with nothing installed.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SAME_WORK_FEATURE, sameWorkDeclared, withSameWorkGate, withParentGate, drawsParentLine } from "../packages/client/same-work.mjs";
+import { SAME_WORK_FEATURE, sameWorkDeclared, withSameWorkGate, withParentGate, drawsParentLine } from "../packages/client/related-work.mjs";
 import { clusterInstances, recencyOrder, rosterGroups, groupRosterFamilies, instanceId } from "../packages/client/instance-tree.mjs";
 import { deploymentStatusData, SESSION_ENDS } from "../packages/client/deployment-data.mjs";
 import { rosterRows, panelInstances, observedEntry } from "../packages/client/deployment-panel.mjs";

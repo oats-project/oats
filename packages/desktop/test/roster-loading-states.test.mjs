@@ -15,7 +15,7 @@ import { rosterPollDue, ROSTER_POLL_FOCUSED_MS } from '../renderer/roster-cadenc
 import { withShellWindowGlobals } from './helpers/shell-window-globals.mjs';
 import { JSDOM } from 'jsdom';
 import * as treeShared from '../../client/instance-tree.mjs';
-import * as sameWork from '../../client/same-work.mjs';
+import * as sameWork from '../../client/related-work.mjs';
 import * as treeView from '../renderer/instance-tree-view.mjs';
 const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
 import { PENDING_DELAY_MS, REFRESHING_DELAY_MS, AGE_TICK_MS } from '../renderer/loading.mjs';

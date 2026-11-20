@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/same-work.mjs";
+import * as sameWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
 const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";

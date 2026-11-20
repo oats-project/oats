@@ -32,7 +32,7 @@ import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
 import { THEMES } from "../renderer/theme.mjs";
 import { rosterKeyAction, moveTarget } from "../renderer/roster-keys.mjs";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/same-work.mjs";
+import * as sameWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
 const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
 import * as layout from "../renderer/split-layout.mjs";

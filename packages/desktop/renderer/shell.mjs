@@ -96,7 +96,7 @@ import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../.
 import { syncWaitingRow } from "./waiting-row.mjs";
 import { createPanelOwner } from "./panel-owner.mjs";
 import { collapseKey, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE, instanceSiblings, rowPinned, PIN_FEATURE } from "../../client/instance-tree.mjs";
-import { withParentGate } from "../../client/same-work.mjs";
+import { withParentGate } from "../../client/related-work.mjs";
 import { createRetiresInFlight, retiringRows } from "../../client/retire-in-flight.mjs";
 import { captureTreeRenderState, relationSpan, stateSpan, rosterResponseOwns, clusterSeparator, renderRosterCount,
   terminalKey, resolveTerminalOpen, createRosterLoading, rosterSignature, ROSTER_STALE_TITLE, rosterName, pinnedMark } from "./instance-tree-view.mjs";
@@ -1097,7 +1097,7 @@ function renderContextRoster(instances) {
   const spawning = decided.filter((p) => !reported.has(instanceId(p)));
   if (spawning.length) {
     // #1577: a pending row is this window's own, so the panel stamped no same-work gate on it: it takes its parent's
-    // (same-work.mjs `withParentGate`). This Desktop's spawn never passes --same-work, so on a host that declares
+    // (related-work.mjs `withParentGate`). This Desktop's spawn never passes --same-work, so on a host that declares
     // the feature it draws no parent line, as its reported row will not.
     const all = [...instances, ...spawning], byId = new Map(all.map((i) => [instanceId(i), i]));
     instances = [...instances, ...spawning.map((p) => withParentGate(p, byId.get(rosterParentId(all, instanceId(p))) ?? null))];

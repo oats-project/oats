@@ -1,16 +1,16 @@
 // #1577: the sidebar's and the palette's solid parent→child lines join only a child that draws its parent line
-// (packages/client/same-work.mjs `drawsParentLine`: on a host that declares instance-same-work, a child the kernel
+// (packages/client/related-work.mjs `drawsParentLine`: on a host that declares instance-same-work, a child the kernel
 // flagged `sameWork: true`; on any other host, every child, as before). The layout does not change: the rows, their
 // depth and indent, the groups, and the dotted sibling links are as they were. The line is the flag's only sign:
 // no label, no tag, nothing to assistive technology. The rule, the gate and the order are
-// test/client-same-work.test.mjs's.
+// test/client-related-work.test.mjs's.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { treeConnectors, treeGuides } from "../renderer/instance-tree-view.mjs";
 import { paletteRows } from "../renderer/palette.mjs";
 import { clusterInstances, filterInstanceTree, instanceVisibleInTree, collapseKey, instanceId, backgroundPlacement } from "../../client/instance-tree.mjs";
-import { withParentGate } from "../../client/same-work.mjs";
+import { withParentGate } from "../../client/related-work.mjs";
 import { sidebarSections } from "../../client/roster-sections.mjs";
 import { DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
 

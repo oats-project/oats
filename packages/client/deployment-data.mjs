@@ -237,7 +237,7 @@ export function deploymentStatusData(document, deployment) {
       // dropped, never checked: the row reads as one that did not say.
       if (own(instance, 'sessionEnd') && SESSION_END_VALUES.includes(instance.sessionEnd)) row.sessionEnd = instance.sessionEnd;
       // #1577 (feature instance-same-work): the child does its parent's work, so its parent line is drawn
-      // (same-work.mjs). Boolean true only; any other value is dropped, never checked: the row reads unflagged.
+      // (related-work.mjs). Boolean true only; any other value is dropped, never checked: the row reads unflagged.
       if (own(instance, 'sameWork') && instance.sameWork === true) row.sameWork = true;
       if (own(instance, 'modules')) row.modules = modules(instance.modules);
       if (own(instance, 'soul')) row.soul = soulSource(instance.soul);

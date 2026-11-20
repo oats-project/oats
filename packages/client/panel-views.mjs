@@ -46,7 +46,7 @@ import { teamMembers } from './team-members.mjs';
 import { requireTerms } from './client-terms.mjs';
 import { ROSTER_WORKSPACE_KEY } from './cli-adapter.mjs';
 import { waitingClaim } from './waiting-on-you.mjs';
-import { sameWorkDeclared, withSameWorkGate } from './same-work.mjs';
+import { sameWorkDeclared, withSameWorkGate } from './related-work.mjs';
 
 /** Roots come ONLY from the kernel's observed `status.root`; before (or
  * without) an observation there is nothing to act on. No layout guess. */
@@ -311,7 +311,7 @@ export function deploymentEntry(info, primary) {
 }
 
 /** One deployment's own panel, as served before views. Each row carries whether its host declares
- * instance-same-work (#1577), stamped here and nowhere else (same-work.mjs `withSameWorkGate`): `held.cli` for
+ * instance-same-work (#1577), stamped here and nowhere else (related-work.mjs `withSameWorkGate`): `held.cli` for
  * this computer's rows, and the group's host too for another machine's. */
 export function deploymentPanel(held, ws) {
   // Another machine's panel never says who made its `error`: the key is removed here whatever the panel carried.

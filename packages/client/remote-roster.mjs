@@ -70,7 +70,7 @@ export function remotePanel(group, at) {
       // #1247: the host's retire state, relayed unchanged when it is in the contract (retire-state.mjs), else absent.
       ...(retireData(sentRetire) ? { retire: retireData(sentRetire) } : {}),
       // #1577: the host's same-work flag, true only (anything else reads unflagged). `sameWorkKnown` is this
-      // client's own field (same-work.mjs), never a host's: whatever a host sent under it is dropped.
+      // client's own field (related-work.mjs), never a host's: whatever a host sent under it is dropped.
       ...(sentSameWork === true ? { sameWork: true } : {}),
       // Feature instance-pin: the host's pin, true only (anything else reads unpinned; instance-tree.mjs rowPinned),
       // and only from a host whose own feature list names it (composed-gate.mjs hostAdvertises: the group's
