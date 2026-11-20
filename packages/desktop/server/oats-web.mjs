@@ -59,11 +59,11 @@
 import { launchEnvironment } from "../../client/own-environment.mjs";
 import { createServer } from "node:http";
 import { execFile, spawn } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, chmodSync, realpathSync, accessSync, constants as fsConstants } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, chmodSync, realpathSync, accessSync, openSync, fstatSync, readSync, closeSync, constants as fsConstants } from "node:fs";
 import { StartupRefusal, readSecretFd, readSecretFile, checkSocketParent, bearerBytes, bearerMatches, sameFile, carriesSecret, CREDENTIAL_IN_REPLY, UNAUTHORIZED } from "./request-checks.mjs";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { homedir } from "node:os";
+import { homedir, constants as osConstants } from "node:os";
 import { performance } from "node:perf_hooks";
 import { scheduleRequest } from "./schedules.mjs";
 import { capabilityRequest } from "./capabilities.mjs";
@@ -999,31 +999,30 @@ function canonicalInside(path, parent) {
     return real === base || real.startsWith(base.endsWith(sep) ? base : base + sep) ? real : null;
   } catch { return null; }
 }
-function containedIn(base) {
-  let real;
-  try { real = realpathSync(base); } catch { return () => false; }
-  return (file) => { try { const target = realpathSync(file); return target === real || target.startsWith(real + sep); } catch { return false; } };
+function canonicalSkillRoots(base) {
+  try { return [realpathSync(base)]; } catch { return []; }
 }
-function listSkills(dir, contained) {
+function listSkills(dir, allowedRoots) {
   // skills live as <dir>/<skill>/SKILL.md with `name`/`description` frontmatter
   const skills = [];
   try {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       if (!e.isDirectory()) continue;
-      const s = skillEntry(join(dir, e.name), contained);
+      const s = skillEntry(join(dir, e.name), allowedRoots);
       if (s) skills.push(s);
     }
   } catch { /* no skills dir */ }
   return skills.sort((a, b) => a.name.localeCompare(b.name));
 }
-function skillEntry(skillDir, contained) {
+function skillEntry(skillDir, allowedRoots) {
   const p = join(skillDir, "SKILL.md");
   if (!existsSync(p)) return null;
-  // A nested SKILL.md symlink can escape its owning tree even when the tree
-  // dir itself is contained — reject per file.
-  if (contained && !contained(p)) return null;
   let meta = {};
-  try { if (!sameFile(statSync(p), TOKEN_FILE)) meta = skillFrontmatter(readFileSync(p, "utf8")); } catch { /* unreadable skill */ }
+  try {
+    const read = readContainedFile(p, allowedRoots, { maxBytes: FILE_MAX_BYTES, tokenFile: TOKEN_FILE });
+    if (read.error === "path outside allowed roots" || read.code === 404) return null;
+    if (read.buf) meta = skillFrontmatter(read.buf.toString("utf8"));
+  } catch { /* Unreadable metadata leaves the skill listed under its directory name. */ }
   return { name: meta.name || basename(skillDir), path: p, description: String(meta.description || "").trim() };
 }
 function mdTree(dir) {
@@ -1066,8 +1065,8 @@ function brainData(agentName, wsId) {
   /* OATSWEB_BRAINSKILLS_END */
   // Soul content is workspace-member content: every file must stay inside the
   // kernel-reported soul directory (a per-commit copy behind the soul pointer).
-  const soulContained = containedIn(def.dir);
-  const soulSkills = mergeSkills(listSkills(join(soulDir, "skills"), soulContained));
+  const soulRoots = canonicalSkillRoots(def.dir);
+  const soulSkills = mergeSkills(listSkills(join(soulDir, "skills"), soulRoots));
   const knowledgeDir = join(soulDir, "knowledge");
   // Instances are exactly the kernel-reported rows of this soul and root.
   const rows = (observed.instances || []).filter((i) => !i.server && i.agent === def.name && i.agentsRoot === root
@@ -1075,12 +1074,12 @@ function brainData(agentName, wsId) {
     .sort((a, b) => String(a.instance).localeCompare(String(b.instance)));
   const instances = rows.map((live) => {
     const home = live.home;
-    const homeContained = containedIn(home);
+    const homeRoots = canonicalSkillRoots(home);
     const skillsDir = join(home, ".agents", "skills");
     let entries = [];
     try { entries = readdirSync(skillsDir, { withFileTypes: true }).filter((e) => e.isDirectory()); } catch { /* none */ }
     const skills = mergeSkills(entries.flatMap((e) => expandSkillPath(join(skillsDir, e.name), existsSync,
-      (d) => listSkills(d, homeContained), (d) => skillEntry(d, homeContained))));
+      (d) => listSkills(d, homeRoots), (d) => skillEntry(d, homeRoots))));
     const notesDir = join(home, "notes");
     return {
       instance: live.instance, home, running: live.running === true,
@@ -1120,12 +1119,74 @@ function brainData(agentName, wsId) {
 function underRoot(realPath, realRoot) {
   return realPath === realRoot || realPath.startsWith(realRoot.endsWith(sep) ? realRoot : realRoot + sep);
 }
-function resolveGuardedFile(requested, allowedRoots) {
+function resolveGuardedFile(requested, allowedRoots, io = { realpathSync }) {
   if (typeof requested !== "string" || !requested.startsWith("/")) return { error: "path must be absolute", code: 400 };
   let real;
-  try { real = realpathSync(resolve(requested)); } catch { return { error: "no such file", code: 404 }; }
+  try { real = io.realpathSync(resolve(requested)); } catch { return { error: "no such file", code: 404 }; }
   if (!allowedRoots.some((root) => underRoot(real, root))) return { error: "path outside allowed roots", code: 403 };
   return { real };
+}
+/** Bounded reads with path containment and descriptor identity checks.
+ * Roots are admission-time canonical strings. These checks assume agents and
+ * Desktop share an OS user: repeated directory swaps are not excluded, and
+ * portable Node lacks descriptor-relative opens. */
+function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null,
+  io = { openSync, fstatSync, realpathSync, statSync, readSync, closeSync } } = {}) {
+  if (typeof requested !== "string" || !requested.startsWith("/")) return { error: "path must be absolute", code: 400 };
+  const missing = { error: "no such file", code: 404 };
+  const outside = { error: "path outside allowed roots", code: 403 };
+  const notFile = { error: "not a regular file", code: 400 };
+  const flags = fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK | fsConstants.O_NOCTTY;
+  const path = resolve(requested);
+  // Reject paths outside the roots before opening them. Check again after open
+  // to confirm the pathname still identifies the opened descriptor.
+  const admitted = resolveGuardedFile(path, allowedRoots, io);
+  if (admitted.error) return admitted;
+  let fd;
+  try {
+    try { fd = io.openSync(path, flags); }
+    catch (e) {
+      const g = resolveGuardedFile(path, allowedRoots, io);
+      if (g.error) return g;
+      if (e.code !== "ELOOP") throw e;
+      fd = io.openSync(g.real, flags);
+    }
+    const st = io.fstatSync(fd);
+    const g = resolveGuardedFile(path, allowedRoots, io);
+    if (g.error) return g;
+    if (!sameFile(st, io.statSync(g.real))) return outside;
+    if (sameFile(st, tokenFile)) return { error: "forbidden", code: 403 };
+    if (!st.isFile()) return notFile;
+    if (st.size > maxBytes) return { error: `file too large (${st.size} bytes)`, code: 413 };
+    const limit = maxBytes + 1;
+    const chunks = [];
+    let chunk = Buffer.alloc(Math.min(st.size + 1, limit));
+    let size = 0;
+    let used = 0;
+    for (;;) {
+      const n = io.readSync(fd, chunk, used, chunk.length - used, null);
+      if (n === 0) break;
+      size += n;
+      used += n;
+      if (size === limit) return { error: `file too large (${size} bytes)`, code: 413 };
+      if (used === chunk.length) {
+        chunks.push(chunk);
+        chunk = Buffer.alloc(Math.min(64 * 1024, limit - size));
+        used = 0;
+      }
+    }
+    const tail = chunk.subarray(0, used);
+    const buf = chunks.length ? Buffer.concat([...chunks, tail], size) : tail;
+    return { real: g.real, st, buf };
+  } catch (e) {
+    if (["ENOENT", "ENOTDIR", "ELOOP"].includes(e.code)) return missing;
+    // Node may report macOS's EOPNOTSUPP on a socket with only its errno.
+    if (fd === undefined && (e.errno === -osConstants.errno.EOPNOTSUPP
+      || ["ENXIO", "ENODEV", "EISDIR", "EOPNOTSUPP", "ENOTSUP"].includes(e.code))) return notFile;
+    throw e;
+  } finally {
+    if (fd !== undefined) io.closeSync(fd);
+  }
 }
 /* OATSWEB_FILEGUARD_END */
 
@@ -1168,17 +1229,13 @@ function fileRoots() {
 }
 
 function fileData(requested) {
-  const g = resolveGuardedFile(requested, fileRoots());
+  const g = readContainedFile(requested, fileRoots(), { maxBytes: FILE_MAX_BYTES, tokenFile: TOKEN_FILE });
   if (g.error) return g;
-  const st = statSync(g.real);
-  if (sameFile(st, TOKEN_FILE)) return { error: "forbidden", code: 403 };
-  if (!st.isFile()) return { error: "not a regular file", code: 400 };
-  if (st.size > FILE_MAX_BYTES) return { error: `file too large (${st.size} bytes)`, code: 413 };
-  const buf = readFileSync(g.real);
+  const { st, buf } = g;
   if (buf.includes(0)) return { error: "binary file", code: 415 };
   return {
     body: {
-      path: g.real, name: basename(g.real), size: st.size, mtime: st.mtime.toISOString(),
+      path: g.real, name: basename(g.real), size: buf.length, mtime: st.mtime.toISOString(),
       markdown: MARKDOWN_EXT.has(extname(g.real).toLowerCase()),
       content: buf.toString("utf8"),
     },

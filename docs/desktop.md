@@ -1481,9 +1481,11 @@ unknown or unreported harness shows "?". Sources and licences are in
   is addressed with `--home` to a home the server's roster reports, and one
   on a soul to a soul and agents root the server lists, never a path the
   caller names.
-- Workspace content is treated as untrusted: symlinked directories never
-  widen the file API, and capability packages cannot read outside their
-  own tree.
+- Workspace content is treated as untrusted: file paths are checked against
+  admitted roots, and capability packages cannot read outside their own tree.
+  The file viewer uses path and descriptor identity checks where agents and
+  Desktop share an OS user, and a writer can still repeatedly swap directories
+  during a read.
 
 ## Troubleshooting
 
