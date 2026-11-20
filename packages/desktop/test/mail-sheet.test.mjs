@@ -391,6 +391,11 @@ test('an identity with an error AND its own messages shows both; unreadableConve
   e.sheet.open(row, 'ws-1'); await settle();
   assert.match(e.one('[data-mail-identity="product"]').textContent, /^Mail from product can't be read: conversation-unreadable — /);
   assert.equal(e.all('.mail-item').length, 3);
+  // Ids are opaque per team: default's c-1 doesn't title product's unreadable c-1.
+  const other = rig(t, { answer: () => unreadable(['c-1']) });
+  other.sheet.open(row, 'ws-1'); await settle();
+  const li = other.one('[data-mail-identity="product"] li');
+  assert.equal(li.textContent, MAIL_WORDS.unnamedConversation); assert.equal(li.title, 'c-1');
   // One conversation: singular.
   const one = rig(t, { answer: () => unreadable(['c-x']) });
   one.sheet.open(row, 'ws-1'); await settle();

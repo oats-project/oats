@@ -232,7 +232,8 @@ export function createMailSheet({ doc, request, generation = () => 0, subscribeW
     box.append(node('p', null, MAIL_WORDS.unreadableConversations(mailLine(i.team), ids.length)));
     const list = node('ul', 'mail-sheet-unreadable');
     for (const id of ids) {
-      const title = messages.find(m => m.conversationId === id && mailLine(m.threadTitle));
+      // Ids are opaque per identity: only a message of this identity's team names it.
+      const title = messages.find(m => m.team === i.team && m.conversationId === id && mailLine(m.threadTitle));
       const li = node('li', null, title ? mailLine(title.threadTitle) : MAIL_WORDS.unnamedConversation);
       if (!title) li.title = mailLine(id);
       li.dataset.conversation = id;
