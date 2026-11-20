@@ -78,10 +78,16 @@ test('built text requires only electron, with no dynamic require, path, builtin 
   assert.doesNotMatch(read('scripts/dist-smoke.mjs'), /["']--no-sandbox["']/);
 });
 
-for (const sandboxed of [true, false]) test(`CDP sandbox probe reads the preload call frame and resumes execution when sandboxed=${sandboxed}`, async () => {
+for (const { sandboxed, requireSandbox, accepted } of [
+  { sandboxed: true, requireSandbox: true, accepted: true },
+  { sandboxed: undefined, requireSandbox: true, accepted: false },
+  { sandboxed: undefined, requireSandbox: false, accepted: true },
+]) test(`CDP preload probe resumes after sandboxed=${sandboxed}, requireSandbox=${requireSandbox}`, async () => {
   const listeners = new Set(), calls = [];
   let resumed;
   const reload = new Promise(resolve => { resumed = resolve; });
+  const state = { ...(sandboxed === undefined ? {} : { sandboxed }), isolated: true,
+    argv: ['electron', ...(sandboxed ? [] : ['--no-sandbox'])] };
   const emit = event => { for (const listener of [...listeners]) listener(event); };
   const cdp = { listeners, async command(method, params) {
     calls.push(method);
@@ -90,14 +96,14 @@ for (const sandboxed of [true, false]) test(`CDP sandbox probe reads the preload
     if (method === 'Page.reload') { emit({ method: 'Debugger.paused', params: { callFrames: [{ callFrameId: 'preload-frame' }] } }); return reload; }
     if (method === 'Debugger.evaluateOnCallFrame') {
       assert.equal(params.callFrameId, 'preload-frame');
-      assert.equal(params.expression, '({ sandboxed: process.sandboxed, isolated: process.contextIsolated })');
-      return { result: { value: { sandboxed, isolated: true } } };
+      assert.equal(params.expression, '({ sandboxed: process.sandboxed, isolated: process.contextIsolated, argv: process.argv })');
+      return { result: { value: state } };
     }
     if (method === 'Debugger.resume') resumed({});
     return {};
   } };
-  if (sandboxed) assert.deepEqual(await probeSandbox(cdp), { sandboxed: true, isolated: true });
-  else await assert.rejects(probeSandbox(cdp), /preload is not sandboxed/);
+  if (accepted) assert.deepEqual(await probeSandbox(cdp, { requireSandbox }), state);
+  else await assert.rejects(probeSandbox(cdp, { requireSandbox }), /preload is not sandboxed/);
   assert.ok(calls.indexOf('Debugger.evaluateOnCallFrame') < calls.indexOf('Debugger.resume'));
   assert.equal(calls.at(-1), 'Debugger.disable');
   assert.equal(listeners.size, 0);

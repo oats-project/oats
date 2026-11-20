@@ -34,7 +34,7 @@ export async function connectProbe(url, timeout = 20000) {
 // The sandbox's process is a parameter of Electron's preload wrapper, not a
 // page global. Pause at its argv read on a picker-only reload and read that
 // call frame; checking the main world or a copied renderer flag would not prove it.
-export async function probeSandbox(cdp) {
+export async function probeSandbox(cdp, { requireSandbox = true } = {}) {
   const scripts = [];
   const collect = event => { if (event.method === 'Debugger.scriptParsed' && /[/\\]generated[/\\]preload\.cjs$/.test(event.params.url)) scripts.push(event.params); };
   cdp.listeners.add(collect);
@@ -60,10 +60,11 @@ export async function probeSandbox(cdp) {
     const stop = await Promise.race([stopped, reload.then(() => stopped)]);
     const result = await cdp.command('Debugger.evaluateOnCallFrame', {
       callFrameId: stop.callFrames[0].callFrameId,
-      expression: '({ sandboxed: process.sandboxed, isolated: process.contextIsolated })', returnByValue: true,
+      expression: '({ sandboxed: process.sandboxed, isolated: process.contextIsolated, argv: process.argv })', returnByValue: true,
     });
     const state = result.result?.value;
-    if (state?.sandboxed !== true || state.isolated !== true) throw new Error(`preload is not sandboxed and isolated: ${JSON.stringify(state)}`);
+    if (state?.isolated !== true || !Array.isArray(state.argv)) throw new Error(`invalid isolated preload state: ${JSON.stringify(state)}`);
+    if (requireSandbox && state.sandboxed !== true) throw new Error(`preload is not sandboxed: ${JSON.stringify(state)}`);
     await cdp.command('Debugger.resume'); paused = false;
     await reload;
     return state;
@@ -107,29 +108,13 @@ export async function probeTerminal(cdp, endpoint, dropPath) {
     } check();
   })`);
   if (output !== true) throw new Error('terminal output probe failed');
-  // A CDP drag carries real disk-backed File objects. Observe the same drop
-  // as the renderer and ask the existing facade for its paths as well; leave
-  // the renderer listener in place, so its normal attachment/paste path runs.
-  await cdp.evaluate(`(() => {
-    const wrap = document.querySelector('.tab-pane.active:not([hidden]) .term-wrap');
-    window.__sandboxProbeDrop = null;
-    wrap.addEventListener('drop', event => {
-      window.__sandboxProbeDrop = oatsDesktop.termAttachFiles(${JSON.stringify(handle)}, [...event.dataTransfer.files]);
-    }, { capture: true, once: true });
-  })()`);
+  // Let the renderer's normal drop handler own the single attachment batch.
+  // The smoke checks the exact path in the harness receipt after the paste.
+  // A synthetic File or an attachment failure cannot produce that path.
   const data = { items: [], files: [dropPath], dragOperationsMask: 1 };
   for (const type of ['dragEnter', 'dragOver', 'drop']) await cdp.command('Input.dispatchDragEvent', { type, ...point, data });
-  const drop = await cdp.evaluate(`new Promise((resolve, reject) => {
-    const until = Date.now() + 10000;
-    function check() {
-      if (window.__sandboxProbeDrop) window.__sandboxProbeDrop.then(resolve, reject);
-      else if (Date.now() >= until) reject(new Error('no native file drop reached the terminal'));
-      else setTimeout(check, 50);
-    } check();
-  })`);
   await cdp.evaluate('window.__sandboxProbeOff()');
-  if (drop?.ok !== true || drop.paths?.length !== 1 || drop.paths[0] !== dropPath) throw new Error(`native dropped-file path failed: ${JSON.stringify(drop)}`);
-  return { text, drop };
+  return text;
 }
 
 export async function probeWorkspace(cdp, { port, targetId, deployment }) {

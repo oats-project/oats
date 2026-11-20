@@ -1,4 +1,5 @@
 ## Fixed
 
-- Desktop's renderer now runs sandboxed. The bundled preload preserves the
-  existing terminal and workspace bridge. ([Security posture](../desktop.md#security-posture))
+- Desktop enables the renderer sandbox and bundles its terminal and workspace
+  bridge. The Linux AppImage uses the OS sandbox where the system permits
+  unprivileged user namespaces. ([Security posture](../desktop.md#security-posture))
