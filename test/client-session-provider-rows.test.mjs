@@ -244,4 +244,8 @@ test("Home's board: a provider row that runs is Running on `running: true` alone
   const board = homeBoard(rows);
   assert.deepEqual(board.running.map((each) => each.instance).sort(), ["bb-run", "tmux-run"]);
   assert.deepEqual(board.needsYou.map((each) => each.row.instance), ["bb-waiting"]);
+  // The summary's counts (slice 2b): each row once; a running provider row is running, an idle or unreached one unknown.
+  assert.deepEqual(board.counts, { agents: 8, running: 2, needYou: 1, stopped: 1, unknown: 4 });
+  assert.deepEqual(homeBoard([row("bb-run", { backend: "bb", running: true, runtimeState: "unknown" })]).counts, { agents: 1, running: 1, needYou: 0, stopped: 0, unknown: 0 });
+  assert.deepEqual(homeBoard([row("tmux-odd", { backend: "tmux", running: true, runtimeState: "unknown" })]).counts, { agents: 1, running: 0, needYou: 0, stopped: 0, unknown: 1 });
 });
