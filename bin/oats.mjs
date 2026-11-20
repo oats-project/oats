@@ -2255,7 +2255,8 @@ async function spawnSandboxGate({ local, deploymentDir, discovery, prepared, rem
   const R = sb.SANDBOX_REASONS;
   const soul = prepared.soulEntry?.qualifiedName ?? prepared.soulEntry?.name ?? args[1];
   if (ctx.self !== null) {
-    const seat = providerPairs.find(([, kv]) => typeof kv === "string" && kv.startsWith("identity.seat="));
+    // The last one, as parseProviderFlags reads repeated options: the seat recorded is the seat the provider gets.
+    const seat = providerPairs.findLast(([, kv]) => typeof kv === "string" && kv.startsWith("identity.seat="));
     const bound = flag("expect-decision") !== undefined && flag("expect-decision") !== true && flag("idempotency-key") !== undefined && flag("idempotency-key") !== true;
     const elsewhere = placed !== ctx.self ? Object.assign(new Error(`${soul} is ${placed ? `placed in sandbox ${placed}` : "placed on the host"}, and this deployment runs inside sandbox ${ctx.self}: it spawns only souls placed in ${ctx.self}; nothing was spawned`), { code: "E_SANDBOX_PLACEMENT", details: { reason: R.notPlacedHere, sandbox: ctx.self, placement: placed } }) : null;
     // A bound and keyed apply keeps the spawn's own order (lib/core.mjs, K6e): its key's recovery and its

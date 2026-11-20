@@ -1243,8 +1243,17 @@ fields are the record's table (C4); every answer has the envelope
 `{sandboxApi: 1, act, state, receipts, problem?}`. A hook that exits nonzero,
 is killed at its time limit, or prints anything but one valid answer is read
 as `state: "unknown"` with problem `E_SANDBOX_PROVIDER`, reason
-`hook-failed`. A `stale` answer carries a fresh `plan`, which the kernel
-answers as `E_PLAN_STALE`.
+`hook-failed`. A valid answer that settles an act carries every field of that
+act's row, each a non-empty string: a seat plan's `seat: {id, path}`, a
+`seat`'s `seat: {id, path, alias, certificateId, team}`, and a `bind`'s or a
+`release`'s `seat: {id, certificateId, state}`; one without them is
+`hook-failed` too. A `stale` answer, to a plan or to an act, carries a fresh
+`plan`, which the kernel answers as `E_PLAN_STALE`.
+
+A seat plan's `spawnProvider` options are the seat's: on a routed spawn, a
+caller's own `--provider` pair for the same capability and key is dropped,
+so the sandbox's spawn, its kept request and the home's recorded seat name
+the seat the host took.
 
 **Time limits.** `plan` and `status` are read-only and get 60 s; every other
 act gets 30 minutes (a build). Every act but `plan` and `status` runs under the

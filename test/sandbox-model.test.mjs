@@ -71,10 +71,16 @@ test("C2: sandboxed-team-by-wildcard — the workspace default team, or a patter
   assert.deepEqual(at(validateWorkspace(ws({ souls: { "agents/*": { default: "ingest-team" } } })), "sandboxed-team-by-wildcard"), ["/souls/agents~1*/default"]);
   // A soul's own default is the one way into a sandbox.
   assert.deepEqual(validateWorkspace(ws({ souls: { "agents/ingester": { default: "ingest-team" } } })), []);
+  // By its provider id: another label of the same id is the sandboxed team too.
+  const alias = { teams: { "ingest-alias": { team: ID } } };
+  assert.deepEqual(at(validateWorkspace(ws({ ...alias, defaultTeam: "ingest-alias" })), "sandboxed-team-by-wildcard"), ["/defaultTeam"]);
+  assert.deepEqual(at(validateWorkspace(ws({ ...alias, souls: { "*": { default: "ingest-alias" } } })), "sandboxed-team-by-wildcard"), ["/souls/*/default"]);
 });
 
 test("C2: sandboxed-team-not-default — a soul's teams list names a sandboxed team; \"any\" never includes it", () => {
   assert.deepEqual(at(validateWorkspace(ws({ souls: { "agents/dev": { teams: ["global", "ingest-team"] } } })), "sandboxed-team-not-default"), ["/souls/agents~1dev/teams/1"]);
+  // By its provider id: another label of the same id is the sandboxed team too.
+  assert.deepEqual(at(validateWorkspace(ws({ teams: { "ingest-alias": { team: ID } }, souls: { "agents/dev": { teams: ["global", "ingest-alias"] } } })), "sandboxed-team-not-default"), ["/souls/agents~1dev/teams/1"]);
   const workspace = ws({ souls: { "agents/dev": { teams: "any" } } });
   assert.deepEqual(validateWorkspace(workspace), []);
   const model = teamModel(workspace, {});

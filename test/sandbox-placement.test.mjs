@@ -237,3 +237,16 @@ test("inside a sandbox, a bound and keyed apply keeps the spawn's order: its key
   const unkeyed = refused(spawn("plain", "seat-plain", []), "E_SANDBOX_PLACEMENT", "not-placed-here", "unkeyed");
   assert.equal(unkeyed.details.sandbox, "ingest");
 });
+
+test("inside a sandbox, repeated identity.seat options: the seat recorded is the last, the one the provider gets", (t) => {
+  const fx = sandboxDeployment({ t, souls: { dev: {}, ingester: { soul: { capabilities: { [FAKE_SEAT_CAPABILITY]: { from: "here" } } } } } });
+  hostLocal(fx);
+  ok(fx.cliS(["sync", "--json"]), "sync");
+  fx.writeLocal({ host: { name: "sbx" }, sandbox: { self: "ingest" } });
+  const seats = ["--provider", FAKE_SEAT_CAPABILITY, "identity.seat=/state/seats/old/", "--provider", FAKE_SEAT_CAPABILITY, "identity.seat=/state/seats/new/"];
+  const spawn = (extra) => fx.cli(["spawn", "ingester", "--purpose", "twice", ...seats, ...extra, "--no-launch", "--json"]);
+  const preview = ok(spawn(["--preview"]), "preview");
+  const home = ok(spawn(["--expect-decision", preview.decision.revision, "--idempotency-key", "twice-key"]), "apply");
+  assert.deepEqual(home.placement, { sandbox: "ingest", seatId: "new" });
+  assert.deepEqual(JSON.parse(readFileSync(join(home.home, "instance.json"), "utf8")).placement, { sandbox: "ingest", seatId: "new" });
+});

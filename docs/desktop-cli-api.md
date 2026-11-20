@@ -2506,8 +2506,10 @@ seat, outcome}`, outcome `replayed`, `held-<state>`, `held-unlisted`,
   refused before the hook: `E_WORKSPACE_SCHEMA`, reason `sandbox-unknown`.
 - Every act but `plan` and `status` holds the sandbox's lock, per deployment:
   a second one is `E_LIFECYCLE_BUSY`.
-- A provider answer of `stale` is `E_PLAN_STALE` with the fresh plan in
-  `details.plan`.
+- A provider answer of `stale`, to a plan or to an act, is `E_PLAN_STALE`
+  with the fresh plan in `details.plan`.
+- A D-S1-3 advisory of a `stopped` sandbox that sync starts stays one of
+  sync's `warnings` after the start.
 - `reconcile` runs the provider's act first, then replays each kept routed
   spawn whose seat it reports `delivered`, unchanged, with its spawn key
   (never one `minting` or `mint-uncertain`); one whose seat is `released` is
@@ -2565,7 +2567,7 @@ sandbox, and the facts below), as on the sandbox verbs'.
 | `E_SANDBOX_NOT_HERE` | `not-listed` | a spawn of a soul placed in a sandbox this host does not list (it never falls back to the host), or a start of one |
 | `E_SANDBOX_NOT_HERE` | `not-running` | a spawn into a listed sandbox its provider does not answer `ready` |
 | `E_SANDBOX_HOST_AGENT` | `host-spawn`, `host-session`, `host-home-running`, `host-home-unreadable` | a deployment that lists a sandbox: a host-placed spawn; a session start, restart or resume of a host home (the resume sweep reports it as a refused row); a sandbox start while a host home runs or cannot be read |
-| `E_SANDBOX_PLACEMENT` | `spawn-from-host`, `not-placed-here` | inside a sandbox: a spawn without a host-delivered seat (an `identity.seat` provider option on an apply bound by `--expect-decision` and keyed), or of a soul placed elsewhere. A bound and keyed apply keeps the spawn's order: its key's recovery (a retry answers the home it made, `replayed: true`) and its decision's check (`E_DECISION_STALE`) come first, then `not-placed-here`, before anything is placed |
+| `E_SANDBOX_PLACEMENT` | `spawn-from-host`, `not-placed-here` | inside a sandbox: a spawn without a host-delivered seat (an `identity.seat` provider option on an apply bound by `--expect-decision` and keyed; repeated, the last one, as the provider reads it, is the seat recorded), or of a soul placed elsewhere. A bound and keyed apply keeps the spawn's order: its key's recovery (a retry answers the home it made, `replayed: true`) and its decision's check (`E_DECISION_STALE`) come first, then `not-placed-here`, before anything is placed |
 | `E_SANDBOX_PLACEMENT` | `caller-bound` | on the host: a spawn into a sandbox that brings its own `--expect-decision` or `--idempotency-key` (the Desktop's apply among them). The kernel binds and keys a spawn into a sandbox itself, so nothing is minted, kept or spawned; `details: {reason, sandbox, flags, remedy}`, the remedy also ending the message. Spawn without them (`oats spawn <soul>`), or from a schedule. A `--preview` is answered as before |
 | `E_SANDBOX_TEAM` | `team-not-created` | a start of, or a spawn into, a sandbox whose team has no provider id |
 | `E_SANDBOX_CREDENTIAL` | `no-source`, `missing` | a start of a sandbox with a declared credential the local file does not give, or whose file does not exist |

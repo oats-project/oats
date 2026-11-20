@@ -131,6 +131,16 @@ test("a stale plan is E_PLAN_STALE with the provider's fresh plan", (t) => {
   assert.deepEqual(e.details.plan, fresh);
 });
 
+test("a stale plan answer is E_PLAN_STALE with its fresh plan, as a stale apply's", (t) => {
+  const fx = sandboxDeployment({ t });
+  ok(fx.cliS(["sync", "--json"]), "sync");
+  const fresh = { planRevision: "fresh", actions: [] };
+  fx.sandbox.set({ "plan:start": { state: "stale", plan: fresh } });
+  const e = refused(fx.cliS(["sandbox", "start", "ingest", "--plan", "--json"]), "E_PLAN_STALE", "a stale plan answer");
+  assert.deepEqual(e.details.plan, fresh);
+  assert.equal(e.details.sandbox, "ingest");
+});
+
 /** Start `args` on the CLI in the background → a promise of { status, stdout }. */
 function background(fx, args, env) {
   return new Promise((done) => {

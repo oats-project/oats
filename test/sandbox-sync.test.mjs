@@ -186,6 +186,19 @@ for (const [reason, remedy] of [["ssh-include-missing", SSH_INCLUDE_REMEDY], ["s
     assert.equal(item.remedy, remedy, "the provider's remedy, unchanged");
     assert.equal(item.required, false);
   });
+  test(`D-S1-3: status stopped with ${reason}, then a successful start: the advisory is still sync's warning`, (t) => {
+    const fx = sandboxDeployment({ t });
+    fx.sandbox.set({ status: { state: "stopped", server: "sandbox-ingest", seats: [], problem: { code: "E_SANDBOX_PROVIDER", reason, message: `the provider's ${reason}`, remedy } } });
+    const r = fx.cliS(["sync", "--json"]);
+    assert.equal(r.status, 0, r.stdout);
+    const d = envelope(r);
+    assert.equal(d.result.sandboxes[0].action, "start");
+    assert.equal(d.result.sandboxes[0].state, "ready");
+    assert.deepEqual(d.result.problems, []);
+    const w = (d.warnings || []).find((x) => x.code === `sandbox-${reason}`);
+    assert.ok(w, JSON.stringify(d.warnings));
+    assert.ok(w.message.endsWith(remedy), w.message);
+  });
 }
 
 test("C10: readiness reports the kernel's items and the provider's, and exits 0", (t) => {

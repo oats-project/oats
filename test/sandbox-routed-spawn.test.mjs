@@ -451,3 +451,50 @@ test("the CLI's answer to a caller-bound spawn into a sandbox carries its reason
   assert.deepEqual(acts(fx), [], "no provider act");
   assert.deepEqual(fx.kept(), []);
 });
+
+test("C4: a settled answer without one of its act's seat fields is unknown, hook-failed; a seat plan without seat.path too", async (t) => {
+  const fx = await routed(t);
+  const seat = { id: "s", path: "/srv/seats/s", alias: "ingester-a", certificateId: "c", team: "ingest:example.org" };
+  const bound = { id: "s", certificateId: "c", state: "active" };
+  const instance = { name: "ingester-a", soul: "ingester", spawnKey: "k", decision: D };
+  const without = (o, f) => Object.fromEntries(Object.entries(o).filter(([k]) => k !== f));
+  const cases = [
+    ...Object.keys(seat).map((f) => ["seat", { state: "ready", seat: without(seat, f) }, { planRevision: "r", idempotencyKey: "k", instance }, f]),
+    ...Object.keys(bound).map((f) => ["bind", { state: "ready", seat: without(bound, f) }, { planRevision: "r", idempotencyKey: "k", instance: { name: "ingester-a", spawnKey: "k" }, apply: null }, f]),
+    ...Object.keys(bound).map((f) => ["release", { state: "ready", seat: without({ ...bound, state: "released" }, f) }, { planRevision: "r", idempotencyKey: "k", instance: { name: "ingester-a", seatId: "s" }, reason: "retired" }, f]),
+    ["plan", { state: "ready", planRevision: "r", actions: [], seat: { id: "s" }, spawnProvider: { capability: "fixture.seat", options: {} } }, { target: "seat", instance: { soul: "ingester", spawnKey: "k" } }, "path"],
+  ];
+  for (const [act, answer, extra, missing] of cases) {
+    fx.sandbox.set({ [act === "plan" ? "plan:seat" : act]: answer });
+    const got = await fx.withKernel(async (sb, ctx) => sb.sandboxAct(ctx, await sb.sandboxProvider(ctx), "ingest", act, extra));
+    assert.equal(got.state, "unknown", `${act} without ${missing}: ${JSON.stringify(got)}`);
+    assert.equal(got.problem?.reason, "hook-failed", `${act} without ${missing}`);
+    assert.match(got.problem.message, /without seat/, `${act} without ${missing}`);
+  }
+  // Every field present: the answer stands.
+  fx.sandbox.set({ seat: { state: "ready", seat } });
+  const whole = await fx.withKernel(async (sb, ctx) => sb.sandboxAct(ctx, await sb.sandboxProvider(ctx), "ingest", "seat", { planRevision: "r", idempotencyKey: "k", instance }));
+  assert.equal(whole.state, "ready", JSON.stringify(whole));
+});
+
+test("a caller's own identity.seat never reaches the sandbox: its spawn, the seat acts and the kept request name only the host's seat", async (t) => {
+  const fx = await routed(t);
+  const host = fakeHost(fx);
+  fx.sandbox.set({ bind: { state: "ready", seat: { id: "s", certificateId: "c", state: "delivered" } } });
+  const out = await fx.spawnInto(host, { args: ["ingester", "--purpose", "a", "--provider", "fixture.seat", "identity.seat=/caller/seat/", "--no-launch"] });
+  assert.equal(out.envelope.ok, true, JSON.stringify(out.envelope));
+  const spawnKey = fx.sandbox.calls()[1].request.instance.spawnKey;
+  const seatPath = `/srv/seats/seat-${spawnKey.slice(0, 8)}`;
+  const spawns = host.calls.filter((c) => c.command.includes(" spawn "));
+  assert.equal(spawns.length, 2);
+  for (const c of spawns) {
+    assert.ok(c.command.includes(`--provider fixture.seat identity.seat=${seatPath}`), c.command);
+    assert.doesNotMatch(c.command, /\/caller\/seat/, c.command);
+  }
+  assert.doesNotMatch(JSON.stringify(fx.sandbox.calls()), /\/caller\/seat/, "no seat act sees it");
+  const [kept] = fx.kept();
+  assert.ok(kept, "the bind answered delivered: the request is kept");
+  const record = JSON.parse(readFileSync(join(fx.pendingDir, kept), "utf8"));
+  assert.doesNotMatch(JSON.stringify(record.argv), /\/caller\/seat/);
+  assert.ok(record.argv.includes(`identity.seat=${seatPath}`), JSON.stringify(record.argv));
+});
