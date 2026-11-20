@@ -5,7 +5,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { inputInstanceSession, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
 import { applyUpgrade, planUpgrade } from "../lib/instance-upgrade.mjs";
@@ -273,4 +274,51 @@ test("an upgrade of a provider home starts only from copies the receipt records,
   const journal = join(home, ".oats", "upgrade-receipt.guard-2.json");
   writeFileSync(journal, JSON.stringify({ ...readJson(journal), status: "partial", step: "swap" }));
   await assert.rejects(apply({ planRevision: planned.planRevision, idempotencyKey: "guard-2" }), (e) => e.code === "E_UPGRADE_PARTIAL" && /is not resumed from the journal in its home/.test(e.message));
+});
+
+test("Git over a provider home's trees runs no hook and no file monitor the repository names: at the spawn, in status, at `oats worktree add` and `remove`, and at the retire", async (t) => {
+  const fx = providerDeployment(t);
+  // What an agent that can write its tree's repository could plant: hooks, and a file monitor
+  // command. Each leaves a file named after itself when Git runs it.
+  const marks = join(fx.fake, "git-ran");
+  mkdirSync(marks, { recursive: true });
+  const planted = (name) => `#!/bin/sh\n: > ${JSON.stringify(join(marks, name))}\n`;
+  mkdirSync(join(fx.member, ".git", "hooks"), { recursive: true });
+  for (const hook of ["post-checkout", "reference-transaction", "post-index-change", "pre-auto-gc", "post-merge"]) {
+    writeFileSync(join(fx.member, ".git", "hooks", hook), planted(hook));
+    chmodSync(join(fx.member, ".git", "hooks", hook), 0o755);
+  }
+  const monitor = join(fx.fake, "file-monitor");
+  writeFileSync(monitor, planted("fsmonitor"));
+  chmodSync(monitor, 0o755);
+  git(fx.member, "config", "core.fsmonitor", monitor);
+  const ran = () => readdirSync(marks).sort();
+  const forget = () => { for (const name of readdirSync(marks)) rmSync(join(marks, name)); };
+  // The plants are live: a plain Git in the clone runs them.
+  execFileSync("git", ["-C", fx.member, "status", "--porcelain"], { env: fx.env, stdio: "ignore" });
+  execFileSync("git", ["-C", fx.member, "update-ref", "refs/heads/planted-probe", "HEAD"], { env: fx.env, stdio: "ignore" });
+  for (const plant of ["fsmonitor", "reference-transaction"]) assert.ok(ran().includes(plant), `a plain git runs the planted ${plant}`);
+  forget();
+  // The spawn makes the home's tree (a checkout: post-checkout, reference-transaction).
+  const { home } = await fx.launch("planted", { work: "worktree" });
+  assert.equal(existsSync(join(home, "work", ".git")), true);
+  assert.deepEqual(ran(), [], "the spawn");
+  // Reads: status, and the instance's git read.
+  assert.equal(rowOf(fx, "planted").running, true);
+  fx.cli(["instance", "git", "planted", "--json"]);
+  assert.deepEqual(ran(), [], "status and the git read");
+  // An extra tree, made and removed from the home.
+  const inHome = { cwd: home, env: { OATS_INSTANCE_HOME: home } };
+  const added = fx.cli(["worktree", "add", "--purpose", "extra", "--branch", "agents/planted-extra", "--base", "main", "--json"], inHome).json();
+  assert.equal(added.ok, true, JSON.stringify(added));
+  assert.equal(existsSync(join(home, ".work-extra", ".git")), true);
+  assert.deepEqual(ran(), [], "oats worktree add");
+  const removed = fx.cli(["worktree", "remove", "--purpose", "extra", "--json"], inHome).json();
+  assert.equal(removed.ok, true, JSON.stringify(removed));
+  assert.deepEqual(ran(), [], "oats worktree remove");
+  // The retire: the session is stopped, and the tree is read, then moved or removed.
+  const retired = JSON.parse(fx.cli(["retire", "planted", "--json"]).stdout);
+  assert.equal(retired.retired, "planted", JSON.stringify(retired));
+  assert.equal(existsSync(home), false);
+  assert.deepEqual(ran(), [], "the retire");
 });
