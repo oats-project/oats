@@ -19,8 +19,8 @@
 //
 // Deterministic: the schedules are enumerated, shuffled by a seed and cut to a sample, so a run
 // in the suite takes seconds. EVERY schedule runs with `npm run test:provider-lifecycle`, which
-// pull-request CI does on every push, as a job of its own. A failure prints the seed and the
-// schedule's steps.
+// pull-request CI does for a change that touches the lifecycle (scripts/provider-lifecycle-changed.mjs)
+// and a nightly run does on main. A failure prints the seed and the schedule's steps.
 //   OATS_EXPLORER_SEED=<n>    another sample           OATS_EXPLORER_COUNT=<n>|all   its size
 //   OATS_EXPLORER_ONLY="<a> | <seam> | <b>"            one schedule, as a failure prints it
 // What it does NOT enumerate, and the tables pin instead: two LIVE commands side by side (a verb

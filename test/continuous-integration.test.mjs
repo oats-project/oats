@@ -43,7 +43,11 @@ test("direct main pushes retain the same read-only CI gates as pull requests", (
   // gate must test each needed job's result itself, or that job's failure passes the gate.
   const checks = gate.steps.flatMap((step) => (step.run ?? "").split("\n").map((line) => line.trim()));
   for (const job of gate.needs) {
-    assert.ok(checks.includes(`test "\${{ needs.${job}.result }}" = success`), `the gate must fail when ${job} did not succeed`);
+    // (One job may also be skipped: every schedule of the session-provider lifecycle, which runs
+    // for a change that touches it. A failure or a cancellation of it still fails the gate.)
+    const mustSucceed = `test "\${{ needs.${job}.result }}" = success`;
+    const wanted = job === "provider-lifecycle" ? `${mustSucceed} || test "\${{ needs.${job}.result }}" = skipped` : mustSucceed;
+    assert.ok(checks.includes(wanted), `the gate must fail when ${job} did not succeed`);
   }
 });
 
@@ -123,23 +127,66 @@ test("pull-request CI runs the Desktop suite with only packages/desktop installe
   assert.equal(pullRequest.on.pull_request["paths-ignore"], undefined);
 });
 
-test("pull-request CI runs every schedule of the session-provider lifecycle on every push, and the gate requires it", () => {
+test("pull-request CI runs every schedule of the session-provider lifecycle for a change that touches it, a nightly run does on main, and the gate requires the job", async () => {
   const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
   const workflow = parseConfigData(read(".github/workflows/pull-request.yml")).value;
-  // The shards run a seeded sample of the explorer's schedules (test/session-provider-explorer.test.mjs);
-  // this job runs them all. It is one command, the one a developer runs locally.
+  // The shards run a seeded sample of the explorer's schedules (test/session-provider-explorer.test.mjs)
+  // on every change; this job runs them all, by one command, the one a developer runs locally.
   const job = workflow.jobs["provider-lifecycle"];
-  assert.ok(job, "pull-request CI must run every schedule of the session-provider lifecycle");
+  assert.ok(job, "pull-request CI must have the job that runs every schedule of the session-provider lifecycle");
   const commands = job.steps.filter((step) => step.run).map((step) => step.run.trim());
-  assert.deepEqual(commands, ["npm ci", "npm run test:provider-lifecycle"]);
+  assert.deepEqual(commands, ["node scripts/provider-lifecycle-changed.mjs", "npm ci", "npm run test:provider-lifecycle"]);
   assert.equal(JSON.parse(read("package.json")).scripts["test:provider-lifecycle"], "node scripts/test-provider-lifecycle.mjs");
   assert.match(read("scripts/test-provider-lifecycle.mjs"), /OATS_EXPLORER_COUNT: "all"/, "the script asks for every schedule");
-  // A red run must stay red: nothing skips the job or a step, and no failure is tolerated.
-  for (const part of [job, ...job.steps]) {
-    assert.equal(part.if, undefined, "no condition may skip the job or one of its steps");
-    assert.equal(part["continue-on-error"], undefined, "no failure may be tolerated");
-  }
+  // The job always runs, and decides in a step of its own whether the change touches the
+  // lifecycle: a job skipped as a whole would leave the gate nothing to wait on. Only the two
+  // steps after that decision are conditional, on its answer and nothing else, and no failure
+  // is tolerated: a red run stays red.
+  const decision = job.steps.find((step) => step.id === "changes");
+  assert.deepEqual([job.if, decision.if, { ...decision.env }], [undefined, undefined, { BASE_SHA: "${{ github.event.pull_request.base.sha || github.event.before }}", HEAD_SHA: "${{ github.sha }}" }]);
+  assert.deepEqual(job.steps.filter((step) => step.if !== undefined).map((step) => [step.run, step.if]), [["npm ci", "steps.changes.outputs.run == 'true'"], ["npm run test:provider-lifecycle", "steps.changes.outputs.run == 'true'"]]);
+  assert.equal(job.steps.find((step) => step.uses?.startsWith("actions/checkout")).with["fetch-depth"], 0, "the decision compares with the base: it needs the history");
+  for (const part of [job, ...job.steps]) assert.equal(part["continue-on-error"], undefined, "no failure may be tolerated");
   assert.ok(workflow.jobs.gate.needs.includes("provider-lifecycle"));
+
+  // What counts as touching the lifecycle, and what the decision answers when it cannot tell.
+  const { LIFECYCLE_FILES, decide, touchesLifecycle } = await import("../scripts/provider-lifecycle-changed.mjs");
+  // The list the release lane decided (every schedule is required for a change to any of these)…
+  for (const file of ["lib/core.mjs", "lib/session-providers.mjs", "lib/session-inspect.mjs", "lib/session-resume.mjs", "lib/session-end.mjs", "lib/provider-call-child.mjs", "lib/provider-resume.mjs", "lib/provider-test-seams.mjs",
+    "lib/instance-lifecycle.mjs", "lib/retire-admission.mjs", "lib/hook-env.mjs", "test/session-provider-explorer.test.mjs", "test/session-provider-lifecycle.test.mjs", "test/session-providers.test.mjs",
+    "test/helpers/session-provider-fixture.mjs", "test/helpers/session-provider-verb.mjs", "scripts/test-provider-lifecycle.mjs", "docs/design/2026-11-20-provider-home-lifecycle.md", ".github/workflows/pull-request.yml"]) {
+    assert.equal(touchesLifecycle([file]), true, file);
+  }
+  // …widened by what the explorer's invariants also stand on: the CLI its verbs run through, the
+  // status rows, process liveness and process groups, the fixtures' deployment, and what decides and runs this.
+  for (const file of ["bin/oats.mjs", "lib/instance-listing.mjs", "lib/worktree-hooks.mjs", "lib/process-group.mjs", "packages/record/lib/process-identity.mjs", "test/helpers/v2-deployment.mjs",
+    "scripts/provider-lifecycle-changed.mjs", ".github/workflows/provider-lifecycle-nightly.yml"]) {
+    assert.equal(touchesLifecycle([file]), true, file);
+  }
+  for (const file of ["lib/servers.mjs", "lib/sessions.mjs", "lib/providers.mjs", "docs/capabilities.md", "packages/desktop/src/app.mjs", "test/session-restart.test.mjs", "test/helpers/fixtures.mjs", "lib/session-x/y.mjs"]) assert.equal(touchesLifecycle([file]), false, file);
+  for (const file of LIFECYCLE_FILES) assert.doesNotThrow(() => read(file), `${file} is a file of this repository`);
+  const changed = (files) => () => files;
+  assert.equal(decide({ base: "a", head: "b", changed: changed(["docs/capabilities.md", "lib/core.mjs"]) }).run, true);
+  assert.equal(decide({ base: "a", head: "b", changed: changed(["docs/capabilities.md"]) }).run, false);
+  assert.equal(decide({ base: "a", head: "b", changed: changed([]) }).run, false);
+  // No base (a new branch's first push), or a change that cannot be listed: every schedule runs.
+  assert.equal(decide({ base: "0000000000000000000000000000000000000000", head: "b", changed: changed([]) }).run, true);
+  assert.equal(decide({ base: undefined, head: "b", changed: changed([]) }).run, true);
+  assert.equal(decide({ base: "a", head: "b", changed: () => { throw new Error("bad revision"); } }).run, true);
+
+  // Every night on main, with no condition at all: what sees a change elsewhere that breaks an ordering.
+  const nightly = parseConfigData(read(".github/workflows/provider-lifecycle-nightly.yml")).value;
+  assert.ok(Array.isArray(nightly.on.schedule) && typeof nightly.on.schedule[0].cron === "string", "it runs on a schedule");
+  assert.deepEqual({ ...nightly.permissions }, { contents: "read", issues: "write" });
+  const every = nightly.jobs["provider-lifecycle"];
+  const runs = every.steps.filter((step) => step.run);
+  assert.deepEqual(runs.slice(0, 2).map((step) => step.run.trim()), ["npm ci", "npm run test:provider-lifecycle"]);
+  // It fails loudly: the run is red (nothing is tolerated, nothing skips the schedules), and its last
+  // step, on a failure only, opens an issue or adds to the open one.
+  assert.equal(every.if, undefined);
+  for (const part of [every, ...every.steps]) assert.equal(part["continue-on-error"], undefined);
+  assert.deepEqual(every.steps.map((step) => step.if).filter((condition) => condition !== undefined), ["failure()"]);
+  assert.deepEqual([runs.length, runs[2].if, /gh issue create/.test(runs[2].run), /gh issue comment/.test(runs[2].run)], [3, "failure()", true, true]);
 });
 
 test("pull-request CI runs the suites that followed a session variable with every one poisoned, and the gate requires it", () => {

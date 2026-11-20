@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // `npm run test:provider-lifecycle`: every schedule of the session-provider lifecycle's explorer
 // (test/session-provider-explorer.test.mjs), where `npm test` runs a seeded sample of them.
-// Pull-request CI runs this on every push, as a job of its own: the full enumeration takes minutes,
-// and a sample is what would let the next ordering through.
+// Pull-request CI runs this, as a job of its own, for a change that touches the lifecycle
+// (scripts/provider-lifecycle-changed.mjs), and a nightly run does on main: the full enumeration
+// takes minutes, and a sample is what would let the next ordering through.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
