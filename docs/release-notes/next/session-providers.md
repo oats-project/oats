@@ -8,6 +8,9 @@
   --backend <name>` (a schedule's `backend`, a trigger's `spawn.backend`)
   runs the instance there. OATS keeps the home, the records, the lifecycle
   and the answers.
+  - **The session-provider wire is experimental**: it is not stable until
+    the follow-up change (sandbox allowances and wire 1.3), and no released
+    provider speaks it.
   - A provider home records `backend` and `session: {provider, endpoint}`.
     Its status row carries `backend`, `session: {provider}` and `open` (a
     link to show instead of a terminal), and on its own host the endpoint's
