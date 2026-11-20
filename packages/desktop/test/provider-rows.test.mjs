@@ -125,7 +125,7 @@ function fixture(t) {
     rosterState: { hasData: true, state: "ready" }, rosterStale: false, contextDeploymentNote: null,
     currentWorkspace: () => "A", workspaceGeneration: () => 0, collapsedInstances: new Set(),
     spawnJobs: { rows: () => [], announce: () => false, check() {} },
-    tabs: new Map(), activeTab: null, tabOpenIntents: { applyFocus: f => f(), invalidate() {} },
+    tabs: new Map(), activeTab: null, tabOpenIntents: { applyFocus: f => f(), invalidate: () => calls.push(["invalidate"]) },
     openTerminalTab: (row, options) => calls.push(["terminal", row.instance, options?.inSplit === true]), openInstanceStart: row => calls.push(["start", row.instance]),
     openLifecycleDialog: assert.fail, onRosterRowKey() {},
     ctx: { openExternal: url => calls.push(["external", url]) },
@@ -150,7 +150,7 @@ function fixture(t) {
   return { dom, doc, calls, render, row, menu, item, choose };
 }
 
-test("a provider row that runs: drawn as running, its activation opens nothing and its title and description say where it runs", t => {
+test("a provider row that runs: drawn as running; its activation opens nothing, supersedes any open under way and says where it runs in the hint line; its title and description say it too", t => {
   const u = fixture(t);
   u.render([bb("bb-run", { model: "opus" }), local("tmux-run")]);
   const row = u.row("bb-run");
@@ -160,7 +160,13 @@ test("a provider row that runs: drawn as running, its activation opens nothing a
   assert.equal(row.title, `${SENTENCE}\nRepository: desktop-repo · Branch: b/bb-run · Claude · opus · bb · thread thr_x`);
   assert.equal(row.getAttribute("aria-description"), SENTENCE);
   row.click();
-  assert.deepEqual(u.calls, [], "no terminal, no Start…, nothing said elsewhere");
+  assert.deepEqual(u.calls, [["invalidate"], ["say", SENTENCE]], "said in the hint line (never an alert); no terminal, no Start…");
+  // A held one, and one of another machine the kernel does not report addressable, say their own reason: nothing here.
+  u.calls.length = 0;
+  u.render([bb("bb-held", { rollbackIncomplete: true }), bb("bb-far", { server: "build", addressable: false })]);
+  u.row("bb-held").click(); u.row("bb-far").click();
+  assert.deepEqual(u.calls, []);
+  u.render([bb("bb-run", { model: "opus" }), local("tmux-run")]);
   // The tmux row beside it opens its terminal, as before.
   assert.equal(u.row("tmux-run").hasAttribute("aria-disabled"), false);
   u.row("tmux-run").click();

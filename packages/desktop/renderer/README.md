@@ -2321,9 +2321,11 @@ home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
 `sessionLine`):
 
 - **The row** is drawn in the state the kernel reports. One that runs can't be
-  opened: it is `aria-disabled`, as a row of unknown state is, its activation does
-  nothing, and its title and description say the sentence (after its own reason,
-  for one of unknown state). A stopped one opens Start…, as any row.
+  opened: it is `aria-disabled`, as a row of unknown state is. Its activation (a
+  click, Enter) opens nothing, supersedes any open under way and says the sentence
+  in the hint's line (announced, never an alert); its title and description say it
+  too (after its own reason, for one of unknown state, whose activation says
+  nothing, as before). A stopped one opens Start…, as any row.
 - **Its context menu** offers the link first, under the provider's label (one
   display line), and opens it in the system browser through the window's own
   handler (`ctx.openExternal`; main opens `http` and `https` only). Open in split

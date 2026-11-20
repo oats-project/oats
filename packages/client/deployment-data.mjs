@@ -223,7 +223,10 @@ export function deploymentStatusData(document, deployment) {
       // reads as it always did. Of `session` the
       // row keeps the provider's capability and, on this machine's rows, the thread id (`session.threadId`), both
       // for display only; of `open` the link a client may show in place of a terminal (`openLink`: an http(s) url).
-      if (own(instance, 'backend') && text(instance.backend) && instance.backend.length > 0 && instance.backend !== 'herdr') row.backend = instance.backend;
+      // A value this reader's text check refuses (over-long, or with a NUL) is not carried, and still is no tmux's:
+      // the row then names the contract's reserved word for any provider, which is never a provider's name.
+      if (own(instance, 'backend') && typeof instance.backend === 'string' && instance.backend.length > 0 && instance.backend !== 'herdr')
+        row.backend = text(instance.backend) ? instance.backend : 'session-provider';
       if (own(instance, 'session') && record(instance.session)) {
         const provider = instance.session.provider, threadId = sessionThreadId(instance);
         const session = { ...(text(provider) && provider.length > 0 && provider.length <= 200 ? { provider } : {}), ...(threadId !== null ? { threadId } : {}) };

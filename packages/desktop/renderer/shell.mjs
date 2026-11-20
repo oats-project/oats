@@ -1419,6 +1419,10 @@ function renderContextRoster(instances) {
             if (again) setRovingRow(listEl, again);
             return;
           }
+          // A provider row that runs has no terminal: its activation says where it runs (the hint's line, announced,
+          // never an alert), supersedes any open under way, and opens nothing. A home the kernel holds, or a row it
+          // does not report addressable, says its own reason, as any row.
+          if (elsewhere && i.running === true && !held && canAddressRemote(i)) { tabOpenIntents.invalidate(); sayInHint(elsewhere.sentence); return; }
           if (staleStart || unavailable || held) return; spawnJobs.seen?.(ws, i); i.running ? openTerminalTab(i) : openInstanceStart(i);
         });
         // full keyboard tree operability (roving tabindex; policy in

@@ -284,13 +284,14 @@ test("a later Edit wins: an inspection answered after another row's Edit opens n
 });
 
 test("an Edit still reading its soul's inspection opens nothing once the list changes under it: a Delete asked, a removal, a workspace switch; whether the read answers or fails", async () => {
-  for (const outcome of ["answers", "fails"]) for (const meanwhile of ["delete asked", "removed", "workspace switched"]) {
+  for (const outcome of ["answers", "fails"]) for (const meanwhile of ["delete asked", "removed", "workspace switched", "list refreshed"]) {
     let release; const held = new Promise((resolve, reject) => { release = () => (outcome === "answers" ? resolve({ operationsApi: 2, sessionProviders: [{ name: "bb" }] }) : reject(new Error("inspect failed"))); });
     const s = setup({ read: async () => ({ schedules: [providerSchedule], scheduler: { installed: true, active: true, registered: true } }),
       mutate: async (path) => (path.startsWith("/api/capabilities") ? held : { removed: true }) });
     try {
       await tick(); s.rowAction("bb-review", "edit").click(); await tick();
       if (meanwhile === "workspace switched") setWorkspace("/elsewhere");
+      else if (meanwhile === "list refreshed") { s.el.querySelector('button[aria-label="Refresh schedules"]').click(); await tick(); await tick(); }
       else {
         s.rowAction("bb-review", "remove").click(); await tick();
         assert.equal(s.el.querySelector(".schedule-delete-sheet").hidden, false, "the confirmation is up");

@@ -66,6 +66,17 @@ test("deployment-data validates the three fields and never refuses the roster fo
   assert.deepEqual(openAct(herdr), { verb: "open", enabled: true, reason: null });
   // Present, text and not "tmux": the row is a provider's (never asked of tmux), also when it is no name the contract allows.
   assert.deepEqual([by.b1.backend, by.b4.backend], ["Not A Name", "-bb"]);
+  // A value the reader cannot carry (over-long, or with a NUL) is no tmux's either: the row names the reserved word
+  // for any provider, is never asked of tmux and keeps the kernel's fields, through the collector and the panel.
+  const odd = [bbRow("u1", { backend: "b".repeat(8193) }), bbRow("u2", { backend: "bb\0x" }), { instance: "dev-t", home: home("dev-t"), running: true, tmux: { session: "oats", window: "dev-t", socket: "/s" } }];
+  const oddRows = rosterRows(deploymentStatusData(statusOf(odd), "/d"), { ok: true, features: [] });
+  assert.deepEqual(oddRows.map((row) => row.backend), ["session-provider", "session-provider", undefined]);
+  const asked = [], oddPrinted = JSON.stringify(observeLiveness(JSON.parse(JSON.stringify(livenessInput(oddRows))), { tmuxReader: (row) => { asked.push(row.instance); return { tmux: row.tmux, running: false, runtimeState: "stopped" }; } }));
+  assert.deepEqual(asked, ["dev-t"]);
+  for (const row of panelInstances(oddRows, livenessAnswers(oddRows, oddPrinted)).filter((each) => each.instance !== "dev-t")) {
+    assert.deepEqual([row.running, row.runtimeState, row.tmux], [true, "unknown", null], row.instance);
+    assert.equal(openAct({ ...row, open: undefined }).reason.sentence, "Runs outside tmux; it has no terminal to open.", row.instance);
+  }
   for (const name of ["b1", "b4"]) {
     assert.equal(sessionProvider(by[name]), by[name].backend, name);
     assert.deepEqual(openAct({ ...by[name], open: undefined }), { verb: "open", enabled: false, reason: { code: "no-terminal", sentence: "Runs outside tmux; it has no terminal to open." } }, `${name}: its text is in no sentence`);

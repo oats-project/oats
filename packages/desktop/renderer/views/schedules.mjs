@@ -194,7 +194,8 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   /** Edit a local schedule from its list row: the stored definition, if this editor can preserve it.
    * Its backend is kept when the kernel lists it: its own (the probe's `sessionBackends`), or a session provider
    * of the schedule's soul, read from that soul's inspection when the schedule names one (one read, under a
-   * latest-intent ticket: a later Edit, a form opened meanwhile, a change to the list begun or a Delete asked
+   * latest-intent ticket: a later Edit, a form opened meanwhile, a change to the list begun, a read of the list
+   * begun (Refresh: the definition held here may be an old one) or a Delete asked
    * meanwhile, a workspace switch or a closed page drops it, whether the read answers or fails).
    * A read that fails lists no provider, so the schedule is refused as one this editor cannot keep. */
   async function editRow(row) {
@@ -326,6 +327,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   };
   const page = mountAutomationsPage(q(".schedule-stage"), ctx, "schedule", call => (automations = call, {
     read: async () => {
+      ++editRequest; // a read of the list that starts: an Edit still reading its soul's inspection holds the old definition, and opens nothing
       try { const list = await call({ kind: "schedule", action: "list" }); readOk = true; return list; }
       catch (error) { readOk = false; throw error; }
       finally { render(); }

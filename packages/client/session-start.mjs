@@ -21,7 +21,7 @@ import { retainedSpawnDetails } from './launch-prompt-outcome.mjs';
 import { answeringFeatures, busyHolder } from './lifecycle-contract.mjs';
 import { displayLine } from './display-text.mjs';
 import { requireTerms } from './client-terms.mjs';
-import { sessionProvider } from './instance-presentation.mjs';
+import { sessionProviderName } from './instance-presentation.mjs';
 
 /** The gate is page-safe and lives apart (start-gate.mjs); a client takes it from here, with the rest of the rule. */
 export { startGate };
@@ -94,23 +94,24 @@ const START_REUSED = Object.freeze(['new', 'pane', 'adopted']);
 /** Whether `v` is the receipt of a completed start or restart of `row`, as the kernel answers one
  * (docs/desktop-cli-api.md, `oats session start`: `{instance, agent, home, harness, backend, model, launchConfig,
  * yolo, target, startedAt, restartCount, reused, warnings}`): the row's instance, in the row's home (the kernel
- * answers with its real path: `canonical`, the verified local home), on the row's backend, and the other fields a
- * start always carries. The backend is one of two:
- *   tmux                 a row that runs in tmux, with its target (`{backend, session, window, socket}`, more keys allowed)
- *   a session provider   a row on one (instance-presentation.mjs `sessionProvider`), answered with that provider's name
- *                        as `backend`, `session: {provider, endpoint?}` and no terminal target (`target` null or absent).
+ * answers with its real path: `canonical`, the verified local home), on the backend the receipt itself names, and
+ * the other fields a start always carries. What was started is what the receipt says, not what the row read before
+ * the start said: a home's backend can move at a start. The receipt's `backend` picks its shape:
+ *   "tmux"               with its target (`{backend, session, window, socket}`, more keys allowed)
+ *   a session provider   (instance-presentation.mjs `sessionProviderName`) with `session: {provider, endpoint?}` and
+ *                        no terminal target (`target` null or absent).
  *                        A start on this machine carries the endpoint, an object; a routed one (`--server`) carries the
  *                        provider alone, the endpoint never leaving its host: required here, refused there
- * A receipt on the other backend than the row's is not this row's. Read where the CLI is newer than this client was
- * tested with, so a format it does not know is not taken for one. */
+ * A receipt that names no backend, or anything else, is no receipt this client knows. Read where the CLI is newer
+ * than this client was tested with, so a format it does not know is not taken for one. */
 function startReceipt(v, row, canonical) {
   const record = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
   const text = (x) => typeof x === 'string' && x.length > 0;
-  const provider = sessionProvider(row), routed = !!row.server;
-  const session = (x) => (provider === null
-    ? x.backend === 'tmux' && record(x.target) && x.target.backend === 'tmux' && text(x.target.session) && text(x.target.window)
+  const routed = !!row.server;
+  const session = (x) => (x.backend === 'tmux'
+    ? record(x.target) && x.target.backend === 'tmux' && text(x.target.session) && text(x.target.window)
       && text(x.target.socket) && x.target.socket.startsWith('/')
-    : x.backend === provider && (x.target === null || x.target === undefined) && record(x.session) && text(x.session.provider)
+    : sessionProviderName(x.backend) && (x.target === null || x.target === undefined) && record(x.session) && text(x.session.provider)
       && (routed ? x.session.endpoint === undefined : record(x.session.endpoint)));
   return record(v) && v.instance === row.instance && text(v.home) && (v.home === row.home || (canonical !== null && v.home === canonical))
     && text(v.agent) && text(v.harness) && text(v.startedAt) && session(v)
