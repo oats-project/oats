@@ -19,7 +19,7 @@
 // roster's line is the shipped words with no chord bound. The relations in words (D26: no drawn lines) are pure too.
 // Feature instance-pin: the pin's order and mark are pure and shared the same way; a suite about other behaviour runs
 // without the feature (`pinsShown`), so nothing moves and no mark is drawn, and its row menu offers no pin item.
-// instance-pin-menu.test.mjs turns the feature on. The palette's Instance: Pin to top / Unpin carry their real labels
+// instance-pin-menu.test.mjs turns the feature on. The palette's Agent: Pin to top / Unpin carry their real labels
 // (PIN_LABELS) and offer themselves for no target here (pinTargetOffer, asked of the palette's own target, which is
 // none: paletteTargetId), so a suite that builds the palette lists neither.
 import { deploymentState, rosterSections, rowStale, splitByDeployment, rosterSectionKey, sidebarSections, isMultiDeployment } from "../../../client/roster-sections.mjs";

@@ -2768,7 +2768,8 @@ const palette = createPalette({
     { label: "Instance: name and colour…", detail: chordDetail("instance.edit"),
       run: () => { takePickerFocusReturn(document)?.restore(); openInstanceEdit(paletteTargetId); } },
     // Pin to top / Unpin (feature instance-pin): listed only where the leader's target offers it, as its row menu does.
-    ...Object.entries(PIN_LABELS).map(([action, label]) => ({ label: `Instance: ${label}`,
+    // Named with D3's noun ("Agent: Pin to top"), from DESKTOP_NOUNS, as the slice 4 palette's own rows are.
+    ...Object.entries(PIN_LABELS).map(([action, label]) => ({ label: `${DESKTOP_NOUNS.instance[0].toUpperCase()}${DESKTOP_NOUNS.instance.slice(1)}: ${label}`,
       when: () => pinTargetOffer(paletteTargetId) === action,
       run: () => { takePickerFocusReturn(document)?.restore(); runPinCommand(paletteTargetId, action); } })),
     { label: "Sidebar: toggle (hide/show)", detail: chordDetail("sidebar.toggle"), run: () => toggleSidebar() },

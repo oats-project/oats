@@ -1290,8 +1290,8 @@ starts, opens, takes input and retires as any other.
 - **Pinning.** A row's context menu offers **Pin to top**, or **Unpin** on a
   pinned instance, which runs `oats instance pin <name> on|off`. Each is an
   act at once, with no dialog. The row moves when the roster is next read,
-  right after the change. The command palette offers **Instance: Pin to
-  top** or **Instance: Unpin** for the instance the leader keys act on. An
+  right after the change. The command palette offers **Agent: Pin to
+  top** or **Agent: Unpin** for the instance the leader keys act on. An
   instance that is held (spawning, or being retired) offers neither.
 - **Shared.** The pin is kept in the instance's home, so everyone who views
   that machine sees the same pins, in the Desktop, the TUI and another

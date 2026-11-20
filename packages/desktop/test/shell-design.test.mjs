@@ -68,7 +68,7 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
     registerAction(action) { const off = registerAction(action); offs.push(off); return off; }, runAction,
     // The palette action notes the leader's target as it opens (the instance entries act on it).
     palette: { toggle: () => events.push(["palette"]), isOpen: () => false, close() {}, open: () => events.push(["quickOpen"]) }, leaderTargetId: () => null,
-    // Instance: Pin to top / Unpin (instance-pin-menu.mjs): their real labels, offered for no target here.
+    // Agent: Pin to top / Unpin (instance-pin-menu.mjs): their real labels, offered for no target here.
     PIN_LABELS, pinTargetOffer: () => null, runPinCommand: async () => {},
     // Quick Open folded into the palette (slice 4): New agent opens the palette on its souls (palette.open, above).
     shortcutsEditor: { close() {}, open: () => events.push(["shortcuts"]) },

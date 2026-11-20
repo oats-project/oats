@@ -918,6 +918,14 @@ rebound to an arrow.
   own notification; there is no command to put on a key.
 - `i`, and the Souls and Capabilities views' own keys: those views keep their
   local keys.
+- `p` (the TUI's pin, #1974: pin or unpin the selected agent, as `oats
+  instance pin <name> on|off`; TUI-only, so not in the shared `PLAIN_KEYS`):
+  the Desktop binds nothing on `p`, in the sidebar, after the leader or
+  anywhere else. The row's context menu (**Pin to top** / **Unpin**) and the
+  palette's **Agent: Pin to top** / **Agent: Unpin** pin there. A sidebar `p`
+  would collide with nothing (the tree's own letters are `k` `j` `g` `G` `h`
+  `l`); in a terminal, plain `p` is the program's, so the leader's table
+  leaves it free too.
 
 ### The list of workspaces
 
