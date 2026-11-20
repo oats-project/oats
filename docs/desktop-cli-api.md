@@ -2497,7 +2497,7 @@ oats sandbox start|stop|reconcile <name> (--plan | --plan-revision <r> --idempot
 sandbox, act, state, server, receipts: [{step, ok, detail?}], problems}`;
 `reconcile` adds `seats` (as in status) and `replays` (`{spawnKey, instance,
 seat, outcome}`, outcome `replayed`, `held-<state>`, `held-unlisted`,
-`held-unsent`, `deleted-<state>` or `no-ledger-entry`). An apply whose `state` is `failed` or `unknown` exits 1.
+`held-unsent`, `held-in-flight`, `deleted-<state>` or `no-ledger-entry`). An apply whose `state` is `failed` or `unknown` exits 1.
 
 - A start records the sandbox as started before its act runs; a stop
   answered `stopped` or `absent` drops it. `absent` is never a failure.
@@ -2516,6 +2516,16 @@ seat, outcome}`, outcome `replayed`, `held-<state>`, `held-unlisted`,
   deleted. A kept spawn for a sandbox this host no longer lists is never
   replayed (`held-unlisted`), nor one the provider's ledger does not hold
   (`no-ledger-entry`): readiness reports both.
+- A kept request whose routed spawn is still in flight is never replayed,
+  bound or deleted by anyone else: the spawn holds the request's lock
+  (`~/.oats/remote/<server>/pending.locks/<spawnKey>.lock`) from keeping it
+  until its bind has settled it, and a reconcile that finds the lock held
+  reports the request `held-in-flight` and does nothing to it. A spawn that
+  was killed or crashed leaves its lock, which the next reconcile takes over:
+  the request is replayable again. The kept apply names the instance the
+  preview showed (`--name`, in place of `--purpose` or `--suggest-name`;
+  the decision is unchanged), so a replay meets that instance's own keyed
+  home, or `E_PLACEMENT_TAKEN`, never the next number.
 - The sandbox's kernel is checked for the routed floor (`sandboxes`,
   `spawn-task-stdin`, `spawn-preview-2`, `spawn-apply-2`,
   `spawn-idempotency-2`) on the probe that sends each preview, apply and

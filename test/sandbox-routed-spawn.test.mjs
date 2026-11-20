@@ -520,3 +520,64 @@ test("C4: with a request kept, a reconcile that leaves out its seats is no empty
   assert.deepEqual(fx.kept(), [`${spawnKey}.json`], "kept");
   assert.equal(host.calls.filter((c) => c.command.includes(" spawn ")).length, 0, "no replay");
 });
+
+/** A process that holds kept request `spawnKey`'s in-flight lock, as a routed spawn between its seat and
+ *  its bind does → { kill() → a promise of its exit }. */
+async function inFlightHolder(fx, spawnKey) {
+  const { spawn } = await import("node:child_process");
+  const { dirname } = await import("node:path");
+  const lock = join(dirname(fx.pendingDir), "pending.locks", `${spawnKey}.lock`);
+  mkdirSync(dirname(lock), { recursive: true, mode: 0o700 });
+  const lib = new URL("../lib/dir-lock.mjs", import.meta.url).href;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", `import { acquireDirLock } from ${JSON.stringify(lib)}; acquireDirLock(${JSON.stringify(lock)}, { what: "a spawn in flight" }); console.log("held"); setInterval(() => {}, 1000);`], { stdio: ["ignore", "pipe", "inherit"] });
+  await new Promise((done, failed) => { child.stdout.on("data", (b) => { if (String(b).includes("held")) done(); }); child.on("exit", () => failed(new Error("the holder exited"))); });
+  return { kill: () => new Promise((done) => { child.once("exit", done); child.kill("SIGKILL"); }) };
+}
+const delivered = (seatId) => ({ reconcile: { state: "ready", server: "sandbox-ingest", seats: [{ seatId, state: "delivered" }] } });
+
+test("a reconcile while a routed spawn sits between seat and bind: the request is held-in-flight, never replayed, and nothing binds it but its spawn; the apply names the previewed instance", async (t) => {
+  const fx = await routed(t);
+  let concurrent = null;
+  const host = fakeHost(fx, { apply: () => {
+    // The spawn's apply is running: its seat delivered, its bind not yet made. Another oats reconciles.
+    const spawnKey = fx.sandbox.calls().find((x) => x.act === "plan" && x.request.target === "seat").request.instance.spawnKey;
+    fx.sandbox.set(delivered(`seat-${spawnKey.slice(0, 8)}`));
+    concurrent = fx.cliS(["sandbox", "reconcile", "ingest", "--plan-revision", "rev-reconcile", "--idempotency-key", "rk-concurrent", "--json"], fx.sandboxEnv);
+    return "ok";
+  } });
+  const out = await fx.spawnInto(host);
+  assert.equal(out.envelope.ok, true, JSON.stringify(out.envelope));
+  assert.equal(concurrent.status, 0, concurrent.stdout);
+  const answer = JSON.parse(concurrent.stdout.trim().split("\n").pop()).result;
+  assert.deepEqual(answer.replays.map((r) => r.outcome), ["held-in-flight"], JSON.stringify(answer.replays));
+  assert.deepEqual(acts(fx).filter((a) => a === "bind" || a === "plan:bind"), ["plan:bind", "bind"], "only the spawn's own bind");
+  assert.equal(host.calls.filter((c) => c.command.includes(" spawn ") && !c.preview).length, 1, "one apply: the spawn's");
+  const apply = host.calls.find((c) => c.command.includes(" spawn ") && !c.preview);
+  assert.ok(apply.command.includes("--name ingester-a"), apply.command);
+  assert.doesNotMatch(apply.command, /--purpose/, "the previewed name, not the next number");
+  assert.deepEqual(fx.kept(), [], "settled by its own bind");
+});
+
+test("the E_DECISION_STALE interleaving: while the original holds its request, a reconcile never replays or binds it, so its seat is never released; once its holder is killed, the next reconcile replays it", async (t) => {
+  const fx = await routed(t);
+  const { spawnKey, seatId } = await keptByLostAnswer(fx);
+  const holder = await inFlightHolder(fx, spawnKey);
+  try {
+    // A concurrent replay would pick another name and meet E_DECISION_STALE, which bind reads as "release".
+    fx.sandbox.set(delivered(seatId));
+    const stale = fakeHost(fx, { apply: { schemaVersion: 1, ok: false, error: { code: "E_DECISION_STALE", message: "the previewed decision changed" } } });
+    const held = await fx.withKernel((sb, ctx) => sb.reconcileSandbox(ctx, "ingest", { planRevision: "rev-reconcile", idempotencyKey: "rk-1", io: stale.io }));
+    assert.deepEqual(held.replays, [{ spawnKey, instance: "ingester-a", seat: seatId, outcome: "held-in-flight" }]);
+    assert.equal(stale.calls.filter((c) => c.command.includes(" spawn ")).length, 0, "no replay sent");
+    assert.deepEqual(acts(fx), ["reconcile"], "no bind, so no release");
+    assert.deepEqual(fx.kept(), [`${spawnKey}.json`]);
+  } finally { await holder.kill(); }
+  // Its holder is gone: the request is replayable again, and its replay is the keyed one.
+  fx.sandbox.set({ ...delivered(seatId), bind: { state: "ready", seat: { id: seatId, certificateId: "c", state: "active" } } });
+  fx.sandbox.reset();
+  const host = fakeHost(fx);
+  const replayed = await fx.withKernel((sb, ctx) => sb.reconcileSandbox(ctx, "ingest", { planRevision: "rev-reconcile", idempotencyKey: "rk-2", io: host.io }));
+  assert.deepEqual(replayed.replays.map((r) => r.outcome), ["replayed"], JSON.stringify(replayed.replays));
+  assert.ok(host.calls.find((c) => c.command.includes(" spawn ")).command.includes(`--idempotency-key ${spawnKey}`));
+  assert.deepEqual(fx.kept(), [], "bound active, settled");
+});
