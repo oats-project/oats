@@ -1276,8 +1276,9 @@ for a routed spawn, the kept request's. The next oats that takes that lock over
 from its dead holder first ends the recorded group (SIGTERM, then SIGKILL) and
 waits for it to go, and only then acts. A recorded group whose leader's start no
 longer matches is someone else's and is left alone. One that cannot be told (its
-leader's start unreadable, or its leader gone with members left) or that
-survives SIGKILL is never signalled blind: the lock stays held, the act is
+leader's start unreadable now, or not recorded when the hook began, or its
+leader gone with members left) or that survives SIGKILL is never signalled
+blind: the lock stays held, the act is
 refused `E_LIFECYCLE_BUSY` (a kept request is `held-in-flight`), and the
 refusal names the group to check by hand.
 

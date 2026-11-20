@@ -524,17 +524,19 @@ test("C4: with a request kept, a reconcile that leaves out its seats is no empty
 /** A process that holds kept request `spawnKey`'s in-flight lock, as a routed spawn between its seat and
  *  its bind does → { kill() → a promise of its exit }. With `hook: { write, afterMs }` it also runs a
  *  hook's group of its own, recorded in the lock as runOwnedGroup records one, that writes `late` there. */
-async function inFlightHolder(fx, spawnKey, { hook = null } = {}) {
+async function inFlightHolder(fx, spawnKey, { hook = null, lock: at = null, nullStart = false } = {}) {
   const { spawn } = await import("node:child_process");
   const { dirname } = await import("node:path");
-  const lock = join(dirname(fx.pendingDir), "pending.locks", `${spawnKey}.lock`);
+  const lock = at ?? join(dirname(fx.pendingDir), "pending.locks", `${spawnKey}.lock`);
   mkdirSync(dirname(lock), { recursive: true, mode: 0o700 });
   const lib = new URL("../lib/dir-lock.mjs", import.meta.url).href;
   const identity = new URL("../packages/record/lib/process-identity.mjs", import.meta.url).href;
-  const runHook = hook === null ? "" : `const g = spawn(process.execPath, ["-e", ${JSON.stringify(`setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(hook.write)}, "late"), ${Number(hook.afterMs)})`)}], { detached: true, stdio: "ignore" }); g.unref(); release.record({ hookPgid: g.pid, hookStart: processStart(g.pid).token ?? null });`;
+  const runHook = hook === null ? "" : `const g = spawn(process.execPath, ["-e", ${JSON.stringify(`setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(hook.write)}, "late"), ${Number(hook.afterMs)})`)}], { detached: true, stdio: "ignore" }); g.unref(); release.record({ hookPgid: g.pid, hookStart: ${nullStart ? "null" : "processStart(g.pid).token ?? null"} }); console.log("group " + g.pid);`;
   const child = spawn(process.execPath, ["--input-type=module", "-e", `import { spawn } from "node:child_process"; import { acquireDirLock } from ${JSON.stringify(lib)}; import { processStart } from ${JSON.stringify(identity)}; const release = acquireDirLock(${JSON.stringify(lock)}, { what: "a spawn in flight" }); ${runHook} console.log("held"); setInterval(() => {}, 1000);`], { stdio: ["ignore", "pipe", "inherit"] });
-  await new Promise((done, failed) => { child.stdout.on("data", (b) => { if (String(b).includes("held")) done(); }); child.on("exit", () => failed(new Error("the holder exited"))); });
-  return { kill: () => new Promise((done) => { child.once("exit", done); child.kill("SIGKILL"); }) };
+  let out = "", group = null;
+  await new Promise((done, failed) => { child.stdout.on("data", (b) => { out += b; if (out.includes("held")) done(); }); child.on("exit", () => failed(new Error("the holder exited"))); });
+  if (hook !== null) group = Number(/group (\d+)/.exec(out)?.[1]);
+  return { group, kill: () => new Promise((done) => { child.once("exit", done); child.kill("SIGKILL"); }) };
 }
 const delivered = (seatId) => ({ reconcile: { state: "ready", server: "sandbox-ingest", seats: [{ seatId, state: "delivered" }] } });
 
@@ -599,3 +601,38 @@ test("a routed spawn killed outright while a hook of its runs under the kept req
   await new Promise((done) => setTimeout(done, 3000));
   assert.equal(existsSync(late), false, "the killed spawn's hook never acted after its request was taken over");
 });
+
+const groupAlive = (pgid) => { try { process.kill(-pgid, 0); return true; } catch (e) { return e.code === "EPERM"; } };
+const endGroup = (pgid) => { try { process.kill(-pgid, "SIGKILL"); } catch { /* already gone */ } };
+
+for (const [which, lockOf, act] of [
+  ["the sandbox's lock", (fx) => join(fx.dep, ".agents", "locks", "sandbox-ingest.lock"), "stop"],
+  ["a kept request's lock", () => null, "reconcile"],
+]) {
+  test(`a killed oats's hook group recorded without its leader's start, under ${which}: the taker refuses, and never signals it`, async (t) => {
+    const fx = await routed(t);
+    const { spawnKey, seatId } = await keptByLostAnswer(fx);
+    const holder = await inFlightHolder(fx, spawnKey, { hook: { write: join(fx.dep, "late-effect"), afterMs: 30000 }, lock: lockOf(fx), nullStart: true });
+    try {
+      await holder.kill();
+      assert.ok(holder.group > 1 && groupAlive(holder.group), "the recorded group runs");
+      if (act === "stop") {
+        const r = fx.cliS(["sandbox", "stop", "ingest", "--plan-revision", "rev-stop", "--idempotency-key", "k-null", "--json"], fx.sandboxEnv);
+        assert.notEqual(r.status, 0, r.stdout);
+        const error = JSON.parse(r.stdout.trim().split("\n").pop()).error;
+        assert.equal(error.code, "E_LIFECYCLE_BUSY", r.stdout);
+        assert.match(error.message, new RegExp(`process group ${holder.group}\\b.*start was not recorded`), error.message);
+        assert.ok(!fx.sandbox.calls().some((c) => c.act === "stop"), "no stop ran");
+      } else {
+        fx.sandbox.set(delivered(seatId));
+        fx.sandbox.reset();
+        const host = fakeHost(fx);
+        const answer = await fx.withKernel((sb, ctx) => sb.reconcileSandbox(ctx, "ingest", { planRevision: "rev-reconcile", idempotencyKey: "rk-null", io: host.io }));
+        assert.deepEqual(answer.replays.map((x) => x.outcome), ["held-in-flight"], JSON.stringify(answer.replays));
+        assert.equal(host.calls.filter((c) => c.command.includes(" spawn ")).length, 0, "no replay");
+        assert.deepEqual(fx.kept(), [`${spawnKey}.json`]);
+      }
+      assert.equal(groupAlive(holder.group), true, "never signalled blind");
+    } finally { if (holder.group) endGroup(holder.group); }
+  });
+}
