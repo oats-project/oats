@@ -459,29 +459,43 @@ extra trees: see [`attached`](#attached--another-instances-tree)),
 because an attached agent serves that owner; relation flags other than a
 redundant child-of-owner are rejected.
 
-`--same-work` (feature `instance-same-work`) records that the new instance
-does the same work as its parent; clients draw the parent→child line for an
-instance that carries it. It is bound to the parent the new home records,
-whichever relation gave it: a child, a sibling of an anchor that has a
-parent, a `parent` relation whose anchor had a parent (the new instance
-inherits it), or an attached spawn (the owner). A spawn that would record no
-parent (unrelated, a sibling of a root, a `parent` relation over a root
-anchor) is refused with `E_BAD_ARGS` before anything is created, a preview
-included. The flag is the home's own file, `.oats-same-work.json`, naming the
-parent it was set against, and it is on only while that is still the home's
-recorded `parentInstance`: after a reparent (a retire's lineage splice, or a
-`parent` spawn re-pointing its anchor) it reads off. It survives a restart, a
-stop and a start, a resume and `oats instance upgrade`; only `off` or
-retirement clears it.
+`--related-work` (feature `instance-related-work`) records that the new
+instance does related work with its parent, or, when it has no parent, with
+its sibling; clients draw the line between the two for an instance that
+carries it. The kernel never sets it on its own. It is bound to the parent
+the new home records, whichever relation gave it: a child, a sibling of an
+anchor that has a parent, a `parent` relation whose anchor had a parent (the
+new instance inherits it), or an attached spawn (the owner). With no parent
+it is bound to the sibling the new home records: a sibling of an anchor with
+no parent binds that anchor, and a `parent` relation over an anchor with a
+sibling link and no parent binds the sibling it inherits. The sibling is the
+one the home records, the anchor it was spawned beside: a sibling of a
+top-level R binds R, and a sibling of R's sibling S binds S, not R. A spawn
+that would record neither (unrelated, a `parent` relation over a top-level
+anchor with no sibling link) is refused with `E_BAD_ARGS` before anything is
+created, a preview included. The flag is the home's own file,
+`.oats-related-work.json`, naming the parent or the sibling it was set
+against. A parent binding is on only while that is still the home's
+recorded `parentInstance`, and a sibling binding only while the home records
+no parent and that sibling is still its `siblingInstance`: after a relink (a
+retire's lineage splice, or a `parent` spawn re-pointing its anchor) it
+reads off. It survives a restart, a stop and a start, a resume and `oats
+instance upgrade`; only `off` or retirement clears it.
 
-`oats instance same-work <instance> on|off` sets or clears the flag on an
+`oats instance related-work <instance> on|off` sets or clears the flag on an
 existing instance, addressed as `oats instance color` addresses it and routed
-with `--server`. `on` needs a recorded parent and binds the flag to the
-current one, so it also rebinds after a reparent; `off` always succeeds. An
-instance with the flag on carries `sameWork: true` on its `oats status
---json` row; otherwise the key is absent. The answer, the errors and the
-remote relay are in
-[desktop-cli-api.md](desktop-cli-api.md#same-work-as-the-parent-oats-instance-same-work).
+with `--server`. `on` needs a recorded parent or sibling and binds the flag
+to the current one, so it also rebinds after a relink; `off` always
+succeeds. An instance with the flag on carries `relatedWork: true` on its
+`oats status --json` row; otherwise the key is absent.
+
+The flag was the same-work flag (`--same-work`, `oats instance same-work`,
+`.oats-same-work.json`, a parent binding only). The old spellings are
+refused with `E_BAD_ARGS`, naming the new one, and nothing is done. An old
+`.oats-same-work.json` is not read, so an instance flagged before the rename
+reads off until `on` is run again; the file is left in the home. The answer,
+the errors and the remote relay are in
+[desktop-cli-api.md](desktop-cli-api.md#related-work-oats-instance-related-work).
 
 `oats instance pin <instance> on|off` (feature `instance-pin`) pins an
 instance at the top of its machine's list, or removes the pin, addressed as

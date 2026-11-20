@@ -333,8 +333,9 @@ A self-contained package has an `oats.json`:
     - an exact name that is `.oats`, `.agents` or `.claude`, or that starts
       with `.oats-events`, `.oats-stop`, `.oats-restart`, `.oats-rollback`,
       `.oats-agents-md`, `.oats-start`, `.oats-attachments`, `.oats-color`,
-      `.oats-background`, `.oats-pinned`, `.oats-same-work` or `.oats-board`: the top-level entries the kernel
-      itself writes in an instance home;
+      `.oats-background`, `.oats-pinned`, `.oats-related-work`, `.oats-same-work` (the
+      file of the flag `.oats-related-work` replaced, no longer read and still the kernel's) or
+      `.oats-board`: the top-level entries the kernel itself writes in an instance home;
     - a prefix that starts with `.oats-`.
 
     An exact name such as `.oats-aweb` is allowed: it is a provider's

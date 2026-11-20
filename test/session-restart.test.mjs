@@ -1128,16 +1128,16 @@ test("#691 a completed start's receipt is never recorded again: no write, no hoo
   process.kill(runningPid(home), "SIGKILL"); // test cleanup only
 });
 
-import { readSameWork, sameWorkOf, writeSameWork } from "../lib/instance-related-work.mjs";
-test("#1577 the same-work flag lasts as long as the home: through a start, a restart, a stop and a start, and a resume of a lost session, which rewrite instance.json only", async () => {
-  const name = "dev-same-work";
+import { readRelatedWork, relatedWorkOf, writeRelatedWork } from "../lib/instance-related-work.mjs";
+test("#1577 the related-work flag lasts as long as the home: through a start, a restart, a stop and a start, and a resume of a lost session, which rewrite instance.json only", async () => {
+  const name = "dev-related-work";
   const { home } = await makeHome(name, { command: renderFor(homeOf(name), name, join(binDir, "polite")), launch: recipeFor(homeOf(name), name, { executable: join(binDir, "polite") }) });
   const metaFile = join(home, "instance.json");
   write(metaFile, JSON.stringify({ ...readJson(metaFile), parentInstance: "dev-lead" }, null, 2) + "\n");
-  writeSameWork(home, "dev-lead");
+  writeRelatedWork(home, { parent: "dev-lead" });
   const flagged = (step) => {
-    assert.equal(readSameWork(home), "dev-lead", `${step}: the record is kept`);
-    assert.equal(sameWorkOf(home, readJson(metaFile).parentInstance), true, `${step}: still bound to the recorded parent`);
+    assert.deepEqual(readRelatedWork(home), { parent: "dev-lead" }, `${step}: the record is kept`);
+    assert.equal(relatedWorkOf(home, readJson(metaFile)), true, `${step}: still bound to the recorded parent`);
   };
   startInstanceSession(home, { env: env() });
   assert.ok(await waitFor(() => runningPid(home) !== null), "the harness is up");

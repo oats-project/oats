@@ -462,7 +462,7 @@ schedule's spec still travel as arguments.
 
 | Command | Where it runs | The server must advertise |
 |---|---|---|
-| `spawn` | registered workspace | the requested harness, backend and yolo option; `launch-config` for `--launch-config`; `schedule` for a wake schedule; `spawn-name` for `--name`; `spawn-task-stdin` for a `--task` or `--task-file` kept off the command line (without it: the task as an argument, and a warning; [a routed spawn's task](#a-routed-spawns-task)); `spawn-preview-2` for `--preview`; `spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2` for a spawn bound to its preview and a key (without them: one call and a warning); `spawn-suggest-name` for `--suggest-name` on a preview, `spawn-apply-suggest-name` on an apply; `instance-background` for `--background` or `--no-background`; `instance-same-work` for `--same-work` |
+| `spawn` | registered workspace | the requested harness, backend and yolo option; `launch-config` for `--launch-config`; `schedule` for a wake schedule; `spawn-name` for `--name`; `spawn-task-stdin` for a `--task` or `--task-file` kept off the command line (without it: the task as an argument, and a warning; [a routed spawn's task](#a-routed-spawns-task)); `spawn-preview-2` for `--preview`; `spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2` for a spawn bound to its preview and a key (without them: one call and a warning); `spawn-suggest-name` for `--suggest-name` on a preview, `spawn-apply-suggest-name` on an apply; `instance-background` for `--background` or `--no-background`; `instance-related-work` for `--related-work`, or `instance-same-work` alone (an older OATS), which is sent `--same-work` for a parent binding and refuses a sibling one with `E_REMOTE_INCOMPATIBLE`, the binding read from the spawn's arguments and the host's roster |
 | `status` | registered workspace | |
 | `retire` | the instance's home | `retire-home` to retire by exact home |
 | `session inspect`, `session attach` | the instance's home | `session`; `session-attach-detach-key` for `attach --detach-key`; `session-attach-no-status-line` for `attach --no-status-line`, which a host without it ignores |
@@ -479,7 +479,7 @@ schedule's spec still travel as arguments.
 | `instance color` | the instance's home | `instance-color` |
 | `instance background` | the instance's home | `instance-background` |
 | `instance pin` | the instance's home | `instance-pin` |
-| `instance same-work` | the instance's home | `instance-same-work` |
+| `instance related-work` | the instance's home | `instance-related-work`; a host with only `instance-same-work` (an older OATS) is asked `instance same-work` for an instance bound to its parent, and `on` for one bound to its sibling is `E_REMOTE_INCOMPATIBLE` there |
 
 `instance suggest-name` and `instance upgrade` are never routed: `--server` is
 `E_BAD_ARGS`. `instance suggest-name` names a spawn on the machine that asks,
@@ -646,10 +646,13 @@ carries `waitingOnYou` (needs input) when the host's kernel reports it, and
 only then: an older host's row has no such key. `retire` (0.59.0, a retire
 of the home running, unknown, failed or interrupted) is relayed the same
 way, through the kernel's own read of it, and a value that read refuses is
-dropped ([`retire`](desktop-cli-api.md#row-retire)). `sameWork` (feature
-`instance-same-work`, the instance does the same work as its parent) is
-relayed only when the host's row has `sameWork: true`, and is absent
-otherwise ([`sameWork`](desktop-cli-api.md#row-same-work)). `pinned` (feature
+dropped ([`retire`](desktop-cli-api.md#row-retire)). `relatedWork` (feature
+`instance-related-work`, the instance does related work with its parent, or
+with its sibling) is relayed only when the host's row has `relatedWork:
+true`, and is absent otherwise. From a host whose features list
+`instance-same-work` and not `instance-related-work` (an older OATS), its
+row's `sameWork: true` is relayed as `relatedWork: true`; no roster row
+carries `sameWork` ([`relatedWork`](desktop-cli-api.md#row-related-work)). `pinned` (feature
 `instance-pin`, the instance is pinned at the top of its machine's list) is
 relayed only when the host's row has exactly `pinned: true`, and is absent
 otherwise ([`pinned`](desktop-cli-api.md#row-pinned)). A removed or edited registration keeps

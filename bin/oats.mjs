@@ -83,7 +83,7 @@ const { hostUnitFiles, hostUnitStatus, installHostUnit, uninstallHostUnit } = aw
 const { kernelNode, stableNode } = await kernelImport("stable-node", () => import("../lib/stable-node.mjs"));
 const { receiveAttachment, uploadAttachment, readStreamBounded, MAX_ATTACHMENT_BYTES } = await kernelImport("attachments", () => import("../lib/attachments.mjs"));
 const { observeInstanceGit, diffInstanceFile, NO_FILE_MONITOR } = await kernelImport("instance-git", () => import("../lib/instance-git.mjs"));
-const { planStop, applyStop, planRetire, retireDefaultsLine, stopClosingLine, descendantsOf, resolveInstance: resolveInstanceForCli, setInstanceColor, setInstanceBackground, setInstancePin, setInstanceSameWork, STOP_WARNINGS } = await kernelImport("instance-lifecycle", () => import("../lib/instance-lifecycle.mjs"));
+const { planStop, applyStop, planRetire, retireDefaultsLine, stopClosingLine, descendantsOf, resolveInstance: resolveInstanceForCli, setInstanceColor, setInstanceBackground, setInstancePin, setInstanceRelatedWork, STOP_WARNINGS } = await kernelImport("instance-lifecycle", () => import("../lib/instance-lifecycle.mjs"));
 const { extraWorktreeLines, formatBytes, warningLines, workRecoveryLines } = await kernelImport("retire-output", () => import("../lib/retire-output.mjs"));
 const { livenessWord, lostLine, statusWord, waitingLine } = await kernelImport("status-words", () => import("../lib/status-words.mjs"));
 const { retainedRecoveryLines, retainedWorktreeLines, retainedWorktrees } = await kernelImport("retained-after-retire", () => import("../lib/retained-after-retire.mjs"));
@@ -1540,8 +1540,8 @@ async function instanceCmd() {
   if (sub === "waiting" || sub === "attention") return instanceWaitingCmd(sub, bail);
   if (sub === "board") return instanceBoardCmd(bail);
   if (sub === "suggest-name") return instanceSuggestNameCmd(bail);
-  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message=<text>] [--clear] [--json] | oats instance board set|unset|ask … [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance pin <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance same-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
-  if (!["git", "diff", "stop", "events", "color", "background", "pin", "same-work"].includes(sub) || !name || name.startsWith("--")) return bail("E_BAD_ARGS", usage);
+  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message=<text>] [--clear] [--json] | oats instance board set|unset|ask … [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance pin <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance related-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
+  if (!["git", "diff", "stop", "events", "color", "background", "pin", "related-work"].includes(sub) || !name || name.startsWith("--")) return bail("E_BAD_ARGS", usage);
   dropAmbientRoot();
   if (sub === "events") {
     // K7: typed producer events, bounded window; nothing inferred.
@@ -1634,20 +1634,20 @@ async function instanceCmd() {
       return lifecycleFail(e, "E_LIFECYCLE_FAILED", e.candidates ? { candidates: e.candidates } : e.details);
     }
   }
-  if (sub === "same-work") {
-    // Feature instance-same-work: presentation only, so no plan; addressed as color addresses an instance.
+  if (sub === "related-work") {
+    // Feature instance-related-work: presentation only, so no plan; addressed as color addresses an instance.
     const homeOpt = flag("home");
     if (homeOpt === true || (homeOpt !== undefined && !isAbsolute(homeOpt))) return bail("E_BAD_ARGS", "--home needs an absolute instance home");
-    const sameWorkUsage = "usage: oats instance same-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
+    const relatedWorkUsage = "usage: oats instance related-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
     // The words after the instance that are not a flag or the value of --home or --dir: exactly one, on or off.
     const words = [];
     for (let i = 3; i < args.length; i++) { if (args[i] === "--home" || args[i] === "--dir") i++; else if (!args[i].startsWith("--")) words.push(args[i]); }
-    if (words.length !== 1 || !["on", "off"].includes(words[0])) return bail("E_BAD_ARGS", `give on or off; ${sameWorkUsage}`);
+    if (words.length !== 1 || !["on", "off"].includes(words[0])) return bail("E_BAD_ARGS", `give on or off; ${relatedWorkUsage}`);
     let root; try { root = ensureRoot(dirFlag()); } catch (e) { return lifecycleFail(e, "E_NO_ROOT"); }
     try {
-      const r = setInstanceSameWork(dirFlag(), root, name, { home: homeOpt, on: words[0] === "on" });
+      const r = setInstanceRelatedWork(dirFlag(), root, name, { home: homeOpt, on: words[0] === "on" });
       if (JSON_MODE) { jsonOk(r); return; }
-      console.log(`${r.instance}: same work ${r.sameWork ? "on" : "off"}`);
+      console.log(`${r.instance}: related work ${r.relatedWork ? "on" : "off"}`);
       return;
     } catch (e) {
       return lifecycleFail(e, "E_LIFECYCLE_FAILED", e.candidates ? { candidates: e.candidates } : e.details);
@@ -3003,8 +3003,9 @@ async function spawnCmd() {
       prepared,
       purpose: flag("purpose"), ...(nameFlag !== undefined ? { name: String(nameFlag) } : {}), task: taskText ?? stdinTask, taskFile: stdinTask === undefined ? taskFileFlag : undefined, relation, relativeTo, relativeRoot,
       ...(args.includes("--allow-child-spawns") ? { allowChildSpawns: true } : args.includes("--no-child-spawns") ? { allowChildSpawns: false } : {}),
-      // Feature instance-same-work: the kernel binds it to the parent the new home records, or refuses.
-      ...(args.includes("--same-work") ? { sameWork: true } : {}),
+      // Feature instance-related-work: the kernel binds it to the parent the new home records, else to its
+      // sibling, or refuses.
+      ...(args.includes("--related-work") ? { relatedWork: true } : {}),
       // Directory execution uses deployment configuration, not an ambient Git
       // checkout (especially when invoked via --dir from a source instance).
       // An attached instance's repository is the repository of the tree it is attached to (derived by the kernel).
@@ -5161,9 +5162,10 @@ Usage:
       [--relation child|sibling|parent|unrelated]  anchor with --relative-to (except unrelated);
       [--relative-to <instance>]            default: unrelated, top-level
       [--relative-root <agents-root>]       disambiguates same-named anchors
-      [--same-work]                         record that the new instance does the same work as
-                                            its parent; clients draw the parent line for it
-                                            (needs a relation that records a parent)
+      [--related-work]                      record that the new instance does related work with
+                                            its parent, else its sibling; clients draw the
+                                            line for it (needs a relation that records a
+                                            parent or a sibling; --same-work is renamed)
       [--work worktree|checkout|attached|workspace|directory]  override the soul's work mode
       [--work-dir <owner-work>]             attached: the owner's work tree (always a child)
       [--branch <b>] [--base <ref>]          worktree branch and starting ref;
@@ -5366,10 +5368,11 @@ Usage:
                                              pin the instance at the top of its machine's
                                              list; shared, as every viewer of the machine
                                              reads it from the home
-  oats instance same-work <instance> on|off [--home <abs>] [--json]
-                                             record that this instance does the same work as
-                                             its parent (on needs a recorded parent); clients
-                                             draw the parent line for it; off removes it
+  oats instance related-work <instance> on|off [--home <abs>] [--json]
+                                             record that this instance does related work with
+                                             its parent, else its sibling (on needs one
+                                             recorded); clients draw the line for it; off
+                                             removes it (oats instance same-work is renamed)
   oats instance suggest-name [--soul <soul>] (--task <t> | --task-file <f>) [--harness claude|pi]
       [--model <m>] [--launch-config <n>] [--dir <d>] [--json]
                                              a name for a spawn by this machine's harness, as a
