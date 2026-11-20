@@ -421,7 +421,9 @@ export function main(args, env, { spawnSync: run = spawnSync } = {}) {
     report(`PASS ${JSON.parse(program(listenerCheck, [declared.listen]))}`);
     const recorded = JSON.parse(program(versionFileCheck, [declared.version.file])).trim();
     assert.match(recorded, /^[\x21-\x7e](?:[\x20-\x7e]{0,62}[\x21-\x7e])?$/, "the declared version file must hold one printable line of at most 64 characters (contents withheld)");
-    assert.ok(docker(["exec", container, ...declared.version.command]) === recorded, "the declared version command must print exactly the content of the declared version file (output withheld)");
+    // Run directly: the shared helper would print a failed command's raw output.
+    const printed = run("docker", ["exec", container, ...declared.version.command], { encoding: "utf8", timeout: 60000, maxBuffer: 1024 * 1024 });
+    assert.ok(printed.status === 0 && typeof printed.stdout === "string" && printed.stdout.trim() === recorded, "the declared version command must exit 0 and print exactly the content of the declared version file (output withheld)");
     report(`PASS ${child}: version ${recorded} (the declared command prints the image's version file)`);
   }
   report(`PASS ${JSON.parse(program(inputsCheck, [!!env.TEAM_INPUT_DIR]))}`);

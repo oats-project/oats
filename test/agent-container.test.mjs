@@ -1455,7 +1455,8 @@ test("an envFromFile value reaches only the child; an absent file starts it with
   const directory = await supervisorFixture(t, {child: "extra", loginFiles: {"child-token": null}});
   await refusedBeforeAnyChild(directory, "the file for CHILD_TOKEN could not be read (EISDIR)", "a directory");
   // A value on two lines, or with a space or a tab inside, is never passed on in part.
-  for (const content of [`${token}\n${token}`, `first ${token}`, `${token}\tsecond`, `${token}\r\n${token}\n`, `export CHILD_TOKEN=${token}\n# note`]) {
+  // So is one with a NUL inside (a file saved as UTF-16): no child could be given it.
+  for (const content of [`${token}\n${token}`, `first ${token}`, `${token}\tsecond`, `${token}\r\n${token}\n`, `export CHILD_TOKEN=${token}\n# note`, `${token}\0${token}`, `\0${token}`]) {
     const split = await supervisorFixture(t, {child: "extra", loginFiles: {"child-token": content}});
     await refusedBeforeAnyChild(split, "the file for CHILD_TOKEN must hold its value on one line", JSON.stringify(content.replaceAll(token, "<value>")));
     assert.ok(!split.said.join("\n").includes(token));
@@ -1759,7 +1760,7 @@ test("acceptance with AGENT_CHILD checks the declaration file, the declared list
   const report = t.mock.method(console, "log", () => {});
   const container = "fixture-agent", program = ["exec", "-i", container, "node"];
   const declared = {...JSON.parse(text), name: "extra", listen: [39111, 39112]};
-  const accept = ({settings = childEnv, info = withChild, declaration = JSON.stringify(declared), recorded = "1.2.3\n", printed = "1.2.3"} = {}) => {
+  const accept = ({settings = childEnv, info = withChild, declaration = JSON.stringify(declared), recorded = "1.2.3\n", printed = "1.2.3", versionExit = {status: 0, stderr: ""}} = {}) => {
     const selected = !!settings.AGENT_CHILD;
     const expected = [
       [["inspect", container], JSON.stringify([info])],
@@ -1772,7 +1773,7 @@ test("acceptance with AGENT_CHILD checks the declaration file, the declared list
         [program, JSON.stringify(declaration), `(${declarationCheck.toString()})("/etc/agent-child.json",16384)`],
         [program, JSON.stringify("listening TCP sockets: fixture"), `(${listenerCheck.toString()})([39111,39112])`],
         [program, JSON.stringify(recorded), `(${versionFileCheck.toString()})("/opt/agent-child/version")`],
-        [["exec", container, "/usr/local/bin/node", "/opt/agent-child/child.mjs", "--version"], printed],
+        [["exec", container, "/usr/local/bin/node", "/opt/agent-child/child.mjs", "--version"], printed, undefined, versionExit],
       ] : []),
       [program, JSON.stringify("inputs: absent without the optional fragment")],
       [program, JSON.stringify("outbox: absent without the optional fragment")],
@@ -1793,7 +1794,7 @@ test("acceptance with AGENT_CHILD checks the declaration file, the declared list
         unexpected.push({ executable, argv });
         return { status: 2, stdout: "", stderr: `unexpected ${executable} ${JSON.stringify(argv)}` };
       }
-      return { status: 0, stdout: row[1], stderr: "" };
+      return { status: 0, stdout: row[1], stderr: "", ...row[3] };
     };
     report.mock.resetCalls();
     try { main([container, "--evidence", "target-amd64"], settings, { spawnSync: run }); }
@@ -1814,8 +1815,12 @@ test("acceptance with AGENT_CHILD checks the declaration file, the declared list
   assert.throws(() => accept({settings: env}), /AGENT_CHILD is set in the container/);
   const secret = "FIXTURE_VALUE_NEVER_REPORT";
   const withheld = (options, pattern) => assert.throws(() => accept(options), error => pattern.test(error.message) && !error.message.includes(secret), String(pattern));
-  withheld({printed: `1.2.4-${secret}`}, /the declared version command must print exactly the content of the declared version file \(output withheld\)/);
-  withheld({printed: ""}, /the declared version command must print exactly/);
+  withheld({printed: `1.2.4-${secret}`}, /the declared version command must exit 0 and print exactly the content of the declared version file \(output withheld\)/);
+  withheld({printed: ""}, /the declared version command must exit 0 and print exactly/);
+  // A command that fails shows neither what it printed nor what it wrote to standard error, even when the output matches.
+  withheld({printed: secret, versionExit: {status: 1, stderr: `failed: ${secret}`}}, /the declared version command must exit 0 and print exactly/);
+  withheld({versionExit: {status: 1, stderr: secret}}, /the declared version command must exit 0 and print exactly/);
+  withheld({versionExit: {status: null, stdout: null, stderr: null, error: new Error(secret)}}, /the declared version command must exit 0 and print exactly/);
   for (const recorded of ["", "\n", `1.2.3\n${secret}`, `1.2.3\u001b[31m${secret}`, "x".repeat(65)]) withheld({recorded, printed: recorded.trim()}, /the declared version file must hold one printable line of at most 64 characters \(contents withheld\)/);
   withheld({declaration: JSON.stringify({...declared, name: "other"})}, /\/etc\/agent-child\.json: name differs from AGENT_CHILD/);
   withheld({declaration: JSON.stringify({...declared, stopMs: 9000, env: {X: secret}})}, /\/etc\/agent-child\.json: stopMs must be a whole number from 1000 to 8000/);

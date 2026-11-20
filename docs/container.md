@@ -730,7 +730,8 @@ child starts:
 - **No such file:** the child starts without that variable.
 - **Empty after trimming:** the same, with one line that names the variable.
 - **Any other read error:** the start is refused.
-- **Whitespace inside the trimmed value** (a second line, a space, a tab):
+- **Whitespace or a NUL byte inside the trimmed value** (a second line, a
+  space, a tab, a file saved as UTF-16):
   the start is refused with `the file for <VARIABLE> must hold its value on
   one line`. A file with two lines is never passed on in part.
 

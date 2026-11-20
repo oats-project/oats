@@ -137,7 +137,8 @@ function admitChild(selected, fs, say) {
       return;
     }
     if (!value) { say(`the file for ${variable} is empty: ${declared.name} starts without it`); continue; }
-    if (/\s/.test(value)) { say(`the file for ${variable} must hold its value on one line`); return; }
+    // A NUL (a file saved as UTF-16, say) could not be passed on either: spawn would throw after the broker started.
+    if (/[\s\0]/.test(value)) { say(`the file for ${variable} must hold its value on one line`); return; }
     fromFiles[variable] = value;
   }
   return { ...declared, env: { ...declared.env, ...fromFiles } };
