@@ -242,7 +242,8 @@ one read of the home, whatever the provider answered (a refusal included):
 Since every stop drains (the stop rule), a stop's and a restart's own stop
 wait for the input, which then reads the home *stopped*: the two rows
 "running, another `startId`" are reached only by an input that outlasted the
-drain's wait and could not be ended.
+drain's wait: its provider call is ended there, and its kernel, still
+running, reads the home after the restart recorded its launch.
 
 The same read before the send refuses without sending. A start of a lost
 home stops the session at `E` after its mark (step 4), which covers the

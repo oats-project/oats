@@ -217,8 +217,9 @@ const CROSSINGS = [
   ["a restart (its stop waits for the input: stopped)", {}, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
   ["a restart whose provider reuses the locator, which a provider must not (the same: stopped)", { stable: true }, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
   // The rows "running, another startId": a restart that was RECORDED while the input was still
-  // being sent, which the drain allows only for an input that outlasted its wait and could not be
-  // ended. Built by writing the records as that restart leaves them.
+  // being sent, which the drain allows only for an input that outlasted its wait (its provider
+  // call is ended there, and its kernel reads the home after the restart recorded its launch).
+  // Built by writing the records as that restart leaves them.
   ["a restart recorded meanwhile, at another endpoint", {}, (fx, home) => restartedUnder(home, E("x", 2)), "E_SESSION_NOT_RUNNING", ["stop:E"]],
   ["a restart recorded meanwhile, at the same endpoint (nothing is stopped: that locator is the new session's)", {}, (fx, home) => restartedUnder(home, runtimeOf(home).endpoint), "E_SESSION_NOT_RUNNING", []],
   // Every stop waits for the input before it asks the provider: the input's own stop (the home is
@@ -240,6 +241,12 @@ for (const [what, behaviour, act, answer, stops] of CROSSINGS) {
     const answered = await inputWhile(fx, home, () => act(fx, home));
     assert.equal(answered.ok ? "submitted" : answered.error.code, answer, JSON.stringify(answered).slice(0, 300));
     assert.deepEqual(callsOf(fx).filter((c) => c.startsWith("stop")), stops);
+    if (what.startsWith("a restart recorded meanwhile")) {
+      // The row is the one reached (the home reads restarted, not stopped), and the stop, where
+      // there is one, is of the endpoint the input used: never the new session's.
+      assert.match(answered.error.message, /was restarted by OATS/);
+      assert.deepEqual(fx.verbs("stop").map((c) => c.request.input.endpoint), stops.length ? [E("x", 1)] : []);
+    }
     if (what === "a retire") {
       // The retire's last stop came after the input's provider call had ended, and the home is gone.
       const order = fx.calls().filter((c) => c.verb === "input" || c.verb === "stop").map((c) => c.verb);
