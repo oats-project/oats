@@ -1889,16 +1889,12 @@ section is the module map.
   `onTerminalTypographyChange`), so every open terminal and the control follow
   each other. A typed size applies on Enter or on leaving the field, never per
   keystroke. The font family stays on the palette's prompt.
-- **quick-open.mjs** — Quick Open for souls (⌘P / Alt+P, also “Souls: quick
-  open…” in the palette): fuzzy-find a soul from the Spawn view's data
-  source and hand off through `views/spawn.mjs` `preselectSpawn()`: the
-  spawn dialog scoped to that soul, as its page's New agent opens it, with focus
 - **quick-open.mjs** — the souls' rows (`quickOpenRows`), shared by the palette's
   New agent group and the New agent form's soul field (slice 5). Quick Open's own
   overlay folded into the palette (slice 4): ⌘P / Alt+P opens the palette on its
   souls (`+`). A pick goes to `openNewAgent` (shell.mjs), today the spawn dialog
   through `views/spawn.mjs` `preselectSpawn()`: the
-  spawn dialog scoped to that soul, as its card's Spawn opens it, with focus
+  spawn dialog scoped to that soul, as its page's New agent opens it, with focus
   in Name. Opening never spawns; Spawn stays explicit. Attached-only, refused
   and CLI pending/unavailable souls open their soul page instead, which says
   why. Dismissing the dialog returns to where the operator was

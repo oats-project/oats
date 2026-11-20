@@ -1167,12 +1167,10 @@ control.
 
 ## Quick Open and the spawn dialog
 
-- **⌘P / Alt+P** finds a soul, from a terminal too; picking it opens
-  the spawn dialog scoped to that soul, exactly as its page's **New agent** does (the
 - **⌘P / Alt+P** opens the palette on its souls (`+`), from a terminal too:
   Quick Open's own overlay folded into the palette (the Desktop UI rework,
   slice 4). A second ⌘P / Alt+P closes it. Picking a soul opens
-  the spawn dialog scoped to that soul, exactly as its card's Spawn does (the
+  the spawn dialog scoped to that soul, exactly as its page's **New agent** does (the
   Workspace stage behind it). A soul
   that can't be spawned here (attached only, refused, no verified CLI) opens
   its soul page instead, which says why. Focus lands on the dialog's first
