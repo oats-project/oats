@@ -64,6 +64,17 @@ export function createHostEntry() {
     return names;
   };
 
+  /** One verb: binds the worker's lifecycle, and runs `use` with the kernel of this call, or refuses its base. */
+  const run = async <Value>(
+    base: Base,
+    context: { lifecycle: { signal: AbortSignal } },
+    use: (oats: Oats) => Promise<Result<Value>>,
+  ): Promise<Result<Value>> => {
+    bind(context);
+    const oats = kernel(base);
+    return oats.ok ? use(oats.value) : oats;
+  };
+
   return experimental_defineHostEntry({
     contract: hostContract,
     experimental_signals: hostSignals,
@@ -85,83 +96,37 @@ export function createHostEntry() {
         return { deployment: null, machine };
       },
 
-      status: async (base, context) => {
-        bind(context);
-        const oats = kernel(base);
-        return oats.ok ? oats.value.status(context.signal) : oats;
-      },
-      souls: async (base, context) => {
-        bind(context);
-        const oats = kernel(base);
-        if (!oats.ok) return oats;
-        const listed = await oats.value.souls(context.signal);
-        // The list the Souls page shows is the list a spawn from it is checked against.
-        if (listed.ok) remember(base, listed.value.souls);
-        return listed;
-      },
-      capabilities: async (base, context) => {
-        bind(context);
-        const oats = kernel(base);
-        return oats.ok ? oats.value.capabilities(context.signal) : oats;
-      },
-      teams: async (base, context) => {
-        bind(context);
-        const oats = kernel(base);
-        return oats.ok ? oats.value.teams(context.signal) : oats;
-      },
-      servers: async (base, context) => {
-        bind(context);
-        const oats = kernel(base);
-        return oats.ok ? oats.value.servers(context.signal) : oats;
-      },
+      status: (base, context) => run(base, context, (oats) => oats.status(context.signal)),
+      souls: (base, context) =>
+        run(base, context, async (oats) => {
+          const listed = await oats.souls(context.signal);
+          // The list the Souls page shows is the list a spawn from it is checked against.
+          if (listed.ok) remember(base, listed.value.souls);
+          return listed;
+        }),
+      capabilities: (base, context) => run(base, context, (oats) => oats.capabilities(context.signal)),
+      teams: (base, context) => run(base, context, (oats) => oats.teams(context.signal)),
+      servers: (base, context) => run(base, context, (oats) => oats.servers(context.signal)),
 
-      spawnPreview: async ({ soul, name, task, ...base }, context) => {
-        bind(context);
-        const oats = kernel(base);
-        if (!oats.ok) return oats;
-        const known = await knownSouls(base, oats.value, context.signal);
-        if (!known.ok) return known;
-        return oats.value.spawnPreview({ soul, name, task }, { knownSouls: known.value, tempDir: context.experimental_paths.tempDir }, context.signal);
-      },
-      spawn: async ({ soul, name, task, key, revision, ...base }, context) => {
-        bind(context);
-        const oats = kernel(base);
-        if (!oats.ok) return oats;
-        const known = await knownSouls(base, oats.value, context.signal);
-        if (!known.ok) return known;
-        return oats.value.spawn({ soul, name, task, key, revision }, { knownSouls: known.value, tempDir: context.experimental_paths.tempDir }, context.signal);
-      },
+      spawnPreview: ({ soul, name, task, ...base }, context) =>
+        run(base, context, async (oats) => {
+          const known = await knownSouls(base, oats, context.signal);
+          if (!known.ok) return known;
+          return oats.spawnPreview({ soul, name, task }, { knownSouls: known.value, tempDir: context.experimental_paths.tempDir }, context.signal);
+        }),
+      spawn: ({ soul, name, task, key, revision, ...base }, context) =>
+        run(base, context, async (oats) => {
+          const known = await knownSouls(base, oats, context.signal);
+          if (!known.ok) return known;
+          return oats.spawn({ soul, name, task, key, revision }, { knownSouls: known.value, tempDir: context.experimental_paths.tempDir }, context.signal);
+        }),
 
-      stopPlan: async ({ instance, ...base }, context) => {
-        bind(context);
-        const oats = kernel(base);
-        return oats.ok ? oats.value.stopPlan(instance, context.signal) : oats;
-      },
-      stopApply: async ({ instance, revision, key, ...base }, context) => {
-        bind(context);
-        const oats = kernel(base);
-        return oats.ok ? oats.value.stopApply({ instance, revision, key }, context.signal) : oats;
-      },
-      start: async ({ home, ...base }, context) => {
-        bind(context);
-        const oats = kernel(base);
-        return oats.ok ? oats.value.start(home, context.signal) : oats;
-      },
-      restart: async ({ home, ...base }, context) => {
-        bind(context);
-        const oats = kernel(base);
-        return oats.ok ? oats.value.restart(home, context.signal) : oats;
-      },
-      retirePlan: async ({ instance, ...base }, context) => {
-        bind(context);
-        const oats = kernel(base);
-        return oats.ok ? oats.value.retirePlan(instance, context.signal) : oats;
-      },
-      retireApply: async ({ instance, revision, key, ...base }, context) => {
-        bind(context);
-        const oats = kernel(base);
-        return oats.ok ? oats.value.retireApply({ instance, revision, key }, context.signal) : oats;
-      },
+      stopPlan: ({ instance, ...base }, context) => run(base, context, (oats) => oats.stopPlan(instance, context.signal)),
+      stopApply: ({ instance, revision, key, ...base }, context) => run(base, context, (oats) => oats.stopApply({ instance, revision, key }, context.signal)),
+      start: ({ home, ...base }, context) => run(base, context, (oats) => oats.start(home, context.signal)),
+      restart: ({ home, ...base }, context) => run(base, context, (oats) => oats.restart(home, context.signal)),
+      retirePlan: ({ instance, ...base }, context) => run(base, context, (oats) => oats.retirePlan(instance, context.signal)),
+      retireApply: ({ instance, revision, key, ...base }, context) => run(base, context, (oats) => oats.retireApply({ instance, revision, key }, context.signal)),
 
       watch: ({ deployment }, context) => {
         bind(context);

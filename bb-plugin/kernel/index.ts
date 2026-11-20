@@ -1,7 +1,7 @@
 // One function per `oats` command: it builds the argv, runs it (kernel/run.ts) and reads the answer
 // with a schema into the plugin's types. No bb and no React import, so plain unit tests cover it.
 import type { Capability, Machine, Soul, SpawnSummary, Team } from "../model/types.js";
-import { answerOf } from "./envelope.js";
+import { answerOf, type AnswerOptions } from "./envelope.js";
 import * as lifecycle from "./lifecycle.js";
 import * as pages from "./pages.js";
 import type { Result } from "./result.js";
@@ -48,12 +48,13 @@ export class Oats {
     parse: (document: unknown) => Result<Value>,
     timeoutMs: number,
     signal?: AbortSignal,
+    options: AnswerOptions = {},
   ): Promise<Result<Value>> {
     const checked: Result<string[]> = Array.isArray(argv) ? { ok: true, value: argv } : argv;
     if (!checked.ok) return checked; // refused before any process starts
     const { bin, cwd, processes, env } = this.#options;
     const outcome = await processes.run({ bin, argv: checked.value, cwd, timeoutMs, signal, env });
-    const document = answerOf(outcome, bin);
+    const document = answerOf(outcome, bin, options);
     return document.ok ? parse(document.value) : document;
   }
 
@@ -91,29 +92,22 @@ export class Oats {
   }
 
   /**
-   * Reads the decision (unless `revision` is the one an earlier call with this key applied), then
-   * applies exactly that decision with the idempotency key.
+   * Applies the decision `revision` (a preview's) with the idempotency key: the kernel refuses a
+   * decision that moved since, and replays a spawn it already made under this key.
    */
   async spawn(
-    input: spawn.SpawnInput & { task: string; key: string; revision: string | null },
+    input: spawn.SpawnInput & { task: string; key: string; revision: string },
     context: { knownSouls: readonly string[]; tempDir: string },
     signal?: AbortSignal,
-  ): Promise<Result<{ instance: string; threadId: string | null; revision: string }>> {
+  ): Promise<Result<{ instance: string; threadId: string | null }>> {
     const checked = spawn.checkSpawn(input, context.knownSouls);
     if (!checked.ok) return checked;
-    // The key is checked before the preview runs: a bad one must start no process either.
-    const probe = spawn.spawnArgv(checked.value, "task", { revision: input.revision ?? "0", key: input.key });
-    if (!probe.ok) return probe;
-    return withTaskFile(context.tempDir, input.task, async (taskFile) => {
-      let revision = input.revision;
-      if (revision === null) {
-        const preview = await this.#run(spawn.spawnPreviewArgv(checked.value, taskFile), spawn.parseSpawnPreview, this.#timeouts.preview, signal);
-        if (!preview.ok) return preview;
-        revision = preview.value.revision;
-      }
-      const applied = await this.#run(spawn.spawnArgv(checked.value, taskFile, { revision, key: input.key }), spawn.parseSpawn, this.#timeouts.long, signal);
-      return applied.ok ? { ok: true, value: { ...applied.value, revision } } : applied;
-    });
+    // The key and the revision are checked before the task file is written.
+    const apply = spawn.checkApply(input);
+    if (!apply.ok) return apply;
+    return withTaskFile(context.tempDir, input.task, (taskFile) =>
+      this.#run(spawn.spawnArgv(checked.value, taskFile, apply.value), spawn.parseSpawn, this.#timeouts.long, signal),
+    );
   }
 
   stopPlan(instance: string, signal?: AbortSignal): Promise<Result<lifecycle.Plan>> {
@@ -132,7 +126,8 @@ export class Oats {
     return this.#run(lifecycle.retirePlanArgv(instance), lifecycle.parseRetirePlan, this.#timeouts.read, signal);
   }
   retireApply(apply: { instance: string; revision: string; key: string }, signal?: AbortSignal): Promise<Result<Record<string, never>>> {
-    return this.#run(lifecycle.retireApplyArgv(apply), lifecycle.parseRetireApply, this.#timeouts.long, signal);
+    // An incomplete retire prints its receipt and exits 1: the receipt is what says what is left.
+    return this.#run(lifecycle.retireApplyArgv(apply), lifecycle.parseRetireApply, this.#timeouts.long, signal, { failedDocument: lifecycle.isIncompleteRetire });
   }
 }
 

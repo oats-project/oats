@@ -31,13 +31,26 @@ const common = (input: SpawnInput, taskFile: string): string[] => [
 
 export const spawnPreviewArgv = (input: SpawnInput, taskFile: string): string[] => [...common(input, taskFile), "--preview", "--json"];
 
-export function spawnArgv(input: SpawnInput, taskFile: string, apply: { revision: string; key: string }): Result<string[]> {
+export type SpawnApply = { revision: string; key: string };
+
+/** Refuses a revision or a key that is not the kernel's shape. */
+export function checkApply(apply: SpawnApply): Result<SpawnApply> {
   const revision = checkRevision(apply.revision);
   if (!revision.ok) return revision;
   const key = checkKey(apply.key);
   if (!key.ok) return key;
-  return ok([...common(input, taskFile), "--expect-decision", revision.value, "--idempotency-key", key.value, "--json"]);
+  return ok({ revision: revision.value, key: key.value });
 }
+
+/** `apply` is a checked one (`checkApply`). */
+export const spawnArgv = (input: SpawnInput, taskFile: string, apply: SpawnApply): string[] => [
+  ...common(input, taskFile),
+  "--expect-decision",
+  apply.revision,
+  "--idempotency-key",
+  apply.key,
+  "--json",
+];
 
 const text = z.string().nullish();
 const preview = z.looseObject({

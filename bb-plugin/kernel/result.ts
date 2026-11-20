@@ -26,6 +26,8 @@ export const codes = {
   failed: "OATS_FAILED",
   /** it printed more than the plugin reads */
   tooLarge: "OATS_OUTPUT_TOO_LARGE",
+  /** a retire ran and its cleanup is incomplete: the kernel kept the home and says what is left */
+  retireIncomplete: "RETIRE_INCOMPLETE",
   /** the plugin refused the input before any process started */
   invalidInput: "INVALID_INPUT",
   // What the server entry says in a failed snapshot, before any `oats` could run:
@@ -39,6 +41,8 @@ export const codes = {
   noDeployment: "NO_DEPLOYMENT",
   /** the machine's host daemon did not answer */
   hostUnreachable: "HOST_UNREACHABLE",
+  /** an act went through, and neither its answer nor the next status names the agent's bb thread */
+  noThread: "NO_THREAD_NAMED",
 } as const;
 
 export const isKernelCode = (code: string): boolean => /^E_[A-Z0-9_]+$/.test(code);

@@ -4,21 +4,27 @@
 import { z } from "zod";
 import { shaped } from "./envelope.js";
 import { checkHome, checkInstance, checkKey, checkRevision } from "./input.js";
-import { err, ok, type Result } from "./result.js";
+import { codes, err, ok, type Result } from "./result.js";
 
 export type Plan = { revision: string; lines: string[] };
 type Apply = { instance: string; revision: string; key: string };
 
 const text = z.string().nullish();
-const session = z.looseObject({ state: text, established: z.boolean().nullish() }).nullish();
+const session = z.looseObject({ state: text, present: z.boolean().nullish(), established: z.boolean().nullish() }).nullish();
 const work = z
   .looseObject({ observed: z.boolean().nullish(), branch: text, changed: z.number().nullish(), untracked: z.number().nullish(), reason: text })
   .nullish();
-const idle = (state: string | null | undefined): boolean => state === "shell" || state === "stopped" || state === "not-launched";
+/**
+ * The kernel's words for a session with nothing to stop: `shell`, `stopped` and `not-launched` are
+ * idle, and one that is established and not present (`absent`) is observably gone. Any other state
+ * of an established session, `unknown` included, is a running harness.
+ */
+const idle = (value: NonNullable<z.output<typeof session>>): boolean =>
+  value.present === false || value.state === "shell" || value.state === "stopped" || value.state === "not-launched";
 
 function sessionWords(value: z.output<typeof session>): string {
   if (!value || value.established === false) return "whether it runs is not known";
-  return idle(value.state) ? "not running" : "running";
+  return idle(value) ? "not running" : "running";
 }
 
 function workWords(value: z.output<typeof work>): string | null {
@@ -121,7 +127,7 @@ const retirePlan = z.looseObject({
       ownWorktree: z.boolean().nullish(),
       children: z.array(z.looseObject({ instance: z.string(), session })).nullish(),
       ambiguous: z.array(z.looseObject({ instance: z.string() })).nullish(),
-      extraWorktrees: z.array(z.looseObject({ path: text, branch: text, disposition: text })).nullish(),
+      extraWorktrees: z.array(z.looseObject({ path: text, branch: text, disposition: text, reason: text })).nullish(),
     })
     .nullish(),
   defaults: z
@@ -137,7 +143,13 @@ export function parseRetirePlan(document: unknown): Result<Plan> {
   const facts = plan.facts ?? {};
   const defaults = plan.defaults ?? {};
   const lines: string[] = [];
-  lines.push(`Removed: the home of ${plan.instance}${plan.home ? ` (${plan.home})` : ""}. Its session is ${sessionWords(facts.session)}${idle(facts.session?.state) ? "" : " and is stopped first"}.`);
+  const sessionLine =
+    !facts.session || facts.session.established === false
+      ? "Whether its session runs is not known; one that runs is stopped first."
+      : idle(facts.session)
+        ? "Its session is not running."
+        : "Its session is running and is stopped first.";
+  lines.push(`Removed: the home of ${plan.instance}${plan.home ? ` (${plan.home})` : ""}. ${sessionLine}`);
   if (facts.ownWorktree === true) {
     const branch = facts.work?.branch ? ` on branch ${facts.work.branch}` : "";
     const pending = workWords(facts.work);
@@ -149,7 +161,12 @@ export function parseRetirePlan(document: unknown): Result<Plan> {
     lines.push(defaults.deleteBranch === true ? "Removed: its branch." : "Kept: its branch.");
   }
   for (const tree of facts.extraWorktrees ?? []) {
-    lines.push(`${tree.disposition === "retain" ? "Kept" : "Removed"}: the extra tree ${tree.path ?? ""}${tree.branch ? ` on branch ${tree.branch}` : ""}.`);
+    const which = `the extra tree ${tree.path ?? ""}${tree.branch ? ` on branch ${tree.branch}` : ""}`;
+    // The kernel's three dispositions; a word of a newer kernel is shown as it is, never guessed.
+    if (tree.disposition === "retain") lines.push(`Kept: ${which}, moved out of the home${tree.reason ? ` (${tree.reason})` : ""}.`);
+    else if (tree.disposition === "remove") lines.push(`Removed: ${which} (it is clean; its branch is kept).`);
+    else if (tree.disposition === "refuse") lines.push(`Blocks the retire: ${which}${tree.reason ? ` (${tree.reason})` : ""}. The kernel would refuse and keep the home.`);
+    else lines.push(`${tree.disposition ?? "Undecided"}: ${which}.`);
   }
   const children = facts.children ?? [];
   if (children.length > 0) {
@@ -162,10 +179,30 @@ export function parseRetirePlan(document: unknown): Result<Plan> {
   return ok({ revision: plan.planRevision, lines });
 }
 
-const retireReceipt = z.looseObject({ retired: z.string().min(1) });
+const retireReceipt = z.looseObject({
+  retired: z.string().min(1),
+  rollbackIncomplete: z.array(z.string()).nullish(),
+  retainedHome: text,
+});
 
-/** A first guarded retire prints the receipt itself; a replayed one prints it in an envelope. */
+/** A retire receipt that says its cleanup is incomplete: the one document `oats retire` prints with exit 1. */
+export const isIncompleteRetire = (document: unknown): boolean => {
+  const parsed = retireReceipt.safeParse(document);
+  return parsed.success && Array.isArray(parsed.data.rollbackIncomplete);
+};
+
+/**
+ * A first guarded retire prints the receipt itself; a replayed one prints it in an envelope. A
+ * receipt with `rollbackIncomplete` (printed with exit 1) is a retire whose cleanup is incomplete:
+ * the home is kept, and the kernel's own lines say what is left.
+ */
 export function parseRetireApply(document: unknown): Result<Record<string, never>> {
   const parsed = shaped(retireReceipt, document, "oats retire");
-  return parsed.ok ? ok({}) : parsed;
+  if (!parsed.ok) return parsed;
+  const left = parsed.value.rollbackIncomplete;
+  if (left) {
+    const home = parsed.value.retainedHome ? ` at ${parsed.value.retainedHome}` : "";
+    return err(codes.retireIncomplete, `the retire of ${parsed.value.retired} is incomplete and its home is kept${home}:\n${left.join("\n")}`);
+  }
+  return ok({});
 }

@@ -18,8 +18,13 @@ export const MIN_INTERVAL_MS = 5_000;
 const PAGE_TTL_MS = 30_000;
 /** A client that asked for the snapshot this recently counts as connected, beside the watched reads. */
 const CLIENT_SEEN_MS = 45_000;
-/** Host-call limits, each a little over the kernel's own (kernel/index.ts), so the typed timeout answers first. */
-const HOST_TIMEOUT = { read: 25_000, preview: 50_000, act: 125_000, long: 26 * 60_000 } as const;
+/**
+ * Host-call limits. The kernel's own limit (kernel/index.ts) must answer first, so that a slow
+ * `oats` is the typed OATS_TIMEOUT and not a lost call. For a verb the host contract marks
+ * `experimental_retryable`, bb cancels the call and sends it once more at HALF this limit: so `read`
+ * and `preview` are more than twice the kernel's 20 s and 45 s. The acts are not retryable.
+ */
+export const HOST_TIMEOUT = { read: 45_000, preview: 100_000, act: 125_000, long: 26 * 60_000 } as const;
 
 type Snapshot = z.infer<typeof snapshotSchema>;
 type Target = { hostId: string; deployment: string; machine: string };
@@ -46,12 +51,17 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+/** The kernel's (or the plugin's) code behind each refusal built here, for the handlers that act on one. */
+const refusedWith = new WeakMap<object, string>();
+
 /** A kernel refusal or a failed `oats`, as the RPC refusal the app shows: the code, then the message, unchanged. */
 function refusal(error: KernelError): experimental_PluginRpcRefusal {
-  return new experimental_PluginRpcRefusal({
+  const refused = new experimental_PluginRpcRefusal({
     code: error.code === codes.invalidInput ? "invalid" : "conflict",
     message: error.code === codes.invalidInput ? error.message : `${error.code}: ${error.message}`,
   });
+  refusedWith.set(refused, error.code);
+  return refused;
 }
 const invalid = (message: string) => new experimental_PluginRpcRefusal({ code: "invalid", message });
 
@@ -80,6 +90,8 @@ export default async function plugin(bb: BbPluginApi) {
   const lifetime = new AbortController();
 
   let target: Target | null = null;
+  /** Counts the settings changes, so that a discovery that read the old settings is not kept. */
+  let settingsGeneration = 0;
   let watchAsserted = false;
   let cached: Snapshot | null = null;
   let comparable = "";
@@ -136,13 +148,19 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   async function base(signal: AbortSignal): Promise<{ target: Target; input: { deployment: string; oatsBin: string } } | Failure> {
-    if (target === null) {
+    let at = target;
+    if (at === null) {
+      const generation = settingsGeneration;
       const found = await findTarget(signal);
       if ("ok" in found) return found;
-      target = found;
-      watchAsserted = false;
+      at = found;
+      // Kept only if the settings it was found with are still the settings.
+      if (generation === settingsGeneration) {
+        target = found;
+        watchAsserted = false;
+      }
     }
-    return { target, input: { deployment: target.deployment, oatsBin: (await settings.get()).oatsBin } };
+    return { target: at, input: { deployment: at.deployment, oatsBin: (await settings.get()).oatsBin } };
   }
 
   /** The watch dies with the host worker: it is asserted again whenever it may be gone. */
@@ -219,8 +237,9 @@ export default async function plugin(bb: BbPluginApi) {
     if (!lifetime.signal.aborted) void reread();
   };
 
+  /** The cached snapshot; before the first one, the read in flight, or one started now. */
   async function current(): Promise<Snapshot> {
-    return cached ?? (await reread());
+    return cached ?? (await (running ?? reread()));
   }
 
   /** The agent the kernel's snapshot names; an instance it does not name is refused. */
@@ -240,15 +259,20 @@ export default async function plugin(bb: BbPluginApi) {
 
   /** Runs one verb on the machine; a kernel refusal, a failed `oats` and an unreachable machine are RPC refusals. */
   async function call<Method extends Verb>(method: Method, extra: Extra<Method>, timeoutMs: number, signal: AbortSignal): Promise<Value<Method>> {
-    const where = await base(signal);
-    if ("ok" in where) throw refusal({ code: where.code, message: where.message });
-    let answer: Answer<unknown>;
+    let where: Awaited<ReturnType<typeof base>>;
+    let answer: Answer<unknown> | null = null;
     try {
-      const input = { ...where.input, ...extra } as z.input<(typeof hostContract)[Method]["input"]>;
-      answer = (await host.call(method, input, { hostId: where.target.hostId, signal, timeoutMs })) as Answer<unknown>;
+      // Finding the machine and the deployment asks bb and the host daemon too: the same refusal.
+      where = await base(signal);
+      if (!("ok" in where)) {
+        const input = { ...where.input, ...extra } as z.input<(typeof hostContract)[Method]["input"]>;
+        answer = (await host.call(method, input, { hostId: where.target.hostId, signal, timeoutMs })) as Answer<unknown>;
+      }
     } catch (error) {
       throw refusal({ code: codes.hostUnreachable, message: `The machine that runs oats did not answer: ${String((error as Error).message)}` });
     }
+    if ("ok" in where) throw refusal({ code: where.code, message: where.message });
+    if (answer === null) throw refusal({ code: codes.hostUnreachable, message: "The machine that runs oats did not answer." });
     if (!answer.ok) throw refusal(answer.error);
     return answer.value as Value<Method>;
   }
@@ -272,7 +296,7 @@ export default async function plugin(bb: BbPluginApi) {
     const next = await reread();
     const row = next.ok ? next.agents.find((agent) => agent.instance === instance) : undefined;
     if (row?.threadId) return row.threadId;
-    throw refusal({ code: "E_RUNTIME_ENDPOINT_UNKNOWN", message: `${act} ${instance}, but the kernel named no bb thread for it` });
+    throw refusal({ code: codes.noThread, message: `${act} ${instance}, but the kernel named no bb thread for it` });
   }
 
   // ---- the RPC contract ----
@@ -331,6 +355,11 @@ export default async function plugin(bb: BbPluginApi) {
       let spawned: Value<"spawn">;
       try {
         spawned = await call("spawn", { soul, name, task, key, revision: decision.revision }, HOST_TIMEOUT.long, lifetime.signal);
+      } catch (error) {
+        // The decision moved and the kernel created nothing: there is nothing to replay under this
+        // key, so the next call with it reads the decision again instead of sending the stale one.
+        if (error instanceof Error && refusedWith.get(error) === "E_DECISION_STALE") spawns.delete(key);
+        throw error;
       } finally {
         rereadSoon();
       }
@@ -405,6 +434,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.events.on("thread.created", rereadSoon);
   bb.events.on("thread.deleted", rereadSoon);
   settings.onChange(() => {
+    settingsGeneration += 1;
     target = null;
     watchAsserted = false;
     pages.clear();

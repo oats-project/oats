@@ -192,13 +192,13 @@ const hostMethods = {
     output: answer(z.object({ summary: spawnSummary, revision: z.string() })),
   },
   /**
-   * The kernel takes an idempotency key only with the decision it confirms, so the host entry reads
-   * the preview and applies it in one call. `revision` is the decision an earlier call with the same
-   * key applied (null on the first call): with it the kernel replays that spawn instead of refusing.
+   * The kernel takes an idempotency key only with the decision it confirms: `revision` is the
+   * decision revision a `spawnPreview` of the same soul, name and task answered. Asked again with the
+   * same key and revision, the kernel replays that spawn instead of making a second one.
    */
   spawn: {
-    input: hostSpawn.extend({ key, revision: z.string().nullable() }).strict(),
-    output: answer(z.object({ instance: z.string(), threadId: z.string().nullable(), revision: z.string() })),
+    input: hostSpawn.extend({ key, revision: z.string() }).strict(),
+    output: answer(z.object({ instance: z.string(), threadId: z.string().nullable() })),
   },
   stopPlan: { experimental_retryable: true, input: hostInstance, output: answer(plan) },
   stopApply: { input: hostApply, output: answer(z.object({})) },

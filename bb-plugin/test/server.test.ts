@@ -1,15 +1,15 @@
 // The server entry on bb's fake plugin host, with the real host entry behind it (bb's host-entry
 // harness) and the fake `oats` behind that: the whole backend, from an RPC to a process and back.
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createFakePluginHost, makeHostResponse, type FakePluginHost } from "@get-bb/plugin-sdk/testing";
 import { experimental_createHostEntryHarness } from "@get-bb/plugin-sdk/testing/host";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { REALTIME_CHANGED } from "../contract.js";
+import { hostContract, REALTIME_CHANGED } from "../contract.js";
 import { createHostEntry } from "../host.js";
-import { codes } from "../kernel/index.js";
-import plugin, { MIN_INTERVAL_MS } from "../server.js";
-import { installFakeOats, type FakeOats } from "./support/fake-oats.js";
+import { codes, timeouts } from "../kernel/index.js";
+import plugin, { HOST_TIMEOUT, MIN_INTERVAL_MS } from "../server.js";
+import { FIXTURES, installFakeOats, type FakeOats } from "./support/fake-oats.js";
 
 let fake: FakeOats;
 let hostEntry: ReturnType<typeof experimental_createHostEntryHarness<any, any>>;
@@ -103,6 +103,18 @@ describe("snapshot", () => {
     await expect.poll(async () => (await verbs()).length, { timeout: MIN_INTERVAL_MS + 4_000 }).toBe(2);
   }, 20_000);
 
+  it("shares the read in flight with a snapshot call that arrives before the first answer", async () => {
+    await fake.behave({ status: { sleepMs: 700 } });
+    const service = server.harness.runService("snapshot");
+    await expect.poll(async () => (await verbs()).length).toBe(1);
+    const started = Date.now();
+    expect((await rpc("snapshot")).ok).toBe(true);
+    expect(Date.now() - started).toBeLessThan(MIN_INTERVAL_MS - 1_000);
+    expect(await verbs()).toEqual(["status"]);
+    service.controller.abort();
+    await service.done;
+  });
+
   it("says in one line that oats is missing, and keeps answering", async () => {
     await server.harness.setSettings({ oatsBin: join(fake.deployment, "no-oats-here") });
     const snapshot = await rpc("snapshot");
@@ -130,6 +142,25 @@ describe("snapshot", () => {
     await load({ deployment: join(fake.deployment, "agents") });
     expect(await rpc("snapshot")).toMatchObject({ ok: false, code: codes.noDeployment });
   });
+
+  it("does not keep a deployment found with settings that changed meanwhile", async () => {
+    await server.harness.dispose();
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await load();
+    server.harness.sdk.stub("hosts.list", (async () => {
+      await held; // the discovery is in flight, with the settings as they were
+      return hosts;
+    }) as never);
+    const first = rpc("snapshot");
+    await expect.poll(() => server.harness.sdk.callsTo("hosts.list").length).toBe(1);
+    await server.harness.setSettings({ deployment: join(fake.deployment, "agents") }); // holds no oats-local.yaml
+    server.harness.sdk.stub("hosts.list", (async () => hosts) as never);
+    release();
+    await first;
+    // The next read looks for the deployment again, with the new setting, instead of using the old one.
+    await expect.poll(async () => (await rpc("snapshot")).code, { timeout: MIN_INTERVAL_MS + 4_000 }).toBe(codes.noDeployment);
+  }, 20_000);
 
   it("asks to choose a machine when the server has several and none is set", async () => {
     await server.harness.dispose();
@@ -175,6 +206,16 @@ describe("the pages", () => {
     expect((await verbs()).filter((verb) => verb === "souls")).toHaveLength(1);
   });
 
+  it("refuses, and does not crash, when the machine cannot be asked where the deployment is", async () => {
+    await server.harness.dispose();
+    await hostEntry.experimental_dispose(); // every host call now fails
+    await load();
+    const refused = await refusalOf(rpc("souls"));
+    expect(refused.code).toBe("conflict");
+    expect(refused.message).toMatch(/^HOST_UNREACHABLE: The machine that runs oats did not answer: /);
+    expect(await rpc("snapshot")).toMatchObject({ ok: false, code: codes.hostUnreachable });
+  });
+
   it("refuses with the kernel's code and message when a page's verb fails, and reads again next time", async () => {
     await fake.behave({ teams: { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { code: "E_WORKSPACE_SCHEMA", message: "oats-workspace.yaml: teams must be a mapping" } }) } });
     expect(await refusalOf(rpc("teams"))).toEqual({ code: "conflict", message: "E_WORKSPACE_SCHEMA: oats-workspace.yaml: teams must be a mapping" });
@@ -203,6 +244,30 @@ describe("acts", () => {
     expect(calls.map((call) => call.verb)).toEqual(["spawn --preview", "spawn", "spawn"]);
     expect(calls[2]!.argv.slice(8)).toEqual(calls[1]!.argv.slice(8));
     expect(await refusalOf(rpc("spawn", { ...input, name: "another-developer" }))).toMatchObject({ code: "invalid" });
+  });
+
+  it("reads the decision again after the kernel refused a stale one, under the same key", async () => {
+    const input = { soul: "oats-developer", name: "flaky-ci-2-developer", task: "Fix the flaky CI job.", key: "spawn-1f0c9a7e" };
+    await fake.behave({ spawn: { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { code: "E_DECISION_STALE", message: "the decision moved", details: {} } }) } });
+    expect(await refusalOf(rpc("spawn", input))).toEqual({ code: "conflict", message: "E_DECISION_STALE: the decision moved" });
+    // The decision the kernel would confirm now is another one.
+    const preview = JSON.parse(await readFile(join(FIXTURES, "spawn-preview.json"), "utf8"));
+    preview.result.decision.revision = "aaaaaaaaaaaaaaaaaaaaaaaa";
+    await fake.behave({ "spawn --preview": { stdout: JSON.stringify(preview) } });
+    expect(await rpc("spawn", input)).toEqual({ instance: "flaky-ci-2-developer", threadId: "thr_ci2" });
+    const calls = (await fake.calls()).filter((call) => call.verb.startsWith("spawn"));
+    expect(calls.map((call) => call.verb)).toEqual(["spawn --preview", "spawn", "spawn --preview", "spawn"]);
+    expect(calls[3]!.argv[calls[3]!.argv.indexOf("--expect-decision") + 1]).toBe("aaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(calls[1]!.argv[calls[1]!.argv.indexOf("--expect-decision") + 1]).not.toBe("aaaaaaaaaaaaaaaaaaaaaaaa");
+  });
+
+  it("keeps the decision for a retry when the spawn failed another way", async () => {
+    const input = { soul: "oats-developer", name: "flaky-ci-2-developer", task: "Fix the flaky CI job.", key: "spawn-1f0c9a7e" };
+    await fake.behave({ spawn: { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { code: "E_SPAWN_INCOMPLETE", message: "launched, not confirmed" } }) } });
+    expect(await refusalOf(rpc("spawn", input))).toMatchObject({ code: "conflict" });
+    await fake.behave({});
+    await rpc("spawn", input);
+    expect((await fake.calls()).filter((call) => call.verb.startsWith("spawn")).map((call) => call.verb)).toEqual(["spawn --preview", "spawn", "spawn"]);
   });
 
   it("refuses a soul that is not listed and a name that is no instance name, with no spawn process", async () => {
@@ -257,6 +322,19 @@ describe("acts", () => {
     expect(await rpc("start", { instance: "weekly-digest-helper" })).toEqual({ threadId: "thr_digest" });
   }, 20_000);
 
+  it("refuses with a code of its own, never a kernel code, when no thread is named anywhere", async () => {
+    const roster = JSON.parse(await readFile(join(FIXTURES, "status.json"), "utf8"));
+    for (const group of roster.agents) for (const instance of group.instances) if (instance.instance === "weekly-digest-helper") delete instance.session;
+    await fake.behave({
+      status: { stdout: JSON.stringify(roster) },
+      "session start": { stdout: JSON.stringify({ schemaVersion: 1, ok: true, result: { instance: "weekly-digest-helper", backend: "bb", warnings: [] } }) },
+    });
+    expect(await refusalOf(rpc("start", { instance: "weekly-digest-helper" }))).toEqual({
+      code: "conflict",
+      message: "NO_THREAD_NAMED: Started weekly-digest-helper, but the kernel named no bb thread for it",
+    });
+  }, 20_000);
+
   it("retires through the plan and its guarded apply", async () => {
     const plan = await rpc("retirePlan", { instance: "weekly-digest-helper" });
     expect(plan.revision).toBe("4e5f6a7b8c9d0e1f2a3b4c5d");
@@ -271,6 +349,20 @@ describe("acts", () => {
     await rpc("stopApply", { instance: "redesign-ui-lead", revision: "9c1f2e3d4b5a69788796a5b4", key: "stop-7f3a9c2e41b8" });
     await expect.poll(async () => (await verbs()).filter((verb) => verb === "status").length, { timeout: MIN_INTERVAL_MS + 4_000 }).toBe(2);
   }, 20_000);
+});
+
+describe("the host-call limits", () => {
+  it("leave the kernel's own limit reachable before bb retries a retryable call at half the transport timeout", () => {
+    expect(HOST_TIMEOUT.read / 2).toBeGreaterThan(timeouts.read);
+    expect(HOST_TIMEOUT.preview / 2).toBeGreaterThan(timeouts.preview);
+    // Not retryable: the kernel's limit only has to come first.
+    expect(HOST_TIMEOUT.act).toBeGreaterThan(timeouts.act);
+    expect(HOST_TIMEOUT.long).toBeGreaterThan(timeouts.long);
+    expect(HOST_TIMEOUT.long).toBeLessThanOrEqual(30 * 60_000); // bb's cap for a host call
+    // Which verbs bb retries, and so which limit each needs.
+    const retryable = Object.entries(hostContract).filter(([, method]) => "experimental_retryable" in method && method.experimental_retryable).map(([name]) => name);
+    expect(retryable.sort()).toEqual(["capabilities", "discover", "servers", "souls", "spawnPreview", "status", "stopPlan", "teams"]);
+  });
 });
 
 describe("the slow poll", () => {

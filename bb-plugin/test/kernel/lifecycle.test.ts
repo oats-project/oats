@@ -122,6 +122,41 @@ describe("retire", () => {
     expect((await fake.calls()).map((call) => call.argv)).toEqual([["retire", "weekly-digest-helper", "--plan", "--json"]]);
   });
 
+  it("says so when the kernel could not establish whether the session runs", async () => {
+    const answer = JSON.parse(await readFile(join(FIXTURES, "retire-plan.json"), "utf8"));
+    answer.result.facts.session = { state: "unestablished", present: null, backend: null, established: false, reason: "E_SESSION_UNAVAILABLE" };
+    await fake.behave({ "retire --plan": { stdout: JSON.stringify(answer) } });
+    const plan = await oats.retirePlan("weekly-digest-helper");
+    expect(plan.ok && plan.value.lines[0]).toBe(
+      "Removed: the home of weekly-digest-helper (/abs/deployment/agents/oats-expert/instances/weekly-digest-helper). Whether its session runs is not known; one that runs is stopped first.",
+    );
+    answer.result.facts.session = { state: "unknown", present: true, backend: "bb", established: true };
+    await fake.behave({ "retire --plan": { stdout: JSON.stringify(answer) } });
+    const running = await oats.retirePlan("weekly-digest-helper");
+    expect(running.ok && running.value.lines[0]).toMatch(/Its session is running and is stopped first\.$/);
+    // Established and observably gone: nothing to stop.
+    answer.result.facts.session = { state: "absent", present: false, backend: "bb", established: true };
+    await fake.behave({ "retire --plan": { stdout: JSON.stringify(answer) } });
+    const absent = await oats.retirePlan("weekly-digest-helper");
+    expect(absent.ok && absent.value.lines[0]).toMatch(/Its session is not running\.$/);
+  });
+
+  it("says for each extra tree what the kernel would do with it: keep, remove, or refuse the retire", async () => {
+    const answer = JSON.parse(await readFile(join(FIXTURES, "retire-plan.json"), "utf8"));
+    const tree = (name: string, disposition: string, reason: string | null) => ({
+      path: `/h/.work-${name}`, repo: "/w/docs", branch: `agents/x-${name}`, detachedAt: null, disposition, movedTo: disposition === "retain" ? "/w/.agents/worktrees/docs/x" : null, reason,
+    });
+    answer.result.facts.extraWorktrees = [tree("a", "retain", "2 changed files"), tree("b", "remove", null), tree("c", "refuse", "its target exists"), tree("d", "quarantine", null)];
+    await fake.behave({ "retire --plan": { stdout: JSON.stringify(answer) } });
+    const plan = await oats.retirePlan("weekly-digest-helper");
+    expect(plan.ok && plan.value.lines.filter((line) => line.includes("the extra tree"))).toEqual([
+      "Kept: the extra tree /h/.work-a on branch agents/x-a, moved out of the home (2 changed files).",
+      "Removed: the extra tree /h/.work-b on branch agents/x-b (it is clean; its branch is kept).",
+      "Blocks the retire: the extra tree /h/.work-c on branch agents/x-c (its target exists). The kernel would refuse and keep the home.",
+      "quarantine: the extra tree /h/.work-d on branch agents/x-d.",
+    ]);
+  });
+
   it("applies the plan: the first answer is the receipt itself, a replay is an envelope", async () => {
     const apply = { instance: "weekly-digest-helper", revision: "4e5f6a7b8c9d0e1f2a3b4c5d", key: "retire-2b9d4e6f8a1c" };
     expect(await oats.retireApply(apply)).toEqual({ ok: true, value: {} });
@@ -129,6 +164,36 @@ describe("retire", () => {
     await fake.behave({ retire: { stdout: JSON.stringify({ schemaVersion: 1, ok: true, result: { ...receipt, replayed: true } }) } });
     expect(await oats.retireApply(apply)).toEqual({ ok: true, value: {} });
     expect((await fake.calls())[0]?.argv).toEqual(["retire", "weekly-digest-helper", "--plan-revision", "4e5f6a7b8c9d0e1f2a3b4c5d", "--idempotency-key", "retire-2b9d4e6f8a1c", "--json"]);
+  });
+
+  it("says what the kernel left when a retire's cleanup is incomplete (the receipt, with exit 1)", async () => {
+    const receipt = JSON.parse(await readFile(join(FIXTURES, "retire-incomplete.json"), "utf8"));
+    await fake.behave({ retire: { file: "retire-incomplete.json", exit: 1 } });
+    const applied = await oats.retireApply({ instance: "weekly-digest-helper", revision: "4e5f6a7b8c9d0e1f2a3b4c5d", key: "retire-2b9d4e6f8a1c" });
+    expect(applied).toEqual({
+      ok: false,
+      error: {
+        code: codes.retireIncomplete,
+        message: `the retire of weekly-digest-helper is incomplete and its home is kept at ${receipt.retainedHome}:\n${receipt.rollbackIncomplete.join("\n")}`,
+      },
+    });
+    expect(receipt.rollbackIncomplete.length).toBeGreaterThan(0);
+    // Asked again with the same key, the kernel replays that receipt in an envelope, with exit 0.
+    await fake.behave({ retire: { stdout: JSON.stringify({ schemaVersion: 1, ok: true, result: { ...receipt, replayed: true } }) } });
+    const replayed = await oats.retireApply({ instance: "weekly-digest-helper", revision: "4e5f6a7b8c9d0e1f2a3b4c5d", key: "retire-2b9d4e6f8a1c" });
+    expect(replayed).toEqual(applied);
+  });
+
+  it("does not take a retire that exits nonzero for done, whatever it printed", async () => {
+    await fake.behave({ retire: { file: "retire-apply.json", exit: 1, stderr: "TypeError: boom\n" } });
+    const applied = await oats.retireApply({ instance: "weekly-digest-helper", revision: "4e5f6a7b8c9d0e1f2a3b4c5d", key: "retire-2b9d4e6f8a1c" });
+    expect(applied).toEqual({ ok: false, error: { code: codes.failed, message: "`oats` exited 1: TypeError: boom" } });
+  });
+
+  it("still says that oats failed when another verb exits nonzero with a document that is no refusal", async () => {
+    await fake.behave({ "instance stop --apply": { file: "stop-apply.json", exit: 1 } });
+    const applied = await oats.stopApply({ instance: "redesign-ui-lead", revision: "9c1f2e3d4b5a69788796a5b4", key: "stop-7f3a9c2e41b8" });
+    expect(applied.ok === false && applied.error.code).toBe(codes.failed);
   });
 
   it("answers the kernel's refusal unchanged", async () => {

@@ -9,4 +9,4 @@ if [ "$(bb --version 2>/dev/null || true)" != "$BB_VERSION" ]; then
   npm install -g "bb-app@$BB_VERSION"
 fi
 npm ci
-echo "setup: bb-app $(bb --version), plugin SDK $(node -p 'require("@get-bb/plugin-sdk/package.json").version')"
+echo "setup: bb-app $(bb --version), plugin SDK $(node -p 'JSON.parse(require("fs").readFileSync("node_modules/@get-bb/plugin-sdk/package.json", "utf8")).version')"

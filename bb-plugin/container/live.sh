@@ -4,7 +4,8 @@
 # checks; the app's (A13, A14: screenshots at two widths) are container/live-ui.mjs, run from here
 # when it is there.
 #   L1  the installed plugin reads the deployment through the host entry
-#   L2  a line appended to the deployment's event log invalidates the snapshot (watch -> signal -> reread)
+#   L2  a line appended to the deployment's event log, with the poll off, makes the server reread (watch -> signal -> reread)
+#   L3  a status slower than the kernel's limit is the typed OATS_TIMEOUT, not a lost host call
 #   A14 (backend) with the fake oats removed, the snapshot says what is missing and bb answers as usual
 #   A15 `bb plugin reload oats` during a slow oats leaves no oats process
 #   A15b stopping bb during a slow oats leaves none either
@@ -77,18 +78,46 @@ else
 fi
 grep -q '"cwd":"'"$DEPLOYMENT"'"' "$FAKE_LOG" && pass "L1 oats ran with the deployment as its cwd" || fail "L1 cwd"
 
-# ---- L2: the watch. A new roster, then one line in the event log; no RPC asks for a reread.
-sleep 5.5 # past the floor between two reads
-before=$(field at <<<"$(rpc snapshot)")
+# ---- L2: the watch alone. The server polls only while a client is connected, and counts one as
+# connected for 45 s after a snapshot call: so no RPC for 50 s, then one line in the event log, and
+# the proof is the fake's own log: a status call that nothing but the watch can have caused.
+say "L2 waiting 50 s with no RPC, so that the 15 s poll is off"
+sleep 50
+: > "$FAKE_LOG"
+sleep 16 # a poll tick, had the poll been on
+if grep -q '"verb":"status"' "$FAKE_LOG"; then fail "L2 precondition: the poll still runs with no client"; fi
 fake '{"status":{"stdout":"{\"root\":\"/abs/deployment\",\"agents\":[]}"}}'
 echo '{"kind":"spawned"}' >> "$DEPLOYMENT/.agents/events/oats-maintainer--release-070-maintainer.jsonl"
-changed() { [ "$(field at <<<"$(rpc snapshot)")" != "$before" ]; }
-if wait_until 8 changed && [ "$(field agents.length <<<"$(rpc snapshot)")" = 0 ]; then
-  pass "L2 a line in .agents/events made the server reread (no poll, no refresh)"
+if wait_until 8 grep -q '"verb":"status"' "$FAKE_LOG"; then
+  pass "L2 a line in .agents/events made the server run oats status (no poll, no RPC)"
 else
-  fail "L2 the event log's change did not reach the snapshot"
+  fail "L2 the event log's change caused no reread"
+fi
+sleep 1
+[ "$(field agents.length <<<"$(rpc snapshot)")" = 0 ] && pass "L2 the cached snapshot is the new roster" || fail "L2 the snapshot is not the new roster"
+fake
+sleep 5.5 # past the floor between two reads
+rpc refresh > /dev/null
+
+# ---- L3: a status slower than the kernel's 20 s limit. bb sends a retryable host call again at half
+# its transport timeout: the limit must be reached before that, in one process.
+fake '{"status":{"sleepMs":600000}}'
+: > "$FAKE_LOG"
+l3_start=$SECONDS
+rpc refresh > /dev/null
+l3_took=$((SECONDS - l3_start))
+slow=$(rpc snapshot)
+first_two=$(grep -c '"verb":"status"' "$FAKE_LOG" || true)
+if [ "$(field code <<<"$slow")" = OATS_TIMEOUT ] && [ "$l3_took" -ge 19 ] && [ "$l3_took" -le 27 ]; then
+  pass "L3 a status that never answers is OATS_TIMEOUT after ${l3_took} s ($first_two status process(es) logged by then)"
+else
+  fail "L3 slow status: code $(field code <<<"$slow") after ${l3_took} s"; say "$slow" | head -c 300
 fi
 fake
+sleep 5.5
+rpc refresh > /dev/null
+none_yet() { [ -z "$(oats_processes)" ]; }
+wait_until 10 none_yet || { fail "L3 a slow oats is still running"; oats_processes; }
 
 # ---- A14, the backend's part: no oats.
 mv "$OATS" "$OATS.away"
@@ -108,6 +137,7 @@ rpc refresh > /dev/null
 fake '{"status":{"sleepMs":600000,"grandchild":true}}'
 : > "$FAKE_LOG"
 (rpc refresh > "$OUT/a15-refresh.txt" 2>&1 || true) &
+refresh=$!
 wait_until 15 grep -q '"verb":"status"' "$FAKE_LOG" || fail "A15 the slow oats did not start"
 oats_processes > "$OUT/a15-before.txt"
 say "A15 running before the reload:"; sed 's/^/    /' "$OUT/a15-before.txt"
@@ -117,7 +147,7 @@ fake
 bb plugin reload oats > "$OUT/a15-reload.txt" 2>&1 || { fail "A15 bb plugin reload"; cat "$OUT/a15-reload.txt"; }
 none_left() { [ -z "$(oats_processes)" ]; }
 if wait_until 10 none_left; then pass "A15 no oats process is left after bb plugin reload oats"; else fail "A15 left running:"; oats_processes; fi
-wait || true
+wait "$refresh" || true
 bb plugin list | grep -q '^oats@.* running' && pass "A15 the plugin runs again after the reload" || fail "A15 plugin state after the reload"
 [ "$(field ok <<<"$(rpc snapshot)")" = true ] && pass "A15 the snapshot answers after the reload" || fail "A15 snapshot after the reload"
 
@@ -133,12 +163,13 @@ if [ -f "$OUT/bb.pid" ]; then
   fake '{"status":{"sleepMs":600000,"grandchild":true}}'
   : > "$FAKE_LOG"
   (rpc refresh > "$OUT/a15b-refresh.txt" 2>&1 || true) &
+refresh=$!
   wait_until 15 grep -q '"verb":"status"' "$FAKE_LOG" || fail "A15b the slow oats did not start"
   oats_processes > "$OUT/a15b-before.txt"
   [ "$(wc -l < "$OUT/a15b-before.txt")" -ge 2 ] || fail "A15b expected the slow oats and its child to be running"
   kill -TERM "$(cat "$OUT/bb.pid")"
   if wait_until 20 none_left; then pass "A15b no oats process is left after bb stops"; else fail "A15b left running:"; oats_processes; fi
-  wait || true
+  wait "$refresh" || true
   rm -f "$OUT/bb.pid"
 else
   say "note: A15b skipped: this run did not start bb itself, so it does not stop it"
