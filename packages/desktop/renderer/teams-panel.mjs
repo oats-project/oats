@@ -6,6 +6,7 @@
 import { teamRow } from '../../client/team-rows.mjs';
 import { iconElement } from './shell-icons.mjs';
 import { codeLineNodes } from '../../client/remote-address.mjs';
+import { cliHeldBack } from './views/cli-status.mjs';
 
 /** One card, the same in the Workspace inspector and the context panel:
  * tokens only (computed-AA inventory in theme-contrast), no opacity.
@@ -390,7 +391,10 @@ export function createTeamsPanel(parent, { operations, selector, request, owns, 
     const held = !mutable();
     for (const b of body.querySelectorAll('[data-team-action]')) {
       const op = operations[b.dataset.teamAction];
-      b.disabled = !!pending || !available() || !live() || !op || !op.arg || !op.available;
+      // Join and leave are capability runs: held back above the tested bound (#1879), the notice as their title.
+      const heldBack = cliHeldBack('POST /api/capabilities run');
+      b.disabled = !!pending || !available() || !live() || !op || !op.arg || !op.available || !!heldBack;
+      if (heldBack) b.title = heldBack;
       // The host's inspection is stale: held with the reason, aria-disabled (focus survives); the next good read lifts it.
       if (held) { b.setAttribute('aria-disabled', 'true'); b.setAttribute('aria-description', mutableReason); if (!b.disabled) b.title = mutableReason; }
       else if (b.getAttribute('aria-description') === mutableReason) { b.removeAttribute('aria-disabled'); b.removeAttribute('aria-description'); if (b.title === mutableReason) b.removeAttribute('title'); }

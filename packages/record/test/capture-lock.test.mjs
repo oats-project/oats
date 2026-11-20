@@ -369,7 +369,7 @@ test("capture lock: a fresh owner record carries bounded command and caller attr
     const lock = acquireCaptureLock(root, { command: "pass", caller: { entry: "turn-record", trigger: "service" } });
     const path = join(captureLockPath(root), "owner.json"), read = () => JSON.parse(readFileSync(path, "utf8"));
     const fresh = read();
-    assert.deepEqual(Object.keys(fresh).sort(), ["caller", "command", "host", "nonce", "pid", "ppid", "startedAt"]);
+    assert.deepEqual(Object.keys(fresh).sort(), ["bootId", "caller", "command", "host", "nonce", "pid", "ppid", "processStart", "startedAt"]);
     assert.equal(fresh.command, "pass"); assert.deepEqual(fresh.caller, { entry: "turn-record", trigger: "service" });
     assert.equal(fresh.ppid, process.ppid);
     const dead = spawnSync(process.execPath, ["-e", "0"]).pid;

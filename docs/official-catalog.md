@@ -9,10 +9,10 @@ or workspace membership alone does not make a package official.
 
 | package | release | capabilities | package souls |
 |---|---|---|---|
-| `oats.framework` | `oats-framework/v1.22.1` (this repository) | `oats.core`, `oats.setup`, `oats.onboarding`, `oats.support`, `oats.knowledge-theory` | `knowledge-theory-expert`, `oats-setup-expert` |
-| `oats.okf` | `v5.8.0` | `oats.okf` (knowledge), `oats.okf-harvest`, `oats.okf-maintenance` | `knowledge-harvester`, `knowledge-maintainer` |
-| `oats.aweb` | `v1.37.0` | `oats.aweb` (messaging), `oats.aweb-tasks` (tasks) | |
-| `oats.engineering` | `v1.18.0` | `oats.engineering-expert`, `oats.developer`, `oats.code-review`, `oats.maintainer` | `code-reviewer` |
+| `oats.framework` | `oats-framework/v1.27.0` (this repository) | `oats.core`, `oats.setup`, `oats.onboarding`, `oats.support`, `oats.knowledge-theory`, `oats.coordination-setup` | `knowledge-theory-expert`, `oats-setup-expert` |
+| `oats.okf` | `v6.3.0` | `oats.okf` (knowledge), `oats.okf-harvest`, `oats.okf-maintenance` | `knowledge-harvester`, `knowledge-maintainer` |
+| `oats.aweb` | `v1.46.0` | `oats.aweb` (messaging), `oats.aweb-tasks` (tasks) | |
+| `oats.engineering` | `v1.18.0` (frozen: see Coordination templates) | `oats.engineering-expert`, `oats.developer`, `oats.code-review`, `oats.maintainer` | `code-reviewer` |
 | `oats.authoring` | `v1.0.3` | `oats.authoring` | |
 | `oats.cloning` | `v1.1.0` | `oats.cloning` | `cloner` |
 | `oats.jira` | `v1.0.1` | `oats.jira` (tasks) | |
@@ -21,16 +21,50 @@ or workspace membership alone does not make a package official.
 | `oats.machine` | `v0.1.1` | `oats.machine-care` | `steward`, `technician` |
 
 Each package lives in its own `awebai/oats-*` repository except
-`oats.framework`, whose payload root is `oats-package/` here. A capability id
-names the package that supplies it through the catalog's aliases, so
-`oats.developer: { from: package }` selects `oats.engineering`. This catalog ships with
+`oats.framework`, whose payload root is `oats-package/` here. A capability
+written `{ from: package }` resolves through the workspace's lock, to the one
+locked package whose capability list holds it: `oats.developer: { from: package }`
+selects `oats.engineering` when that package is pinned and synced. Two locked
+packages providing the same capability are refused with `E_PACKAGE_MISSING`,
+which names both. The catalog's `capabilities` map records which official
+package ships each capability (and a renamed capability's current name:
+`oas.okf` is `oats.okf`); the kernel reads it only to pick a standalone
+deployment's package (the one that ships `oats.core`). This catalog ships with
 the CLI: an older installed CLI keeps its own copy, and a change here rewrites
 no lock and adds nothing to an existing workspace.
+
+## Coordination templates
+
+OATS's coordination ships as templates, not packages: one for each way of
+working, each in its own repository. An installed kernel's
+copy of this catalog carries this section from the next kernel release; the
+onboarding skills name the engineering template directly, so they work on an
+older kernel too. A template is a
+repository that a setup expert copies into a workspace's own capabilities and
+adapts to the organisation by the repository's `ADAPTING.md`
+(`/adapt-to-the-organisation`, in `oats.framework`); nobody pins it. Template
+releases are tagged `template-v<version>`. Each copied capability records the
+release it came from in its description, and the copy records it as a whole in
+`capabilities/TEMPLATE-RELEASE`.
+
+| Template | Latest release | Way of working |
+| --- | --- | --- |
+| `oats-project/oats-engineering-coordination` | `template-v4.0.2` | Work that lands as pull requests: a dispatcher, a lead for each effort with a tree sized to the work (alone, with short-lived probes and helpers, or with one specialist per area), whoever builds a change iterating with a fresh reviewer each round, a maintainer's green light where a lane asks for one, and every finished instance retiring itself. |
+| `oats-project/oats-research-coordination` | `template-v2.1.2` | Work that ends in a finding or a report: a dispatcher, a research lead for each question that researches a single small angle itself or sends a researcher for each, and a verifier briefed to disprove, which checks the lead's own claims too. A report lands when the person who asked accepts it. |
+| `oats-project/oats-scientific-research-coordination` | `template-v2.1.2` | Studies that end in claims a person is accountable for: a dispatcher, a study lead for each study, an analyst for each arm of a locked protocol, fresh study reviewers for the methods, an independent check, leakage and citations, and a record steward that locks protocols and keeps the study records. A claim lands when the scientist accepts it; one that leaves the group needs a check that isn't LLM judgement. |
+
+The package `oats.engineering` is frozen at `v1.18.0`. Its entry and its four
+aliases stay, so existing pins keep resolving, and its repository,
+`oats-project/oats-engineering`, gets no further releases. The engineering
+template that replaces it lives in its own repository, above; a workspace that
+pins the package moves to it by the template's `ADAPTING.md` and the "From
+v1.18.0" steps in its CHANGELOG. Open: retiring the entry and moving the
+aliases, a later decision once no workspace we know of pins it.
 
 ## Find and use packages
 
 - A workspace pins an official package by **bare version** in its
-  `packages:` map (`oats.okf: v5.8.0`); `oats sync` resolves it through the
+  `packages:` map (`oats.okf: v6.3.0`); `oats sync` resolves it through the
   catalog to an exact commit, fetches it, verifies its integrity and locks it.
   A package outside the catalog is written `git:<repo>@<ref>`. Pinning does
   not join a team or adopt the publisher's workspace. See
@@ -87,3 +121,46 @@ an entry. State the reason, affected releases and supported replacement or hold,
 and assess existing locks before changing discovery. Preserve immutable
 release history. A list change is not permission to rewrite a deployment's
 lock or change what a workspace declares.
+
+## Updating the test mirrors
+
+`package-catalog.json` is the source of package release refs. Workspace pins,
+current documentation and skill recommendations are checked against it by
+`scripts/check-catalog-references.mjs`; dated release/design/upgrade records
+retain their historical versions. The clean-room smoke reads the catalog
+rather than repeating its versions.
+
+The capability copies in `mirrors/` are test and release material. They stay
+outside `capabilities/` so member discovery cannot offer them a second time,
+and are excluded from npm. Never edit them by hand. For a non-OKF catalog pin:
+
+```bash
+node scripts/check-mirrors.mjs --generate oats.aweb
+node scripts/check-mirrors.mjs --verify
+```
+
+Generation fetches only the catalog tag into ignored disposable scratch under
+`.agents/mirror-source-*`, verifies its published tag object and peeled commit,
+and reads raw Git blobs. Same-filesystem staging uses
+`.agents/mirror-generation-*` there too. These paths are separate from the
+deployment packages/capabilities under `.agents/`; generation does not modify
+those or use modified source-checkout files. Existing destinations can be
+replaced only when the same package's prior manifest owns their exact names;
+OKF inventory paths are reserved for OKF. An optional source
+clone argument uses that clone's immutable objects instead of fetching them;
+its origin and tag must match the catalog and published remote. A moved tag
+at an unchanged pin is refused against the previous inventory. All bytes,
+executable bits, file sets and symlink targets are recorded in
+`scripts/mirror-source-inventory.json`. Root capability exports (`.`) are
+supported; escaping, broken and directory symlinks are refused by the shared
+payload walker before replacement. Git paths that collide under case or Unicode
+normalization are refused before staging writes; symlinks are created only
+after every directory and regular file, so no staging write traverses one.
+
+OKF keeps its existing stricter release finalization and wrapper/soul/trigger
+inventory; use [the OKF mirror procedure](release-lane.md#mirroring-a-released-oatsokf)
+to generate that package. The combined checker includes that gate and requires
+its published catalog release. Verification is offline and needs neither Git
+nor sibling clones. It runs explicitly in PR CI and through `npm run validate`.
+A missing, extra or changed entry refuses verification; version equality alone
+is insufficient.

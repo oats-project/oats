@@ -374,7 +374,7 @@
                   "description": "Home entries the kernel owns cannot be declared.",
                   "anyOf": [
                     {"pattern": "^\\.(?:oats|agents|claude)$"},
-                    {"pattern": "^\\.oats-(?:events|stop|restart|rollback|agents-md|start|attachments|color|background|same-work)"},
+                    {"pattern": "^\\.oats-(?:events|stop|restart|rollback|agents-md|start|attachments|color|background|pinned|same-work|related-work|board)"},
                     {"pattern": "^\\.oats-.*\\*$"}
                   ]
                 }

@@ -105,6 +105,9 @@ jobs:
       - name: Pi adapter TypeScript syntax
         run: npm run check:pi
 
+      - name: Generated package mirrors match their catalog pins
+        run: node scripts/check-mirrors.mjs --verify
+
       - name: Schemas, manifests, config examples, and public links
         run: npm run validate
 

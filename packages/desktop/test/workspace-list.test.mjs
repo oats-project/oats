@@ -1,7 +1,7 @@
 // The workspace list (renderer/workspace-switcher.mjs): always shown at the sidebar's top, one row per workspace
 // this window can show, whatever machine it is on. Its rows and their order (the matched views, then the unattached
 // ones, in one flat list with no heading), a row as one line with the name alone, the current row (marked by style
-// alone), the needs-input mark and its words, Show only the current workspace, picking a row another window shows, an unattached row's deployment
+// alone), the needs-input mark and its words, every workspace always shown, picking a row another window shows, an unattached row's deployment
 // tab, the leader's moves (`step`), the arrow keys and the roving tab stop, the empty message, the bounded height,
 // a switch on its way and the pick tokens. Nothing is asked of main for the list itself.
 // The Add dialog is workspace-switcher.test.mjs; Open in new window (⌘Enter / Ctrl+Enter, the row's context
@@ -10,7 +10,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
-import { createWorkspaceSwitcher, moreBelowText, WAITING_NAME, WAITING_TITLE, CURRENT_ONLY_LABEL, CURRENT_ONLY_KEY } from "../renderer/workspace-switcher.mjs";
+import * as switcherModule from "../renderer/workspace-switcher.mjs";
+const { createWorkspaceSwitcher, moreBelowText, WAITING_NAME, WAITING_TITLE } = switcherModule;
 import { UNMATCHED_SECTION } from "../../client/workspace-choices.mjs";
 import { onDeploymentTabRequest } from "../renderer/deployment-tabs.mjs";
 
@@ -24,7 +25,7 @@ const view = (name, fields = {}) => ({ id: `ws:${name.padEnd(20, "0")}`, name, t
 const A = view("alpha"), B = view("beta"), C = view("gamma");
 // A stale `shown` (main no longer sends it) changes nothing.
 const HELD = view("held", { shown: true });
-const LOOSE = view("loose", { id: "remote:vega:loose", deployments: ["remote:vega:loose"], machines: ["vega"], deploymentLabels: ["vega · loose"],
+const LOOSE = view("loose", { id: "remote:laptop:loose", deployments: ["remote:laptop:loose"], machines: ["laptop"], deploymentLabels: ["laptop · loose"],
   unattached: true, short: "Not reached" });
 
 function setup(t, overrides = {}) {
@@ -102,7 +103,7 @@ test("a row is one line, the roster's circle and the name: no other mark, icon, 
     }
     assert.equal(button.textContent, name.textContent);
     assert.equal(button.title, name.textContent, "the tooltip is the name");
-    assert.ok(!/This Mac|vega|\/h\/|~\//.test(button.title), "no machine, no path");
+    assert.ok(!/This Mac|laptop|\/h\/|~\//.test(button.title), "no machine, no path");
   }
   assert.deepEqual(s.rows().map((b) => b.textContent), ["alpha", "held", "busy", "loose"]);
   assert.equal(s.row(HELD.id).dataset.otherWindow, undefined, "not marked as another window's");
@@ -124,11 +125,11 @@ test("two of one name without keys are never told apart by where they are: no fo
   const s = setup(t);
   // Local folders (an older server, an unmatched deployment) and remote ones, named alike, with no workspace key.
   const a = { id: "/org-a/oats", name: "oats" }, b = { id: "/org-b/oats", name: "oats" };
-  const c = { id: "remote:vega:t1", name: "tsm", machines: ["vega"] }, d = { id: "remote:rigel:t2", name: "tsm", machines: ["rigel"], team: { name: "Acme" } };
+  const c = { id: "remote:laptop:t1", name: "web", machines: ["laptop"] }, d = { id: "remote:build:t2", name: "web", machines: ["build"], team: { name: "Acme" } };
   s.controller.begin()(a, [a, b, c, d]); await tick();
-  assert.deepEqual(s.rows().map((r) => r.textContent), ["oats", "oats", "tsm", "tsm — Acme"], "a team names a workspace; a folder or a machine does not");
-  assert.deepEqual(s.rows().map((r) => r.title), ["oats", "oats", "tsm", "tsm — Acme"]);
-  for (const r of s.rows()) assert.doesNotMatch(`${r.textContent} ${r.title}`, /org-a|org-b|\/|vega|rigel/);
+  assert.deepEqual(s.rows().map((r) => r.textContent), ["oats", "oats", "web", "web — Acme"], "a team names a workspace; a folder or a machine does not");
+  assert.deepEqual(s.rows().map((r) => r.title), ["oats", "oats", "web", "web — Acme"]);
+  for (const r of s.rows()) assert.doesNotMatch(`${r.textContent} ${r.title}`, /org-a|org-b|\/|laptop|build/);
   // The list's description names the current workspace the same way: a screen reader hears no folder either.
   assert.equal(s.document.getElementById("ws-list").getAttribute("aria-description"), "Current workspace: oats");
 });
@@ -499,22 +500,18 @@ test("an older pick's answer never clears a newer pick of the same workspace: D 
   assert.equal(s.calls.selected.at(-1), C.id);
 });
 
-/* ── Show only the current workspace (2026-10-23) ── */
+/* ── Every workspace, always (slice 1 of the Desktop UI rework dropped Show only the current workspace) ── */
 const memory = (initial = {}) => { const m = new Map(Object.entries(initial)); return {
   getItem: (k) => m.has(k) ? m.get(k) : null, setItem: (k, v) => { m.set(k, String(v)); }, removeItem: (k) => { m.delete(k); }, map: m }; };
 
-test("Show only the current workspace: a toggle before Add at the heading, named, off by default", async (t) => {
-  const s = setup(t, { storage: memory() });
-  s.controller.begin()(A, [A, B, C]); await tick();
-  const toggle = s.document.getElementById("ws-current-only");
-  assert.equal(toggle.nextElementSibling, s.document.getElementById("ws-add-open"), "before Add, at the heading's end");
+test("the head is the heading and Add alone; the list shows every workspace, a waiting one's mark included", async (t) => {
+  const s = setup(t);
+  s.controller.begin()(A, [A, { ...B, waiting: true }, C]); await tick();
   const head = s.document.querySelector(".side-head");
-  assert.ok(head, "the sidebar's head");
-  assert.equal(toggle.closest(".side-head"), head, "in the head, after the Workspace heading");
-  assert.equal(toggle.previousElementSibling, s.document.getElementById("ws-heading"));
-  // The head holds only the heading and its two controls (the product owner, 2026-10-26: the OATS mark is the foot's),
-  // with no line between it and the list; the list's own line closes it, before the main views.
-  assert.deepEqual([...head.children].map((el) => el.id), ["ws-heading", "ws-current-only", "ws-add-open"]);
+  // The head holds only the heading and Add (the product owner, 2026-10-26; slice 1: no toggle), with no line between
+  // it and the list; the list's own line closes it, before the pinned rows.
+  assert.deepEqual([...head.children].map((el) => el.id), ["ws-heading", "ws-add-open"]);
+  assert.equal(s.document.getElementById("ws-current-only"), null);
   assert.equal(head.nextElementSibling, s.document.getElementById("ws-list"));
   const headRule = css.match(/^\.side-head\s*\{([^}]*)\}/m)[1];
   assert.doesNotMatch(headRule, /border(?!-box)/, "no line under the head");
@@ -522,96 +519,18 @@ test("Show only the current workspace: a toggle before Add at the heading, named
   assert.match(headRule, /height:\s*40px;/); assert.match(headRule, /box-sizing:\s*border-box;/);
   assert.match(headRule, /padding:\s*8px 10px 0 13px;/);
   assert.match(css.match(/^\.ws-list\s*\{([^}]*)\}/m)[1], /border-bottom:\s*1\.5px solid var\(--border\)/, "the line before the nav, a little bolder than the roster\'s");
-  assert.equal(toggle.getAttribute("aria-label"), CURRENT_ONLY_LABEL); assert.equal(toggle.title, CURRENT_ONLY_LABEL);
-  assert.equal(toggle.getAttribute("aria-pressed"), "false"); assert.equal(toggle.dataset.action, "workspaces.currentOnly");
-  assert.ok(toggle.querySelector("svg"), "its icon"); assert.equal(s.controller.currentOnly, false);
-  assert.deepEqual(s.rows().filter((b) => !b.hidden).map(s.keyOf), [A.id, B.id, C.id]);
+  assert.deepEqual(s.rows().filter((b) => !b.hidden).map(s.keyOf), [A.id, B.id, C.id], "every workspace");
+  assert.ok(s.row(B.id).querySelector(".ws-waiting"), "another workspace's wait keeps its mark");
+  assert.equal("toggleCurrentOnly" in s.controller || "currentOnly" in s.controller, false, "no toggle to run");
+  assert.equal("CURRENT_ONLY_KEY" in switcherModule || "CURRENT_ONLY_LABEL" in switcherModule, false);
 });
 
-test("on, only the current row shows: the others leave the list and its keys, no line stands for them, and it is remembered", async (t) => {
-  const storage = memory();
+test("a preference stored by Show only the current workspace is no longer read: every workspace shows, and nothing is written", async (t) => {
+  const storage = memory({ "oats-desktop-workspaces-current-only": "1" });
   const s = setup(t, { storage });
-  s.controller.begin()(B, [A, B, C]); await tick();
-  s.document.getElementById("ws-current-only").click();
-  assert.equal(s.document.getElementById("ws-current-only").getAttribute("aria-pressed"), "true");
-  assert.equal(storage.getItem(CURRENT_ONLY_KEY), "1");
-  assert.deepEqual(s.rows().filter((b) => !b.hidden).map(s.keyOf), [B.id], "the current row alone");
-  for (const b of s.rows().filter((b) => b.hidden)) assert.equal(b.closest("li").hidden, true);
-  const more = s.document.querySelector(".ws-more");
-  assert.equal(more.hidden, true, "the other workspaces are not shown at all"); assert.equal(more.textContent, "");
-  // Its keys go over the shown row only: Arrow and End stay on it.
-  s.controller.focusList(); assert.equal(s.document.activeElement, s.row(B.id));
-  s.key("ArrowDown"); assert.equal(s.document.activeElement, s.row(B.id)); s.key("End"); assert.equal(s.document.activeElement, s.row(B.id));
-  // Off again: every row, and forgotten.
-  s.controller.toggleCurrentOnly();
+  s.controller.begin()(A, [A, B, C]); await tick();
   assert.deepEqual(s.rows().filter((b) => !b.hidden).map(s.keyOf), [A.id, B.id, C.id]);
-  assert.equal(storage.getItem(CURRENT_ONLY_KEY), null); assert.equal(more.getAttribute("aria-hidden"), "true");
-});
-
-test("on, a hidden workspace that waits shows nothing either; a remembered choice applies at start", async (t) => {
-  const s = setup(t, { storage: memory({ [CURRENT_ONLY_KEY]: "1" }) });
-  s.controller.begin()(A, [A, { ...B, waiting: true }, C]); await tick();
-  assert.equal(s.controller.currentOnly, true);
-  assert.equal(s.document.getElementById("ws-current-only").getAttribute("aria-pressed"), "true");
-  const more = s.document.querySelector(".ws-more");
-  assert.deepEqual(s.rows().filter((b) => !b.hidden).map(s.keyOf), [A.id]);
-  assert.equal(more.hidden, true); assert.equal(more.textContent, ""); assert.equal(more.querySelector(".ws-waiting"), null);
-});
-
-test("on, a focused row that goes hands focus to the current row; with no current row every row shows", async (t) => {
-  const s = setup(t, { storage: memory() });
-  s.controller.begin()(A, [A, B, C]); await tick();
-  s.row(C.id).focus();
-  s.controller.toggleCurrentOnly();
-  assert.equal(s.document.activeElement, s.row(A.id), "never <body>");
-  s.controller.choose([A, B, C]); await tick();
-  assert.deepEqual(s.rows().filter((b) => !b.hidden).map(s.keyOf), [A.id, B.id, C.id], "nothing current (choosing): nothing hidden");
-});
-
-test("a storage that throws: the toggle still works, remembered nowhere", async (t) => {
-  const broken = { getItem() { throw new Error("denied"); }, setItem() { throw new Error("denied"); }, removeItem() { throw new Error("denied"); } };
-  const s = setup(t, { storage: broken });
-  s.controller.begin()(A, [A, B]); await tick();
-  s.controller.toggleCurrentOnly();
-  assert.deepEqual(s.rows().filter((b) => !b.hidden).map(s.keyOf), [A.id]);
-});
-
-// Remembered per computer: the shell hands the switcher the window's localStorage, and a new window (a reload) built
-// over the same storage starts as the last one left it, pressed or not.
-test("Show only the current workspace survives a reload: the same storage, a new list; the shell passes localStorage", async (t) => {
-  const storage = memory();
-  const first = setup(t, { storage });
-  first.controller.begin()(A, [A, B, C]); await tick();
-  first.controller.toggleCurrentOnly();
-  assert.deepEqual([...storage.map], [[CURRENT_ONLY_KEY, "1"]], "only its own key, under its own name");
-  assert.equal(CURRENT_ONLY_KEY, "oats-desktop-workspaces-current-only");
-  const second = setup(t, { storage });
-  second.controller.begin()(A, [A, B, C]); await tick();
-  assert.equal(second.controller.currentOnly, true);
-  assert.equal(second.document.getElementById("ws-current-only").getAttribute("aria-pressed"), "true");
-  assert.deepEqual(second.rows().filter((b) => !b.hidden).map(second.keyOf), [A.id]);
-  second.controller.toggleCurrentOnly();
-  const third = setup(t, { storage });
-  third.controller.begin()(A, [A, B, C]); await tick();
-  assert.equal(third.controller.currentOnly, false, "turned off is remembered too");
-  assert.deepEqual(third.rows().filter((b) => !b.hidden).map(third.keyOf), [A.id, B.id, C.id]);
+  assert.deepEqual([...storage.map], [["oats-desktop-workspaces-current-only", "1"]], "untouched: the switcher neither reads nor writes it");
   const shell = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
-  assert.match(shell, /const workspaceLabel = createWorkspaceSwitcher\(\{[^]*?\n  storage: \(\(\) => \{ try \{ return window\.localStorage; \} catch \{ return null; \} \}\)\(\),/, "the shell's storage is the window's localStorage");
-});
-
-// The rows it hides are still the workspaces of the list: the leader's ↑ / ↓ (step) move to the previous / next one,
-// which then shows alone.
-test("on, step still moves to the next or previous workspace, hidden as it was, which then shows alone", async (t) => {
-  const s = setup(t, { storage: memory({ [CURRENT_ONLY_KEY]: "1" }) });
-  const land = (workspace) => { s.controller.reset(workspace.id); s.controller.begin()(workspace, [A, B, C]); };
-  s.controller.begin()(A, [A, B, C]); await tick();
-  assert.deepEqual(s.rows().filter((b) => !b.hidden).map(s.keyOf), [A.id]);
-  assert.equal(s.controller.step(1), true);
-  assert.deepEqual(s.calls.selected, [B.id], "the next workspace of the list, though hidden");
-  land(B); await tick();
-  assert.deepEqual(s.rows().filter((b) => !b.hidden).map(s.keyOf), [B.id], "now it alone shows");
-  assert.equal(s.controller.step(-1), true); assert.equal(s.calls.selected.at(-1), A.id);
-  // The moves wrap over the full list as drawn, the hidden rows included.
-  land(A); await tick();
-  assert.equal(s.controller.step(-1), true); assert.equal(s.calls.selected.at(-1), C.id, "up from the first: the last, hidden");
+  assert.doesNotMatch(shell, /workspaces\.currentOnly|toggleCurrentOnly|current-only/, "no action, palette command or wiring is left");
 });

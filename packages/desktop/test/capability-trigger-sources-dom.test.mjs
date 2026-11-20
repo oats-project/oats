@@ -1,5 +1,5 @@
-// Trigger sources (kernel feature `trigger-sources`) on the capability page: the Provides card's "Trigger sources"
-// row, drawn from `capabilities show` by the Contents controller (capability-contents.mjs) and placed by the page
+// Trigger sources (kernel feature `trigger-sources`) on the capability page: the "Trigger sources" row of its
+// Triggers fold (the Desktop UI rework, slice 3b: the page's Provides card became its folds), drawn from `capabilities show` by the Contents controller (capability-contents.mjs) and placed by the page
 // (capability-page.mjs). jsdom, no CLI, server or GUI.
 //
 // The answers are the kernel's own, recorded in test/fixtures/trigger-sources/ (envelopes; the answer is `.result`):
@@ -43,7 +43,7 @@ function page(t, answer, { catalogRow = {}, from = null } = {}) {
   t.after(() => { contents.dispose(); dom.window.close(); });
   const go = async () => { state.row = rowOf(answer.current); render(); contents.update({ row: state.row, cli, deployment: '/ws' }); await flush(); };
   const $ = s => host.querySelector(s), $$ = s => [...host.querySelectorAll(s)];
-  return { doc, host, calls, changes, contents, render, go, $, $$, row: () => $('.provides-card > [data-provides="trigger-sources"]'),
+  return { doc, host, calls, changes, contents, render, go, $, $$, row: () => $('.provides-card > [data-provides="trigger-sources"]'), folds: () => $$('details.cap-fold').map(d => d.dataset.fold),
     lines: () => $$('.source-quote-line').map(line => ({ text: [...line.querySelectorAll('.source-quote-text')].map(n => n.textContent), notes: [...line.querySelectorAll('.source-quote-note')].map(n => n.textContent) })) };
 }
 /** No element, link, button, image or tooltip is ever made from a manifest's text: only text in quote lines. */
@@ -53,13 +53,14 @@ function assertOnlyQuotedText(row) {
   assert.deepEqual([...new Set([...row.querySelectorAll('*')].map(n => n.tagName))].sort(), ['BLOCKQUOTE', 'DD', 'DIV', 'DT', 'LI', 'P', 'SPAN', 'UL'].filter(tag => row.querySelector(tag)).sort());
 }
 
-test('capability-show.json: one source, its events and description quoted under the manifest lead-in, in the Provides card', async t => {
+test('capability-show.json: one source, its events and description quoted under the manifest lead-in, in the Triggers fold', async t => {
   const u = page(t, { current: GOOD }, { catalogRow: { skills: ['graph'], commands: ['review-source'], hooks: [] } });
   await u.go();
   const row = u.row();
-  assert.ok(row, 'a row of the Provides card');
+  assert.ok(row, 'a row of the Triggers fold');
+  assert.equal(row.closest('details.cap-fold').dataset.fold, 'triggers');
   assert.equal(row, u.contents.triggerSources, "the controller's own element");
-  assert.deepEqual(u.$$('.provides-card > .provides-row').map(r => r.dataset.provides), ['skills', 'commands', 'hooks', 'trigger-sources'], 'after the other rows');
+  assert.deepEqual(u.folds(), ['commands', 'triggers', 'hooks', 'used-by', 'source', 'files'], 'after Commands, before Hooks');
   assert.equal(row.querySelector('dt.provides-kind').textContent, 'Trigger sources1');
   assert.equal(row.querySelector('dt .provides-count').textContent, '1');
   const group = row.querySelector('dd.provides-items .source-quote');
@@ -89,9 +90,9 @@ test('capability-show-problems.json: a source with a problem or of another shape
   for (const note of u.$$('.source-quote-note')) assert.equal(note.closest('.source-quote-text'), null);
   assert.equal(u.$('.provides-unreadable'), null);
   assertOnlyQuotedText(u.row());
-  // The page had no other Provides row (the catalog row reports none): the card is built for this one.
-  assert.deepEqual(u.$$('.provides-card > .provides-row').map(r => r.dataset.provides), ['trigger-sources']);
-  assert.equal(u.$('[data-section="Provides"]').nextElementSibling, u.contents.element, 'Provides, then Contents');
+  // The catalog row reports no commands or hooks: the Triggers fold is the page's only one before Used by.
+  assert.deepEqual(u.folds(), ['triggers', 'used-by', 'source', 'files']);
+  assert.equal(u.$('details.cap-fold[data-fold="files"]').lastElementChild, u.contents.element, 'Files holds the Contents');
 });
 
 test('capability-show-not-object.json: declared but not readable, with the kernel\'s message as plain lines; no quote, no count', async t => {
@@ -130,7 +131,7 @@ test('a manifest\'s markup, URL, bidi and control characters, or a sentence in t
   const row = u.row();
   assertOnlyQuotedText(row);
   assert.equal(u.host.querySelectorAll('img, script, a').length, 0, 'nowhere on the page either');
-  assert.equal(u.host.querySelectorAll('.capability-page button').length, 1, 'only the page\'s own Back');
+  assert.equal(u.host.querySelectorAll('.capability-page button:not(.page-crumb-link)').length, 1, 'only the page\'s own Back (and its trail\'s links, slice 2b)');
   assert.deepEqual(u.lines(), [
     { text: [`${MARKUP}: <b>opened</b>, ${URL_TEXT}`, `<a href="${URL_TEXT}">${VOICE}</a>`], notes: [] },
     { text: ['bidi\uFFFDevil\uFFFDname: up\uFFFDdated, two lines', VOICE], notes: [] },
@@ -168,18 +169,18 @@ test('the list is capped at 16 sources; a problem\'s source the listing does not
   assert.deepEqual([none.row().querySelector('.provides-count').textContent, none.row().querySelector('dd').textContent], ['0', 'None']);
 });
 
-test('an answer without triggerSources renders no row, and no Provides card for it', async t => {
+test('an answer without triggerSources renders no row, and no Triggers fold for it', async t => {
   const { triggerSources: _t, ...older } = GOOD;
   const u = page(t, { current: older });
   await u.go();
   assert.equal(u.contents.triggerSources.childElementCount, 0);
   assert.equal(u.row(), null); assert.equal(u.contents.triggerSources.isConnected, false);
-  assert.equal(u.$('[data-section="Provides"]'), null, 'no empty section');
+  assert.equal(u.$('details.cap-fold[data-fold="triggers"]'), null, 'no empty fold');
   assert.deepEqual(u.changes, []);
-  // With other rows the card is theirs alone.
+  // With other facts the folds are theirs alone.
   const listed = page(t, { current: older }, { catalogRow: { skills: [], commands: ['x'] } });
   await listed.go();
-  assert.deepEqual(listed.$$('.provides-card > .provides-row').map(r => r.dataset.provides), ['skills', 'commands']);
+  assert.deepEqual(listed.folds(), ['commands', 'used-by', 'source', 'files']);
   // Problems without a declaration show nothing either.
   const stray = page(t, { current: { ...older, triggerSourceProblems: PROBLEMS.triggerSourceProblems } });
   await stray.go();
@@ -199,7 +200,7 @@ test('triggerSourceProblems never change the Contents state, its problems or its
     assert.equal(u.$('.cap-reader-body').textContent, a.$('.cap-reader-body').textContent);
     assert.equal(u.$('.cap-contents-section .page-section-lead').textContent, `What an instance gets, at ${(u === b ? PROBLEMS : NOT_OBJECT).commit.slice(0, 7)}`);
   }
-  // The capability's own problems stay in Contents, and the trigger sources' stay in Provides.
+  // The capability's own problems stay in Contents, and the trigger sources' stay in Triggers.
   const own = page(t, { current: { ...PROBLEMS, problems: [{ code: 'E_X', message: 'cannot list skills', path: null }] } });
   await own.go();
   assert.deepEqual(own.$$('.cap-contents-problem').map(n => n.textContent), ['cannot list skills']);
@@ -222,12 +223,12 @@ test('a catalog repaint keeps the row; the same answer re-applied does not rebui
   assert.equal(u.row().querySelector('.source-quote'), group); assert.equal(u.row().querySelector('.source-quote-text'), first);
   assert.deepEqual(u.changes, [true]);
   // Another declaration at the same commit repaints the row in place: same row, new content, still no page rebuild.
-  const section = u.$('[data-section="Provides"]');
+  const section = u.$('details.cap-fold[data-fold="triggers"]');
   answer.current = { ...PROBLEMS, triggerSources: GOOD.triggerSources, triggerSourceProblems: [] };
   u.contents.refresh(); await flush();
   assert.equal(u.row(), row); assert.notEqual(u.row().querySelector('.source-quote'), group);
   assert.deepEqual(u.lines(), [{ text: ['harvest-branches: opened, updated', DESCRIPTION], notes: [] }]);
-  assert.equal(u.$('[data-section="Provides"]'), section, 'the page was not rebuilt');
+  assert.equal(u.$('details.cap-fold[data-fold="triggers"]'), section, 'the page was not rebuilt');
   assert.deepEqual(u.changes, [true]);
   // The declaration is gone: the row empties, the host is told, and the page drops it.
   const { triggerSources: _t, triggerSourceProblems: _p, ...older } = PROBLEMS;
@@ -235,7 +236,7 @@ test('a catalog repaint keeps the row; the same answer re-applied does not rebui
   u.contents.refresh(); await flush();
   assert.deepEqual(u.changes, [true, false]);
   assert.equal(u.row(), null); assert.equal(u.contents.triggerSources.childElementCount, 0);
-  assert.deepEqual(u.$$('.provides-card > .provides-row').map(r => r.dataset.provides), ['skills']);
+  assert.deepEqual(u.folds(), ['used-by', 'source', 'files']);
   // Back again, then a gate (an external capability has no contents): the row leaves with the answer.
   answer.current = PROBLEMS;
   u.contents.refresh(); await flush();
@@ -267,7 +268,7 @@ test('both forms of the page show it: from the Capabilities table and from a sou
   const soul = page(t, { current: GOOD }, { from: { label: 'dev' } });
   await soul.go();
   assert.equal(soul.$('.page-crumbs').textContent.includes('Souls'), true, 'the soul form');
-  assert.deepEqual(soul.$$('.provides-card > .provides-row').map(r => r.dataset.provides), ['trigger-sources']);
+  assert.deepEqual(soul.folds(), ['triggers', 'used-by', 'source', 'as-soul', 'files']);
   assert.deepEqual(soul.lines(), [{ text: ['harvest-branches: opened, updated', DESCRIPTION], notes: [] }]);
 });
 
@@ -329,7 +330,7 @@ test('Workspace: the open capability page gains the row when the answer lands, k
   let answer = PROBLEMS; const asked = [];
   const u = await workspace(t, body => { asked.push(body); return structuredClone(answer); });
   u.state.catalog = catalogWith(PROBLEMS); await u.reread();
-  u.q('.catalog-row[data-capability="acme.graph"]').click(); await settle();
+  u.q('.cap-row[data-capability="acme.graph"]').click(); await settle();
   assert.deepEqual(asked.at(-1), { action: 'show', capability: SELECTOR });
   assert.match(u.q('.oats-view > style').textContent, /\.source-quote-text/, "the quote's styles are the view's");
   const row = u.q('.capability-page .provides-card > [data-provides="trigger-sources"]');
@@ -345,11 +346,11 @@ test('Workspace: the open capability page gains the row when the answer lands, k
   assert.equal(u.q('.capability-page .page-lede').textContent, 'Graph tools.');
   assert.equal(u.q('.capability-page .provides-card > [data-provides="trigger-sources"]'), row);
   assert.equal(row.querySelector('.source-quote'), group, 'not rebuilt: the answer is the same');
-  assert.deepEqual([...u.doc.querySelectorAll('.capability-page .provides-card > .provides-row')].map(r => r.dataset.provides), ['skills', 'trigger-sources']);
+  assert.deepEqual([...u.doc.querySelectorAll('.capability-page .provides-card > .provides-row')].map(r => r.dataset.provides), ['trigger-sources']);
   // The capability moves to a commit whose manifest declares none (capability-show.json without the key): the row leaves.
   const { triggerSources: _t, ...older } = GOOD; answer = older;
   const moved = catalogWith(GOOD); Object.assign(moved.capabilities.at(-1), { description: 'Graph tools.', skills: ['graph'] });
   u.state.catalog = moved; await u.reread();
   assert.equal(u.q('.capability-page [data-provides="trigger-sources"]'), null);
-  assert.deepEqual([...u.doc.querySelectorAll('.capability-page .provides-card > .provides-row')].map(r => r.dataset.provides), ['skills']);
+  assert.equal(u.q('.capability-page details.cap-fold[data-fold="triggers"]'), null);
 });

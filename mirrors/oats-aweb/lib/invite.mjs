@@ -1,15 +1,20 @@
+import {registryEnv} from './registry-setting.mjs';
+import { awChildEnv } from './aw-child-env.mjs';
+
+import { parseProviderSettings } from './provider-settings.mjs';
 // Selected-deployment member invitation. Native/server issuance decides authority;
 // membership and a plan never claim an owner/admin role or permission to mint.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, realpathSync, statSync, rmSync } from 'node:fs';
+import { closeSync, lstatSync, mkdtempSync, openSync, readFileSync, realpathSync, statSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { selectedDeployment } from './team-roots.mjs';
 import { querySelectedKernel } from './session-readiness.mjs';
 import { yamlScalar } from './binding-wire.mjs';
 import { withheldFailureCause } from './aw-failure-cause.mjs';
 import { childOutcome } from './child-outcome.mjs';
 import { plainServiceUrl } from './plain-service.mjs';
+import { sameAwebTeamId, teamKeyIn } from "./aweb-team-id.mjs";
 const object = x => x !== null && typeof x === 'object' && !Array.isArray(x);
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
 // Match the provider's existing canonical team/hostname contract.
@@ -17,12 +22,12 @@ function validTeam(value) {
   const match = typeof value === 'string' && /^([A-Za-z0-9][A-Za-z0-9._-]{0,127}):([^:]+)$/.exec(value);
   return !!match && match[2].length <= 253 && match[2].split('.').every(label => /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label));
 }
-const usage = 'usage: oats aweb invite [--label <label>] [--plan] [--json] (no recipient argument)';
+const usage = 'usage: oats aweb invite [--label <label>] [--out <file>] [--plan] [--json] (no recipient argument)';
 function options(argv) {
   const out = { plan: false, json: false }, seen = new Set();
   for (let i = 0; i < argv.length; i++) {
     const [flag, ...parts] = argv[i].split('=');
-    if (!['--label', '--plan', '--json', '--soul', '--dir'].includes(flag) || seen.has(flag)) fail('E_INVITE_ARGUMENT', usage);
+    if (!['--label', '--out', '--plan', '--json', '--soul', '--dir'].includes(flag) || seen.has(flag)) fail('E_INVITE_ARGUMENT', usage);
     seen.add(flag);
     if (flag === '--plan' || flag === '--json') {
       if (parts.length) fail('E_INVITE_ARGUMENT', usage);
@@ -37,13 +42,13 @@ function options(argv) {
 }
 // Deliberate allowlist: do not inherit routing, credential, controller, proxy,
 // instance or principal selectors. All native identity/service facts come from cwd.
-function nativeEnv(env, home) {
-  return { PATH: env.PATH || '', ...(env.SystemRoot ? { SystemRoot: env.SystemRoot } : {}), HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home,'.config'), XDG_CACHE_HOME: join(home,'.cache'), AW_NO_UPDATE_CHECK: '1' };
+function nativeEnv(env, home, settings, args) {
+  return awChildEnv({ PATH: env.PATH || '', ...(env.SystemRoot ? { SystemRoot: env.SystemRoot } : {}), HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home,'.config'), XDG_CACHE_HOME: join(home,'.cache') },registryEnv(settings,args));
 }
 function native(args, root, env, issuance) {
   try { return execFileSync('aw', args, { cwd: root, env, encoding: 'utf8', stdio: ['ignore','pipe','pipe'], timeout: 45000, maxBuffer: 1024 * 1024 }); }
   catch (e) {
-    // aw 1.36.23 prints a CLI-generated HTTP prefix followed by an arbitrary
+    // The supported aw 1.36.33 floor prints a CLI-generated HTTP prefix followed by an arbitrary
     // server body, even under --json. Never classify by or expose body prose.
     const status = /^create hosted team invite: aweb: http (\d{3}):/.exec(String(e.stderr || ''))?.[1];
     if (issuance && ['401','403'].includes(status)) fail('E_INVITE_DENIED', `aw denied member invite (HTTP ${status}); native detail withheld because it may contain credentials`);
@@ -58,9 +63,9 @@ function native(args, root, env, issuance) {
 // Read-only native calls also get disposable user state: cwd supplies the
 // selected identity, HOME must never expose root-adjacent controller/config state.
 /** `issuance` is false for a read, or `{ source }`, the setting that chose the issuing root. */
-function isolatedNative(args, root, env, issuance = false) {
+function isolatedNative(args, root, env, issuance = false, settings={}) {
   const home = mkdtempSync(join(tmpdir(), 'oats-invite-'));
-  try { return native(args, root, nativeEnv(env, home), issuance); }
+  try { return native(args, root, nativeEnv(env, home, settings, args), issuance); }
   finally { rmSync(home, { recursive: true, force: true }); }
 }
 const safeProblemCodes = new Set(['team-label-collision', 'team-unmapped', 'team-soul-unknown', 'E_TEAM_UNKNOWN', 'E_TEAM_UNCONFIGURED', 'E_WORKSPACE_SCHEMA']);
@@ -96,12 +101,50 @@ export function rootAwebUrl(root) {
   try { raw = yamlScalar(readFileSync(join(root,'.aw','workspace.yaml'),'utf8'),'aweb_url'); } catch { return null; }
   return plainServiceUrl(raw) ?? null;
 }
+/** The file `--out` names, checked first (#285): a new path in an existing
+ *  directory. Nothing may be at the path, not even a link, so the token never
+ *  replaces a file or follows a link to one. Only ENOENT is absence: any other
+ *  lstat failure (a name too long, a directory it cannot search) refuses. */
+function outFile(raw, cwd) {
+  const path = resolve(cwd, raw);
+  let missing = false;
+  try { lstatSync(path); } catch (e) {
+    if (e.code !== 'ENOENT') fail('E_INVITE_OUT', `--out ${path}: cannot be checked (${e.code || 'lstat failed'}); name another file`);
+    missing = true;
+  }
+  if (!missing) fail('E_INVITE_OUT', `--out ${path}: something is already there; name a new file`);
+  try { if (!statSync(dirname(path)).isDirectory()) throw new Error(); } catch { fail('E_INVITE_OUT', `--out ${path}: its directory does not exist`); }
+  return path;
+}
+/** Creates the --out file before the mint, exclusively (O_EXCL refuses a file or a
+ *  link that appeared since outFile) and only its owner can read it, so a path that
+ *  cannot be written refuses with nothing minted. The caller holds the descriptor
+ *  until the token is written, or removes the file. */
+function reserveOut(path) {
+  try { return openSync(path, 'wx', 0o600); }
+  catch (e) { fail('E_INVITE_OUT', `--out ${path}: cannot be created (${e.code || 'open failed'}); nothing was minted`); }
+}
+/** Close and remove the reserved file; whether it is gone. It never throws: a failed
+ *  cleanup must not replace the outcome the caller reports (a live invite above all). */
+function releaseOut(fd, path) {
+  try { closeSync(fd); } catch { /* already closed */ }
+  try { rmSync(path, { force: true }); return true; } catch { return false; }
+}
+/** The refusal when the token was minted under --out but could not be written: the
+ *  invite is live and its token is not printed, so the answer names its invite_id (not
+ *  a secret) for revoking it, but only in a plain identifier's form: it is remote text. */
+export function unwrittenInviteMessage(out, code, inviteId, removed = true) {
+  const id = typeof inviteId === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(inviteId) ? `invite_id ${inviteId}` : 'its invite_id withheld: aw gave it in an unexpected form';
+  return `the invite was minted (${id}) but could not be written to ${out} (${typeof code === 'string' && /^E[A-Z0-9]{1,15}$/.test(code) ? code : 'write failed'}); it is not printed, and that invite stays live until it is revoked${removed ? '' : `; ${out} could not be removed and may hold part of the token: delete it`}: mint another with a new --out`;
+}
 export function issueInvite(argv, env = process.env) {
   const opts = options(argv);
+  const out = opts.out === undefined ? undefined : outFile(opts.out, process.cwd());
   let deployment;
   try { deployment = selectedDeployment(env, opts.dir); } catch { fail('E_INVITE_DEPLOYMENT', 'selected deployment is missing, unreadable or inconsistent'); }
   let settings;
-  try { settings = JSON.parse(env.OATS_SETTINGS || ''); } catch { fail('E_INVITE_ROOT', 'selected provider settings are malformed'); }
+  if (env.OATS_SETTINGS === undefined) fail('E_INVITE_ROOT', 'OATS_SETTINGS is missing');
+  try { settings = parseProviderSettings(env); } catch (error) { fail('E_INVITE_ROOT', error.message); }
   if (!object(settings) || Object.hasOwn(settings,'team') || (Object.hasOwn(settings,'roots') && !object(settings.roots))) fail('E_INVITE_ROOT', 'selected provider root settings are invalid');
   let doc;
   try { doc = querySelectedKernel(['teams','--dir',deployment,'--json'], { env, cwd: deployment }); } catch { fail('E_INVITE_TEAM_QUERY', 'selected kernel team query unavailable'); }
@@ -119,25 +162,40 @@ export function issueInvite(argv, env = process.env) {
   if (!opts.label && env.OATS_DEFAULT_TEAM_ID !== team) fail('E_INVITE_TEAM', 'selected default team does not match current kernel declarations');
   // With no root declared, the team's root is the deployment's own, as setup creates it and spawn
   // reads it. A declared root, even an invalid one, is never replaced.
-  const declared = (object(settings.roots) && Object.hasOwn(settings.roots,team)) || Object.hasOwn(settings,'root');
-  const source = object(settings.roots) && Object.hasOwn(settings.roots,team) ? 'roots[team]' : declared ? 'root' : 'the deployment directory';
-  const raw = object(settings.roots) && Object.hasOwn(settings.roots,team) ? settings.roots[team] : declared ? settings.root : deployment;
+  const rootsKey = teamKeyIn(settings.roots, team);
+  const declared = rootsKey !== undefined || Object.hasOwn(settings,'root');
+  const source = rootsKey !== undefined ? 'roots[team]' : declared ? 'root' : 'the deployment directory';
+  const raw = rootsKey !== undefined ? settings.roots[rootsKey] : declared ? settings.root : deployment;
   let root;
   try { if (typeof raw !== 'string' || !isAbsolute(raw)) throw new Error(); root = realpathSync(raw); if (!statSync(join(root,'.aw')).isDirectory()) throw new Error(); } catch { fail('E_INVITE_ROOT', declared ? 'selected team root is missing, invalid or unreadable; repair its explicit root setting' : 'no team root is set and the deployment has no .aw root; run setup, or set settings.oats.aweb.root'); }
   let membership;
-  try { membership = JSON.parse(isolatedNative(['team','list','--json'], root, env)); } catch (e) { if (e.code?.startsWith('E_INVITE_')) throw e; fail('E_INVITE_MEMBERSHIP', 'selected root returned malformed membership'); }
+  try { membership = JSON.parse(isolatedNative(['team','list','--json'], root, env, false, settings)); } catch (e) { if (e.code?.startsWith('E_INVITE_')) throw e; fail('E_INVITE_MEMBERSHIP', 'selected root returned malformed membership'); }
   if (!Array.isArray(membership?.memberships)) fail('E_INVITE_MEMBERSHIP', 'selected root returned malformed membership');
-  if (membership.memberships.filter(m => object(m) && m.team_id === team).length !== 1) fail('E_INVITE_MEMBERSHIP', 'selected root cannot prove membership in the requested team');
+  if (membership.memberships.filter(m => object(m) && sameAwebTeamId(m.team_id, team)).length !== 1) fail('E_INVITE_MEMBERSHIP', 'selected root cannot prove membership in the requested team');
   const result = { label, team, root, awebUrl: rootAwebUrl(root), authority: 'native/server decides at issuance' };
-  if (opts.plan) return { ...result, plan: true, command: ['aw','team','invite','--team-id',team,'--member-local','--json'] };
-  // Fresh native user state prevents an invoking-home BYOT controller key or
-  // cached principal from silently replacing selected-root hosted authority.
-  const rawResult = isolatedNative(['team','invite','--team-id',team,'--member-local','--json'], root, env, { source });
+  if (opts.plan) return { ...result, plan: true, ...(out ? { tokenFile: out } : {}), command: ['aw','team','invite','--team-id',team,'--member-local','--json'] };
+  const fd = out ? reserveOut(out) : undefined;
   let minted;
-  try { minted = JSON.parse(rawResult); } catch { fail('E_INVITE_OUTPUT', 'aw returned malformed invite output; issuance may have occurred; do not automatically retry'); }
-  if (!object(minted) || minted.status !== 'created' || typeof minted.invite_id !== 'string' || !minted.invite_id.trim() || typeof minted.token !== 'string' || !/^aw_inv_[^\s\x00-\x1f\x7f]+$/.test(minted.token)) fail('E_INVITE_OUTPUT', 'aw returned an unsupported or malformed hosted invite; issuance may have occurred; do not automatically retry');
+  try {
+    // Fresh native user state prevents an invoking-home BYOT controller key or
+    // cached principal from silently replacing selected-root hosted authority.
+    const rawResult = isolatedNative(['team','invite','--team-id',team,'--member-local','--json'], root, env, { source }, settings);
+    try { minted = JSON.parse(rawResult); } catch { fail('E_INVITE_OUTPUT', 'aw returned malformed invite output; issuance may have occurred; do not automatically retry'); }
+    if (!object(minted) || minted.status !== 'created' || typeof minted.invite_id !== 'string' || !minted.invite_id.trim() || typeof minted.token !== 'string' || !/^aw_inv_[^\s\x00-\x1f\x7f]+$/.test(minted.token)) fail('E_INVITE_OUTPUT', 'aw returned an unsupported or malformed hosted invite; issuance may have occurred; do not automatically retry');
+  } catch (e) {
+    if (fd !== undefined && !releaseOut(fd, out) && e.code?.startsWith('E_INVITE_')) e.message += `; the empty file reserved at ${out} could not be removed: delete it`;
+    throw e;
+  }
   // The joiner's one-line command (#56): it reads the token on stdin, so the token is never in it.
-  return { ...result, issuedAt: new Date().toISOString(), token: minted.token, joinCommand: `oats aweb setup --soul ${/^[A-Za-z0-9][A-Za-z0-9._\/-]*$/.test(opts.soul || '') ? opts.soul : '<soul>'} --invite-stdin --name <alias>` };
+  const joinCommand = `oats aweb setup --soul ${/^[A-Za-z0-9][A-Za-z0-9._\/-]*$/.test(opts.soul || '') ? opts.soul : '<soul>'} --invite-stdin --name <alias>`;
+  // With --out the token goes to the file and the answer names the file in its place (#285).
+  if (out) {
+    // writeFileSync writes until every byte is out or a write fails: a short write never passes as success.
+    try { writeFileSync(fd, `${minted.token}\n`); closeSync(fd); }
+    catch (e) { const removed = releaseOut(fd, out); fail('E_INVITE_OUT', unwrittenInviteMessage(out, e.code, minted.invite_id, removed)); }
+    return { ...result, issuedAt: new Date().toISOString(), tokenFile: out, joinCommand };
+  }
+  return { ...result, issuedAt: new Date().toISOString(), token: minted.token, joinCommand };
 }
 export function inviteMain(argv, env = process.env) {
   const json = argv.includes('--json') || !!env.OATS_OPERATION;
@@ -145,6 +203,7 @@ export function inviteMain(argv, env = process.env) {
     const result = issueInvite(argv,env);
     if (json) process.stdout.write(JSON.stringify({schemaVersion:1,ok:true,result})+'\n');
     else if (result.plan) process.stdout.write(`Plan: ask ${result.root} to issue a LOCAL member invite for ${result.team}; native/server decides authority. No invite minted.\n`);
+    else if (result.tokenFile) { process.stdout.write(`Invite token written to ${result.tokenFile} (owner-only); it is not printed.\n`); process.stderr.write(`Joiner: hand that file to the joiner privately; they run \`${result.joinCommand} < <the file>\` in their deployment (<alias> is the joining root's name), then delete it.\n`); }
     else { process.stdout.write(result.token+'\n'); process.stderr.write(`Joiner: pipe this token to \`${result.joinCommand}\` in their deployment (it reads the token on stdin; <alias> is the joining root's name).\n`); }
     return 0;
   } catch (e) {

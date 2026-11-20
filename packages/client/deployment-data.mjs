@@ -8,8 +8,9 @@ import { teamRow, teamRowsOf, defaultTeamOf, TEAM_ID } from './team-rows.mjs';
 import { launchOf, REPORT_FROM } from './launch-contract.mjs';
 import { readIdentity } from './workspace-views.mjs';
 import { waitingOnYouData } from './waiting-on-you.mjs';
+import { attributedHumanData } from './attributed-human.mjs';
 import { retireData } from './retire-state.mjs';
-import { instanceColor } from './instance-presentation.mjs';
+import { instanceColor, openLink, sessionThreadId } from './instance-presentation.mjs';
 const text = value => typeof value === 'string' && value.length <= 8192 && !value.includes('\0');
 const absolute = value => text(value) && isAbsolute(value) && resolve(value) === value;
 const own = (value, key) => Object.hasOwn(value, key);
@@ -214,6 +215,24 @@ export function deploymentStatusData(document, deployment) {
       }
       if (own(instance, 'tmux')) row.tmux = instance.tmux === null ? null : fields(instance.tmux, ['session', 'window', 'socket']);
       if (own(instance, 'sessionTarget')) row.sessionTarget = sessionTarget(instance.sessionTarget);
+      // Session providers (feature session-providers): where the instance runs, when it is not tmux's. Validated,
+      // never check()ed: `backend` is kept when it is text that is not empty (instance-presentation.mjs `sessionProvider` reads it:
+      // "tmux", or anything else, which is a provider's and never asked of tmux), else dropped, and the row reads
+      // as one with none (a tmux row). "herdr" is not kept: a Herdr-recorded row of this machine is known by its
+      // `sessionTarget` or its `runtimeState`, as before session providers, and a row that only names the backend
+      // reads as it always did. Of `session` the
+      // row keeps the provider's capability and, on this machine's rows, the thread id (`session.threadId`), both
+      // for display only; of `open` the link a client may show in place of a terminal (`openLink`: an http(s) url).
+      // A value this reader's text check refuses (over-long, or with a NUL) is not carried, and still is no tmux's:
+      // the row then names the contract's reserved word for any provider, which is never a provider's name.
+      if (own(instance, 'backend') && typeof instance.backend === 'string' && instance.backend.length > 0 && instance.backend !== 'herdr')
+        row.backend = text(instance.backend) ? instance.backend : 'session-provider';
+      if (own(instance, 'session') && record(instance.session)) {
+        const provider = instance.session.provider, threadId = sessionThreadId(instance);
+        const session = { ...(text(provider) && provider.length > 0 && provider.length <= 200 ? { provider } : {}), ...(threadId !== null ? { threadId } : {}) };
+        if (Object.keys(session).length) row.session = session;
+      }
+      if (own(instance, 'open')) { const link = openLink(instance); if (link !== null) row.open = link; }
       if (own(instance, 'retirePending')) row.retirePending = true;
       // #1247 (feature status-retire-state): the retire that runs, or failed, or was interrupted. Validated, never
       // check()ed: a value out of the contract is dropped and the row reads as if it had none.
@@ -226,14 +245,19 @@ export function deploymentStatusData(document, deployment) {
       // Feature instance-background (#1579): the row is placed in the Background section. Exactly true only; any
       // other value is dropped, never checked: the row stays in the main tree.
       if (own(instance, 'background') && instance.background === true) row.background = true;
+      // Feature instance-pin: the row is listed first in its machine's list (instance-tree.mjs rowPinned). Exactly
+      // true only; any other value is dropped, never checked: the row keeps the roster's order.
+      if (own(instance, 'pinned') && instance.pinned === true) row.pinned = true;
       // #802 (feature worktree-event): a spawn running its worktree hooks, verifiably alive. Boolean true only;
       // any other value is dropped, never checked: the row stays an ordinary one.
       if (own(instance, 'spawnInProgress') && instance.spawnInProgress === true) row.spawnInProgress = true;
       // Session resume: how the instance's last session ended, one of SESSION_ENDS exactly. Any other value is
       // dropped, never checked: the row reads as one that did not say.
       if (own(instance, 'sessionEnd') && SESSION_END_VALUES.includes(instance.sessionEnd)) row.sessionEnd = instance.sessionEnd;
-      // #1577 (feature instance-same-work): the child does its parent's work, so its parent line is drawn
-      // (same-work.mjs). Boolean true only; any other value is dropped, never checked: the row reads unflagged.
+      // Related work (features instance-related-work, and instance-same-work before it): the row's work is
+      // related to its parent's, or a top-level row's to its sibling's, so the line between them is drawn
+      // (related-work.mjs). Boolean true only; any other value is dropped, never checked: the row reads unflagged.
+      if (own(instance, 'relatedWork') && instance.relatedWork === true) row.relatedWork = true;
       if (own(instance, 'sameWork') && instance.sameWork === true) row.sameWork = true;
       if (own(instance, 'modules')) row.modules = modules(instance.modules);
       if (own(instance, 'soul')) row.soul = soulSource(instance.soul);
@@ -244,6 +268,9 @@ export function deploymentStatusData(document, deployment) {
       // Needs input (PR K): validated, never check()ed — an invalid claim is null (unknown), never an E_* that
       // fails the roster. Absent stays absent.
       if (own(instance, 'waitingOnYou')) row.waitingOnYou = waitingOnYouData(instance.waitingOnYou);
+      // Feature spawn-attribution: the owning human's label, or null. Validated, never check()ed: a malformed
+      // value is null (no human), never an E_* that fails the roster. Absent stays absent.
+      if (own(instance, 'attributedHuman')) row.attributedHuman = attributedHumanData(instance.attributedHuman);
       return [row];
     });
     return out;

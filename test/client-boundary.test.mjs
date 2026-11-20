@@ -53,7 +53,7 @@ const HOME = "packages/client", TUI = "packages/tui", DESKTOP = "packages/deskto
 const SURFACE = Object.freeze({
   // Firm: the frame and the Instances view.
   "display-text.mjs": ["displayLine", "cleanLine", "DETAIL_WITHHELD", "MAX_DISPLAY_LINE", "NOT_NOTE_TEXT", "UNSAFE"],
-  "cli-locator.mjs": ["ACCEPT_RANGE", "ACCEPT_RANGE_TEXT", "PROBE_NAME", "parseSemver", "parseProbeStdout", "acceptProbe", "cliRecord"],
+  "cli-locator.mjs": ["ACCEPT_RANGE", "acceptRangeText", "PROBE_NAME", "parseSemver", "parseProbeStdout", "acceptProbe", "cliRecord"],
   "cli-probe-contract.mjs": ["probeSignature", "probeChanged"],
   "deployment-contract.mjs": ["DEPLOYMENT_FEATURES", "deploymentRecord", "deploymentReadGate", "deploymentFailure", "OBSERVE_MAX_AGE_FEATURE", "validMaxAge", "maxAgeArgv"],
   "deployment-read-cli.mjs": ["cliDeploymentRead", "DEPLOYMENT_READ_TIMEOUT", "DEPLOYMENT_READ_MAX_BUFFER"],
@@ -73,7 +73,9 @@ const SURFACE = Object.freeze({
   "deployment-facts.mjs": ["memberLabel", "servedIdentityText", "deploymentUnavailableText"],
   "instance-admission.mjs": ["admitInstance", "instanceSelector"],
   "instance-tree.mjs": ["instanceId", "resolveLinkId", "clusterInstances", "recencyOrder", "rosterGroups", "waitingRollup", "instanceVisibleInTree",
-    "collapseKey", "filterInstanceTree", "hasInstanceChildren", "heldHome", "instanceSiblings", "backgroundPlacement", "BACKGROUND_FEATURE"],
+    "collapseKey", "filterInstanceTree", "hasInstanceChildren", "heldHome", "instanceSiblings", "backgroundPlacement", "BACKGROUND_FEATURE", "PIN_FEATURE"],
+  // Pinned instances (feature instance-pin): a client pins through the shared run of the kernel's verb, which reads its answer.
+  "instance-pin.mjs": ["pinInstance"],
   // #1579: the roster's section key and the sidebar's sections (the main tree, then the Background section), both clients'.
   "roster-sections.mjs": ["rosterSections", "deploymentState", "rowStale", "primaryDeployment", "isMultiDeployment", "rosterSectionKey", "sidebarSections"],
   "kernel-environment.mjs": ["INSTANCE_VARIABLES", "withoutInstanceVariables"],
@@ -510,7 +512,7 @@ test("lib/ and bin/ import nothing from packages/client or packages/desktop", (t
 
 test("the stable surface names what packages/client has: every listed module, every listed export", () => {
   assert.deepEqual(surfaceProblems(repository), []);
-  assert.equal(Object.keys(SURFACE).length, 73);
+  assert.equal(Object.keys(SURFACE).length, 74);
   // #1559: the machine sweep's runner and the shared trigger, with the trigger's locality; not the reader.
   assert.deepEqual(["session-resume-cli.mjs", "session-resume.mjs", "session-resume-trigger.mjs"].map((module) => SURFACE[module]), [["runResumeSweep"], undefined, ["createResumeTrigger", "localDeploymentIds"]]);
   // #482 in a switcher: a listed deployment's identity, read before it is served.

@@ -10,8 +10,8 @@ const RUNTIME_ORDER = Object.freeze({ running: 0, unknown: 1, stopped: 2 });
 /** The panel's runtime order, a comparator for `sort`: running, then unknown (`running` null or anything not
  * a boolean: it may be running, so it stands above the rows nobody needs to watch), then stopped; by name
  * within each. Each row's place depends on that row alone, so it is a total order whatever `running` holds.
- * Read by `panelInstances` (deployment-panel.mjs). The sidebar's roster orders by name (instance-tree.mjs
- * `rosterOrder`, #1262). */
+ * Read by `panelInstances` (deployment-panel.mjs). The sidebar's roster orders by spawn time, newest first
+ * (instance-tree.mjs `rosterOrder`). */
 export function byRuntimeState(a, b) {
   return RUNTIME_ORDER[runtimeState(a)] - RUNTIME_ORDER[runtimeState(b)] || String(a.instance).localeCompare(String(b.instance));
 }
@@ -52,6 +52,61 @@ export function unsupportedSession(instance) {
   const stem = HERDR_STAND_IN;
   if (instance?.runtimeState === "unsupported") return kernelsOwnReason(instance) ? instance.runtimeError : stem;
   return (instance?.sessionTarget !== undefined && instance?.sessionTarget !== null) || instance?.backend === "herdr" ? stem : null;
+}
+
+/** A session provider's name, by the session-provider contract: 1 to 40 lowercase letters, digits and dashes.
+ * Here it also starts with a letter or a digit: a name is a `--backend` value, and one that starts with a dash
+ * is an option to the CLI's parser. `tmux` is the kernel's own backend and `session-provider` the contract's
+ * word for any provider: both are reserved, never a provider's name. This is the rule for a name a client
+ * sends (`--backend`, cli-adapter.mjs), offers (session-backends.mjs) or sets in a sentence of its own
+ * (instance-acts.mjs); which row runs on a provider is `sessionProvider`'s, wider on purpose. Not on the
+ * stable surface. */
+const PROVIDER_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
+export const sessionProviderName = (value) => typeof value === "string" && value !== "tmux" && value !== "session-provider" && PROVIDER_NAME.test(value);
+
+/** The session provider a row runs on, as the row's `backend` says it, or null for a row that runs in tmux. A provider (a
+ * capability's session backend, "bb" say) has no tmux target and no terminal: a client takes such a row's
+ * `running`, `runtimeState` and `runtimeError` from the kernel as given, never probes tmux for it
+ * (liveness.mjs) and opens, splits or restores no terminal for it (instance-acts.mjs `openAct`).
+ *
+ * It is the row's `backend` whenever that is text that is not empty and not "tmux": any such row is not tmux's, so none is ever
+ * asked of tmux, also one whose value is no name the contract allows (`sessionProviderName`): what is answered
+ * is then the row's own text, for display only through `displayLine`, and never set in a sentence or sent as
+ * an argument. A row with no `backend` (an older kernel's, or an older routed host's) is a tmux row, as one
+ * with "tmux" is, and reads as it always did; so does one whose `backend` is not text, or is empty: an empty
+ * `backend` names no backend, the kernel never sends one, and reading it as a provider's would take a tmux
+ * home's terminal away. A Herdr-recorded row
+ * (`unsupportedSession`, `backend: "herdr"` included) is never one: its own reason comes first, everywhere.
+ * Not on the stable surface: a client reads `openAct`'s answer. */
+export function sessionProvider(instance) {
+  if (unsupportedSession(instance)) return null;
+  const backend = instance?.backend;
+  return typeof backend === "string" && backend !== "" && backend !== "tmux" ? backend : null;
+}
+
+/** What a provider offers in place of a terminal: the row's `open`, `{ label, url }`, or null. Kept only
+ * when both are text and the url is an http or https one with no credentials in it: a client opens nothing
+ * else in a browser. The label is the provider's own text: a client shows it through display-text.mjs
+ * `displayLine`. Not on the stable surface. */
+// Together under display-text.mjs MAX_DISPLAY_LINE, so a client can show the label and the url as one line, whole.
+const MAX_LINK_LABEL = 200, MAX_LINK_URL = 1800;
+export function openLink(instance) {
+  const open = instance?.open;
+  if (open === null || typeof open !== "object" || Array.isArray(open)) return null;
+  const { label, url } = open;
+  if (typeof label !== "string" || !label || label.length > MAX_LINK_LABEL || typeof url !== "string" || !url || url.length > MAX_LINK_URL) return null;
+  let parsed;
+  try { parsed = new URL(url); } catch { return null; }
+  if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return null;
+  return { label, url };
+}
+
+/** The id of the provider's thread a row runs in: `session.threadId` when it is text, else null. Only a
+ * status row of this machine carries it: a row relayed from another host never does, and nothing here may
+ * depend on it. For display only, through `displayLine`: it addresses nothing. Not on the stable surface. */
+export function sessionThreadId(instance) {
+  const id = instance?.session?.threadId;
+  return typeof id === "string" && id && id.length <= 200 ? id : null;
 }
 
 /** Who wrote what `unsupportedSession` answers for a row as the kernel or a host reported it: "kernel"

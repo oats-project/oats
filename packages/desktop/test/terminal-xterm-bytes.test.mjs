@@ -44,15 +44,14 @@ const altArrow = (arrow, final) => ({ data: `\x1b[1;5${final}`, plainer: `Ctrl+$
 const altShiftArrow = (final) => ({ data: `\x1b[1;4${final}`, plainer: null });
 // The same in every family.
 const SHARED_SENDS = {
-  "app.leader": { data: "\x18", plainer: null },
+  // D18 (decided 2026-11-19): the Desktop's leader is Ctrl+Space, NUL; the leader pressed twice gives the program its NUL.
+  "app.leader": { data: "\x00", plainer: null },
   "roster.openPrevious": altShiftArrow("A"),
   "roster.openNext": altShiftArrow("B"),
   "stage.automations": { data: "\x1b", plainer: "Escape" },
   "tabs.next": { data: "\t", plainer: "Tab" },
   "tabs.prev": { data: "\x1b[Z", plainer: "Shift+Tab" },
   "split.close": ctrlAlt("W"),
-  // Show only the current workspace, Ctrl+Alt+Shift+O in every family: ESC ^O, which Esc, then Ctrl+O still sends.
-  "workspaces.currentOnly": ctrlAlt("O"),
   "focus.leaveTerminal": { data: "\x1b[17;6~", plainer: null },
 };
 const CTRL_ALT_SENDS = {
@@ -71,6 +70,8 @@ const CTRL_ALT_SENDS = {
   "split.focusNextGroup": ctrlAlt("A"),
   "sidebar.focusFilter": ctrlAlt("F"),
   "instance.edit": ctrlAlt("R"),
+  "app.newAgent": ctrlAlt("N"),
+  "instance.mail": ctrlAlt("M"),
 };
 // The Ctrl+Shift family's seven (below) send nothing; its other rows keep their Ctrl+Alt key.
 const SEVEN = { "app.palette": "K", "app.quickOpenSouls": "P", "app.workspaces": "S", "terminal.focusMode": "M",
@@ -94,6 +95,9 @@ const SENDS = {
     "split.focusNextGroup": altShiftArrow("C"),
     "sidebar.focusFilter": alt("f"),
     "instance.edit": alt("r"),
+    // New agent's Alt+N (the Desktop UI rework): readline's and zsh's history search forward get ESC n from Esc, then n.
+    "app.newAgent": alt("n"),
+    "instance.mail": alt("m"),
   },
   "ctrl+alt": CTRL_ALT_SENDS,
   "ctrl+shift": Object.fromEntries(Object.entries(CTRL_ALT_SENDS).filter(([id]) => !Object.hasOwn(SEVEN, id))),
@@ -299,16 +303,17 @@ test("the Alt+Shift arrows, a named exception: no plainer arrow sends their sequ
   }
 });
 
-// The leader is Ctrl+X on every platform (keymap.mjs LEADER), which fires in a terminal by the allowlist
-// on Linux/Windows and by name on macOS (principle 3's exception). Pressed twice, its second press is the
-// program's: what xterm sends for it, 0x18 (CAN), pinned here under xterm's Linux, Windows and macOS
-// evaluation (navigator.platform set before load). The end of this file runs it through the leader.
-test("the leader, Ctrl+X, is the byte 0x18 in xterm on every platform, which the leader pressed twice gives the program", t => {
+// The leader is Ctrl+Space on every platform in the Desktop (D18; Ctrl+X, keymap.mjs LEADER, is the other choice), which
+// fires in a terminal by the allowlist on Linux/Windows and by name on macOS (principle 3's exception). Pressed twice,
+// its second press is the program's: what xterm sends for it, NUL (Ctrl+X: 0x18, CAN), pinned here under xterm's
+// Linux, Windows and macOS evaluation (navigator.platform set before load). The end of this file runs it through the leader.
+test("the leader, Ctrl+Space, is NUL in xterm on every platform (Ctrl+X, the other choice, 0x18), which the leader pressed twice gives the program", t => {
   for (const [platform, isMac] of [[null, false], ["Win32", false], ["MacIntel", true]]) {
     const press = xtermTerminal(t, { platform });
     assert.equal(press.isMac, isMac, `xterm loaded under ${platform ?? "Linux"}`);
-    assert.equal(defaultBinding("app.leader", isMac), "Ctrl+X");
-    assert.equal(press(keydownInit(defaultBinding("app.leader", isMac))), "\x18", platform ?? "Linux");
+    assert.equal(defaultBinding("app.leader", isMac), "Ctrl+Space");
+    assert.equal(press(keydownInit(defaultBinding("app.leader", isMac))), "\x00", platform ?? "Linux");
+    assert.equal(press(keydownInit("Ctrl+X")), "\x18", `${platform ?? "Linux"}: the Ctrl+X choice`);
   }
   // ⌃\, the macOS leader before 0.67, which macOS still fires by name when bound back: 0x1c (FS, SIGQUIT's byte).
   assert.equal(xtermTerminal(t, { platform: "MacIntel" })(keydownInit("Ctrl+\\")), "\x1c");
@@ -604,7 +609,7 @@ const shellKeyPath = (isMac) => (event) => {
 // leader alone registered it reaches the program as ESC o (in the Alt family, with every default
 // registered, it is the workspace switcher's: keymap-linux.test.mjs).
 for (const [platform, isMac] of [[null, false], ["Win32", false], ["MacIntel", true]]) {
-  test(`the leader in a terminal (${platform ?? "Linux"}): Ctrl+X sends nothing, twice sends 0x18 once, Alt+O is not the leader`, t => {
+  test(`the leader in a terminal (${platform ?? "Linux"}): Ctrl+Space sends nothing, twice sends NUL once, Alt+O is not the leader`, t => {
     resetAllBindings();
     const press = xtermTerminal(t, { platform, keyHandler: shellKeyPath(isMac) });
     const log = [];
@@ -618,7 +623,7 @@ for (const [platform, isMac] of [[null, false], ["Win32", false], ["MacIntel", t
     assert.equal(first.events[0].defaultPrevented, true, "claimed before the pty");
     assert.ok(leader.isWaiting());
     const second = press.sequence([["keydown", ctrlX]]);
-    assert.equal(second.data, "\x18", "the leader pressed twice: exactly 0x18, once");
+    assert.equal(second.data, "\x00", "the leader pressed twice: exactly NUL, once");
     assert.equal(leader.isWaiting(), false);
     assert.deepEqual(log, ["open", "again"], "nothing ran");
     // xterm's macOS evaluation reads ⌥O as the third-level ø (no macOptionIsMeta), so only elsewhere is it ESC o.

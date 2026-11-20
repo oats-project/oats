@@ -7,8 +7,9 @@
 // The homes are started, one is stopped with OATS, one ends on its own (`exit 0`), and the tmux
 // server is killed. `oats session resume --json` then brings back the lost ones in their own
 // conversations (asserted on the argv the stand-ins received), under their own deployment's launch
-// configuration; the stopped and the exited ones are not listed; a second sweep reports `already-running` and starts nothing; a refusal is reported again in the same boot
-// (`refused-this-boot`) without a second start; a held lock answers E_RESUME_BUSY.
+// configuration; the stopped and the exited ones are not listed; a second sweep reports `already-running` and starts nothing; a refusal is reported again
+// (`start-refused-retrying`) without a second start until its delay has run; a held lock answers E_RESUME_BUSY, and a lock that
+// needs a person E_RESUME_LOCK_STUCK.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -25,6 +26,7 @@ import { fakeBin } from "./helpers/fake-ssh.mjs";
 import { agentScopeWarning, isAgentScopeWarning } from "../lib/tmux-server-scope.mjs";
 import { readEvents } from "../lib/instance-events.mjs";
 import { START_ENV_FILE, START_ENV_KEY_FILE, launchEnvUnverifiedWarning } from "../lib/start-env.mjs";
+import { processStartToken } from "../lib/worktree-hooks.mjs";
 
 const hasTmux = !spawnSync("tmux", ["-V"], { stdio: "ignore" }).error;
 /** The PATH this file was started with: the isolated environment (test.before) keeps a small one. */
@@ -201,6 +203,7 @@ test("after the tmux server dies, the sweep resumes the lost homes in their own 
   const judgements = (fx) => Object.fromEntries(Object.entries(readSeen(join(fx.dep, "agents")).homes).map(([home, r]) => [home.split("/").pop(), r.judgedBy?.outcome ?? null]));
   assert.deepEqual(Object.values(judgements(A)).filter(Boolean), [], "a plan judges no loss");
   assert.deepEqual(Object.fromEntries(Object.keys(homes).map((n) => [n, before(n)])), counts, "a plan starts nothing");
+  const refusedSeen = readSeen(join(C.dep, "agents")).homes[homes.c2];
 
   // The sweep. The envelope is the standard one; exit 0 whatever the rows say.
   const swept = cli(A, ["session", "resume", "--json"]);
@@ -254,33 +257,55 @@ test("after the tmux server dies, the sweep resumes the lost homes in their own 
     assert.equal(JSON.stringify(meta.launch).includes(ids[name]), false, `${name}: the recipe`);
   }
 
-  // Each lost home the sweep answered is judged: c2's loss is answered once.
-  assert.deepEqual(judgements(C), { c1: OUTCOME.FRESH, c2: OUTCOME.REFUSED });
+  // Each home the sweep started is seen running for its new start, with no loss and no judgement.
+  // c2's start was refused: its loss record is kept, unjudged.
+  for (const [fx, names] of [[A, ["a1", "a4", "a5", "a6", "a7"]], [C, ["c1"]]]) {
+    const seen = readSeen(join(fx.dep, "agents")).homes;
+    for (const name of names) {
+      const current = readJson(join(homes[name], "instance.json")).startId, record = seen[homes[name]];
+      assert.notEqual(current, runningNow[name].startId, `${name} has a new start`);
+      assert.equal(record.startId, current, `${name} is seen for its current start`);
+      assert.ok(Number.isFinite(Date.parse(record.lastSeenRunningAt)), `${name} was seen running`);
+      assert.equal(record.firstNotRunningAt, null, `${name}'s new start has no loss`);
+      assert.equal(record.firstNotRunningBoot, null);
+      assert.equal(record.judgedBy, null, `${name}'s new start is not judged`);
+    }
+  }
+  assert.deepEqual(readSeen(join(C.dep, "agents")).homes[homes.c2], refusedSeen, "c2's refused start keeps its loss record");
+  assert.equal(refusedSeen.judgedBy, null, "c2's loss is not judged");
 
-  // A second sweep: the resumed homes run; nothing is started again; c2's loss was judged.
+  // A second sweep: the resumed homes run; nothing is started again. c2's refusal is not due again
+  // within its first minute: it is reported with its code, not started (on a host that has a boot
+  // id; without one nothing is noted, and the sweep tries c2 again).
   const again = ok(cli(A, ["session", "resume", "--json"]), "second sweep");
   const second = Object.fromEntries(again.rows.map((r) => [r.instance, [r.outcome, r.reason ?? null, r.code ?? null]]));
   for (const name of ["a1", "a4", "a5", "a6", "a7", "c1"]) assert.deepEqual(second[name], [OUTCOME.ALREADY_RUNNING, null, null], name);
-  assert.deepEqual(second.c2, [OUTCOME.SKIPPED, ROW_REASON.NOT_SEEN_RECENTLY, null]);
-  // A judgement lost to a status write that renamed over it: this boot's refusal note still holds
-  // c2 (on a host that has a boot id).
-  const seenOfC = seenFile(join(C.dep, "agents")), recordOfC = readJson(seenOfC);
-  recordOfC.homes[homes.c2].judgedBy = null;
-  writeFileSync(seenOfC, JSON.stringify(recordOfC));
-  const third = ok(cli(A, ["session", "resume", "--json"]), "third sweep").rows.find((r) => r.instance === "c2");
-  assert.deepEqual([third.outcome, third.reason, third.code], bootId() ? [OUTCOME.REFUSED, ROW_REASON.REFUSED_THIS_BOOT, "E_LAUNCH_ENV_MISSING"] : [OUTCOME.REFUSED, ROW_REASON.START_REFUSED, "E_LAUNCH_ENV_MISSING"]);
+  assert.deepEqual(second.c2, [OUTCOME.REFUSED, bootId() ? ROW_REASON.START_REFUSED_RETRYING : ROW_REASON.START_REFUSED, "E_LAUNCH_ENV_MISSING"]);
+  const waiting = again.rows.find((r) => r.instance === "c2");
+  if (bootId()) assert.ok(Date.parse(waiting.nextAttemptAt) > Date.now() - 60_000 && Date.parse(waiting.nextAttemptAt) <= Date.now() + 60_000, `c2 says when it is tried again: ${waiting.nextAttemptAt}`);
   assert.equal(before("c2"), counts.c2);
   for (const name of ["a1", "a4", "a5", "a6", "a7", "c1"]) assert.equal(before(name), counts[name] + 1, `${name} was not started again`);
 
   // A held lock: E_RESUME_BUSY through the standard failure envelope, nothing started.
+  // The holder is this process, as a sweep's claim names it.
   const lock = join(oatsHome, "session-resume", "lock");
-  mkdirSync(lock, { recursive: true });
-  writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid, bootId: bootId() }));
+  writeFileSync(lock, JSON.stringify({ bootId: bootId(), pid: process.pid, processStart: processStartToken(process.pid), nonce: "a".repeat(32), at: new Date().toISOString() }) + "\n");
   const busy = cli(A, ["session", "resume", "--json"]);
   assert.equal(busy.status, 1, busy.stdout);
   const failure = busy.json();
   assert.deepEqual([failure.schemaVersion, failure.ok, failure.error.code], [1, false, "E_RESUME_BUSY"]);
-  assert.equal(typeof failure.error.message, "string");
+  assert.equal(failure.error.message, `another session resume on this machine holds ${lock} (pid ${process.pid} holds it); nothing was started`);
+  rmSync(lock);
+  // A lock that needs a person: E_RESUME_LOCK_STUCK through the same envelope, with the lock's path
+  // and what was found in its details, nothing started and the directory left.
+  mkdirSync(lock);
+  writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid, bootId: bootId() }));
+  const stuck = cli(A, ["session", "resume", "--json"]);
+  assert.equal(stuck.status, 1, stuck.stdout);
+  const refusal = stuck.json();
+  assert.deepEqual([refusal.schemaVersion, refusal.ok, refusal.error.code, refusal.error.details], [1, false, "E_RESUME_LOCK_STUCK", { lock, found: "directory" }]);
+  assert.match(refusal.error.message, /is a lock directory written by an earlier kernel\); once no earlier oats is running on this machine, remove the directory /);
+  assert.deepEqual(readdirSync(lock), ["owner.json"]);
   rmSync(lock, { recursive: true });
 });
 
@@ -382,13 +407,13 @@ test("`session resume --deployment <dir>` sweeps that deployment alone, register
   assert.deepEqual([launches("d1").length, launches("d3").length], [counts.d1, counts.d3], "the stopped homes were not started");
 });
 
-test("a home lost again after each resume is started by sweeps at most 3 times in a boot, then answered keeps-getting-lost, predicted by --plan; a start by hand is not counted; a reboot does not bring back the loss the guard answered, and a new loss is counted afresh in another boot", { skip: TMUX.skip || (!bootId() && "this host has no boot id: nothing is counted") }, async () => {
+test("a home lost again after each resume is started by sweeps at most 3 times in an hour, then answered keeps-getting-lost with the time a sweep starts it again, predicted by --plan; a start by hand is not counted; the count is one boot's, and in another boot the loss is started again and counted afresh", { skip: TMUX.skip || (!bootId() && "this host has no boot id: nothing is counted") }, async () => {
   const E = v2Deployment({ name: "e", local: { "launch-configs": { "claude-e": config("claude", "dep-e") } } });
   later.push(E);
   const home = await spawnHome(E, "e1", "claude-e");
   await startHome(E, home, "e1");
   const notePath = join(oatsHome, "session-resume", "note.json");
-  const count = () => (existsSync(notePath) ? readJson(notePath).resumes?.[home] : undefined);
+  const count = () => (existsSync(notePath) ? readJson(notePath).starts?.[home]?.length : undefined);
   // Seen running by a status for its current start, then lost: a loss the sweep vouches for.
   const lose = async () => {
     await waitUntil(() => statusRows(E).e1.running === true, "a status to see e1 run");
@@ -416,7 +441,7 @@ test("a home lost again after each resume is started by sweeps at most 3 times i
   // The fourth sweep: predicted, then answered, and nothing started.
   await lose();
   runs = launches("e1").length;
-  const keeps = (r) => { assert.deepEqual([r.instance, r.outcome, r.reason, r.code], ["e1", OUTCOME.REFUSED, ROW_REASON.KEEPS_GETTING_LOST, undefined]); assert.match(r.message, /resumed 3 times in this boot/); };
+  const keeps = (r) => { assert.deepEqual([r.instance, r.outcome, r.reason, r.code], ["e1", OUTCOME.REFUSED, ROW_REASON.KEEPS_GETTING_LOST, undefined]); assert.match(r.message, /resumed 3 times in the last hour/); assert.ok(Date.parse(r.nextAttemptAt) > Date.now(), `it says when a sweep starts it again: ${r.nextAttemptAt}`); };
   const [predicted] = sweep("--plan");
   keeps(predicted);
   const [answered] = sweep();
@@ -425,20 +450,12 @@ test("a home lost again after each resume is started by sweeps at most 3 times i
   assert.equal(count(), 3);
   assert.equal(statusRows(E).e1.sessionEnd, SESSION_END.LOST);
 
-  // A reboot does not bring back the loss the guard answered (it was judged).
-  writeFileSync(notePath, JSON.stringify({ ...readJson(notePath), bootId: "another-boot" }));
-  assert.deepEqual(sweep().map((r) => [r.instance, r.outcome, r.reason]), [["e1", OUTCOME.SKIPPED, ROW_REASON.NOT_SEEN_RECENTLY]]);
-  assert.equal(launches("e1").length, runs, "nothing was started");
-
-  // Another boot's count is no count: a start by hand, and a new loss.
-  assert.ok(ok(cli(E, ["session", "start", "--resume", "--home", home, "--json"]), "start --resume by hand").resume.resumed);
-  await waitUntil(() => launches("e1").length === runs + 1, "e1's stand-in to run after the start by hand");
-  await lose();
-  runs = launches("e1").length;
+  // The count is one boot's: in another boot this loss, which the guard did not answer, is started
+  // again, and that start is the first of the new boot's count.
   writeFileSync(notePath, JSON.stringify({ ...readJson(notePath), bootId: "another-boot" }));
   assert.deepEqual(sweep().map((r) => [r.instance, r.outcome]), [["e1", OUTCOME.RESUMED]]);
   await waitUntil(() => launches("e1").length === runs + 1, "e1's stand-in to run in the new boot");
-  assert.deepEqual(readJson(notePath).resumes, { [home]: 1 }, "the note of this boot, the count started again");
+  assert.deepEqual(Object.entries(readJson(notePath).starts).map(([at, times]) => [at, times.length]), [[home, 1]], "the note of this boot, the count started again");
 });
 
 /** Two homes of `fx` started, seen running by a status, then lost (their windows killed by hand). */
@@ -597,7 +614,8 @@ test("the per-boot note names a home by its real path: a budget used up through 
   const saved = existsSync(notePath) ? readFileSync(notePath) : null;
   try {
     // j1 was started 3 times this boot (under its real path): through the symlink it is refused.
-    writeFileSync(notePath, JSON.stringify({ bootId: boot, refused: [], resumes: { [homes.j1]: 3 } }));
+    const justNow = new Date().toISOString();
+    writeFileSync(notePath, JSON.stringify({ bootId: boot, refused: [], starts: { [homes.j1]: [justNow, justNow, justNow] } }));
     const answers = [];
     const sweep = await resumeSessions({ deployment: link, boot, start: (row) => { answers.push(row.instance); return Promise.resolve(RESUMED_ANSWER); } });
     assert.deepEqual(sweep.rows.map((r) => [r.instance, r.outcome, r.reason ?? null]), [["j1", OUTCOME.REFUSED, ROW_REASON.KEEPS_GETTING_LOST], ["j2", OUTCOME.RESUMED, null]]);

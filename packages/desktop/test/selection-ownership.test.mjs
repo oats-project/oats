@@ -2,6 +2,7 @@
 // close/workspace functions and terminal lifecycle. Only IPC, xterm and module
 // loading are synthetic. No Electron, processes, sockets or operator sessions.
 import test from "node:test";
+import { createLaunchFocus } from "../renderer/launch-focus.mjs";
 import { createInstanceRecency, recencyIdFromTerminalKey } from "../renderer/instance-recency.mjs";
 import { viewContext } from "./helpers/view-context.mjs";
 import assert from "node:assert/strict";
@@ -28,18 +29,18 @@ import { splitControlsState } from "../renderer/split-controls.mjs";
 import { projectSplitDom } from "../renderer/split-dom.mjs";
 import * as instanceTreeShared from "../../client/instance-tree.mjs";
 import * as instanceTreeView from "../renderer/instance-tree-view.mjs";
-const instanceTree = { ...instanceTreeShared, ...instanceTreeView };
+import * as relatedWork from "../../client/related-work.mjs";
+const instanceTree = { ...instanceTreeShared, ...instanceTreeView, ...relatedWork };
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget, sameInstanceActionTarget } from '../renderer/instance-action-target.mjs';
 import { instanceSplitPlan, instanceSplitIdentity } from '../renderer/instance-split.mjs';
 import { runtimeState, unsupportedSession } from "../../client/instance-presentation.mjs";
 import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
-import { createRuntimeBadge } from "../renderer/identity-marks.mjs";
 import { rosterKeyAction, moveTarget } from "../renderer/roster-keys.mjs";
 import { revealInStrip, revealInScrollport } from "../renderer/reveal-in-scrollport.mjs";
 import { createLeader } from "../renderer/leader.mjs";
 import { createLeaderDispatch } from "../renderer/leader-dispatch.mjs";
-import { leaderApplies, leaderLabel } from "../renderer/leader-keys.mjs";
+import { leaderApplies, leaderLabel, supportedLeaderRows, rowKeysText } from "../renderer/leader-keys.mjs";
 import { createLeaderHint, LEADER_ANNOUNCEMENT } from "../renderer/leader-hint.mjs";
 import { LEADER_TABLE } from "../../client/keymap.mjs";
 import { navTab } from "../renderer/shell-nav.mjs";
@@ -54,7 +55,7 @@ const names = [
 ];
 // The leader's part of the shell (shell.mjs "the leader"): what a key after it, or a chord that does
 // one's work, acts on, and the shipped dispatch and engine that run it.
-const leaderNames = ["leaderTargetId", "leaderOrigin", "openingInstanceId", "runAsLeaderKey", "notApplicable", "leaderState"];
+const leaderNames = ["leaderTargetId", "leaderOrigin", "openingInstanceId", "runAsLeaderKey", "notApplicable", "leaderState", "leaderHelp"];
 const leaderSetup = [/let terminalOpening = [^\n]+/, /const rosterInstance = [^\n]+/,
   /const leaderDispatch = createLeaderDispatch\(\{[^]*?\n\}\);/, /const leader = createLeader\(\{[^]*?\n\}\);/,
   /registerAction\(\{ id: "app\.leader"[^\n]*\n[^\n]*/, /for \(const \[id, does\] of \[\["roster\.openPrevious"[^]*?\n\}/];
@@ -82,7 +83,7 @@ function shell(t, { shellSource = source, ownership = createSelectionOwnership, 
     tabs: new Map(), nextTabId: 1, activeTab: null, split: null, sidebarMode: "instances", tabLayerVisible: false,
     contextRosterGen: 0, contextInstances: [], collapsedInstances: new Set(), focusRegions: { focusRegion: () => false, regionOfFocus: () => null },
     rosterState: null, rosterStale: false, contextDeploymentNote: null, ...viewContext(), rosterSignaturePainted: null, // initContextRoster builds the real controller; tests mark it ready before rendering rows
-    rosterTip: { bind() {}, hide() {}, sync() {} }, rosterTipFacts: () => ({}), rosterPrs: { get: () => null, refresh() {} }, spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} },
+    spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} },
     // The palette's last-focus record (Spec C), inert here: the shell code under test writes to it.
     instanceRecency: createInstanceRecency({ storage: null }), recencyIdFromTerminalKey,
     wsActiveTerminal: new Map(), pendingTerms: new Set(),
@@ -97,7 +98,7 @@ function shell(t, { shellSource = source, ownership = createSelectionOwnership, 
     // Panel behavior is covered with the real presenter in split-empty-shell.
     syncContextPanel() {}, contextPanel: { setFocusMode() {} },
     updateSplitControls() {}, revealInStrip, revealInScrollport, tabStripResize: null /* spec F: the shipped active-tab reveal runs too */, numberTabStrips, tabNumberObserver: null, refreshContextRoster() {}, setNavActive() {}, setSidebarHidden() {},
-    ...instanceTree, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, createRuntimeBadge, rosterKeyAction, moveTarget,
+    ...instanceTree, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, rosterKeyAction, moveTarget,
     api: () => { const gate = deferred(); requests.push(gate); return gate.promise; },
     prepareOwnedOpen: opts => prepareOwnedOpen({ ...opts, load() {
       const gate = deferred(); loads.push(gate); return gate.promise;
@@ -105,7 +106,7 @@ function shell(t, { shellSource = source, ownership = createSelectionOwnership, 
     // Keep identity resolution out of this test; keys/targets remain distinct.
     resolveTerminalOpen: (instances, ref, ws) => ({ inst: { instance: ref, running: true, tmux: { session: "synthetic", window: ref } }, key: `${ws}:${ref}` }),
     ctx: {}, reserveKey, whenKeyFree, createViewLifecycle, createTabChrome, tabKeyAction, focusAfterLastTab, tabNameTailStart, setTabTitle,
-    createSelectionOwnership: ownership, wirePaneSelection, terminalOptions, wireTerminalSelection: () => () => {}, fitTerminal, createGlyphRenderer,
+    createLaunchFocus, createSelectionOwnership: ownership, wirePaneSelection, terminalOptions, wireTerminalSelection: () => () => {}, fitTerminal, createGlyphRenderer,
     ...workspaceTabs, ...layout, projectSplitDom, splitControlsState,
     // tabs.close also goes into the real keymap: the strip's close chord is the keymap's, not tab-a11y's.
     registerAction: action => { actions.set(action.id, action.run); if (action.id === "tabs.close") t.after(keymap.registerAction(action)); },
@@ -135,6 +136,9 @@ function shell(t, { shellSource = source, ownership = createSelectionOwnership, 
   c.ownsInstanceTarget = target => target?.workspace === c.workspace && c.contextInstances.filter(row => sameInstanceActionTarget(target, row, c.workspace)).length === 1;
   if (leader) Object.assign(c, {
     window: dom.window, createLeader, createLeaderDispatch, LEADER_TABLE, leaderApplies, leaderLabel, actionLabel: () => null, rosterActsHeld: () => null,
+    // The help sheet (slice 4, D15): the shipped leaderHelp over the shared keys; on, as it is by default.
+    supportedLeaderRows, rowKeysText, getBinding: keymap.getBinding, formatChord: keymap.formatChord, isMac: false, leaderHelpEnabled: () => true,
+    DESKTOP_LEADER: keymap.DESKTOP_LEADER, LEADER_CHOICES: keymap.LEADER_CHOICES,
     said: [], sayInHint: line => { c.said.push(line); c.leaderHint.say(line); }, leaderHint: createLeaderHint({ doc: document, host: document.body }),
     // A roster row's click opens its terminal (renderContextRoster); the opens are recorded, then run as shipped.
     opened: [], failed: [], openTerminalTab: ref => {
@@ -505,24 +509,38 @@ test("roster polling restores logical focus without superseding a terminal selec
 
 function ambiguousClusterGuides(t, ambiguity, shellSource = source) {
   const s = shell(t, { shellSource });
+  // A solid line joins only a child its host reports related to its parent, so worker and child are flagged: the line
+  // is what an ambiguous parent name must not forge (as before slice 1's D26).
   const full = [
     { instance: "parent", home: "/a/parent", agentsRoot: "/a/agents", siblingInstance: "worker", running: true },
     { instance: "parent", home: "/b/parent", agentsRoot: ambiguity === "same-root" ? "/a/agents" : "/b/agents", running: true },
-    { instance: "worker", home: "/c/worker", agentsRoot: ambiguity === "same-root" ? "/a/agents" : "/c/agents", parentInstance: "parent", running: true },
-    { instance: "child", home: "/c/child", agentsRoot: "/c/agents", parentInstance: "worker", running: true },
-  ];
+    { instance: "worker", home: "/c/worker", agentsRoot: ambiguity === "same-root" ? "/a/agents" : "/c/agents", parentInstance: "parent", relatedWork: true, running: true },
+    { instance: "child", home: "/c/child", agentsRoot: "/c/agents", parentInstance: "worker", relatedWork: true, running: true },
+  ].map(row => ({ ...row, relatedWorkKnown: relatedWork.RELATED_WORK_FEATURE }));
   assert.equal(instanceTree.visibleClusters(full, full).length, 2, "duplicate parent is outside the worker's cluster");
   s.renderContextRoster(full);
   const rows = [...s.document.querySelectorAll(".ctx-tree-row")];
   assert.equal(rows.length, full.length, "ambiguity must not hide a row");
   const row = name => rows.find(r => r.querySelector(".ctx-name").dataset.name === name);
+  // A row's parent is its line, its indent and its "under <parent>" words, decided on the full roster (an ambiguous
+  // parent name forges none of them).
+  const words = name => row(name).querySelector(".ctx-relation")?.textContent ?? "";
   assert.equal(row("worker").querySelectorAll(".ctx-guide.elbow").length, 0, "shipped caller must not forge an ambiguous parent guide");
-  assert.equal(row("child").querySelectorAll(".ctx-guide.elbow").length, 1, "unambiguous parent still draws its elbow");
+  assert.equal(row("child").querySelectorAll(".ctx-guide.elbow").length, 1, "an unambiguous related parent still draws its elbow");
+  assert.doesNotMatch(words("worker"), /under/, "shipped caller must not forge an ambiguous parent");
+  assert.equal(row("worker").style.getPropertyValue("--depth"), "0");
+  assert.match(words("child"), /under worker/, "an unambiguous parent is still said");
+  assert.equal(row("child").style.getPropertyValue("--depth"), "1");
 }
 for (const ambiguity of ["same-root", "cross-root"]) {
-  test(`shipped roster guides use the full roster for ${ambiguity} ambiguity across clusters`, t => ambiguousClusterGuides(t, ambiguity));
+  test(`shipped roster relations use the full roster for ${ambiguity} ambiguity across clusters`, t => ambiguousClusterGuides(t, ambiguity));
+  test(`mutation: saying a parent the tree did not resolve (${ambiguity}) is caught at the shipped caller`, t => {
+    const mutant = source.replace("const underWords = (i) => (i.depth || 0) > 0 && i.parentInstance", "const underWords = (i) => i.parentInstance");
+    assert.notEqual(mutant, source);
+    assert.throws(() => ambiguousClusterGuides(t, ambiguity, mutant), /shipped caller must not forge/);
+  });
   test(`mutation: omitting the full roster for ${ambiguity} guides is caught at the shipped caller`, t => {
-    const mutant = source.replace("treeConnectors(items, i, instances)", "treeConnectors(items, i)");
+    const mutant = source.replace("treeConnectors(items, i, instances)", "treeConnectors(items, i, items)");
     assert.notEqual(mutant, source);
     assert.throws(() => ambiguousClusterGuides(t, ambiguity, mutant), /shipped caller must not forge/);
   });
@@ -796,22 +814,31 @@ test("an open that fails leaves no target behind: the next press steps from what
   assert.deepEqual(s.c.opened, ["B", "B"], "A is still shown: the step is from A again, not from the dead B");
 });
 
-test("the leader shows nothing while it waits, announced once; a key after it that cannot act says why in the line", async t => {
+test("the leader shows its help sheet while it waits, announced once; a key after it that cannot act says why in the line", async t => {
   const s = stepShell(t);
   await s.open(steps[0]);
   const hint = s.c.leaderHint.element;
   s.actions.get("app.leader")({ target: s.document.activeElement });
-  assert.deepEqual([...hint.children].map(child => [child.className, child.textContent]), [["sr-only", LEADER_ANNOUNCEMENT]], "no keys panel");
+  assert.deepEqual([...hint.children].map(child => [child.className, child.textContent]), [["sr-only", LEADER_ANNOUNCEMENT]], "the line shows no keys panel");
   assert.equal(s.c.leaderHint.isShown(), false);
+  // Slice 4 (D15): the help sheet lists the keys that apply here, and goes with the next key.
+  const help = s.document.getElementById("leader-help");
+  assert.equal(s.c.leaderHint.helpMode(), "wait"); assert.equal(help.hidden, false);
+  assert.match(help.querySelector(".leader-help-title").textContent, /^After Ctrl\+Space$/, "D18: the Desktop's leader");
+  assert.match(help.textContent, /If an input method takes Ctrl\+Space, choose Ctrl\+X on Keyboard shortcuts/);
+  assert.ok([...help.querySelectorAll("dt")].some(dt => dt.textContent === "K or Space"), "the palette's row");
+  assert.ok(![...help.querySelectorAll("dd")].some(dd => /split/i.test(dd.textContent) && /group/i.test(dd.textContent)), "no row that does not apply (the tabs are not split)");
   s.dispatch(s.document.activeElement, "keydown", { key: "ArrowRight", code: "ArrowRight" });
   assert.equal(s.c.leaderHint.mode(), "line", "one tab: → cannot act");
   assert.equal(hint.textContent, "There is no other tab.");
-  // The leader's ? is the shortcuts editor, which lists its keys.
+  assert.equal(s.c.leaderHint.helpMode(), null, "the key settled the wait: the sheet is gone");
+  // The leader's ? pins the help sheet (slice 4, D15); the shortcuts editor is Ctrl+, and the palette's.
   let editor = 0; s.actions.set("app.shortcuts", () => editor++);
   s.actions.get("app.leader")({ target: s.document.activeElement });
   s.dispatch(s.document.activeElement, "keydown", { key: "?", code: "Slash", shiftKey: true });
-  assert.equal(editor, 1);
-  assert.equal(s.c.leaderHint.mode(), null, "a key that ran: the wait's announcement is gone, nothing shows");
+  assert.equal(editor, 0);
+  assert.equal(s.c.leaderHint.helpMode(), "pinned");
+  assert.equal(s.c.leaderHint.mode(), null, "a key that ran: the wait's announcement is gone");
 });
 
 test("the leader's ← / → in a split: an empty or one-tab focused group says there is no other tab, and nothing moves", async t => {
@@ -839,4 +866,46 @@ test("the leader's ← / → in a split: an empty or one-tab focused group says 
   s.c.said.length = 0; press("ArrowRight");
   assert.deepEqual(s.c.said, []);
   assert.equal(s.c.activeTab, C, "two tabs in the focused group: → moves within it");
+});
+
+
+test('launch opens a new or retained terminal without keyboard focus, including after attachment', async t => {
+  for (const retained of [false, true]) {
+    const s = shell(t, { leader: true });
+    const row = { instance: 'launch-probe', agent: 'dev', home: '/fixture/agents/dev/instances/launch-probe',
+      agentsRoot: '/fixture/agents', deployment: { id: '/fixture' }, running: true,
+      tmux: { session: 'synthetic', window: 'launch-probe' } };
+    s.c.contextInstances = [row];
+    s.renderContextRoster([row]);
+    if (retained) {
+      const opened = s.c.openTerminalTab(row);
+      s.requests.at(-1).resolve({ instances: [row] }); await flush();
+      s.attachments.at(-1).resolve({ id: 201 }); await opened;
+    }
+    s.c.tabOpenIntents = s.tabOpenIntents;
+    s.c.heldHome = instanceTree.heldHome;
+    s.c.showInRoster = s.showInRoster;
+    s.c.operator = { input: () => 0, pointer: () => 0 };
+    s.c.notifications = { notify: message => assert.fail(message) };
+    s.c.shownRoster = { gen: 0, ws: 'A', instances: [row], read: 1 };
+    s.c.openTerminalTab = (ref, opts) => s.openTerminalTabFlow(ref, message => assert.fail(message), opts);
+    s.c.alert = message => assert.fail(message);
+    const creation = source.slice(source.indexOf("// A launch's --instance (launch-focus.mjs): its row is selected"),
+      source.indexOf('// Persistent recursive instance tree'));
+    const focus = runInNewContext(`${creation}\nlaunchFocus`, s.c);
+    t.after(() => focus.dispose());
+    focus.request({ deployment: '/fixture', name: 'launch-probe' });
+    focus.observe([row]); await flush();
+    const input = s.terms.at(-1).input;
+    assert.equal(s.c.tabs.size, 1);
+    assert.equal(s.c.tabs.get(s.c.activeTab).instanceRef.instance, row.instance);
+    assert.equal(s.document.activeElement.dataset.treeInstance, s.c.instanceId(row));
+    assert.equal(input.contains(s.document.activeElement), false);
+    if (!retained) { s.attachments.at(-1).resolve({ id: 202 }); await flush(); }
+    assert.equal(s.document.activeElement.dataset.treeInstance, s.c.instanceId(row), 'readiness keeps focus on the row');
+    assert.equal(s.attachments.length, 1, 'retained opens attach once');
+    assert.equal(s.terms.at(-1).focuses, retained ? 1 : 0, 'launch adds no input focus');
+    s.focusActiveTerminal();
+    assert.equal(s.document.activeElement, input, 'the existing explicit focus action still enters the terminal');
+  }
 });

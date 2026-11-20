@@ -37,7 +37,7 @@ export function supportsLifecycle(cli, operation, apply = false) {
  * E_REMOTE_INCOMPATIBLE, E_AMBIGUOUS and E_SNAPSHOT_UNKNOWN before sending, and the host's own resolution
  * refuses them (and E_HOME_MISMATCH) before any effect. E_PLAN_STALE is not here: it is read by its own branch
  * (interpret), by the shape of the answer, never by this set. */
-export const BEFORE_EFFECT_CODES = Object.freeze(['E_BAD_ARGS', 'E_INSTANCE_RETIRING', 'E_LIFECYCLE_BUSY',
+export const BEFORE_EFFECT_CODES = Object.freeze(['E_BAD_ARGS', 'E_USAGE', 'E_INSTANCE_RETIRING', 'E_LIFECYCLE_BUSY',
   'E_HOME_MISMATCH', 'E_SESSION_UNKNOWN', 'E_AMBIGUOUS_INSTANCE', 'E_UNIDENTIFIED_INSTANCE_HOME', 'E_REMOTE_INCOMPATIBLE', 'E_AMBIGUOUS', 'E_SNAPSHOT_UNKNOWN']);
 /** The installed CLI printed this error envelope: the kernel answered. Said by the adapter where it builds
  * the envelope (`origin`), never inferred from the envelope's shape: the adapter's own failures and this
@@ -53,9 +53,9 @@ const kernelAnswered = envelope => envelope?.origin === 'kernel' && envelope.sch
  * A kernel's E_LIFECYCLE_BUSY whose kernel (`features`: the answering kernel's) says who holds the claim
  * reads by that (`holder`, busyHolder), local or remote, and names the target of `plan` the refusal is
  * about when that is not the instance acted on (`about`). */
-function failureReason(envelope, remote, terms, { code = envelope?.error?.code, features = null, plan = null } = {}) {
+function failureReason(envelope, remote, terms, { code = envelope?.error?.code, features = null, plan = null, operation } = {}) {
   const kernel = kernelAnswered(envelope), undescribed = kernel ? undescribedAnswer(code, terms) : null;
-  const reason = undescribed || lifecycleReason(code, terms), details = envelope?.error?.details;
+  const reason = undescribed || lifecycleReason(code, terms, { operation }), details = envelope?.error?.details;
   const holder = kernel ? busyHolder(code, details, features) : null, about = holder ? busyAbout(plan, details?.home) : null;
   const busy = holder ? { holder, ...(about ? { about } : {}) } : {};
   const message = holder ? busyHeadline(holder) : reason.message;
@@ -140,7 +140,8 @@ export function createLifecycleBoundary({ invoke = cliLifecycle, now = () => per
     if (!same(selected, current)) return denied('E_PLAN_CHANGED', selected.target);
     if (envelope?.schemaVersion !== 1 || envelope.ok !== true) {
       const code = envelope?.error?.code || 'E_CLI_PROTOCOL';
-      return denied(code, selected.target, { reason: failureReason(envelope, selected.remote, terms, { code, features: selected.features }) });
+      return denied(code, selected.target, { reason: failureReason(envelope, selected.remote, terms, { code, features: selected.features,
+        operation: request.operation }) });
     }
     // The plan is read by the features of the kernel that made it: for a relayed plan its host's, never this computer's.
     const data = lifecyclePlan(envelope.result, selected.target, request.operation, choices, { features: selected.features });
@@ -180,7 +181,8 @@ export function createLifecycleBoundary({ invoke = cliLifecycle, now = () => per
       // children have already stopped. The user must explicitly read a new plan.
       return failure(code, 'refused', { plan: fresh, childrenStopped });
     }
-    if (beforeEffect.has(code)) return failure(code, 'refused', { reason: failureReason(envelope, entry.remote, terms, { features, plan: entry.plan }) });
+    if (beforeEffect.has(code)) return failure(code, 'refused', { reason: failureReason(envelope, entry.remote, terms,
+      { features, plan: entry.plan, operation: entry.plan.action }) });
     return failure('E_OUTCOME_UNKNOWN', 'unknown', { cause: failureReason(envelope, entry.remote, terms, { features }) });
   }
   /** The apply of this client that is running, as a reply names it. */

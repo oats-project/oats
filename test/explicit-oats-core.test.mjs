@@ -185,6 +185,7 @@ test('K6c spawn idempotency: --expect-decision + --idempotency-key — a retry o
   // Lost response → retry with the same key: replay, nothing new.
   const again = spawn('--purpose', 'a', '--expect-decision', rev, '--idempotency-key', 'k-1', '--no-launch');
   assert.equal(again.ok, true, JSON.stringify(again).slice(0, 300)); assert.equal(again.result.replayed, true); assert.equal(again.result.instance, 'wt-a'); assert.equal(again.result.home, first.result.home);
+  assert.equal(typeof first.result.attach, 'string'); assert.equal(again.result.attach, first.result.attach, 'a replay answers the attach command the first apply answered');
   assert.deepEqual(homes(fx, 'wt'), ['wt-a'], 'replay spawned nothing');
   assert.ok(JSON.parse(fx.run(['instance', 'events', 'wt-a', '--json']).stdout).result.events.filter(e => e.kind === 'spawned').length === 1, 'one spawned event');
   // Same key, different decision (name now taken → fresh decision is wt-a-2): conflict, not a second spawn.

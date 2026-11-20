@@ -17,6 +17,8 @@ const flush = () => new Promise(setImmediate);
 const cli = { ok: true, bin: '/memory/oats', version: '0.24.13', remote: ['session', 'session-upload'], features: [] };
 const spec = { remote: { serverId: 'peer', instance: 'one', home: '/memory/home' }, cols: 80, rows: 24 };
 const response = value => new Response(JSON.stringify(value));
+/** Main's backendFetch for the CLI read: it takes the path of the server's accepted CLI, never a URL. */
+const cliRead = reply => async path => { assert.equal(path, '/api/cli', 'the CLI is read by its path'); return reply(); };
 
 test('preload chunks UTF8 at codepoint boundaries, keeps Ctrl bytes; caller overflow refused BEFORE any send', () => {
   const calls = [], ipc = { send: (...args) => calls.push(args) }, bridge = createTerminalBridge(ipc, {});
@@ -67,9 +69,9 @@ test('a remote Herdr session never reaches a PTY: an older kernel inspection and
   for (const stdout of ['{"schemaVersion":1,"ok":true,"result":{"backend":"herdr","present":true,"state":"shell","terminalId":"term_abc"}}',
     '{"schemaVersion":1,"ok":false,"error":{"code":"E_HERDR_REMOVED","message":"E_HERDR_REMOVED: removed"}}']) {
     const commands = [], ptys = [];
-    const io = createTerminalIo({ base: () => 'http://127.0.0.1:1111', context: () => 'epoch', attachmentDirectory: () => '/memory/files',
+    const io = createTerminalIo({ context: () => 'epoch', attachmentDirectory: () => '/memory/files',
       spawnPty: (...args) => { ptys.push(args); return {}; }, execFileSync: () => assert.fail('not local'),
-      fetch: async () => response(cli), run: async (bin, args) => { commands.push(args); return { stdout }; },
+      fetch: cliRead(() => response(cli)), run: async (bin, args) => { commands.push(args); return { stdout }; },
     });
     await assert.rejects(io.prepare(io.admit(structuredClone(spec)).spec, { current: () => true }), error => error.code === 'E_HERDR_REMOVED');
     assert.deepEqual(commands.map(args => args[1]), ['inspect'], 'inspected, never attached');
@@ -88,9 +90,9 @@ test('a failed command keeps its bounded stdout on the rejection, still only aft
 
 test('remote preparation uses fixed CLI arguments, rechecks identity, and never creates from stale metadata', async () => {
   let reads = 0; const commands = [];
-  const io = createTerminalIo({ base: () => 'http://127.0.0.1:1111', context: () => 'epoch', attachmentDirectory: () => '/memory/files',
+  const io = createTerminalIo({ context: () => 'epoch', attachmentDirectory: () => '/memory/files',
     spawnPty: () => assert.fail('prepare must not create'), execFileSync: () => assert.fail('not local'),
-    fetch: async () => response(++reads === 2 ? { ...cli, bin: '/memory/other' } : cli),
+    fetch: cliRead(() => response(++reads === 2 ? { ...cli, bin: '/memory/other' } : cli)),
     run: async (bin, args, options) => { commands.push({ bin, args, options }); return { stdout: '{"schemaVersion":1,"ok":true,"result":{"present":true}}' }; },
   });
   await assert.rejects(io.prepare(spec, { current: () => true }), error => error.code === 'E_TERM_CONTEXT_CHANGED');
@@ -99,17 +101,21 @@ test('remote preparation uses fixed CLI arguments, rechecks identity, and never 
   assert.equal(commands[0].options.shell, false); assert.equal(commands[0].options.timeout, 20000);
 });
 
-test('CLI metadata stream is bounded before retaining oversize chunk; nonloopback and stale read refuse', async () => {
+test('CLI metadata stream is bounded before retaining oversize chunk; it is read by its path alone; a stale read refuses', async () => {
   let cancelled = 0, reads = 0;
   const body = { getReader: () => ({
     read: async () => ++reads === 1 ? { done: false, value: new Uint8Array(1024 * 1024 + 1) } : { done: true },
     cancel: async () => { cancelled++; }, releaseLock() {},
   }) };
-  await assert.rejects(readTerminalCli('http://127.0.0.1:1111', { current: () => true, fetch: async () => ({ ok: true, body }) }), /budget/);
+  await assert.rejects(readTerminalCli({ current: () => true, fetch: cliRead(async () => ({ ok: true, body })) }), /budget/);
   assert.equal(cancelled, 1); assert.equal(reads, 1);
-  await assert.rejects(readTerminalCli('http://foreign.invalid', { current: () => true, fetch: () => assert.fail('no dispatch') }));
+  // Where the read goes is not the caller's to name: it hands backendFetch (main's own server, path-only
+  // input: backend-client.test.mjs) the fixed path, and nothing else.
+  const asked = [];
+  assert.deepEqual(await readTerminalCli({ current: () => true, fetch: async (...args) => { asked.push(args[0]); return response(cli); } }), cli);
+  assert.deepEqual(asked, ['/api/cli']);
   let current = true;
-  await assert.rejects(readTerminalCli('http://127.0.0.1:1111', { current: () => current, fetch: async () => { current = false; return response(cli); } }), error => error.code === 'E_TERM_CONTEXT_CHANGED');
+  await assert.rejects(readTerminalCli({ current: () => current, fetch: cliRead(async () => { current = false; return response(cli); }) }), error => error.code === 'E_TERM_CONTEXT_CHANGED');
 });
 
 for (const stop of ['stat', 'mkdir', 'write', 'upload']) test(`attachment revocation after ${stop} stops later effects; no rollback/delete claim`, async () => {
@@ -168,11 +174,12 @@ test('actual main composition registers owner BEFORE load and uses shared broker
   const event = () => ({ sender: window.webContents, senderFrame: window.webContents.mainFrame });
   renderer.invoke = (name, ...args) => invokes.get(name)(event(), ...args);
   renderer.send = (name, ...args) => ipc.emit(name, event(), ...args);
+  const backendFetch = cliRead(() => response(cli));
   const vm = runInNewContext(`${mainBlock}\n${windowBlock}\n({createWindow, terminalBroker})`, {
-    createTerminalOwnerBroker, createTerminalIo: options => createTerminalIo({ ...options,
+    createTerminalOwnerBroker, createTerminalIo: options => { assert.equal(options.fetch, backendFetch, 'the terminal IO reads through main\'s backendFetch'); return createTerminalIo({ ...options,
       run: async (bin, args) => { commands.push([bin, args]); return { stdout: '' }; },
-    }), installTerminalHandlers,
-    RENDERER_URL: url, ipcMain: ipc, base: () => 'http://127.0.0.1:1111', serverEpoch: 1, serverHost: { inTransition: () => false },
+    }); }, installTerminalHandlers,
+    RENDERER_URL: url, ipcMain: ipc, backendFetch, serverEpoch: 1, serverHost: { inTransition: () => false, lease: () => ({ generation: 1 }) },
     app: { getPath: () => '/memory/app' }, HERE: '/memory', join, BrowserWindow: Object.assign(FakeWindow, { fromWebContents: () => window }),
     // The terminal frame gate (#1488): the window opens terminals of the workspace main binds it to.
     frameWorkspace, choosers: new Set(), holdsHash: (win, id) => win === window && id === '/memory/ws',

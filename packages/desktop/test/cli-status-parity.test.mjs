@@ -65,11 +65,11 @@ async function domainParity(shape, method, mod = cs) {
   const c = card(mod, ctx);
   const off = mod.onCliChange(s => seen.push(s));
   try {
-    await mod[method](ctx, method === "reprobeCli" ? "/chosen/oats" : undefined);
+    await mod[method](ctx);
     assertFacts(mod, c.el, expected);
     assert.deepEqual(seen, [expected]);
     assert.deepEqual(calls, method === "refreshCli" ? [["/api/cli", undefined]] : [["/api/cli/reprobe", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ bin: "/chosen/oats" }),
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
     }]], "rendering never installs or dispatches extra requests");
   } finally { off(); c.close(); mod.resetCliStateForTests(); }
 }
@@ -127,10 +127,31 @@ for (const shape of ["parsed", "response"]) {
       c.el.querySelector(".cli-retry").click(); await tick();
       assertFacts(cs, c.el, expected);
       assert.deepEqual(calls.map(([path, opts]) => [path, JSON.parse(opts.body)]), [
-        ["/api/cli/reprobe", { bin: "/not-yet-verified/oats" }], ["/api/cli/reprobe", {}],
+        ["/api/cli/reprobe", {}], ["/api/cli/reprobe", {}],
       ]);
     } finally { c.close(); cs.resetCliStateForTests(); }
   });
+}
+
+// #1879: /api/cli gains aboveTested and testedThrough; both shapes keep them, and the notice takes the card's place.
+const aboveTested = { ...compatible, version: "0.23.1", aboveTested: true, testedThrough: "0.22", required: { range: ">=0.22.0, tested through 0.22", desktopApi: 1 } };
+for (const shape of ["parsed", "response"]) {
+  for (const method of ["refreshCli", "reprobeCli"]) {
+    test(`${method}: ${shape} an accepted CLI above the tested bound keeps aboveTested and testedThrough, and shows the notice, not the card`, async () => {
+      cs.resetCliStateForTests();
+      const ctx = context(shape, async () => reply(aboveTested));
+      const d = new JSDOM("<!doctype html><body></body>", { url: "http://127.0.0.1/" });
+      const notice = cs.aboveTestedCard(d.window.document, ctx);
+      try {
+        await cs[method](ctx, method === "reprobeCli" ? "/chosen/oats" : undefined);
+        assert.deepEqual(cs.cliStatus(), aboveTested);
+        assert.equal(cs.cliAvailable(), true);
+        assert.equal(cs.cliKnownUnavailable(), false, "no card");
+        assert.equal(notice.el.hidden, false);
+        assert.match(notice.el.querySelector(".cli-notice").textContent, /tested with oats CLIs up to 0\.22; the installed CLI is 0\.23\.1\./);
+      } finally { notice.dispose(); d.window.close(); cs.resetCliStateForTests(); }
+    });
+  }
 }
 
 test("actual card tolerates incomplete diagnostics without inventing binary absence", async () => {
@@ -382,11 +403,13 @@ test("mutation: reset must advance request ownership", async () => {
   await assert.rejects(resetRace("compatible", mod), /reset invalidates pending request/);
 });
 test("mutation: latest card action must own its completion message", async () => {
-  const mod = await mutant('if (owns() && !cliAvailable() && el.isConnected)', 'if (!cliAvailable() && el.isConnected)');
+  const mod = await mutant('if (owns() && still() && el.isConnected)', 'if (still() && el.isConnected)');
   await assert.rejects(cardRace("newer action", "transport", mod), /obsolete card completion must not paint/);
 });
 test("mutation: disposal must invalidate a pending picker", async () => {
-  const mod = await mutant('dispose() { alive = false; off(); }', 'dispose() { off(); }');
+  // The card's own disposer (the notice beside it has one of the same shape).
+  const mod = await mutant('// dispose with the element: observe removal via the returned disposer\n  return { el, dispose() { alive = false; off(); } };',
+    '// dispose with the element: observe removal via the returned disposer\n  return { el, dispose() { off(); } };');
   await assert.rejects(pickerRace("dispose", "resolve", mod), /obsolete picker must not dispatch reprobe/);
 });
 test("mutation: emitting per response instead of per change is caught", async () => {

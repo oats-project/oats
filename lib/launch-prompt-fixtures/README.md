@@ -7,6 +7,12 @@ Enter only while the normalized screen EQUALS one `confirmation` entry's `text`.
 It also holds the notice Claude shows when it ignores the development-channel
 flag (`flag-ignored` entries), which ends a start with no key.
 
+The engagement tests take the channel arguments from the pinned `oats.aweb`
+mirror's `CLAUDE_CHANNEL_ARGUMENTS`. They check that the kernel engages for the
+provider's development argument and stays disengaged for its approved argument,
+so a provider argument change cannot silently bypass confirmation. The kernel
+does not import the provider at runtime.
+
 ## Normalization, and only this
 
 1. Split the captured screen into rows.

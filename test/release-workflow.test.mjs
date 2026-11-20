@@ -388,6 +388,12 @@ test("the Linux leg launches the packaged window under xvfb, by the identical st
     launches[name] = launch;
   }
   assert.deepEqual(launches["release.yml"], launches["build-installers.yml"], "release and build-only workflows must launch by the IDENTICAL step");
+  // The launch phase onboards a fixture with this repository's kernel: each job installs the root dependencies before it
+  // (v0.69.13's release.yml did not, and its Linux leg refused before publication).
+  for (const [name, job] of Object.entries(jobs)) {
+    const rootInstall = job.steps.findIndex((step) => step["working-directory"] === undefined && /^npm ci\b/m.test(step.run ?? ""));
+    assert.ok(rootInstall >= 0 && rootInstall < job.steps.indexOf(launches[name]), `${name}: the root dependencies are installed before the launch`);
+  }
   // In release.yml the step is in desktop-build, which publication needs: a window that does not come up publishes nothing.
   assert.ok(parseConfigData(yml).value.jobs.publish.needs.includes("desktop-build"));
   // Each workflow says why macOS has no launch step.

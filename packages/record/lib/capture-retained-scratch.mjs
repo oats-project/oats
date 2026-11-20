@@ -7,7 +7,8 @@ import { randomBytes, createHash } from "node:crypto";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { captureContext } from "./capture-context.mjs";
-import { holderLiveness, readCaptureLockOwner } from "./capture-lock.mjs";
+import { readCaptureLockOwner } from "./capture-lock.mjs";
+import { holderLiveness } from "./lock-holder.mjs";
 import { captureScratchRoot, captureScratchDirectory, readCaptureScratchMarker,
   sameCaptureScratchMarker } from "./capture-scratch.mjs";
 
@@ -153,11 +154,11 @@ export function openRetainedCaptureScratch(store, stream, key, start, { cleanup 
   try {
     const mine = marker.value.pid === process.pid && marker.value.nonce === start.workerNonce;
     if (!mine) {
-      if (liveness(marker.value.pid) !== "dead") throw new Error("retained capture owner is not proven dead");
+      if (liveness(marker.value) !== "dead") throw new Error("retained capture owner is not proven dead");
       marker = publish(path, ownerValue(key, claim.id, start, claim.owner), () => {
         assertReference(store.root, state, key, claim, path, marker, start);
         payloadAt(path, claim, { allowMissing: cleanup || claim.phase === "deleting" });
-        if (liveness(marker.value.pid) !== "dead") throw new Error("retained capture owner death became uncertain");
+        if (liveness(marker.value) !== "dead") throw new Error("retained capture owner death became uncertain");
       });
     }
     // Publication may precede this transaction's commit. A successor accepts

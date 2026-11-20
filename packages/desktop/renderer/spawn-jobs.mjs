@@ -45,6 +45,7 @@ import { createSpawnTransaction, RECOVER_POLL_MS, FOLLOW_MARGIN_MS, RECOVER_WITH
 import { spawnProblem, rolledBackProblem, cleanupOwedProblem } from '../../client/spawn-messages.mjs';
 import { spawnText, outcomeText } from './spawn-words.mjs';
 import { rememberSpawnDeployment } from './spawn-deployment-field.mjs';
+import { sessionProvider } from '../../client/instance-presentation.mjs';
 
 /** How long a created instance may take to appear in the roster before the row goes and the
  * notification says so (the dialog's former wait: 20 reads 700 ms apart). */
@@ -280,7 +281,10 @@ export function createSpawnJobs({ post, notify, notifySpawned = () => {}, reopen
         if (job.state === 'created') {
           const same = instances.filter(i => i.instance === job.instance && i.home === job.home && i.agentsRoot === job.selector?.agentsRoot && i.agent === job.soul?.name && !i.server
             && (!i.deployment || i.deployment.id === job.deployment));
-          const ready = same.length === 1 && (!job.wantRunning || same[0].running === true && !!same[0].tmux?.session);
+          // Ready: in the roster and, for a launched spawn, running with its session. A row on a session provider
+          // (packages/client/instance-presentation.mjs sessionProvider) has no tmux session to wait for: it is
+          // ready once the kernel reports it running. The follow then opens no terminal for it (resolveTerminalOpen).
+          const ready = same.length === 1 && (!job.wantRunning || same[0].running === true && (!!same[0].tmux?.session || sessionProvider(same[0]) !== null));
           if (ready) {
             job.state = 'done';
             if (job.wantRunning && job.quiet) job.arrived = { ...same[0] };

@@ -24,7 +24,7 @@ test('Setup names the files the kernel reports, and links them only when they ha
   const where = plain.querySelector('.setup-lede-where');
   assert.match(where.textContent, new RegExp(`^Declared in agents's oats-workspace\\.yaml at ${SHORT}\\.$`));
   assert.equal(where.querySelector('button'), null, 'the capture has url: null, so the path is plain text');
-  renderSetup(plain, { status: statusOf(), view: 'graph', selected: MARKETING, onSelect() {}, openExternal: () => assert.fail() });
+  renderSetup(plain, { status: statusOf(), selected: MARKETING, onSelect() {}, openExternal: () => assert.fail() });
   const subs = [...plain.querySelectorAll('.setup-panel .setup-hand-sub')].map(s => s.textContent);
   assert.deepEqual(subs, ["in agents's oats-workspace.yaml", "The repo's oats-membership.yaml names this workspace"]);
   assert.equal(plain.querySelector('.setup-panel [data-verb=repo]'), null, 'no repository link without a web address');
@@ -35,7 +35,7 @@ test('Setup names the files the kernel reports, and links them only when they ha
     const m = r.members.find(x => x.key === MARKETING);
     m.url = 'https://github.com/northwind/marketing/tree/abc'; m.membershipFile.url = 'https://github.com/northwind/marketing/blob/abc/oats-membership.yaml';
   });
-  renderSetup(hosted, { status, view: 'graph', selected: MARKETING, onSelect() {}, openExternal: url => opened.push(url) });
+  renderSetup(hosted, { status, selected: MARKETING, onSelect() {}, openExternal: url => opened.push(url) });
   hosted.querySelector('.setup-lede-where button.setup-file').click();
   hosted.querySelector('.setup-panel .setup-hand-sub button.setup-file[aria-label="Open oats-membership.yaml"]').click();
   hosted.querySelector('.setup-panel [data-verb=repo]').click();
@@ -63,8 +63,7 @@ test('This computer shows the lock file, disabled souls and each member clone; a
   assert.ok(clones.marketing.classList.contains('warn') && clones.marketing.classList.contains('wrap'), 'a refusal wraps, never cropped');
   const ends = Object.fromEntries([...root.querySelectorAll('[data-box=Packages] .setup-row')].map(r => [r.dataset.package, r.querySelector('.setup-end').textContent]));
   assert.deepEqual(ends, { 'nw.tools': 'locked', 'oats.framework': 'locked', 'oats.okf': '4.0.0 available' });
-  renderSetup(root, { status, view: 'graph', selected: MARKETING, onSelect() {} });
-  assert.equal(root.querySelector('.setup-node[data-package="oats.okf"] .setup-node-meta').textContent, '4.0.0 available');
+  renderSetup(root, { status, selected: MARKETING, onSelect() {} });
   assert.equal(root.querySelector('.setup-panel [data-clone] p').textContent, 'marketing is not a clone of this member');
 });
 
@@ -75,7 +74,7 @@ test('an older kernel (no desktop facts) keeps the generic words and shows no cl
   assert.match(root.querySelector('.setup-lede-where').textContent, new RegExp(`'s workspace file at ${SHORT}\\.$`));
   assert.equal(root.querySelector('dl[aria-label="Member clones"]'), null);
   assert.deepEqual(Object.keys(local(root)).filter(k => ['Lock file', 'Disabled souls'].includes(k)), []);
-  renderSetup(root, { status, view: 'graph', selected: MARKETING, onSelect() {} });
+  renderSetup(root, { status, selected: MARKETING, onSelect() {} });
   assert.deepEqual([...root.querySelectorAll('.setup-panel .setup-hand-sub')].map(s => s.textContent), ["in agents's workspace file", "The repo's membership file names this workspace"]);
   assert.equal(root.querySelector('.setup-panel [data-clone]'), null);
 });
@@ -128,23 +127,23 @@ test('Setup list: one column, the lede, the overview, Shared through Git above T
   assert.deepEqual([...setup.children].map(c => c.className), ['setup-lede', 'setup-explain', 'setup-sec', 'setup-zone']);
   assert.deepEqual([...setup.querySelectorAll('.setup-sec-title')].map(h => [h.tagName, h.textContent]), [['H3', 'Shared through Git'], ['H3', 'This computer']]);
   assert.deepEqual([...setup.querySelectorAll('.setup-sec-lead')].map(p => p.textContent),
-    ['What the workspace declares: the same on every computer that runs it.', "Not shared: this deployment's own settings, clones and machines."]);
+    ['What the workspace declares: the same on every computer that runs it.', "Not shared: this deployment's own settings and clones. The computers it runs on are under Machines."]);
   assert.equal(root.querySelector('.setup-cols, .setup-col, .setup-legend, .setup-header, .setup-scope'), null, 'the right column, the legend and the scope chips are gone');
   assert.deepEqual([...root.querySelectorAll('[data-zone=shared] .setup-box-head')].map(h => [h.firstChild.tagName, h.textContent]), [
     ['H4', 'MembersEach repository and whether both of its links are in place.'],
     ['H4', 'PackagesVersioned bundles, pinned here and fingerprinted in the lock.'],
     ['H4', 'DefaultsEvery soul starts from these.']]);
-  // The facts of this computer, the same values and titles, Instances now "N, M running".
+  // The facts of this computer, the same values and titles, Agents (DESKTOP_NOUNS) "N, M running".
   const kv = local(root);
   assert.deepEqual(Object.fromEntries(Object.entries(kv).map(([k, dd]) => [k, dd.textContent])), {
-    Folder: DEPLOYMENT, Settings: 'oats-local.yaml', Lock: 'current', 'Lock file': 'oats-lock.json', CLI: 'oats 0.55.0', Instances: '3, 1 running', 'Disabled souls': 'campaign-writer' });
+    Folder: DEPLOYMENT, Settings: 'oats-local.yaml', Lock: 'current', 'Lock file': 'oats-lock.json', CLI: 'oats 0.55.0', Agents: '3, 1 running', 'Disabled souls': 'campaign-writer' });
   assert.equal(kv.Settings.title, `${DEPLOYMENT}/oats-local.yaml`);
-  assert.deepEqual(['Lock', 'CLI', 'Instances'].map(k => kv[k].className), ['prim', 'prim', 'prim'], 'primary facts');
+  assert.deepEqual(['Lock', 'CLI', 'Agents'].map(k => kv[k].className), ['prim', 'prim', 'prim'], 'primary facts');
   assert.deepEqual(['Folder', 'Settings', 'Lock file', 'Disabled souls'].map(k => kv[k].className), ['mono', 'mono', 'mono', 'mono']);
   assert.equal(root.querySelector('[data-zone=here] h4').textContent, 'Member clones');
   renderSetup(root, { status: statusOf(r => { r.unsynced = ['nw.chat']; }) });
   assert.equal(local(root).Lock.textContent, 'out of date · 1 not locked'); assert.equal(local(root).Lock.className, 'prim warn');
-  assert.equal(local(root).Instances.textContent, 'none yet');
+  assert.equal(local(root).Agents.textContent, 'none yet');
 });
 
 test('Setup lede: the summary counts members, those that need attention, packages and the lock, from workspace status', () => {
@@ -172,9 +171,8 @@ test('Setup overview: the host defines the workspace; without a workspace key it
   renderSetup(root, { status: keyless });
   assert.equal(root.querySelector('.setup-explain-ov').textContent, 'The host repository defines this OATS workspace: which repositories are its members and which packages it uses.');
   assert.equal(root.querySelector('.setup-lede-where'), null, 'no key, no declaration line (as before)');
-  // Both views: above the graph in the graph view.
-  renderSetup(root, { status: statusOf(), view: 'graph', onSelect() {} });
-  assert.deepEqual([...root.querySelector('.setup').children].map(c => c.className), ['setup-lede', 'setup-explain', 'setup-graph-wrap']);
+  // The list (its only view since the graph went): the lede, the overview, then the shared section and this computer.
+  assert.deepEqual([...root.querySelector('.setup').children].map(c => c.className), ['setup-lede', 'setup-explain', 'setup-sec', 'setup-zone']);
 });
 
 test('Setup "For developers": closed by default, open across re-renders, the kernel\'s file names (generic words otherwise), an aria-hidden drawing', () => {
@@ -189,8 +187,8 @@ test('Setup "For developers": closed by default, open across re-renders, the ker
   dev().open = true;
   renderSetup(root, { status: statusOf() });
   assert.equal(dev().open, true, 'a re-render keeps it open');
-  renderSetup(root, { status: statusOf(), view: 'graph', onSelect() {} });
-  assert.equal(dev().open, true, 'and so does the other view');
+  renderSetup(root, { status: statusOf(), selected: MARKETING, onSelect() {} });
+  assert.equal(dev().open, true, 'and so does a member panel opening');
   root.replaceChildren(); // another tab drawn in the same host
   renderSetup(root, { status: statusOf() });
   assert.equal(dev().open, true);
@@ -296,15 +294,11 @@ test('Setup list: hostile names and file paths render literally', () => {
   assert.equal(root.querySelector('[data-box=Members] .setup-row .setup-name-text').textContent, hostile);
 });
 
-test('Setup list: the Registered machines box sits in This computer, the same element across renders; the graph keeps it below', () => {
-  const root = host(), machines = root.ownerDocument.createElement('section');
-  renderSetup(root, { status: statusOf(), machines });
-  assert.equal(machines.parentElement, root.querySelector('.setup-zone[data-zone=here]'), 'a descendant of the This computer zone');
-  assert.equal(root.querySelector('[data-zone=here]').lastElementChild, machines, 'after the facts and the clones');
-  renderSetup(root, { status: statusOf(), machines });
-  assert.equal(root.querySelector('[data-zone=here]').lastElementChild, machines, 'the same node, not rebuilt');
-  renderSetup(root, { status: statusOf(), machines, view: 'graph', onSelect() {} });
-  assert.equal(root.querySelector('.setup').lastElementChild, machines, 'below the graph');
+test('Setup list: the machines are not Setup\'s any more (the Workspace\'s Machines tab); This computer points there', () => {
+  const root = host();
+  renderSetup(root, { status: statusOf(), machines: root.ownerDocument.createElement('section') });
+  assert.equal(root.querySelector('section:not(.setup-sec):not(.setup-zone):not(.setup-box):not(.setup-explain)'), null, 'no machines box, whatever is passed');
+  assert.equal(root.querySelector('[data-zone=here] .setup-sec-lead').textContent, "Not shared: this deployment's own settings and clones. The computers it runs on are under Machines.");
 });
 
 test('Setup list: one line per row at 860px and wider (a grid per box, subgrid rows); two lines in a narrower box', () => {

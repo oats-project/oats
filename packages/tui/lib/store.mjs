@@ -10,9 +10,9 @@
 // Selection is an identity (the shared `instanceId`), never an index, so it survives every read;
 // the rows it moves among are the model's, in drawn order.
 import { ACTIONS, LEADER_KEYS, backKeyLabel, bindings, chordKeys, chordsRead, paletteKeys } from "./actions.mjs";
-import { CHORDS, chordFamilyFrom, collapseKey, workspaceStep, displayLine, instanceActs, instanceId, outcomeWords, pendingEntry, spawnProblem } from "./client.mjs";
+import { CHORDS, chordFamilyFrom, collapseKey, workspaceStep, displayLine, instanceActs, instanceId, openAct, outcomeWords, pendingEntry, spawnProblem } from "./client.mjs";
 import { defaultDetachKey } from "./config.mjs";
-import { BACKGROUND_ID, backgroundOpen, BUTTON_ORDER, SPAWN_WORDS, LEADER_WORDS, SPLIT_WORDS, TAB_WORDS, actDecision, capabilitiesHeight, capabilitiesOf, capabilityUsersOf, disclosure, openDecision, paletteItems, paletteStep, preflightLine, returnedLine, roster, soulNames, soulOfAgent, soulsOf, spawnChoices, spawnChoicesKey, spawnLine, spawnPickerItems, spawnReady, spawnRing, spawnSelector, spawnedRow, switcher, switcherHeight, switcherWindow, memoryKey, memoryKeys, LIST_WORDS, WORKSPACE_WORDS, listChoice, listChoices, workspaceList } from "./model.mjs";
+import { BACKGROUND_ID, backgroundOpen, BUTTON_ORDER, PIN_WORDS, pinDecision, pinLine, SPAWN_WORDS, LEADER_WORDS, SPLIT_WORDS, TAB_WORDS, actDecision, capabilitiesHeight, capabilitiesOf, capabilityUsersOf, disclosure, openDecision, paletteItems, paletteStep, preflightLine, returnedLine, roster, soulNames, soulOfAgent, soulsOf, spawnChoices, spawnChoicesKey, spawnLine, spawnPickerItems, spawnReady, spawnRing, spawnSelector, spawnedRow, switcher, switcherHeight, switcherWindow, memoryKey, memoryKeys, LIST_WORDS, WORKSPACE_WORDS, listChoice, listChoices, workspaceList } from "./model.mjs";
 import { backKeyId, backKeySequences, isBackKey } from "./term/through.mjs";
 import { windowOf } from "./views/scroll.mjs";
 import { SPLIT_MIN, splitFits } from "./views/split.mjs";
@@ -133,7 +133,7 @@ export function initialState({ deployment = null, cli, home, entry = null, actio
     selected: null, collapsed: new Set(), background: new Set(), filter: NO_FILTER, focus: "list", top: 0, loose: false, detailTop: 0, places: new Map(), unread: new Map(), unreadKeys: new Map(), workspaceCursor: null, colour,
     switcher: NO_SWITCHER,
     listed: NO_LIST, identities: new Map(),
-    helpTop: 0, actions, ascii, detachKey, opening: null, terminal: null, outcome: null, act: null, acted: 0, starting: new Map(), retiring: new Set(),
+    helpTop: 0, actions, ascii, detachKey, opening: null, terminal: null, outcome: null, act: null, acted: 0, starting: new Map(), retiring: new Set(), pinning: new Set(),
     leaderKey: backKeyId(detachKey), leader: null, keyboard: null, keysRead, mac: platform === "darwin", chords: chordKeys(platform === "darwin", actions, CHORDS, keysRead.family, backKeyId(detachKey)), palette: null, paletteKeys: paletteKeys(platform === "darwin"), recent: new Map(), layouts: new Map(), restoring: null, leftFocus: null, souls: NO_SOULS, capabilities: NO_CAPABILITIES,
     spawn: null, spawning: null, spawnCheck: null, arriving: null, previews: 0, tabs: Object.freeze([]), split: null, group: 0, aside: null,
     notice: null,
@@ -737,6 +737,23 @@ function resumedHeard(state, reading) {
   return { state, effect: null };
 }
 
+/** The pin key on `row` (feature instance-pin; lib/model.mjs pinDecision): at once, no confirmation. The line under
+ *  the sidebar's title says it is changing, the row is held from a second press until the answer, and the loop runs
+ *  the kernel's verb (`{ pin }`); a key it does nothing for says why on that line. */
+function pinOn(state, row) {
+  const decision = pinDecision(state, row, instanceActs(row));
+  if (!decision.open) return { state: next(state, { outcome: decision.said }), effect: null };
+  const pinning = new Set(state.pinning); pinning.add(decision.id);
+  const outcome = Object.freeze({ said: PIN_WORDS.pinning(decision.name, decision.pinned), under: Object.freeze([]) });
+  return { state: next(state, { pinning, outcome }), effect: { pin: Object.freeze({ id: decision.id, row, pinned: decision.pinned }) } };
+}
+/** A pin answered (lib/main.mjs): the line says how, the row is free again, and the rows are read again, so the
+ *  list moves (a refusal changes nothing, and the read says so too). */
+function pinHeard(state, { id, name, pinned, answer }) {
+  const pinning = new Set(state.pinning); pinning.delete(id);
+  return { state: next(state, { pinning, outcome: pinLine(name, pinned, answer) }), effect: { refresh: { live: true } } };
+}
+
 /** A Remove answered (lib/main.mjs): the switcher says how, and the list is read again. */
 function removedHeard(state, { name, ok, reason = null }) {
   const line = Object.freeze(ok ? { removed: name } : { notRemoved: name, message: reason?.message ?? "" });
@@ -1103,12 +1120,21 @@ const TAB_PICKS = Object.freeze({
 
 /** The preflight of another machine's agent ended. Given up meanwhile (Esc, a suspend, a second
  *  open): dropped. Failed: the line that says so, unless it is the person's own giving up. Else
- *  the viewer is started in the panel, unless the row it is for has gone from the roster since. */
+ *  the viewer is started in the panel, unless the row it is for has gone from the roster since, or
+ *  runs on a session provider now: the roster may have brought, while the preflight ran, the row of a
+ *  home that moved to one, which has no terminal (the shared open decision, asked again of the row as
+ *  it is now). Then nothing starts: the line says where it runs, as Enter on that row would, and a
+ *  restore says nothing, as for any tab it drops. A row that runs in tmux is started as before. */
 function prepared(state, { id, error }) {
   const opening = state.opening;
   if (opening === null || opening.id !== id || opening.phase !== "preflight") return { state, effect: null };
   if (error !== undefined) return { state: next(state, { opening: null, outcome: preflightLine(opening, error) }), effect: null };
-  if (!roster(state).instances.some((row) => instanceId(row) === id)) return { state: next(state, { opening: null }), effect: null };
+  const row = roster(state).instances.find((each) => instanceId(each) === id) ?? null;
+  if (row === null) return { state: next(state, { opening: null }), effect: null };
+  if (openAct(row)?.reason?.code === "no-terminal") {
+    const decision = openDecision(state, row, instanceActs(row));
+    return { state: next(state, { opening: null, ...(opening.restore ? {} : { outcome: decision.said }) }), effect: null };
+  }
   return { state: (opening.restore ? restoredTab : tabOpened)(next(state, { opening: null }), opening), effect: { panel: id } };
 }
 
@@ -1477,6 +1503,13 @@ function led(state, does, event, keymap) {
   const stay = { state, effect: null }, t = state.terminal;
   const inTerminal = t?.focus === "terminal" && state.view === "instances";
   if (does === "list") return toList(state);
+  // The shared table's `b` (the Desktop's sidebar; the Desktop UI rework, slice 4): the list is the TUI's sidebar. With
+  // a terminal shown, it takes the whole screen with the focus (as zoom does), and zoomed, the list comes back with the
+  // focus (as Esc does). With none shown the list is all there is: nothing.
+  if (does === "sidebar") {
+    if (t === null || state.view !== "instances") return stay;
+    return t.zoom ? toList(state) : { state: terminalWith(state, { focus: "terminal", zoom: true }), effect: null };
+  }
   if (does === "palette") return { state: paletteOpened(state, event, inTerminal ? "terminal" : "list"), effect: null };
   if (does === "zoom" || does === "close-terminal") {
     if (t === null) return stay;
@@ -1661,6 +1694,7 @@ function reduced(state, event, keymap) {
   if (event.retiring !== undefined) return { state: next(state, { retiring: new Set(event.retiring) }), effect: null };
   if (event.listed !== undefined) return listedHeard(state, event.listed);
   if (event.removed !== undefined) return removedHeard(state, event.removed);
+  if (event.pinned !== undefined) return pinHeard(state, event.pinned);
   // The machine sweep's reading: no line, at most a live read.
   if (event.resumed !== undefined) return resumedHeard(state, event.resumed);
   // Shown once, in the line under the sidebar's title, as the line after an open is.
@@ -1762,6 +1796,7 @@ function reduced(state, event, keymap) {
       return refused === true ? { state, effect: null } : refused !== null ? { state: next(state, { outcome: refused }), effect: null } : splitKey(state, action, false);
     }
     case "stop": case "retire": case "start": case "restart": return at < 0 ? stay : actOn(state, r.items[at].row, action);
+    case "pin": return at < 0 || !r.items[at].row ? stay : pinOn(state, r.items[at].row);
     case "detail": return at < 0 ? stay : { state: next(state, { focus: state.focus === "detail" ? "list" : "detail" }), effect: null };
     case "up": case "down": case "top": case "bottom": case "page-up": case "page-down": {
       if (state.focus === "detail") return { state: next(state, { detailTop: scrolled(state.detailTop) }), effect: null };

@@ -25,11 +25,15 @@ adapter and the Desktop (`packages/`), the `oats.framework` package
   untrue.
 - **Tests pin behaviour.** A behaviour change changes its test in the same
   commit. Never weaken an assertion to make a change pass.
-- The package mirrors in `mirrors/` (`mirrors/oats-okf*` and the other
-  official packages' capabilities) are generated from their own repositories;
-  never edit them by hand. They stay out of `capabilities/`: member discovery
-  would list them as this repository's own capabilities, beside their packages.
-  `capabilities/` holds only this repository's own capabilities.
+- The package mirrors in `mirrors/` are copies of the official packages'
+  capabilities at their catalog-pinned tags; never edit them by hand.
+  `scripts/check-mirrors.mjs` generates them from immutable Git objects and
+  byte-checks every mirror against its source inventory in PR CI. OKF keeps
+  its stricter release inventory in `scripts/okf-source-inventory.json`; the
+  other packages use `scripts/mirror-source-inventory.json`. They stay
+  out of `capabilities/`: member discovery would list them as this repository's
+  own capabilities, beside their packages. `capabilities/` holds only this
+  repository's own capabilities.
 
 ## Gates
 

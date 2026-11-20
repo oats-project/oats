@@ -14,8 +14,8 @@
 import { fs, join, resolve, atomic, fail } from './io.mjs';
 
 export const LEGACY_KEYS = ['harvest', 'harvest-runtime', 'harvest-model'];
-const NEW_WAY = 'agents now propose knowledge and spawn oats.okf/knowledge-harvester at checkpoints';
-const WHY = { harvest: NEW_WAY, 'harvest-runtime': 'the harvester now launches with the kernel\'s own harness and model selection', 'harvest-model': 'the harvester now launches with the kernel\'s own harness and model selection' };
+const NEW_WAY = 'agents now propose their own knowledge by PR at checkpoints (oats okf propose)';
+const WHY = { harvest: NEW_WAY, 'harvest-runtime': 'there is no harvest runtime: agents propose their own knowledge by PR (oats okf propose)', 'harvest-model': 'there is no harvest model: agents propose their own knowledge by PR (oats okf propose)' };
 const CLEANUP = 'oats okf setup --remove-legacy-settings --soul <soul> --json';
 const failWith = (code, message, result) => { throw Object.assign(new Error(message), { code, result }); };
 
@@ -38,7 +38,9 @@ export function legacySettings(env = process.env) {
   let settings; try { settings = JSON.parse(env.OATS_SETTINGS || '{}'); } catch { return []; }
   if (!settings || typeof settings !== 'object') return [];
   const origins = parseOrigins(env.OATS_SETTINGS_ORIGINS);
-  return LEGACY_KEYS.filter((key) => Object.hasOwn(settings, key) && !defaulted(origins, key) && !(key === 'harvest' && soulOptOut(env))).map((key) => {
+  return LEGACY_KEYS.filter((key) => Object.hasOwn(settings, key) && !defaulted(origins, key) && !(key === 'harvest' && settings.harvest === 'off' && origins['/harvest']?.kind === 'soul')).map((key) => {
+    // Only the harvest key's OWN soul-origin off is the opt-out; a soul's
+    // publish: off never excuses a host or spawn harvest key.
     const layer = origins[`/${key}`], kind = typeof layer?.kind === 'string' ? layer.kind : null, at = typeof layer?.at === 'string' ? layer.at : null;
     const origin = kind ? `from ${kind}${at ? ` (${at})` : ''}` : 'from an unknown origin';
     let setting = key, remedy;
@@ -51,12 +53,24 @@ export function legacySettings(env = process.env) {
     return { key, kind: kind ?? 'unknown', at, setting, origin, remedy, message: removedSentence({ setting, origin, remedy }) };
   });
 }
-/** Whether the soul opts out: the forwarded `harvest` is `off` and the soul
- *  layer is the one that set it (a host or spawn value masks it, and refuses). */
+/** Whether the soul opts out: the forwarded `harvest` (or, from oats.okf 6,
+ *  its spelling `publish`) is `off` and the soul layer is the one that set it
+ *  (a host or spawn value masks it, and refuses). */
 export function soulOptOut(env = process.env) {
   let settings; try { settings = JSON.parse(env.OATS_SETTINGS || '{}'); } catch { return false; }
-  const layer = parseOrigins(env.OATS_SETTINGS_ORIGINS)['/harvest'];
-  return settings?.harvest === 'off' && layer?.kind === 'soul';
+  const origins = parseOrigins(env.OATS_SETTINGS_ORIGINS);
+  return ['harvest', 'publish'].some(key => settings?.[key] === 'off' && origins[`/${key}`]?.kind === 'soul');
+}
+/** oats.okf 6: `publish: off` is the soul's opt-out, spelled differently, and
+ *  nothing else; `propose` is no setting at all. Any other use refuses. */
+export function refuseKnowledgeKeys(env = process.env) {
+  let settings; try { settings = JSON.parse(env.OATS_SETTINGS || '{}'); } catch { return; }
+  if (!settings || typeof settings !== 'object') return;
+  if (Object.hasOwn(settings, 'propose')) fail('E_CONFIG', 'knowledge.propose is not a setting; instances propose directly in oats.okf 6; use harvest: off to opt out');
+  if (Object.hasOwn(settings, 'publish')) {
+    const layer = parseOrigins(env.OATS_SETTINGS_ORIGINS)['/publish'];
+    if (layer?.kind !== 'soul' || settings.publish !== 'off') fail('E_CONFIG', `publish ${layer?.kind ? `from ${layer.kind}${typeof layer.at === 'string' ? ` (${layer.at})` : ''}` : 'from an unknown origin'} is not valid: only the soul's own knowledge: { publish: off } (or harvest: off) opts out; remove it there`);
+  }
 }
 /** Refuse a forwarded legacy key before any of this provider's effects. */
 export function refuseLegacySettings(env = process.env) {

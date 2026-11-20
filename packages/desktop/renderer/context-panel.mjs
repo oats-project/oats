@@ -2,8 +2,10 @@ import { servedIdentityText } from '../../client/deployment-facts.mjs';
 import { iconElement } from './shell-icons.mjs';
 import { ageText } from './age-text.mjs';
 import { createSoulMark, createRuntimeBadge, harnessName } from './identity-marks.mjs';
-import { reasonLine, unsupportedLine } from './speaker-line.mjs';
-import { instanceActs } from '../../client/instance-acts.mjs';
+import { reasonLine, unsupportedLine, runtimeErrorLine } from './speaker-line.mjs';
+import { sessionLine } from './provider-row.mjs';
+import { waitingLabel, waitedText, waitingClock } from '../../client/waiting-on-you.mjs';
+import { desktopActs } from './desktop-acts.mjs';
 import { needsInputReportingGap } from '../../client/needs-input-reporting-gap.mjs';
 import { rowReason, serverLabel, shownLabel, unaddressableSentence } from '../../client/remote-address.mjs';
 let workNotes = 0;
@@ -59,6 +61,10 @@ export const contextPanelCSS = `
 #context-panel .context-panel-section-head { display:flex; align-items:center; gap:8px; min-width:0; min-height:24px; }
 #context-panel .context-panel-tools { display:flex; align-items:center; gap:2px; margin-left:auto; }
 #context-panel .context-panel-tools:empty { display:none; }
+/* Messaging's Mail: opens the agent's read-only mail sheet (mail-sheet.mjs). */
+#context-panel .context-panel-mail { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 9px; border-radius:6px; border:1px solid var(--border);
+  background:var(--surface); color:var(--fg); font:600 11.5px/1 inherit; cursor:pointer; }
+#context-panel .context-panel-mail:hover { background:var(--surface-2); }
 /* Messaging & Teams: each part under a sentence-case sub-label (not the uppercase section style). */
 #context-panel .context-panel-part { display:flex; flex-direction:column; gap:4px; min-width:0; }
 #context-panel .context-panel-sublabel { font-size:11.5px; font-weight:600; line-height:1.45; color:var(--muted); }
@@ -80,6 +86,8 @@ export const contextPanelCSS = `
 #context-panel .context-panel-paths[open] > summary { margin-bottom:8px; }
 /* Facts: a label column (64px, muted) and a value column; Paths and Lineage share it. */
 #context-panel .context-panel-facts { display:grid; grid-template-columns:64px minmax(0,1fr); gap:7px 10px; align-items:center; margin:0; min-width:0; font-size:12px; line-height:1.45; }
+/* Lineage's label column grows to fit "Owning human" on one line, and only while that row is shown. */
+#context-panel .context-panel-facts.is-lineage { grid-template-columns:minmax(64px, max-content) minmax(0,1fr); }
 #context-panel .context-panel-fact { display:contents; }
 #context-panel .context-panel-facts dt { color:var(--muted); }
 #context-panel .context-panel-facts dd { margin:0; min-width:0; color:var(--fg); overflow-wrap:anywhere; }
@@ -104,6 +112,12 @@ export const contextPanelCSS = `
 #context-panel .context-panel-session { display:flex; flex-direction:column; gap:10px; min-width:0; padding:10px 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface); }
 #context-panel .context-panel-session-lines { display:flex; align-items:center; gap:10px; min-width:0; }
 #context-panel .context-panel-session-note { margin:0; font-size:12px; line-height:1.5; }
+/* Needs input (slice 1: the facts the roster's hover card held): the claim's words and how long it has waited, then
+   the agent's message as text. The needs-input mark leads the line; the words carry the state, never the colour. */
+#context-panel .context-panel-waiting-head { display:flex; align-items:center; gap:6px; margin:0; font-size:12.5px; font-weight:600; line-height:1.5; }
+#context-panel .context-panel-waiting-head > .attn-mark { width:10px; height:10px; }
+#context-panel .context-panel-waiting-message { margin:4px 0 0; font-size:12.5px; line-height:1.5; white-space:pre-wrap; }
+#context-panel .context-panel-status-note { margin:6px 0 0; font-size:12px; line-height:1.5; }
 #context-panel .context-panel-session-badge { flex:none; }
 #context-panel .context-panel-session-badge:empty { display:none; }
 #context-panel .context-panel-session-badge .runtime-badge { width:26px; height:26px; border-radius:7px; font-size:11px; }
@@ -249,7 +263,7 @@ export function instanceDeployment(context) {
 
 export function createContextPanel({
   document: suppliedDocument, root: suppliedRoot, onIntent = noop,
-  applyFocus = callback => callback(), onFocusModeChange = noop, fallbackFocus = () => null, closedFocus = () => null, createGitPanel, createTeamsSection, createSoulSection, openSoul, lifecycle = null,
+  applyFocus = callback => callback(), onFocusModeChange = noop, fallbackFocus = () => null, closedFocus = () => null, createGitPanel, createTeamsSection, createSoulSection, openSoul, openMail = null, lifecycle = null,
   connectionGeneration = () => 0, subscribeConnections = () => noop, instanceOpen = { read: () => true, write: noop }, onChange = noop,
 } = {}) {
   const document = suppliedDocument ?? suppliedRoot?.ownerDocument ?? globalThis.document;
@@ -259,7 +273,7 @@ export function createContextPanel({
   let disposed = false, focusMode = false, applyingFocus = false, epoch = 0;
   let detailsOpen = false;
   try { detailsOpen = instanceOpen.read() === true; } catch { /* storage-less: closed */ }
-  let context = { workspace: null, owner: null, instance: null, key: null };
+  let context = { workspace: null, owner: null, instance: null, key: null, waiting: null };
   let gitSummary = null, prSummary = null, gitChanged = false, notified = false;
   const contextIdentity = () => JSON.stringify([context.workspace, context.key, context.instance?.home, context.instance?.agent,
     context.instance?.agentsRoot, context.instance?.server || null, context.instance?.createdAt ?? null]);
@@ -398,6 +412,13 @@ export function createContextPanel({
   }
   // Work (Spec A): one card — the work mode's tile and one sentence saying what the mode means
   // for this instance, then Folder and Home behind a closed Paths disclosure (an operator's lookup).
+  // Needs input (the Desktop UI rework, slice 1, which removed the roster's hover card): the row's claim as the
+  // sidebar's gate passed it (setContext's `waiting`), its words and how long it has waited, then its message.
+  const waitingSection = section('instance', 'Needs input'); waitingSection.dataset.contextSection = 'waiting'; waitingSection.hidden = true;
+  const waitingHead = node('p', 'context-panel-waiting-head'), waitingWords = node('span');
+  waitingHead.append(iconElement(document, 'attention', { size: 10, className: 'shell-icon attn-mark' }), waitingWords);
+  const waitingMessage = node('p', 'context-panel-waiting-message'); waitingMessage.hidden = true;
+  waitingSection.append(waitingHead, waitingMessage);
   const workSection = section('instance', 'Work');
   const workCard = node('div', 'context-panel-work'), workMain = node('div', 'context-panel-work-main');
   const modeTile = node('span', 'context-panel-mode-tile'), workSentence = node('p', 'context-panel-work-sentence');
@@ -453,7 +474,9 @@ export function createContextPanel({
   startedLine.append('started ', field('span', null, 'startedAt'));
   sessionSide.append(tmuxLine, startedLine, createdLine);
   sessionLines.append(sessionBadge, sessionCopy, sessionSide);
-  sessionCard.append(sessionLines, sessionNote); session.append(sessionCard);
+  // The row's runtime error, said with who made it (speaker-line.mjs), where the roster's hover card said it.
+  const statusNote = node('p', 'context-panel-status-note context-panel-note'); statusNote.dataset.contextStatusNote = ''; statusNote.hidden = true;
+  sessionCard.append(sessionLines, sessionNote, statusNote); session.append(sessionCard);
   // Messaging & Teams (teams contract): injected like Git — this host performs no IO.
   // Header: the label and a tools slot (the section's icon Refresh); then two
   // labelled parts: the Messaging ID (with an icon Copy), then Teams, whose lead
@@ -461,6 +484,17 @@ export function createContextPanel({
   const teamsHost = node('section', 'context-panel-section'); teamsHost.dataset.contextSection = 'teams'; teamsHost.hidden = true;
   const teamsHead = node('div', 'context-panel-section-head'), teamsTools = node('div', 'context-panel-tools');
   teamsHead.append(node('div', 'context-panel-label', 'Messaging & Teams'), teamsTools);
+  // Mail (S2-M3): the agent's own mail, read-only, in the sheet from the right; shown with the section, which shows
+  // only where a messaging provider fills the layer. The host opens it (openMail); this panel performs no IO.
+  if (typeof openMail === 'function') {
+    const mailControl = node('button', 'context-panel-mail', 'Mail'); mailControl.type = 'button';
+    mailControl.title = "Read this agent's mail (read-only)"; mailControl.dataset.action = 'instance.mail';
+    mailControl.addEventListener('click', event => {
+      if (disposed || !context.instance?.home) return;
+      onIntent(event); openMail({ workspace: context.workspace, instance: context.instance });
+    });
+    teamsTools.append(mailControl);
+  }
   const idPart = node('div', 'context-panel-part'), idLine = node('div', 'context-panel-idline');
   idLine.append(field('span', 'context-panel-id', 'identity'), copyControl('identity', 'Copy messaging ID'));
   idPart.append(node('div', 'context-panel-sublabel', 'Messaging ID'), idLine); idPart.dataset.row = 'identity'; rows.set('identity', idPart);
@@ -469,7 +503,9 @@ export function createContextPanel({
   const teamsSection = typeof createTeamsSection === 'function' ? createTeamsSection(teamsHost, { tools: teamsTools,
     onPresence(present) { if (!disposed) teamsHost.hidden = !present; } }) : null;
   const lineage = section('instance', 'Lineage');
-  facts(lineage, [['parentInstance', 'Parent'], ['siblingInstance', 'Sibling']]);
+  // Owning human (feature spawn-attribution): the kernel's attributedHuman, the label of the human the instance's
+  // messaging identity is attributed to. Shown only when set; null or absent hides the row, like any unreported fact.
+  facts(lineage, [['attributedHuman', 'Owning human'], ['parentInstance', 'Parent'], ['siblingInstance', 'Sibling']]).classList.add('is-lineage');
   const soulHead = identityHeader('soul');
   const soulSub = field('div', 'context-panel-identity-sub', 'description');
   soulHead.copy.append(field('div', 'context-panel-identity-name', 'agent'), soulSub);
@@ -625,13 +661,23 @@ export function createContextPanel({
         const code = node('span', 'context-panel-fact-code', part.code); code.title = part.code; return code;
       }));
     }
-    // Session card: the harness mark and name, the model, the terminal session.
+    // Session card: the harness mark and name, the model, the terminal session or the session provider's thread.
     const reportingGap = needsInputReportingGap(instance);
     sessionNote.textContent = reportingGap ? `This agent's Claude questions and permission requests don't show as needs input: its oats.core (oats.framework ${reportingGap}) is older than 2.4.0. Upgrade or respawn it to report them.` : '';
     sessionNote.hidden = !reportingGap;
+    // Needs input: the claim's words, "waiting N min (since 14:03)" computed now (each paint: the roster's poll), and
+    // the message as text, never markup.
+    const claim = context.waiting && typeof context.waiting === 'object' ? context.waiting : null, now = Date.now();
+    waitingSection.hidden = !claim;
+    const waitingText = claim ? `${waitingLabel(claim)} · waiting ${waitedText(claim.since, now)}${waitingClock(claim.since, now) ? ` (since ${waitingClock(claim.since, now)})` : ''}` : '';
+    if (waitingWords.textContent !== waitingText) waitingWords.textContent = waitingText;
+    const message = typeof claim?.message === 'string' ? claim.message : '';
+    if (waitingMessage.textContent !== message) waitingMessage.textContent = message;
+    waitingMessage.hidden = !message;
     const harness = typeof instance.harness === 'string' && instance.harness ? instance.harness : null;
     if (sessionBadge.dataset.harness !== (harness ?? '')) { sessionBadge.dataset.harness = harness ?? ''; sessionBadge.replaceChildren(...(harness ? [createRuntimeBadge(document, harness)] : [])); }
-    const tmux = typeof instance.tmux?.session === 'string' && instance.tmux.session ? `tmux · ${instance.tmux.session}` : '';
+    // Where the session runs: `tmux · <session>`, or the session provider and its thread, `bb · thread thr_x`.
+    const tmux = sessionLine(instance);
     if (tmuxLine.textContent !== tmux) tmuxLine.textContent = tmux;
     tmuxLine.hidden = !tmux;
     state.dataset.state = instance.running === true ? 'running' : instance.running === false ? 'stopped' : 'unknown';
@@ -656,8 +702,11 @@ export function createContextPanel({
       if (id === 'createdAt') el.title = value === 'Not reported' ? '' : value;
       else if (id === 'startedAt') el.title = value === 'Not reported' ? '' : [value, reported(instance.createdAt) !== 'Not reported' ? `created ${instance.createdAt}` : null].filter(Boolean).join(' · ');
       else if (el.closest('.context-panel-path')) el.closest('.context-panel-path').title = value === 'Not reported' ? '' : value;
-      el.toggleAttribute('data-unreported', value === 'Not reported');
-      const row = rows.get(id); if (row) row.hidden = value === 'Not reported';
+      // The owning human is a label (attributed-human.mjs validated it), so its presence is the value's, never its
+      // text: a label that reads "Not reported" is still a human.
+      const unreported = id === 'attributedHuman' ? !(typeof instance.attributedHuman === 'string' && instance.attributedHuman) : value === 'Not reported';
+      el.toggleAttribute('data-unreported', unreported);
+      const row = rows.get(id); if (row) row.hidden = unreported;
       else if (['model', 'modelFrom'].includes(id)) el.hidden = value === 'Not reported';
       if (id === 'identity' || id === 'instance') el.title = value === 'Not reported' ? '' : value;
       if (id === 'model' || id === 'modelFrom') modelLine.title = [fields.get('model')?.textContent, fields.get('modelFrom')?.textContent].filter(t => t && t !== 'Not reported').join(' · ');
@@ -674,7 +723,7 @@ export function createContextPanel({
     // control; a limited one (#802: a spawn or a retire left it half cleaned) Retire alone. A listed act that is not
     // enabled (Start on a Herdr-recorded row) stays visible, disabled, its reason as its title, said as the row says it.
     // A secondary act (#1247: Retire on a home being retired) gets no control here: the roster menu keeps it.
-    const { blocked, limited, acts } = instanceActs(instance), offered = new Map(acts.filter(act => !act.secondary).map(act => [act.verb, act]));
+    const { blocked, limited, acts } = desktopActs(instance), offered = new Map(acts.filter(act => !act.secondary).map(act => [act.verb, act]));
     for (const [verb, b] of [['restart', restartControl], ['start', startControl], ['stop', stopControl], ['retire', retireControl]]) {
       const act = offered.get(verb);
       b.hidden = !act; b.disabled = !act?.enabled;
@@ -688,6 +737,12 @@ export function createContextPanel({
       : limited && (acts.some(act => act.secondary) || limited.origin !== undefined) ? reasonLine(limited) ?? '' : '';
     if (actionsNote.textContent !== why) actionsNote.textContent = why;
     actionsNote.hidden = !why;
+    // The runtime error, unless the lifecycle row's note already says it.
+    const runtime = runtimeErrorLine(instance) ?? '';
+    const status = runtime && runtime !== why ? runtime : '';
+    if (statusNote.textContent !== status) statusNote.textContent = status;
+    statusNote.hidden = !status;
+    if (status) session.hidden = false;
     // A section with nothing reported is not shown; the header sub-line omits an unreported description.
     soulSub.hidden = fields.get('description').textContent === 'Not reported';
     lineage.hidden = [...lineage.querySelectorAll('[data-row]')].every(r => r.hidden);
@@ -718,14 +773,14 @@ export function createContextPanel({
   const offConnection = subscribeConnections(() => { gitSummary = null; prSummary = null; paintGitDot(); });
   render();
   return {
-    setContext({ workspace = null, owner = null, instance = null, key = null } = {}) {
+    setContext({ workspace = null, owner = null, instance = null, key = null, waiting = null } = {}) {
       project(() => {
         if (workspace !== context.workspace) {
           epoch++;
           for (const slot of slots.values()) slot.present = false;
         }
         const previous = contextIdentity();
-        context = { workspace, owner, instance, key };
+        context = { workspace, owner, instance, key, waiting };
         if (previous !== contextIdentity() || owner != null) { gitSummary = null; prSummary = null; }
         // Paths opens per selection: another instance starts with it closed.
         if (previous !== contextIdentity()) paths.open = false;
@@ -790,7 +845,7 @@ export function createContextPanel({
         const changed = focusMode;
         focusMode = false; app?.classList.remove('focus-mode');
         for (const slot of slots.values()) slot.wrapper.remove();
-        slots.clear(); context = { workspace: null, owner: null, instance: null, key: null };
+        slots.clear(); context = { workspace: null, owner: null, instance: null, key: null, waiting: null };
         gitPanel?.dispose(); teamsSection?.dispose?.();
         generic.remove(); stages.remove();
         if (changed) onFocusModeChange(false);

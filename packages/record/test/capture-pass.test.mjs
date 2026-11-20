@@ -4,7 +4,8 @@ import fs from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { superviseCapturePass } from "../lib/capture-pass.mjs";
-import { acquireCaptureLock, captureLockPath, holderLiveness, readCaptureLockOwner } from "../lib/capture-lock.mjs";
+import { acquireCaptureLock, captureLockPath, readCaptureLockOwner } from "../lib/capture-lock.mjs";
+import { holderLiveness } from "../lib/lock-holder.mjs";
 import { CAPTURE_POLICY } from "../lib/capture-budget.mjs";
 import { captureCommandPass } from "../lib/capture-command-output.mjs";
 const workerUrl = new URL("../lib/capture-worker.mjs", import.meta.url).href;
@@ -39,7 +40,7 @@ test("eight-start ceiling includes finalization, all children share the original
   assert.equal(new Set(rows.map(row => row.pass.runId)).size, 1);
   assert.equal(new Set(rows.map(row => row.owner.nonce)).size, 1);
   for (const row of rows) {
-    assert.equal(row.owner.worker.pid, row.pid); assert.equal(holderLiveness(row.pid), "dead");
+    assert.equal(row.owner.worker.pid, row.pid); assert.equal(holderLiveness({ pid: row.pid }), "dead");
     assert.ok(row.drainAt <= row.finalizeAt && row.finalizeAt <= row.hardAt && row.hardAt <= row.pass.deadline);
   }
   for (const row of rows.slice(0, 7)) assert.equal(row.hardAt - row.drainAt, 1000);
@@ -64,7 +65,7 @@ test("an unresponsive first child is reaped and independent work progresses in t
   assert.deepEqual(result, { outcome: "failed", reason: "deadline", exitCode: 1, starts: 3 });
   assert.deepEqual(JSON.parse(fs.readFileSync(join(f.root, "independent-progress"))), { outcome: "failed", reason: "deadline" });
   assert.equal(fs.readFileSync(join(f.root, "earlier-failure"), "utf8"), "deadline", "a healthy intermediate child cannot erase earlier failure evidence");
-  for (const pid of fs.readFileSync(join(f.root, "pids"), "utf8").trim().split("\n").map(Number)) assert.equal(holderLiveness(pid), "dead");
+  for (const pid of fs.readFileSync(join(f.root, "pids"), "utf8").trim().split("\n").map(Number)) assert.equal(holderLiveness({ pid }), "dead");
   assert.equal(fs.existsSync(captureLockPath(f.root)), false);
 });
 
@@ -133,7 +134,7 @@ test("TERM asks the started worker to stop through its owner record; it stops at
   assert.deepEqual(result, { outcome: "failed", reason: "interrupted", exitCode: 1, starts: 1 });
   assert.deepEqual(JSON.parse(fs.readFileSync(join(f.root, "stopped"), "utf8")), { reason: "interrupted", stop: true });
   const pids = fs.readFileSync(join(f.root, "pids"), "utf8").trim().split("\n");
-  assert.equal(pids.length, 1); assert.equal(holderLiveness(Number(pids[0])), "dead");
+  assert.equal(pids.length, 1); assert.equal(holderLiveness({ pid: Number(pids[0]) }), "dead");
   assert.equal(fs.existsSync(captureLockPath(f.root)), false);
 });
 
@@ -149,7 +150,7 @@ test("a worker that cannot cooperate is killed and reaped after the grace; a sec
   const result = await superviseCapturePass(f.root, {}, { ...seams, workerPath: f.workerPath, graceMs: 500 });
   assert.deepEqual(result, { outcome: "failed", reason: "interrupted", exitCode: 1, starts: 1 });
   assert.ok(Date.now() - started < 10000, "bounded by the first signal's grace, well inside the deadline");
-  assert.equal(holderLiveness(Number(fs.readFileSync(join(f.root, "pid")))), "dead");
+  assert.equal(holderLiveness({ pid: Number(fs.readFileSync(join(f.root, "pid"))) }), "dead");
   assert.equal(fs.existsSync(captureLockPath(f.root)), false);
 });
 
@@ -173,7 +174,7 @@ test("TERM before the child is started kills it at once; no operation runs", asy
   const result = await superviseCapturePass(f.root, {}, { ...seams, workerPath: f.workerPath, graceMs: 20000 });
   assert.deepEqual(result, { outcome: "failed", reason: "interrupted", exitCode: 1, starts: 1 });
   assert.equal(fs.existsSync(join(f.root, "ran")), false);
-  assert.equal(holderLiveness(Number(fs.readFileSync(join(f.root, "pid")))), "dead");
+  assert.equal(holderLiveness({ pid: Number(fs.readFileSync(join(f.root, "pid"))) }), "dead");
   assert.equal(fs.existsSync(captureLockPath(f.root)), false);
 });
 
@@ -183,7 +184,7 @@ test("TERM after the worker sent its result still bounds the child's lifetime by
     while(true){}`);
   const result = await superviseCapturePass(f.root, {}, { ...seams, workerPath: f.workerPath, graceMs: 500 });
   assert.deepEqual(result, { outcome: "failed", reason: "interrupted", exitCode: 1, starts: 1 });
-  assert.equal(holderLiveness(Number(fs.readFileSync(join(f.root, "pid")))), "dead");
+  assert.equal(holderLiveness({ pid: Number(fs.readFileSync(join(f.root, "pid"))) }), "dead");
   assert.equal(fs.existsSync(captureLockPath(f.root)), false);
 });
 

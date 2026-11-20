@@ -8,7 +8,7 @@
 // The keys the TUI shares with the Desktop are not written here: an action with no `keys` of its own
 // takes its default keys from the shared keymap (packages/client/keymap.mjs PLAIN_KEYS), and the
 // leader's table is the shared one (LEADER, below). What only the TUI has (q, Ctrl+C, Ctrl+Z, Ctrl+L,
-// Ctrl+K, Tab, Esc, Delete, C, i) keeps its keys here. packages/tui/test/keymap.test.mjs pins both.
+// Ctrl+K, Tab, Esc, Delete, C, i, p) keeps its keys here. packages/tui/test/keymap.test.mjs pins both.
 import { CHORDS, DEFAULT_CHORD_FAMILY, LEADER_TABLE, PALETTE_KEYS, chordKeyOf, plainKeys } from "./client.mjs";
 // An action's words, for the help (views/help.mjs): a view takes the shared home's keymap through this module only.
 export { doesLabel } from "./client.mjs";
@@ -75,6 +75,12 @@ export const ACTIONS = Object.freeze([
   { id: "spawn-another", label: "spawn another", views: [["instances", "spawn another agent of the selected agent's soul: the preview, and Enter spawns it"], ["souls", "the same as n"]] },
   // Offered only while a spawn's outcome is not known: it asks the kernel once, never spawns again.
   { id: "spawn-check", keys: ["C"], label: "check spawn", views: [["instances", "check the result of a spawn whose outcome is not known, while one is"]] },
+  // Pinned instances (feature instance-pin; docs/tui.md, "Pinning"): at once, no confirmation (a pin only orders the
+  // list, and the same key undoes it). `p` is a new default key: a tui.json that gives it to another action is
+  // refused at the start with the line that says so (config.mjs), until that action moves or pin gets another key.
+  // Lower-case, unlike the four acts above: it opens no confirmation and changes nothing but the order. Its help
+  // line fits one row of the help: the shared pin and the feature's line are in docs/tui.md and on the status line.
+  { id: "pin", keys: ["p"], label: "pin", views: [["instances", "pin the selected agent at the top of its list or unpin it, as oats instance pin <name> on|off; needs instance-pin"]] },
   { id: "help", label: "help" },
   { id: "close", keys: ["escape"], label: "close" },
   { id: "quit", keys: ["q", "ctrl+c"], label: "quit" },
@@ -93,9 +99,10 @@ export const ACTIONS = Object.freeze([
  *  and from any other focus it only cancels the leader (lib/store.mjs `twice`). */
 export const LEADER = LEADER_TABLE;
 /** What the leader does that no action of ACTIONS does (lib/store.mjs `led`): `workspace-previous`
- *  and `workspace-next` (the workspace before or after the open one in the list of workspaces) and
- *  `list` (the list's focus, which Esc gives). */
-export const LEADER_OWN = Object.freeze(["workspace-previous", "workspace-next", "list"]);
+ *  and `workspace-next` (the workspace before or after the open one in the list of workspaces),
+ *  `list` (the list's focus, which Esc gives), and `sidebar` (the shared table's `b`, the Desktop's
+ *  sidebar: here the list, hidden by the shown terminal taking the whole screen, or given back). */
+export const LEADER_OWN = Object.freeze(["workspace-previous", "workspace-next", "list", "sidebar"]);
 /** What a chord does that neither the leader's table nor an action does (lib/store.mjs `led`):
  *  `tab-1` to `tab-8`, the focused group's Nth tab shown, and `tab-9`, its last (as the Desktop and
  *  the browsers do). No key after the leader does them: LEADER has no row for them. */

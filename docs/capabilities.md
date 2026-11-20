@@ -32,6 +32,13 @@ its skills flat into `<home>/.agents/skills/<skill>/`), and the instance's `AGEN
 generated without changing the canonical soul. Nothing is installed or
 activated at a deployment.
 
+Trust is decided once, where the workspace declares the member or the
+package. When the kernel later reports a capability as trusted, it has
+checked only that what it is about to run is the copy made at spawn and where
+that copy came from. It judges nothing about the code, and the copy is in the
+home its agent can write, so the check is no defence against that agent
+([trust-model.md](trust-model.md)).
+
 ## Manifest
 
 A self-contained package has an `oats.json`:
@@ -142,6 +149,15 @@ A self-contained package has an `oats.json`:
   Doctor without `--soul` reads every member and locked package capability
   from this machine's cache only. What the cache cannot answer is reported as
   unchecked (`hook-events-unchecked` in its information), never as no warning.
+- **A retire hook must be safe to run when its spawn hook did not finish, and
+  when it has run before.** It runs after a spawn that was killed while the
+  spawn hook ran (below), which may have registered everything, something or
+  nothing, and then gets an empty `OATS_META`: the spawn hook never answered
+  its receipt. It runs again on every retry of an incomplete cleanup. It
+  reads what there is to undo from the home and from the service it
+  registered with, and answers `meta: { retired: false, reason:
+  "nothing-to-delete" }` when there is nothing: that is a complete cleanup.
+  Every other explicit `retired: false` outcome is an incomplete cleanup.
 - A capability declaring a **required** spawn hook should declare a `retire` hook
   too. Without one, OATS has no way to undo what the spawn hook did and no way to
   know whether it did anything, so a failure quarantines the home rather than
@@ -168,8 +184,30 @@ A self-contained package has an `oats.json`:
   the branch gone (a damaged ref, a failed read), the retry stays incomplete
   with `git branch <b>: could not verify whether it still exists (…)`. A retry that still cannot
   finish keeps the home again, names what is outstanding, and exits nonzero.
-- The **escape hatch is `oats retire <instance> --force`**, for a home OATS cannot
-  identify at all: no `instance.json` and no **usable** cleanup descriptor. Usable
+- **A home whose retire hooks cannot run is refused before anything is stopped,
+  run or removed, children included.** The same admission rule applies to
+  `oats retire --plan`, the Desktop's Remove plan and every apply path.
+  `E_UNIDENTIFIED_INSTANCE_HOME` names the cause, the recorded capabilities
+  that may have left state, and the manual-cleanup remedy. No current
+  deployment configuration can prove what an old home registered.
+  A normal home needs its recorded `capabilityRuntime` and a context repository
+  to run its hooks. The context is its recorded `repo`, or the repository Git
+  identifies for its own worktree when the record names none. An explicit
+  capability set with no retire hooks proves that none is owed. A captured home from before 0.26 cannot run its hooks:
+  only an explicit empty captured `hookOrder`, with no capability metadata,
+  hook intents, hook failures or lifecycle marked `*-cleanup-required`,
+  proves that no capability's spawn hook ran. Missing
+  information proves nothing.
+- The **escape hatch is `oats retire <instance> --force`**. This includes
+  homes spawned before `capabilityRuntime`, captured homes without proof of
+  no spawn hooks, a home without a usable record or cleanup descriptor, and
+  a home whose recorded retire hooks have no context repository. Inspect the
+  home and clean up external identities and memberships with the provider's
+  tooling first. Force can remove the home while leaving that state active;
+  its output keeps the warnings about hooks that did not run and state that
+  was not revoked. An unreadable `instance.json` still refuses even with
+  force. A forced self-retirement carries the force choice into its deferred
+  completion. A usable cleanup descriptor can drive the normal retry. Usable
   means it satisfies the versioned cleanup contract the rollback writes, checked
   to the depth the retry consumes it: `version`, a context `repo`, a recognised
   `work` mode (plus a `branch` for `worktree` — an unknown mode would skip the
@@ -187,23 +225,40 @@ A self-contained package has an `oats.json`:
   success, and every Git step it records must be re-run and verified. A retry that resolves no
   capabilities — a hand-edited descriptor, or config drift since the spawn — is an
   incomplete cleanup, not a clean one, and the home stays.
-- **A spawn in progress** (0.49.0). A `work: worktree` spawn that fires
-  [`worktree` hooks](#the-worktree-event) writes the same marker just before
-  the first of them, so a parent killed while they run (SIGKILL included)
-  leaves a home `oats retire` can clean up. Its `outstanding` holds the retire
-  hooks of the capabilities whose spawn hooks ran, plus the Git steps
-  `worktree` and `branch`. It adds an optional top-level `inProgress: { pid,
-  processStart, startedAt, branch, baseOid, hookPgid?, hookStart? }`: the
-  spawning process, identified by its pid and start time, the branch the spawn
-  created and the commit it created it at, and the process group of the hook
-  running. The spawn removes the marker once its final `instance.json` and
-  baseline are written; a failure's compensation replaces it in one rename.
+- **A spawn in progress** (0.49.0). A spawn writes the same marker before
+  the first hook whose effects a retire would have to undo, so a parent
+  killed from there on (SIGKILL, a container stop, a dropped connection)
+  leaves a home `oats retire` can clean up:
+  - before its first **spawn hook**, in every work mode, when a capability
+    with a spawn hook also has a retire hook. Until the spawn writes its
+    final `instance.json`, the home's record is a stub that names neither the
+    repository nor the capabilities, and the marker is the only record of
+    which retire hooks to run. Its `outstanding.hooks` holds the retire hooks
+    of every capability with a spawn hook; once the spawn hooks have
+    answered, the marker is written again with their receipt
+    (`cleanup.capabilityMeta`, a retire hook's `OATS_META`). Its `cleanup`
+    also holds the record's `workspace`, `teams` and `defaultTeam`, so the
+    retire hooks get the team and workspace environment a retire of a whole
+    home gives them;
+  - before its first [`worktree` hook](#the-worktree-event), for a `work:
+    worktree` spawn that fires them. Its `outstanding` holds the retire
+    hooks of the capabilities whose spawn hooks ran, plus the Git steps
+    `worktree` and `branch` (a `work: worktree` marker written before the
+    spawn hooks holds those Git steps too).
+
+  It adds an optional top-level `inProgress: { pid,
+  processStart, startedAt, branch?, baseOid?, hookPgid?, hookStart? }`: the
+  spawning process, identified by its pid and start time, the branch of the
+  work and, for a `work: worktree` spawn, the commit the spawn created it at,
+  and the process group of the worktree hook running. The spawn removes the marker
+  once its final `instance.json` is written, before it takes the final
+  baseline; a failure's compensation replaces it in one rename.
   Such a marker satisfies every rule above, so a reader that does not know
   `inProgress` reads it as a quarantine. While the spawning process is
   verifiably alive (its pid runs with the recorded start time):
   - `oats status` gives the home's row `spawnInProgress: true` and no
     `rollbackIncomplete`;
-  - `oats retire` refuses with `E_LIFECYCLE_BUSY`, `--force` included;
+  - `oats retire` refuses with `E_LIFECYCLE_BUSY`, `--plan` and `--force` included;
   - `oats session start` refuses it as any quarantined home
     (`E_INSTANCE_RETIRING`).
 
@@ -278,8 +333,9 @@ A self-contained package has an `oats.json`:
     - an exact name that is `.oats`, `.agents` or `.claude`, or that starts
       with `.oats-events`, `.oats-stop`, `.oats-restart`, `.oats-rollback`,
       `.oats-agents-md`, `.oats-start`, `.oats-attachments`, `.oats-color`,
-      `.oats-background` or `.oats-same-work`: the top-level entries the kernel
-      itself writes in an instance home;
+      `.oats-background`, `.oats-pinned`, `.oats-related-work`, `.oats-same-work` (the
+      file of the flag `.oats-related-work` replaced, still read while the new one is absent) or
+      `.oats-board`: the top-level entries the kernel itself writes in an instance home;
     - a prefix that starts with `.oats-`.
 
     An exact name such as `.oats-aweb` is allowed: it is a provider's
@@ -539,7 +595,8 @@ One package can carry capabilities meant for **different souls**. oats.okf
 ships three:
 
 - `oats.okf` fills every working soul's knowledge slot;
-- `oats.okf-harvest` is composed only into its harvester soul;
+- `oats.okf-harvest` is composed only into its harvester soul, a stub
+  since 6.0 that refuses every spawn (kept until 7.0);
 - `oats.okf-maintenance` is composed only into its maintainer soul.
 
 Each is its own manifest with its own skills, inject and commands. One pin
@@ -868,6 +925,13 @@ Spawn order is by capability name; retirement reverses successful
 spawn order. Hooks run from the instance's own copy
 (`<home>/.oats/modules/<cap>/`).
 
+A retire hook must be safe to run again, and safe to run beside itself. A
+retire whose process is killed while one of its retire hooks runs leaves that
+hook running. A later retire takes the home's claim over, does not run again
+the hooks the claim records as finished
+([one retire at a time](desktop-cli-api.md#retire-hooks-in-claim)), and runs
+the unfinished one again, possibly while the first run of it is still going.
+
 ### A declared name is the provider's
 
 A variable a capability declares in `environment` is the capability's to
@@ -1138,7 +1202,7 @@ own configuration.
    naming the release, not with a schema error.
 3. The blast radius is every soul that composes the capability, on every host
    below the release: one capability can stop every developer soul of a
-   workspace from spawning, as in lfx-oats-workspace#22, where one capability
+   workspace from spawning, as in lab-oats-workspace#22, where one capability
    took down every developer soul.
 4. To limit it, put the hook in a small capability composed only by the souls
    that need the setup.
@@ -1180,6 +1244,15 @@ characters; control characters, the Unicode line and paragraph separators,
 bidi controls (U+202A–202E, U+2066–2069), U+200B, U+2060, U+FEFF and tag
 characters (U+E0000–E007F) are refused, and everything else (emoji ZWJ
 sequences, ZWNJ, LRM, RLM, ALM) is allowed.
+
+**The board's claim** (feature `instance-board`). An agent that needs a
+decision between 2 and 4 options asks it on its board, `oats instance board
+ask <question> --option <text> --option <text>`. While any board question is
+open, the kernel holds a claim of producer `oats.board`, reason `attention`,
+whose message is the oldest open question, and the last `oats instance board
+ask --clear <id>` removes it. It sits beside the agent's own `attention`
+claim and holds no scheduled wake. The board is in
+[desktop-cli-api.md](desktop-cli-api.md#the-agents-board-oats-instance-board).
 
 **The Claude Code emitter.** For a Claude instance, oats.core's spawn and
 launch hooks (`bin/oats-core.mjs`, preview-aware) write Claude Code hooks
@@ -1561,7 +1634,7 @@ schedule or an operator invokes without knowing the provider.
 
 ```json
 "operations": {
-  "harvest": { "kind": "action", "command": "harvest", "context": "home", "description": "Promote this instance's notes" },
+  "checkpoint": { "kind": "action", "command": "checkpoint", "context": "home", "description": "Record this instance's checkpoint" },
   "inspect": { "kind": "view",   "command": "inspect", "context": "home", "description": "Show this instance's working knowledge" }
 }
 ```

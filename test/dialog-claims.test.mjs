@@ -114,7 +114,7 @@ const hold = (home) => inspectInstanceSession(home).wakeHold;
 /** Stop the window so the home reads stopped, and a later start is an ordinary one. */
 function stopWindow(home, name) { try { tmux("kill-window", "-t", `=${session}:${name}`); } catch { /* gone */ } rmSync(join(home, ".oats-start-pending.json"), { force: true }); }
 
-test("Juan's side's case: a spawn answers `reported`, a start answers nothing, inspect reads `unknown`", async () => {
+test("The second operator's side's case: a spawn answers `reported`, a start answers nothing, inspect reads `unknown`", async () => {
   const name = "named-case";
   say(name, "spawn", { dialogClaims: "reported" });
   const { home } = await spawnHome("both", name);
@@ -229,7 +229,7 @@ test("oats.core: a Claude that takes the hooks reads on-claims, from the spawn a
   assert.ok(readJson(join(home, ".claude", "settings.json")).hooks.StopFailure);
 });
 
-test("oats.core: 2.1.77 selected and a failed --version answer nothing, so `unknown`, and an earlier `reported` doesn't survive (Juan's side, end to end)", async () => {
+test("oats.core: 2.1.77 selected and a failed --version answer nothing, so `unknown`, and an earlier `reported` doesn't survive (the second operator's side, end to end)", async () => {
   const name = "core-downgrade";
   const { home } = await spawnHome("dev", name);
   await start(home);

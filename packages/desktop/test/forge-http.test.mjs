@@ -10,6 +10,7 @@ import { forgeObservation } from '../server/forge-observation.mjs';
 import { FORGE_EPOCH_HEADER, validForgeEpoch } from '../forge-proxy.mjs';
 import { cli, oats, context, target, selector, state, envelope, output, status, pr, deferred, tick } from './helpers/forge-fixture.mjs';
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
+import { handlerAuth, authorized } from './helpers/handler-auth.mjs';
 function http({ remote = false, run, discover, raw = state(), transform = source => source } = {}) {
   const source = transform(readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8'));
   const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\nserver.on("error",');
@@ -30,12 +31,12 @@ function http({ remote = false, run, discover, raw = state(), transform = source
   };
   const deps = { createServer: handler => handler, forgeBoundary: service, FORGE_EPOCH_HEADER, validForgeEpoch, createReviewPaste, tmuxTarget: () => { throw new Error('no pane in the harness'); },
     cliState: oats, ...views, viewForgeContext, snapshot,
-    panelData: assert.fail, snapshotPanel: assert.fail, collectNow: assert.fail };
+    panelData: assert.fail, snapshotPanel: assert.fail, collectNow: assert.fail, ...handlerAuth };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   const requestBody = { selector, observationKey: forgeObservation(raw, target, oats).observationKey };
   return { count: () => executions, async request({ url = '/api/instance-forge?ws=team', method = 'POST', body = JSON.stringify(requestBody),
     headers = { host: '127.0.0.1:4820', origin: 'http://localhost:4820', [FORGE_EPOCH_HEADER]: 'client:0' } } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: authorized(headers) }); let result;
     const res = { writeHead(code, responseHeaders) { result = { code, headers: responseHeaders }; }, end(text) { result.body = JSON.parse(text); } };
     const waiting = handler(req, res); req.emit('data', Buffer.from(body)); req.emit('end'); await waiting;
     return result;

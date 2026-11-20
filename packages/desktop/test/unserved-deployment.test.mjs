@@ -15,7 +15,7 @@ import { withWindowGlobals } from './helpers/main-window-globals.mjs';
 import { JSDOM } from 'jsdom';
 import { persistableDirs, stageDirs, savedWorkspacePaths, restoreWorkspaceDirs, createAddExecutor, decideAdd, createGenerations, pickedFolderChoices, createPerformAdd, NOT_A_DEPLOYMENT_REASON, PICK_CHOICE_LIMIT, PICK_ANCESTOR_LIMIT } from '../workspace-registry.mjs';
 import { PICK_SCAN_LIMIT } from '../../client/workspace-admission.mjs';
-import { apiUrl, apiInit, classifyApiRoute, unservedWorkspace, createUnservedRefusal, servedSelectors } from '../api-url.mjs';
+import { apiUrl, apiInit, classifyApiRoute, requestPath, unservedWorkspace, createUnservedRefusal, servedSelectors } from '../api-url.mjs';
 import { forgeProxyOptions, trustedForgeFrame, FORGE_EPOCH_HEADER } from '../forge-proxy.mjs';
 import { forgeFailure } from '../renderer/forge-contract.mjs';
 import { lifecycleFailure } from '../../client/lifecycle-contract.mjs';
@@ -28,33 +28,33 @@ import { DEPLOYMENT_READ_TIMEOUT } from '../../client/deployment-read-cli.mjs';
 import { mapBounded, MAX_DEPLOYMENT_OBSERVATIONS } from '../../client/deployment-observer.mjs';
 import { createDataState, failedElement } from '../renderer/loading.mjs';
 
-const DEPLOYMENTS = new Set(['/d/oats-v2', '/d/Agents/aweb', '/d/third']);
+const DEPLOYMENTS = new Set(['/d/oats-qa', '/d/Agents/aweb', '/d/third']);
 const isDeployment = path => DEPLOYMENTS.has(path);
 const validate = path => (isDeployment(path) ? { id: path, path } : null);
 
 /* ── the open set ─────────────────────────────────────────────────────────── */
 test('persistableDirs: deployments only, each once; a parent folder is never written', () => {
-  assert.deepEqual(persistableDirs(['/d/Agents', '/d/oats-v2', '/d/oats-v2', '/d/Agents/aweb'], validate), ['/d/oats-v2', '/d/Agents/aweb']);
+  assert.deepEqual(persistableDirs(['/d/Agents', '/d/oats-qa', '/d/oats-qa', '/d/Agents/aweb'], validate), ['/d/oats-qa', '/d/Agents/aweb']);
   assert.deepEqual(persistableDirs(['/d/Agents'], validate), [], 'nothing to write: the saved set is left as it is');
-  assert.deepEqual(persistableDirs(['/d/oats-v2'], () => { throw Error('EACCES'); }), [], 'a failing check is not a deployment');
+  assert.deepEqual(persistableDirs(['/d/oats-qa'], () => { throw Error('EACCES'); }), [], 'a failing check is not a deployment');
 });
 
 test('the restore after a launch from a parent folder opens the saved set and nothing else', () => {
-  const saved = JSON.stringify(['/d/oats-v2', '/d/Agents/aweb']);
-  assert.deepEqual(restoreWorkspaceDirs('/d/Agents', saved, validate), ['/d/oats-v2', '/d/Agents/aweb']);
+  const saved = JSON.stringify(['/d/oats-qa', '/d/Agents/aweb']);
+  assert.deepEqual(restoreWorkspaceDirs('/d/Agents', saved, validate), ['/d/oats-qa', '/d/Agents/aweb']);
   // Nothing saved validates: nothing is served, never the startup folder; the window chooses (#518).
   assert.deepEqual(restoreWorkspaceDirs('/d/Agents', 'not json', validate), []);
-  assert.deepEqual(savedWorkspacePaths(saved), ['/d/oats-v2', '/d/Agents/aweb']);
+  assert.deepEqual(savedWorkspacePaths(saved), ['/d/oats-qa', '/d/Agents/aweb']);
   assert.deepEqual(savedWorkspacePaths('{"x":1}'), []); assert.deepEqual(savedWorkspacePaths('["relative", 3, "/abs"]'), ['/abs']);
 });
 
 test('stageDirs: the restart after an add carries the whole validated set plus the new deployment', () => {
-  assert.deepEqual(stageDirs(['/d/oats-v2', '/d/Agents/aweb'], '/d/third', validate), ['/d/oats-v2', '/d/Agents/aweb', '/d/third']);
+  assert.deepEqual(stageDirs(['/d/oats-qa', '/d/Agents/aweb'], '/d/third', validate), ['/d/oats-qa', '/d/Agents/aweb', '/d/third']);
   assert.deepEqual(stageDirs(['/d/Agents'], '/d/third', validate), ['/d/third'], 'a served non-deployment placeholder does not ride along');
   assert.deepEqual(stageDirs(['/d/third'], '/d/third', validate), ['/d/third']);
 });
 
-function executor({ ready = true, previous = ['/d/oats-v2', '/d/Agents/aweb'] } = {}) {
+function executor({ ready = true, previous = ['/d/oats-qa', '/d/Agents/aweb'] } = {}) {
   const log = { servers: [], commits: [] };
   let dirs = [...previous];
   const execute = createAddExecutor({
@@ -71,16 +71,16 @@ test('a restart after an add keeps the full set: the replacement server argv is 
   const x = executor();
   const result = await x.execute({ id: '/d/third', path: '/d/third' }, () => true);
   assert.equal(result.ok, true);
-  assert.deepEqual(x.log.servers, [['/d/oats-v2', '/d/Agents/aweb', '/d/third']]);
-  assert.deepEqual(x.log.commits, [['/d/oats-v2', '/d/Agents/aweb', '/d/third']]);
+  assert.deepEqual(x.log.servers, [['/d/oats-qa', '/d/Agents/aweb', '/d/third']]);
+  assert.deepEqual(x.log.commits, [['/d/oats-qa', '/d/Agents/aweb', '/d/third']]);
 });
 
 test('a failed add restores the previous server and commits nothing', async () => {
   const x = executor({ ready: false });
   const result = await x.execute({ id: '/d/third', path: '/d/third' }, () => true);
   assert.equal(result.code, 'server-timeout');
-  assert.deepEqual(x.log.servers, [['/d/oats-v2', '/d/Agents/aweb', '/d/third'], ['/d/oats-v2', '/d/Agents/aweb']]);
-  assert.deepEqual(x.log.commits, []); assert.deepEqual(x.dirs(), ['/d/oats-v2', '/d/Agents/aweb']);
+  assert.deepEqual(x.log.servers, [['/d/oats-qa', '/d/Agents/aweb', '/d/third'], ['/d/oats-qa', '/d/Agents/aweb']]);
+  assert.deepEqual(x.log.commits, []); assert.deepEqual(x.dirs(), ['/d/oats-qa', '/d/Agents/aweb']);
 });
 
 /* ── a picked folder that is not a deployment ─────────────────────────────── */
@@ -107,8 +107,8 @@ test('pickedFolderChoices: more than the choice limit says how many more; a full
 });
 
 test('pickedFolderChoices: the deployment a folder is inside, within the ancestor bound', () => {
-  const inside = pickedFolderChoices('/d/oats-v2/agents/dev', { list: listing({}), isDeployment: p => p === '/d/oats-v2' });
-  assert.deepEqual(inside.choices, [{ path: '/d/oats-v2', name: 'oats-v2', kind: 'ancestor' }]);
+  const inside = pickedFolderChoices('/d/oats-qa/agents/dev', { list: listing({}), isDeployment: p => p === '/d/oats-qa' });
+  assert.deepEqual(inside.choices, [{ path: '/d/oats-qa', name: 'oats-qa', kind: 'ancestor' }]);
   const deep = `/root/${Array.from({ length: PICK_ANCESTOR_LIMIT + 1 }, (_, i) => `l${i}`).join('/')}`;
   assert.deepEqual(pickedFolderChoices(deep, { list: listing({}), isDeployment: p => p === '/root' }).choices, [], 'past the bound nothing is offered');
   assert.deepEqual(pickedFolderChoices('/empty', { list: () => { throw Error('EACCES'); }, isDeployment: () => false }).choices, [], 'unreadable: no choices');
@@ -152,25 +152,24 @@ test('a non-picker add of a non-deployment carries the message and no offer; oth
 });
 
 /* ── the proxy refusal ────────────────────────────────────────────────────── */
-const base = 'http://127.0.0.1:4820';
-const known = path => path === '/d/oats-v2';
+const known = path => path === '/d/oats-qa';
 test('unservedWorkspace: only a known local deployment the server does not advertise, on the roster and agents reads', () => {
   const state = { allowedWs: new Set(['/d/Agents/aweb']), known };
   const ws = path => `?ws=${encodeURIComponent(path)}`;
-  assert.equal(unservedWorkspace(`/api/panel${ws('/d/oats-v2')}`, base, state), '/d/oats-v2');
-  assert.equal(unservedWorkspace(`/api/agents${ws('/d/oats-v2')}`, base, state), '/d/oats-v2');
-  assert.equal(unservedWorkspace(`/api/panel${ws('/d/unknown')}`, base, state), null, 'unknown: today\'s adoption');
-  assert.equal(unservedWorkspace(`/api/panel${ws('/d/Agents/aweb')}`, base, state), null, 'served');
-  assert.equal(unservedWorkspace(`/api/panel${ws('remote:host')}`, base, state), null, 'remote ids are not local paths');
-  assert.equal(unservedWorkspace('/api/panel', base, state), null, 'no ws: the verified workspace');
-  assert.equal(unservedWorkspace(`/api/spawn${ws('/d/oats-v2')}`, base, state), null, 'mutations keep their own guards');
-  assert.equal(unservedWorkspace(`/api/panel${ws('/d/oats-v2')}&ws=x`, base, state), null, 'duplicates are the server boundary\'s to refuse');
-  assert.equal(unservedWorkspace(`/api/panel${ws('/d/oats-v2')}`, base, { ...state, allowedWs: new Set() }), null, 'not before the first answer');
-  assert.equal(unservedWorkspace(`//evil.invalid/api/panel${ws('/d/oats-v2')}`, base, state), null);
-  assert.equal(unservedWorkspace(`/api/panel${ws('/d/oats-v2')}`, base, { ...state, known: () => { throw Error('x'); } }), null);
-  const refusal = createUnservedRefusal({ base: () => base, state: () => state, body: workspaceNotServed });
-  assert.deepEqual(refusal(`/api/panel${ws('/d/oats-v2')}`), { ok: false, status: 404,
-    body: { error: "This Desktop's server isn't serving this deployment.", code: NOT_SERVED_CODE, workspace: '/d/oats-v2' } });
+  assert.equal(unservedWorkspace(`/api/panel${ws('/d/oats-qa')}`, state), '/d/oats-qa');
+  assert.equal(unservedWorkspace(`/api/agents${ws('/d/oats-qa')}`, state), '/d/oats-qa');
+  assert.equal(unservedWorkspace(`/api/panel${ws('/d/unknown')}`, state), null, 'unknown: today\'s adoption');
+  assert.equal(unservedWorkspace(`/api/panel${ws('/d/Agents/aweb')}`, state), null, 'served');
+  assert.equal(unservedWorkspace(`/api/panel${ws('remote:host')}`, state), null, 'remote ids are not local paths');
+  assert.equal(unservedWorkspace('/api/panel', state), null, 'no ws: the verified workspace');
+  assert.equal(unservedWorkspace(`/api/spawn${ws('/d/oats-qa')}`, state), null, 'mutations keep their own guards');
+  assert.equal(unservedWorkspace(`/api/panel${ws('/d/oats-qa')}&ws=x`, state), null, 'duplicates are the server boundary\'s to refuse');
+  assert.equal(unservedWorkspace(`/api/panel${ws('/d/oats-qa')}`, { ...state, allowedWs: new Set() }), null, 'not before the first answer');
+  assert.equal(unservedWorkspace(`//evil.invalid/api/panel${ws('/d/oats-qa')}`, state), null);
+  assert.equal(unservedWorkspace(`/api/panel${ws('/d/oats-qa')}`, { ...state, known: () => { throw Error('x'); } }), null);
+  const refusal = createUnservedRefusal({ state: () => state, body: workspaceNotServed });
+  assert.deepEqual(refusal(`/api/panel${ws('/d/oats-qa')}`), { ok: false, status: 404,
+    body: { error: "This Desktop's server isn't serving this deployment.", code: NOT_SERVED_CODE, workspace: '/d/oats-qa' } });
   assert.equal(refusal('/api/panel'), null);
 });
 
@@ -182,12 +181,12 @@ test('the shipped api handler answers a known unserved deployment with 404 E_WOR
   const allowedWs = new Set(['/d/Agents/aweb']);
   const context = { ipcMain: { handle: (_name, fn) => { handler = fn; } }, apiUrl, apiInit, servedSelectors, classifyApiRoute, forgeProxyOptions, trustedForgeFrame,
     FORGE_EPOCH_HEADER, forgeFailure, lifecycleFailure, lifecycleFrameRefusal, DESKTOP_TERMS, RENDERER_URL: renderer, serverEpoch: 0, currentForgeEpoch: () => 'main:0',
-    unservedRefusal: createUnservedRefusal({ base: () => base, state: () => ({ allowedWs, known }), body: workspaceNotServed }),
-    serverHost: { inTransition: () => false }, base: () => base, wsId: '/d/Agents/aweb', allowedWs, guard: () => {}, AbortSignal: { timeout: ms => ({ ms }) },
-    fetch: async url => { fetched.push(String(url)); return { ok: true, status: 200, text: async () => JSON.stringify({ workspace: { id: '/d/Agents/aweb' }, workspaces: [{ id: '/d/Agents/aweb' }] }) }; } };
+    unservedRefusal: createUnservedRefusal({ state: () => ({ allowedWs, known }), body: workspaceNotServed }),
+    serverHost: { inTransition: () => false, held: () => () => true }, wsId: '/d/Agents/aweb', allowedWs, guard: () => {}, AbortSignal: { timeout: ms => ({ ms }) },
+    requestPath, backendFetch: async path => { assert.equal(typeof path, 'string', 'backendFetch takes a path'); fetched.push(path); return { ok: true, status: 200, text: async () => JSON.stringify({ workspace: { id: '/d/Agents/aweb' }, workspaces: [{ id: '/d/Agents/aweb' }] }) }; } };
   runInNewContext(source.slice(start, end), withWindowGlobals(context));
-  const refused = await handler(event, `/api/panel?ws=${encodeURIComponent('/d/oats-v2')}`, {});
-  assert.deepEqual(refused, { ok: false, status: 404, body: workspaceNotServed('/d/oats-v2') });
+  const refused = await handler(event, `/api/panel?ws=${encodeURIComponent('/d/oats-qa')}`, {});
+  assert.deepEqual(refused, { ok: false, status: 404, body: workspaceNotServed('/d/oats-qa') });
   assert.deepEqual(fetched, [], 'never fetched: no other workspace\'s data answers for it');
   const adopted = await handler(event, `/api/panel?ws=${encodeURIComponent('/d/unknown')}`, {});
   assert.equal(adopted.ok, true); assert.match(fetched[0], /ws=%2Fd%2FAgents%2Faweb/, 'an unknown id is still pinned to the verified workspace');
@@ -200,12 +199,12 @@ test('during a server replacement the outgoing server\'s set still refuses: a Re
   assert.match(source, /onInvalidate: \(\) => \{ if \(allowedWs\.size\) advertisedBefore = allowedWs; allowedWs = new Set\(\);/);
   assert.match(source, /state: \(\) => \(\{ allowedWs: allowedWs\.size \? allowedWs : advertisedBefore, known:/);
   let allowedWs = new Set(['/d/Agents/aweb']), advertisedBefore = new Set();
-  const refusal = createUnservedRefusal({ base: () => base, body: workspaceNotServed,
+  const refusal = createUnservedRefusal({ body: workspaceNotServed,
     state: () => ({ allowedWs: allowedWs.size ? allowedWs : advertisedBefore, known }) });
-  const read = `/api/panel?ws=${encodeURIComponent('/d/oats-v2')}`;
+  const read = `/api/panel?ws=${encodeURIComponent('/d/oats-qa')}`;
   advertisedBefore = allowedWs; allowedWs = new Set(); // the Re-add's restart is in flight
   assert.equal(refusal(read)?.status, 404, 'still not served while the new server starts');
-  allowedWs = new Set(['/d/Agents/aweb', '/d/oats-v2']); // the new server advertises it
+  allowedWs = new Set(['/d/Agents/aweb', '/d/oats-qa']); // the new server advertises it
   assert.equal(refusal(read), null, 'served: proxied');
 });
 
@@ -242,8 +241,8 @@ test('createPendingWatch with onOverdue: a timer of the subject\'s own fires onc
 });
 
 test('the copy names the deployment and what happened', () => {
-  assert.equal(unservedText(NOT_SERVED_CODE, '/d/oats-v2'), "This Desktop's server isn't serving this deployment: /d/oats-v2. Re-add the workspace, or retry.");
-  assert.equal(unservedText(NO_ANSWER_CODE, '/d/oats-v2'), "No answer from the Desktop's server for this deployment: /d/oats-v2. Retry, or check the OATS CLI.");
+  assert.equal(unservedText(NOT_SERVED_CODE, '/d/oats-qa'), "This Desktop's server isn't serving this deployment: /d/oats-qa. Re-add the workspace, or retry.");
+  assert.equal(unservedText(NO_ANSWER_CODE, '/d/oats-qa'), "No answer from the Desktop's server for this deployment: /d/oats-qa. Retry, or check the OATS CLI.");
   const error = unservedError(NOT_SERVED_CODE, '/d/x'); assert.equal(error.code, NOT_SERVED_CODE); assert.equal(error.workspace, '/d/x');
 });
 

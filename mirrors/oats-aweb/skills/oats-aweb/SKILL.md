@@ -65,14 +65,28 @@ membership certificates (`aw id team members`) and its workspaces
 - **Who coordinates.** aw does not mark the team's coordinator, and a
   workspace's `role` is its own setting. Look among the global identities and
   ask your expert or coordinator which one coordinates.
-- **Whether an entry is retired.** A certificate with no workspace record may
-  belong to an instance that was retired, one that runs elsewhere, or one that
-  aw never recorded. Offline is not retired.
+- **Whether an entry is retired**, beyond the leftovers below. A certificate
+  with no workspace record may belong to an instance that was retired, one that
+  runs elsewhere, or one that aw never recorded. Offline is not retired.
 - **The whole team, when it prints `Incomplete:`.** That line names the source
   that could not be read, or says presence is past its 200-workspace cap. The
   roster then lists what it has and claims nothing about the rest.
 
-- A `deployment root` (for example `altair-aweb`) is a machine's minting
+**Leftovers of a retire.** In a team whose controller key is held by people,
+retire cannot remove the instance's member certificate. A line that ends
+`; retired by OATS on this host <date>; the team controller removes it with:
+<command>` is such a leftover: don't message it. Only the team's controller can
+remove it, by running that command; tell your human if you are not the
+controller. A line that instead says its record entry is malformed shows no
+command on purpose: the record is a file any agent on the host can write, and
+the roster builds the command only from values that pass its checks. Tell your
+human; don't compose the command yourself. The record lives on the host where
+the retire ran, so a roster read on another host does not show those leftovers.
+A line that says `recorded as retired, but its workspace is active: check
+before removing` is a member the record calls retired while its workspace is
+live: treat it as a live member, show no command, and tell your human.
+
+- A `deployment root` (for example `builder-aweb`) is a machine's minting
   identity, not an agent: don't send work to it.
 - Instances are addressed by **instance name** (the alias), e.g. `dev-2`.
   Humans and global identities are addressed by their alias the same way.
@@ -88,9 +102,25 @@ Always put the body in a file: inline `--body "…"` breaks on quotes,
 backticks, `$(…)` and newlines. There is **no positional recipient** for mail
 and **no `--reply-to`**.
 
+**Make a new private file for every message**, and never use a fixed or shared
+`/tmp` path: other agents and users on the host share `/tmp`, so a fixed name
+there lets another agent overwrite your draft (and your mail carries its text),
+and anyone can read it. Run this from your home; it prints a new path:
+
 ```bash
-aw mail send --to <alias> --subject "<short subject>" --body-file /tmp/msg.md
-aw mail reply <message-id> --body-file /tmp/reply.md    # stay in the thread
+(umask 077; mkdir -p "${OATS_INSTANCE_HOME:?}/.oats-aweb/drafts" && mktemp "$OATS_INSTANCE_HOME/.oats-aweb/drafts/XXXXXXXX")
+```
+
+Write the body to the path it printed and pass that path as `<body-file>`
+below. Use the printed path itself: a shell variable does not survive between
+your tool calls. Keep the `X`s last (macOS `mktemp` replaces only trailing
+`X`s, so `XXXXXX.md` is one fixed name). The directory is owner-only, and
+retirement neither keeps nor copies it. Once the message is sent you may
+delete its draft (`rm -f <body-file>`); drafts you leave go at retirement.
+
+```bash
+aw mail send --to <alias> --subject "<short subject>" --body-file <body-file>
+aw mail reply <message-id> --body-file <body-file>      # stay in the thread
 aw mail inbox                                          # UNREAD only
 aw mail inbox --show-all --json                       # recovery, including affected Pi interrupts (section 4); page with --cursor
 aw mail show --message-id <id> --json                  # exact delivered message recovery
@@ -101,12 +131,12 @@ aw mail ack <message-id>                               # mark one read without r
 Chat is synchronous: use it only when someone must answer before you can go on.
 
 ```bash
-aw chat send-and-wait <alias> --body-file /tmp/q.md --start-conversation   # ask and wait
-aw chat send-and-leave <alias> --body-file /tmp/answer.md                   # answer, don't wait
-aw chat extend-wait <alias> --body-file /tmp/status.md                      # "need 5 more minutes"
+aw chat send-and-wait <alias> --body-file <body-file> --start-conversation   # ask and wait
+aw chat send-and-leave <alias> --body-file <body-file>                      # answer, don't wait
+aw chat extend-wait <alias> --body-file <body-file>                         # "need 5 more minutes"
 aw chat pending                                                             # chats waiting on you
 aw chat history <alias>                                                     # past exchange
-aw chat send --session-id <session-id> --body-file /tmp/more.md             # continue a known session
+aw chat send --session-id <session-id> --body-file <body-file>              # continue a known session
 ```
 
 `aw chat send` has **no `--to`**: it only continues an existing session. Start a
@@ -116,7 +146,7 @@ chat with `send-and-wait` / `send-and-leave`.
 nothing else changes:
 
 ```bash
-aw --identity-home <identityHome> mail send --to <alias> --subject "…" --body-file /tmp/msg.md
+aw --identity-home <identityHome> mail send --to <alias> --subject "…" --body-file <body-file>
 aw --identity-home <identityHome> mail inbox
 aw --identity-home <identityHome> chat pending
 ```
@@ -139,7 +169,10 @@ The intended receive path follows your runtime. Under the default `delivery:
 channel`, Claude Code takes mail through the aweb channel plugin and pi through
 its aweb extension, which push into the session; Codex (and any runtime without
 an aweb channel) is woken by the host wake broker. Under `delivery: session`
-the host wake broker wakes every runtime. A session is on one path, never both.
+the host wake broker wakes every runtime. A home that a session provider
+launched (a session backend other than tmux) is woken by the host wake broker
+too, whatever the setting and the runtime: its `Comms:` line says
+`Notification delivery: external`. A session is on one path, never both.
 
 | Your `Comms:` line / teams doc says | What wakes you |
 |---|---|
@@ -244,12 +277,17 @@ needs separate explicit operator authorization.
 For an unattended Claude home, the approved route is recommended.
 
 **The host wake broker** (`aw wake run`, one per host user) wakes every Codex
-home, every `delivery: session` home and every joined team, except a Claude
+home, every `delivery: session` home, every home a session provider launched
+and every joined team, except a Claude
 channel home's joined teams (below). The provider registers a home at spawn and
 launch. `aw wake register` accepts a
 registration even while the daemon is down, and the registration takes
-effect when the daemon starts. Readiness reads the daemon's own status
-(section 7). Without a running daemon, every such home reads `unavailable`
+effect when the daemon starts. So the provider asks first: a spawn or a start
+of a home the broker delivers to is refused with `wake-daemon-not-running`
+while no daemon runs, because the home would never be woken. The refusal
+names the start for the host: `oats aweb wake install`, or `aw wake run`
+where there is no service manager. Readiness reads the daemon's own status
+(section 7). A daemon that stops later leaves every such home `unavailable`
 with `wake-daemon-not-running`, and each joined team adds
 `joined-team-poll-only`.
 
@@ -353,9 +391,10 @@ minting authority for its canonical T. Run from H, not the caller's worktree.
 | Act | Command | Writes / success / one next step | Error → remedy |
 |---|---|---|---|
 | Inspect | `oats aweb teams --json` | Read-only default/eligible/joined/left facts; success: intended target is identified. Next: selected authorized join or leave. | Unknown label → `/oats-teams` resolves policy, never a guessed team. |
-| Plan a join | `oats aweb join --labels L --plan [--json]` | Read-only: per label, team, root, the setting that chose it (`roots[team]` or `root`) and whether membership was confirmed; no invite or state. Next: the join below. | `refused: …` names why the join would refuse → section 8 LOCAL join. |
-| Join | `oats aweb join --labels L` | Mints separate per-team identity and receive registration; success: `joined` readback has intended T/home/receive. Next: section 4 receive verification. | `E_TEAM_NOT_ELIGIBLE` → correct declaration with `/oats-teams`; `cannot join team …: the deployment's live settings could not be read (…); nothing was minted` → run the `oats inspect … --json` it names and fix what it reports; `cannot join team …: <no or non-member root>; nothing was minted` → section 8 LOCAL join; `aw team invite failed … nothing was joined; … root R (from S)` → the cause in the parentheses, then `--plan`. |
+| Plan a join | `oats aweb join --labels L --plan [--json]` | Read-only: per label, team, root, the setting that chose it (`roots[team]` or `root`) and whether membership was confirmed; no invite or state. Next: the join below. | `E_SETUP_MEMBERSHIP: could not check membership …` → run `aw team list --json` in the named root, repair the read and retry; `refused: …` names another reason the join would refuse → section 8 LOCAL join. |
+| Join | `oats aweb join --labels L` | Mints separate per-team identity and receive registration; success: `joined` readback has intended T/home/receive. Next: section 4 receive verification. | `E_TEAM_NOT_ELIGIBLE` → correct declaration with `/oats-teams`; `cannot join team …: the deployment's live settings could not be read (…); nothing was minted` → run the `oats inspect … --json` it names and fix what it reports; `E_SETUP_MEMBERSHIP: could not check membership …` → run `aw team list --json` in the named root, repair the read and retry; `cannot join team …: <no or non-member root>; nothing was minted` → section 8 LOCAL join; `aw team invite failed … nothing was joined; … root R (from S)` → the cause in the parentheses, then `--plan`. |
 | Leave | `oats aweb leave --labels L` | Releases membership/receive registration; success: joined entry is absent after confirmed release. Next: `oats aweb teams --json` readback. | `E_TEAM_DEFAULT: <label> is the default team and cannot be left` → stop; policy change does not migrate this identity. |
+| Finish or release an unfinished join | `oats aweb join --labels L`, or `oats aweb leave --labels L` | A start warned `unfinished join of team L …`: a join was killed after aw accepted its invite, before the home recorded it. The join adopts it (connects and records it, no second invite); the leave adopts it and releases it. Success: as for Join or Leave. | `… could not be checked: aw id team list failed …; kept it and its identity home` → rerun once aw answers; `hosted accept interrupted: the server may hold the membership; …` → a person reruns the same `aw id team accept-invite` with the original invite, or the team's controller removes the member and the marker is deleted; then the leave; `failed to leave team L; kept …` → as for a failed leave. |
 
 Homes composed before provider 1.22.0 can hold stale captured minting roots;
 require the 1.22.0 fix to be composed instead of borrowing another identity.
@@ -388,6 +427,22 @@ home is respawned: only a respawn moves its primary identity.
   another channel first (/aweb-messaging → Verification posture).
 
 ## 7. Troubleshooting
+
+`registry-setting-required` means the deployment needs an operator's registry
+admission setting. The operator runs `oats aweb setup --registry <origin>` in
+the deployment, then reruns `oats aweb resident create <name>` for resident
+custody and `oats aweb wake install` for the shared wake daemon. Restart homes
+to receive the new session pin. A saved registry_url is only a locator;
+neither it nor an ambient AWID_REGISTRY_URL grants an OATS child private
+network access. Give a bare HTTP/HTTPS origin, with no credentials or path
+(use the bare origin for /api). A path-prefix registry reverse proxy is
+unsupported; the registry needs its own hostname. Front-door authentication
+is separate from settings.oats.aweb.registry.
+
+`E_WAKE_REGISTRY_CONFLICT` requires one registry for this user's daemon,
+another host user for the other deployment, or deregistering its other homes
+with `aw wake deregister --home <other-home>`, then `oats aweb wake uninstall`
+and a new install. `delivery: session` uses that same daemon.
 
 Check your own state first:
 
@@ -423,7 +478,7 @@ oats readiness --home "$PWD" --json   # the provider's readiness answer for this
 | `grant-expiring` (warning, grant seats with a finite expiry) | the grant recorded at the seat's last mint expires within 7 days; the message names the instant as recorded | human: the message names this seat's remedy: restart the seat to renew it (`oats session restart --home <home>`), which requests another captured `identity.ttl` duration, subject to team or certificate limits (removing identity.ttl and respawning requests never; a team or certificate cap can still impose an expiry); a capped never seat restarts for renewal up to the team's limit; respawn it when its grant was minted under `renew: off` (section 8, "GLOBAL residents and grant seats") |
 | `grant-expired` (grant seats with a finite expiry) | that grant's recorded expiry has passed: messaging is unavailable (aw reports `grant_expired`) | human: the message names this seat's remedy: restart the seat to renew it (`oats session restart --home <home>`), which requests another captured `identity.ttl` duration, subject to team or certificate limits (removing identity.ttl and respawning requests never; a team or certificate cap can still impose an expiry); a capped never seat restarts for renewal up to the team's limit; respawn it when its grant was minted under `renew: off` (section 8, "GLOBAL residents and grant seats") |
 | `grant-expiry-unknown` (warning, grant seats) | the recorded grant has no readable expiry; readiness does not guess one | human: the message names this seat's remedy: restart the seat to renew it (`oats session restart --home <home>`), which requests another captured `identity.ttl` duration, subject to team or certificate limits (removing identity.ttl and respawning requests never; a team or certificate cap can still impose an expiry); a capped never seat restarts for renewal up to the team's limit; respawn it when its grant was minted under `renew: off` (section 8, "GLOBAL residents and grant seats") |
-| `grant-revoke-pending` (warning, grant seats) | the custody's grant list shows an active grant of this seat other than the current one (a failed revoke, or a mint before a crash); it stays valid until revoked, or until its expiry; the message names it and the revoke command | human: run the named `aw id grant revoke <id>` in the resident's custody directory, or restart the seat: every start and retire revokes it |
+| `grant-revoke-pending` (warning, grant seats) | the custody's grant list shows an active grant of this seat other than the current one (a failed revoke, or a mint before a crash); it stays valid until revoked, or until its expiry; the message names it and the revoke command | human: run the named `aw id grant revoke --team=<team> -- <id>` in the resident's custody directory, or restart the seat: every start and retire revokes it |
 | `grant-revoke-unchecked` (warning, grant seats) | the custody's grant list could not be read, so readiness cannot tell whether this seat holds grants that stay valid | human: check the resident's custody and its aweb service; a retire fails until the list can be read |
 | `teams-unverified` (launch) | live team data was unavailable; memberships were kept | nobody |
 | `channel-not-connected` (Claude channel homes) | Claude's MCP log for the home's project has no `Channel notifications registered` line since the home's last start, and that start is more than 2 minutes old: the session is not on the aweb channel and hears no mail, even though it shows the channel banner. Usually Claude skipped the plugin because a recent failure was cached in `<CLAUDE_CONFIG_DIR>/mcp-needs-auth-cache.json` (one failed start anywhere on the account makes every Claude launched in the next 15 minutes skip it), or the plugin failed to start | operator: restart the session (`oats session restart --home <home>`) |
@@ -433,7 +488,8 @@ oats readiness --home "$PWD" --json   # the provider's readiness answer for this
 | `channel-cache-unrecognized` (start) | the failure cache is not in the shape the provider reads (Claude Code 2.1.300's), so it was left alone | nobody; `channel-not-connected` follows if Claude skips the channel |
 | `channel-cache-changed` (start) | another Claude kept writing the failure cache while the start read it, so it was left alone rather than overwrite that write | nobody; `channel-not-connected` follows if Claude skips the channel |
 | `channel-cache-unchecked` (spawn, start) | the start's Claude config dir is not known: every spawn (the kernel gives hooks no resolved config dir, awebai/oats#1503), or a start whose recorded `CLAUDE_CONFIG_DIR` is not a literal path. The cache was not checked | nobody; `channel-not-connected` follows if Claude skips the channel |
-| `pi-extension-skills-loaded` (warning, pi homes) | the pi folder of the home's launch lists `npm:@awebai/pi` without `"skills": []` in its `settings.json`, so pi loads the skills bundled with the extension in every session using that folder; a home gets its skills through its OATS capabilities only | operator: make the entry `{"source": "npm:@awebai/pi", "skills": []}` as the message says, keeping any version and the other entries (README, "The pi extension without its skills"); `pi install` and `pi update` keep the filter |
+| `pi-extension-skills-loaded` (warning, pi homes) | the pi folder of the home's launch lists `npm:@awebai/pi` without `"skills": []` in its `settings.json`, and the `@awebai/pi` installed there is below 0.5.0, or its version is unknown, so pi loads the skills bundled with the extension in every session using that folder; a home gets its skills through its OATS capabilities only | operator: update `@awebai/pi` to 0.5.0 or later, which bundles no skills, or make the entry `{"source": "npm:@awebai/pi", "skills": []}` as the message says, keeping any version and the other entries (README, "The pi extension without its skills"); `pi install` and `pi update` keep the filter |
+| `pi-skills-package-loaded` (warning, pi homes) | the pi folder of the home's launch lists `npm:@awebai/claude-skills` without `"skills": []` in its `settings.json`, so pi loads its aweb skills in every session using that folder, whatever the extension's version; a home gets its skills through its OATS capabilities only | operator: remove the entry, or filter it with `"skills": []`, as the message says (README, "The pi extension without its skills") |
 
 A registered channel still reads `native-receive-unproven`: registration proves
 Claude took the channel for this start, not that the plugin's aweb event stream
@@ -502,23 +558,20 @@ named blocker; do not substitute a value or ask permission again at each step.
 
 ### Version and selected context
 
-These are source-qualified cards, not an installation or live-acceptance receipt.
+The aw this provider supports is in the capability's `aw-compat.json`: `min`, the client floor every path is held to, and `tested`, the highest aw its CI journeys pass on (the package README, "aw-compat.json").
 
-| Selected version | Supported boundary |
-|---|---|
-| Released provider 1.21.1, OATS >=0.30, aw >=1.36.13 | Labelled setup/join/resume, LOCAL instance join/leave, existing GLOBAL resident grant consumption. OATS >=0.38 supplies `localTeams` policy. |
-| Released provider 1.22.0 (PR61/#65) | New Claude/channel compositions default to development; explicit approved and captured histories remain distinct. From provider 1.27.0 (OATS >=0.52.0) the kernel confirms the development-channel prompt at launch (section 4); provider mode answers nothing itself. Verify the selected composition; a repository release is not an installation receipt. |
-| Released provider 1.22.0 (#45/#52/#59, PR63) | Deployment-scoped sibling placement, current-root lookup for explicit join and corrected remedies are included. Older 1.21.1 compositions lack these fixes; verify the selected provider is 1.22.0 or later. |
-| Native aw 1.36.24 | Hosted sibling create and exact external-home allowlist below; aw 1.36.23 lacks hosted create. Native source `32fe2d795780a8ba90260c631d84f5d5c6fc0190`; maintainer binary evidence `92abe3b43beb81562eafeb13b3f60d8f3c5d44c2` is separate, not our local trial. |
-| Released provider 1.24.0 (#87–#89, #91), OATS >=0.42 | Approved Claude channel route documented in section 4, and approved spawn, launch and readiness read the machine managed-settings policy (section 7 verdicts). Retire's recovery copy holds no provider home state ("What retire's recovery keeps" below); homes spawned on earlier providers are copied whole. |
-| Released provider 1.25.0, OATS >=0.42, aw >=1.36.32 | New grant seats never expire (`identity.ttl: never`; `identity: { ttl: 720h }` keeps a duration). Upgrade aw, restart every custody service and the wake daemon, then sync ("Upgrading a host to provider 1.25.0" below). One aw client floor, 1.36.32; the probe uses it too. Grant seats require the custody ops `grant_never_ttl.v1` (never ttl) and `mail_reply_continuation.v1` (E2EE). Seat-labelled grants are swept from the custody's grant list at every start and retire. `wake-daemon-outdated` is a warning. Readiness shows a grant's lifetime and unrevoked grants. |
-| Released provider 1.25.1, OATS >=0.42, aw >=1.36.32 | Readiness warns only about what someone must act on: no `joined-team-receive` for a joined team that receives live. A start waits at most 10 s for the custody grant list; an aw call that never exits is reported as timed out or by its code or signal. |
-| Released provider 1.26.0, OATS >=0.42, aw >=1.36.33 | `oats aweb resident create <name>` creates or adopts a GLOBAL resident in an existing hosted team from the dashboard's API key, installs its per-user custody unit and records `residents.<name>` ("GLOBAL residents and grant seats" below). One aw client floor, 1.36.33. |
-| Provider 1.26.1, OATS >=0.48 for `resident create` | `resident create` maps the resident's team without `--team-label` (under the team's name) and makes it the default team where there is none; another default is kept and `oats teams default <label>` is printed as the first step. That step moves the whole deployment's default team (every later spawn of a soul without its own default goes to the resident's team), so it is the operator's decision: an agent prints it and asks, and never runs it on its own. A grant seat gets `AWID_REGISTRY_URL` from its resident's identity when that registry is not aw's default. |
-| Provider 1.28.0, OATS >=0.52.0, aw >=1.36.33 | `oats aweb wake install`, `status` and `uninstall` install the host wake broker as a per-user service ("Host wake broker service" below). Readiness warns `claude-channel-mode-default` for a Claude channel home whose mode nobody chose, and checks the broker at soul scope when the spawn will need it (section 7). |
-| Provider 1.32.0, OATS >=0.68.0, aw >=1.36.33 | A stopped seat moves to the locked package with `oats instance upgrade`. Upgrade preserves identity and grant state without host calls; the next start re-registers and renews according to the seat's settings. |
-| Provider 1.36.0, OATS >=0.68.0, aw >=1.36.53 | Setup from an invite alone: `--invite-stdin` without `--join` reads the team and service with `aw team invite inspect` ("LOCAL team join and resume" below). Older aw refuses it with `E_SETUP_AW_VERSION`; labelled join is unchanged. |
-| Future provider #60 | GLOBAL wider-team join is not an installed procedure here. Stop at its named owner boundary. |
+These are source-qualified cards for the provider this skill ships in, not an
+installation or live-acceptance receipt. What each earlier provider release
+changed, the OATS and aw each one needed, and the host upgrade order for the
+1.25.0 and 1.26.0 floors are the package's history, not cards:
+[docs/provider-history.md](https://github.com/awebai/oats-aweb/blob/main/docs/provider-history.md) and the package's CHANGELOG. GLOBAL
+wider-team join (#60) is not an installed procedure here: stop at its named
+owner boundary.
+
+A stopped home moves to the locked provider with `oats instance upgrade`
+(`/oats-operate`). The upgrade keeps its identity, grant, seat and joined teams
+and makes no aw calls; the next start re-registers the wake broker and renews
+grants by the seat's settings.
 
 `D` = selected absolute deployment, `S` = resolved messaging soul, `L` = label,
 `T` = canonical `name:namespace` team ID, `H` = selected instance home,
@@ -546,16 +599,50 @@ Next: use `/oats-teams` to correct the declaration.
 
 ### First LOCAL root and controller-owned team
 
-For provider 1.23.0 (#70) automatic username mapping/default, plan and partial recovery,
+For the username account's mapping and default, its plan and partial recovery,
 read [Username setup and deployment default](references/username-setup.md).
-The provider 1.22.2 first-account behavior below only prints mapping advice,
-as did earlier versions; provider 1.23.0 users follow the reference above.
 
 | Act / prerequisites | Exact command in D | Writes / success / one next step | Emitted error or template → remedy |
 |---|---|---|---|
-| First hosted account, provider 1.22.2 (#66); selected account name, explicit root alias and empty LOCAL root | `oats aweb setup --soul S --username <selected-user> --name <root-alias>` | Runs `aw init --new-account --username <selected-user> --name <root-alias> --do-not-touch-agents-md`; root identity/workspace and hosted account/team. Success: returned canonical membership matches selected account. Next: `/oats-teams` records mapping/default. | `--username requires --name <alias>; invalid alias: ...` → supply an explicit 1–64 character alias (letter/digit first, then letters/digits/`-`/`_`); no soul-derived default. Older provider versions cannot pass this pair; require the fix before effects. `choose exactly one onboarding authority (...)` → remove unrelated credential input from the protected child environment and use the authorized branch. |
+| First hosted account; selected account name, explicit root alias and empty LOCAL root | `oats aweb setup --soul S --username <selected-user> --name <root-alias>` | Runs `aw init --new-account --username <selected-user> --name <root-alias> --do-not-touch-agents-md`; root identity/workspace and hosted account/team, then records the label mapping and default (the reference above). Success: returned canonical membership, mapping and default read back. Next: the reference's next step. | `--username requires --name <alias>; invalid alias: ...` → supply an explicit 1–64 character alias (letter/digit first, then letters/digits/`-`/`_`); no soul-derived default. `choose exactly one onboarding authority (...)` → remove unrelated credential input from the protected child environment and use the authorized branch. |
 | Existing hosted team's first LOCAL root, released provider 1.21.1; selected team provisioning key | `oats aweb setup --soul S` with key only in protected `AWEB_API_KEY` child environment | `aw init --do-not-touch-agents-md`, LOCAL root/workspace; returned membership must match intended team. Next: `/oats-teams` mapping/default readback. | `Workspace initialized, but no membership matching "<T>".` → use LOCAL join below with an appropriate owner invite; not fresh GLOBAL init. |
-| Additional controller-owned team, released provider 1.21.1; actual controller authority for owned namespace | `oats aweb setup --soul S --create L --namespace <owned-domain>` | Normalizes label, creates team, accepts/connects a per-team root, records `roots[T]`; success is returned canonical membership plus recorded root. Where `localTeams: true`, records local label; otherwise prints `teams:`/`defaultTeam:` to commit in `oats-workspace.yaml`, with eligibility in a `souls:` entry. Next: `/oats-teams` declaration/readback. | `could not tell whether this workspace allows local teams (...); nothing was created` → repair selected kernel/configuration read before retry. No invented controller authority. |
+| Additional controller-owned team, released provider 1.21.1; actual controller authority for owned namespace: its namespace controller key on this machine, for this user; the aweb service from `AWEB_URL` (the server's public URL; hosted aweb is `https://app.aweb.ai/api`), else an existing messaging root's `.aw/workspace.yaml` `aweb_url` | `oats aweb setup --soul S --create L --namespace <owned-domain> [--name <alias>]` (`--service` is refused with `--create`; `--name` names the per-team root's identity, and a fresh deployment with no root identity needs it) | Needs aw 1.36.53 or later (refused up front below it; `--install-aw` installs aw-compat.json's `tested`). Normalizes label; resolves the service before any aw call; settles the alias (`--name`, else the root identity's) before any team key is written; `aw id team create` (T, team key written locally); reads T's AWID team-server record (`aw id team show-server`) and refuses one that names another URL; `aw id team register --service <url> --team <team id>` registers T with that service; publishes the record for that service (`aw id team set-server --url <service>`, skipped when it already names it) and verifies it; mints a local invite with that team key (`aw id team invite`), skipped when the per-team root already holds an accepted identity; accepts it into a per-team root, connects it to the service, records `roots[T]`; success is returned canonical membership plus recorded root. Where `localTeams: true`, records local label; otherwise prints `teams:`/`defaultTeam:` to commit in `oats-workspace.yaml`, with eligibility in a `souls:` entry. A re-run of the same command resumes a partial create: no second team, no `-2` suffix, no second invite once the identity is accepted. The result names the team key's path (`team key: <path>`), never the key. Next: `/oats-teams` declaration/readback. | `--create --namespace needs aw >= 1.36.53 (this host has <version>)` → `npm install -g @awebai/aw@<tested>` as it names, or re-run with `--install-aw`, then re-run. `--name <alias> is required when no root identity is available ...; nothing was created` → re-run with `--name <alias>`; after a partial create, the same command with `--name` resumes it. `could not tell whether this workspace allows local teams (...); nothing was created` → repair selected kernel/configuration read before retry. `set AWEB_URL to the server's public URL (hosted aweb is https://app.aweb.ai/api) and re-run; nothing was created` → set `AWEB_URL` to the server's public URL, then re-run. `team T's AWID team-server record names <url>, not <service>` → the team's owner republishes it for `<service>` with `aw id team set-server`, or set `AWEB_URL` to the published URL; setup does not replace a record it finds. A refused publish, or `did not verify as <service>` → T exists, its key kept: fix what it names, then re-run the same command. A refused registration (HTTP status and the server's short code, e.g. `http 422 ... service_url_mismatch`; T exists, its key kept) → fix what it names, then re-run the same command: it resumes. `the namespace controller key for this namespace is not on this machine` → as this user, `aw id namespace prepare-controller --domain <owned-domain>`, or create the team where that key is, then re-run. `the team key is not on this machine` → run setup as the user whose `~/.awid/team-keys/<owned-domain>/` holds it, then re-run. `team <name>:<owned-domain> already exists in the registry, and its team key is not on this machine` → choose another label, or run setup as the user that holds its key; setup never tries another name, and nothing was created. aw's raw output is never relayed. No invented controller authority. |
+
+Operator notes for this card:
+
+- **One trust boundary.** The namespace controller key
+  (`~/.awid/controllers/<domain>.key`) and each team key
+  (`~/.awid/team-keys/<domain>/<team>.key`) are user-wide on the deployment
+  host, not inside the deployment. Every process that user runs can read them:
+  the operator's shell, the deployment and every agent instance spawned there.
+  Whoever runs as that user can add members to the team and, with the
+  controller key, create teams in the namespace. aw also keeps each local
+  invite, its secret included, in `~/.config/aw/team-invites/<id>.json` until
+  it is accepted. Setup passes the token only through memory and accept's
+  stdin.
+- Spawned instances join with `aw init --join-from <root> --join-team <T>`,
+  which mints a local invite with that same team key: spawns work only as the
+  user that holds it.
+- Setup publishes the team's coordination server at AWID (`aw id team
+  set-server`, after register) and verifies it (`aw id team show-server`: the
+  team, its current key and the service URL). It reads the record before
+  register and again just before publishing: one that names the same URL is
+  left as it is; one that names another URL stops setup, naming both URLs, and
+  is not replaced. aw has no publish-if-absent, so a record published between
+  setup's last read and its `set-server` is replaced unnoticed. The service URL is canonicalized first (no trailing slash);
+  one a record cannot hold (http outside loopback, a literal IP, a query) is
+  refused before anything is created.
+- A local-controller invite can be accepted only where the team key is: the
+  same user on the same machine. Run setup, and the deployment's instances, as
+  that user; another user's deployment on that machine cannot accept it. aw
+  then falls back to a hosted invite, which a self-hosted server answers with
+  404.
+- A self-hosted aweb accepts signed requests only for its public origin:
+  `AWEB_URL` must be the server's public URL, not a port forward.
+- Without `AWEB_URL`, the team is registered with the service an existing
+  root already uses, which may be hosted aweb. To create on a self-hosted
+  server, set `AWEB_URL` first. Setup names the service
+  before it creates anything.
 
 For created or joined LOCAL teams, one identity owns each separate `.aw`; never
 accept a second LOCAL team into an existing identity. Intended new root is
@@ -571,7 +658,9 @@ aweb lead.
 
 An aweb account that `oats aweb setup --username` created has no person on it:
 nobody can sign in to its dashboard, and the root's `.aw/signing.key` is its
-only recovery. The person it belongs to attaches their email to it: ask the
+only recovery. Setup's success text says so and prints the command below with
+the root filled in; no readiness item can, because no aw read shows whether a
+person is attached (below). The person it belongs to attaches their email to it: ask the
 person for their email address and run the command with exactly that address,
 never a guessed or inferred one.
 
@@ -631,7 +720,9 @@ appropriate member invite, root alias/service and required team policy from inta
 | Check selected default after mapping | `oats aweb setup --soul S --check-only --json` | Read-only `{aw, defaultTeam, member, root}`; success requires usable aw, intended default and `member: true` at intended root. Next: onboarding's staffing/completion stage. | `member: false` is a result, not an error code → reconcile selected root/team via the join card. |
 
 `--invite <token>` is still parsed, but stdin keeps the token off provider argv;
-never paste it in history, logs or messages. Setup passes it to native accept on
+never paste it in history, logs or messages. On a terminal, `--invite-stdin`
+asks `Invite token (input hidden): ` and reads it without echo; piped, it reads
+the first line. Setup passes it to native accept on
 stdin (`--token-stdin`, aw 1.36.33), never in argv. `--invite` and `--invite-stdin` cannot combine.
 Without `--join`, an invite needs aw 1.36.53 or later (the "Join from the invite
 alone" card); with `--join L` and aw 1.36.53, a mapped L that is not the
@@ -708,6 +799,9 @@ Renewal failures preserve the previous grant under the existing recovery rules.
 Existing captured provider modules/settings do not change automatically when
 this version ships. LOCAL identities are unchanged; there is no timer or
 background renewal.
+A grant seat, its custody and the wake service get `AWID_REGISTRY_URL` only
+from `settings.oats.aweb.registry` (`oats aweb setup --registry <origin>`); a
+saved aw registry URL is never used as admission.
 
 Every mint passes its ttl explicitly (`--ttl=never` or the duration) and records
 it, and the renew mode, as `identity.grant.ttl` and `identity.grant.renew`; a
@@ -720,11 +814,34 @@ custody's grant list is the source of
 truth: every real start and retire revokes this seat's other active grants (at
 retire, all of them), including one minted before a crash; other labels are never
 touched. A failed revoke names how long the grant stays valid ("until revoked"
-for a never-grant) and the exact command, `aw id grant revoke <id>` run in the
+for a never-grant) and the exact command, `aw id grant revoke --team=<team> -- <id>` run in the
 resident's custody directory; readiness warns `grant-revoke-pending`, or
 `grant-revoke-unchecked` when the list cannot be read. A failed renewal keeps the
 previous grant and starts on it; only a failed first mint at spawn fails. A
 retire exits nonzero while a grant stays unrevoked or the list is unread.
+A start waits at most 10 s for the custody's grant list. An aw call that ends
+without an answer is reported by how it ended (timed out, an error code or a
+signal), never as done.
+
+A present `seat.json` owns this home's seat id, resident and team. A different
+configured resident or default team refuses start with a respawn remedy; an
+unreadable or incomplete record refuses both start and retire. A selected grant
+home recording another team also refuses start, preview and `renew: off` included.
+Metadata naming a grant in another team refuses start unless the selected readable
+grant file confirms the seat's team; missing grant homes cannot erase cleanup
+evidence. Retire with no resolvable team refuses with a configuration remedy and
+keeps the metadata and credential.
+When a recorded grant names another team, including a home renewed there by an
+earlier release, follow retire's printed manual revoke command with its `--team`, then the operator's
+`oats retire <instance> --force`: ordinary retire cannot confirm cleanup outside
+the recorded team.
+
+A pre-1.25.0 home renewing into a changed default team revokes its previous
+grant in that grant's recorded team. A failed renewal keeps the previous
+grant and the newly written seat record. If they name different teams, the
+next start refuses until the home is respawned; follow retire's printed
+cleanup steps. Do not rewrite the record: it keeps a grant minted before a
+crash discoverable.
 
 `oats readiness --home H --json` reads the grant recorded at the seat's last
 mint, asking neither aw nor custody. A never-grant gets no lifetime diagnostic
@@ -766,7 +883,7 @@ AWEB_API_KEY=<key> AWEB_URL=<url> oats aweb resident create <name> [--team-label
 
 | Act | Writes / success / one next step | Error → remedy |
 |---|---|---|
-| Create, continue or adopt resident `<name>` in R (`D/.aweb-residents/<name>`, or `--root`) | One `aw init --global` run whose environment is built from nothing, the key in it only; a per-user custody unit `ai.aweb.custody.<namespace>.<name>` (launchd on macOS, systemd --user on Linux) running `aw custody serve` in R; `settings.oats.aweb.residents.<name>`. Success: `PASS resident <address> team <id> custody running`. The resident's team is mapped under `--team-label`, else under the team's name, and becomes the default team where the deployment has none; another default is never changed. Next: the printed steps, in order: `oats teams default <label>` when another default was kept (a seat's grant is minted in the default team; this moves the whole deployment's default, so every later spawn of a soul without its own default goes to the resident's team: the operator decides, an agent prints it and asks and never runs it itself), then `oats spawn <soul> --provider oats.aweb identity.mode=global --provider oats.aweb identity.resident=<name>`. |  `FAIL <stage>: …`: an init failure is aw's own text, "rerun" only when aw kept a partial; `E_RESIDENT_LINGER` → an admin runs `loginctl enable-linger <user>`; `E_RESIDENT_UNIT_CONFLICT` → retire the named foreign unit using the printed platform steps, then rerun (same-root units under another label also conflict); `E_RESIDENT_CUSTODY_RUNNING` (the resident's custody already runs, started by hand or another supervisor) → follow the retirement steps for another recognised unit when named; if no other recognised unit was found, find and stop any supervisor outside the recognised units (`aw custody stop` in R or stop whatever supervises it), then rerun; `E_RESIDENT_TEAM_LABEL` at record (the label maps to another team; the resident is in place) → rerun with `--team-label <other>`, no key needed; at preflight with an OATS below 0.48.0 → upgrade OATS. |
+| Create, continue or adopt resident `<name>` in R (`D/.aweb-residents/<name>`, or `--root`) | One `aw init --global` run whose environment is built from nothing, the key in it only; a per-user custody unit `ai.aweb.custody.<namespace>.<name>` (launchd on macOS, systemd --user on Linux) running `aw custody serve` in R; `settings.oats.aweb.residents.<name>`. Success: `PASS resident <address> team <id> custody running`. The resident's team is mapped under `--team-label`, else under the team's name, and becomes the default team where the deployment has none; another default is never changed. Next: the printed steps, in order: `oats teams default <label>` when another default was kept (a seat's grant is minted in the default team; that step moves the whole deployment's default, and every later spawn of a soul without its own default goes to the resident's team, so it is the operator's decision: an agent prints it and asks, and never runs it on its own.), then `oats spawn <soul> --provider oats.aweb identity.mode=global --provider oats.aweb identity.resident=<name>`. |  `FAIL <stage>: …`: an init failure is aw's own text, "rerun" only when aw kept a partial; `E_RESIDENT_LINGER` → an admin runs `loginctl enable-linger <user>`; `E_RESIDENT_UNIT_CONFLICT` → retire the named foreign unit using the printed platform steps, then rerun (same-root units under another label also conflict); `E_RESIDENT_CUSTODY_RUNNING` (the resident's custody already runs, started by hand or another supervisor) → follow the retirement steps for another recognised unit when named; if no other recognised unit was found, find and stop any supervisor outside the recognised units (`aw custody stop` in R or stop whatever supervises it), then rerun; `E_RESIDENT_TEAM_LABEL` at record (the label maps to another team; the resident is in place) → rerun with `--team-label <other>`, no key needed; at preflight with an OATS below 0.48.0 → upgrade OATS. |
 
 With no `AWEB_API_KEY` it asks for the key on the terminal without echo; with
 no key and no terminal it refuses. A rerun after a failure continues aw's
@@ -847,6 +964,24 @@ An unmapped host default reports `E_TEAM_UNMAPPED`: correct its team declaration
 before retry. Route/join failures retain their step and error; reconcile the
 remote root before retry rather than assuming rollback.
 
+An unreadable local or host membership stops connect before an invite is
+minted. `setup --check-only --json` returns `member:null`, a safe "could not
+check" cause on stderr and a nonzero exit; a confirmed absence is
+`member:false` with exit 0. Repair `aw team list --json` in the named root and
+retry. `join --plan` uses `E_SETUP_MEMBERSHIP` for an unreadable root instead of
+a false membership row; scripts must handle that command error.
+
+`setup --create` and tokenless `setup --join` check only their selected per-team
+root's membership and report that root's readiness. An unrelated default root's
+membership does not block them. An existing target with unreadable or wrong-team
+membership refuses before effects. Explicit `--name` and `AWEB_URL` avoid
+default-root locator reads; otherwise the existing alias/service fallbacks stay.
+A needed unavailable locator refuses with the explicit input remedy. Bare API-key
+setup refuses before init in another team's root: configure `roots[team]` to the
+intended team's root or a fresh `.aweb-roots/<label>` destination and retry.
+Setup human output and existing missing-root diagnostics name their root source;
+an absent default root is described as having no identity yet.
+
 The invite token is never in argv, a file, a log or output **on this side**;
 it stays in memory and the routed join's stdin. On the host, native
 `aw id team accept-invite` exposes the token in its process list while the call
@@ -860,7 +995,7 @@ check or permission inferred from onboarding.
 
 | Act / context | Exact command in D | Writes / success / one next step | Emitted error or template → remedy |
 |---|---|---|---|
-| Install missing, unreadable-version or below-floor aw; retain `--soul S` for outside-session dispatch | `oats aweb setup --install-aw [--aw-version <v>] --soul S` | Runs `npm install -g @awebai/aw@<v>` (default `^1.36.33`), rechecks the 1.36.33 floor, then continues ordinary setup. At/above floor, skips npm even with a version supplied. Success: usable aw and the selected setup's own success predicate. Next: follow that setup card's one next step. | `npm install -g <package> failed ...` (`E_AW_INSTALL` in check-only JSON) → operator resolves npm/access failure before retry; `npm install -g <package> ran, but ...` (`E_AW_FLOOR`) → resolve PATH/version so the selected aw meets the floor. |
+| Install missing, unreadable-version or below-floor aw; retain `--soul S` for outside-session dispatch | `oats aweb setup --install-aw [--aw-version <v>] --soul S` | Runs `npm install -g @awebai/aw@<v>` (default: `aw-compat.json`'s exact tested version), rechecks the 1.36.33 floor, then continues ordinary setup. At/above floor, skips npm even with a version supplied. Success: usable aw and the selected setup's own success predicate. Next: follow that setup card's one next step. | `npm install -g <package> failed ...` (`E_AW_INSTALL` in check-only JSON) → operator resolves npm/access failure before retry; `npm install -g <package> ran, but ...` (`E_AW_FLOOR`) → resolve PATH/version so the selected aw meets the floor. |
 
 `<v>` accepts an exact version or `^`/`~` range; `--aw-version` requires
 `--install-aw`. This option does not promise an upgrade of an already-usable CLI
@@ -876,36 +1011,20 @@ yet: its owner runs oats aweb setup, then commits the id, or choose another defa
 workspace doesn't allow local teams`. Next: `/oats-teams` owns mapping/default
 policy. Plain setup creates nothing for that unmapped committed/shared default.
 
-### Upgrading a host to provider 1.26.0 (aw 1.36.33 floor)
-
-Upgrade aw to 1.36.33 or later on the host, restart the host wake daemon (aw
-1.36.33 writes its status atomically only once restarted) and every resident
-custody service, then `oats sync` to provider 1.26.0. Below the floor, every
-path refuses with the wording below. Provider 1.26.0 adds
-`oats aweb resident create` ("GLOBAL residents and grant seats" above).
-
-### Upgrading a host to provider 1.25.0 (aw 1.36.32 floor)
-
-1. **New grant seats never expire.** A GLOBAL seat spawned on 1.25.0 gets a
-   grant that ends only when revoked.
-2. **One setting keeps a duration:** `identity.ttl`, for example
-   `identity: { ttl: 720h }`. Existing seats keep theirs at renewal.
-3. **What bounds a grant now:** its scopes, revocation at retire, and revocation
-   by the resident's owner.
-4. **Order on every host, done by a person: upgrade aw to 1.36.32 or later,
-   restart every resident custody service and the host wake daemon, then
-   `oats sync` to provider 1.25.0.** A running custody or daemon keeps its old
-   code, and its old ops, until it restarts. In the other order a grant seat
-   fails readiness and spawn with "required custody operations are missing:
-   <op>; restart the custody on aw 1.36.33 or later (upgrade aw, restart the
-   custody service and the wake daemon, then oats sync)", and readiness warns
-   `wake-daemon-outdated` (section 7).
+### aw upgrades, the floor and grant-seat custody
 
 Every path that refuses an older aw says the same thing: `aw <installed> is
 older than required 1.36.33; upgrade with \`npm i -g @awebai/aw@latest\` (or
-\`npm i -g @awebai/aw@1.36.33\`)` (1.36.33 from provider 1.26.0). aw 1.36.31
-lets an agent reply to a sender outside its team roster (a dashboard human in
-aweb Cloud's agent chat); aw 1.36.32 mints grants that never expire.
+\`npm i -g @awebai/aw@1.36.33\`)`.
+
+**After upgrading aw on a host, a person restarts every resident custody
+service and the host wake broker (`oats aweb wake install` restarts the
+broker), then runs `oats sync`.** A running custody or broker keeps its old
+code, and its old ops, until it restarts. In the other order a grant seat
+fails readiness and spawn with "required custody operations are missing:
+<op>; restart the custody on aw 1.36.33 or later (upgrade aw, restart the
+custody service and the wake daemon, then oats sync)", and readiness warns
+`wake-daemon-outdated` (section 7).
 
 A LOCAL seat needs the aw floor. A grant seat needs the worker's aw **and** a
 running resident custody with the ops aw 1.36.32 brought (the client floor
@@ -932,6 +1051,9 @@ They stay in the home until the kernel removes it, so retire hooks see them, and
 an incomplete cleanup keeps the home with them; a retry reads them from the home,
 never from recovery. A joined-team leave that needs its member key (any failure
 but `team_not_hosted`) makes retire exit nonzero, so the home and that key stay.
+The same holds for an unfinished join (`pendingJoins` in `.oats-aweb/teams.json`,
+a join killed after aw accepted its invite): retire adopts it and releases it,
+and keeps it and its key while that release fails.
 After `oats retire --force` no copy of the key remains: the team's controller or
 owner removes the membership. Exceptions: a failed spawn's preservation (directory
 mode) copies the whole home, keys included, and homes spawned before 1.24.0 are

@@ -8,7 +8,7 @@
 //   - the soul may join the label through its souls: entry or as a local team (kernel `via` workspace or
 //     local), and the label is not its own souls: default  <=>  the audience puts the soul in May join.
 // The deployment's or workspace's fallback default is its own Default for row, and does not take a soul out
-// of May join: lfx-agents' souls default to lfx-all through the fallback, and their `any` also lists it.
+// of May join: lab-agents' souls default to lab-all through the fallback, and their `any` also lists it.
 // A kernel change to resolution breaks this test, not the UI. In process: no CLI, nothing written.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -21,11 +21,11 @@ const DEP = "/fixture/deployment";
 const ids = (...labels) => Object.fromEntries(labels.map((label) => [label, { team: `${label}:acme.aweb.ai` }]));
 
 const FIXTURES = {
-  // The lfx rig: three member repos, local teams closed, the workspace's default lfx-all.
-  lfx: { workspace: { teams: ids("lfx-ai-team", "lfx-all", "lfx-platform-team"), defaultTeam: "lfx-all", souls: {
-    "*": { teams: [] }, "lfx-ai-engineering/*": { default: "lfx-ai-team", teams: ["lfx-all"] },
-    "lfx-ai-engineering/ai-reviewer": { default: "lfx-ai-team", teams: ["lfx-all", "lfx-platform-team"] },
-    "lfx-platform/*": { default: "lfx-platform-team", teams: ["lfx-all"] }, "lfx-agents/*": { teams: "any" } } } },
+  // The lab rig: three member repos, local teams closed, the workspace's default lab-all.
+  lab: { workspace: { teams: ids("lab-ai-team", "lab-all", "lab-platform-team"), defaultTeam: "lab-all", souls: {
+    "*": { teams: [] }, "lab-ai-engineering/*": { default: "lab-ai-team", teams: ["lab-all"] },
+    "lab-ai-engineering/ai-reviewer": { default: "lab-ai-team", teams: ["lab-all", "lab-platform-team"] },
+    "lab-platform/*": { default: "lab-platform-team", teams: ["lab-all"] }, "lab-agents/*": { teams: "any" } } } },
   // The solo rig: local teams open, this deployment's own default (mine) replaces the workspace's (engineering).
   solo: { workspace: { teams: { ...ids("engineering"), docs: {} }, defaultTeam: "engineering", localTeams: true,
     souls: { "*": { teams: ["engineering"] }, "acme-agents/writer": { default: "docs", teams: ["engineering"] } } },

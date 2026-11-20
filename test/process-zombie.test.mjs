@@ -185,7 +185,7 @@ test("runPs: the columns asked for, without headers, in the fixed environment; a
   const ran = () => readFileSync(seen, "utf8");
   reading(join(dir, "ps"), () => {
     assert.deepEqual(runPs(["pid", "comm"], ["-ax"]), { out: "  1 one\n  2 two\n" }, "its stdout, as it was written");
-    assert.equal(ran(), "ARGS=-o pid= -o comm= -ax\nPATH=/usr/bin:/bin\nLC_ALL=C\nTZ=UTC\nSENTINEL=\n", "the fixed environment is the default");
+    assert.equal(ran(), "ARGS=-o pid= -o comm= -ax\nPATH=/usr/bin:/bin:/usr/sbin:/sbin\nLC_ALL=C\nTZ=UTC\nSENTINEL=\n", "the fixed environment is the default");
     assert.deepEqual(runPs(["pid"], ["-p", "1"], { path: "/opt/fixture/bin:/usr/bin:/bin" }), { out: "  1 one\n  2 two\n" });
     assert.equal(ran(), "ARGS=-o pid= -p 1\nPATH=/opt/fixture/bin:/usr/bin:/bin\nLC_ALL=C\nTZ=UTC\nSENTINEL=\n", "a given PATH replaces the fixed one, and nothing else");
   });

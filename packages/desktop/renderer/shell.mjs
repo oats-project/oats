@@ -17,18 +17,17 @@ import { instanceActionTarget, sameInstanceActionTarget } from "./instance-actio
 import { createInstancePrAction } from "./instance-pr-action.mjs";
 import { instanceSplitPlan, instanceSplitIdentity } from "./instance-split.mjs";
 import { createInstanceStarter } from "./start-instance.mjs";
-import { runtimeState } from "../../client/instance-presentation.mjs";
+import { runtimeState, siblingText } from "../../client/instance-presentation.mjs";
 import { NOT_SERVED_CODE, NO_ANSWER_CODE, unservedError, createPendingWatch } from "./deployment-header.mjs";
 import { deploymentUnavailableText, keptFailure } from "../../client/deployment-facts.mjs";
 import { panelErrorCause } from "../../client/deployment-contract.mjs";
 import {
   initTheme, toggleTheme, setTheme, currentTheme, refreshHostTheme, THEMES, xtermTheme, terminalFontWeight, onThemeChange,
-  terminalTypography, setTerminalFontSize, setTerminalFontFamily, resetTerminalTypography, onTerminalTypographyChange,
+  terminalTypography, setTerminalFontSize, setTerminalFontFamily, resetTerminalTypography, onTerminalTypographyChange, terminalFamilyChosen,
   initFont, setFont, currentFont, onFontChange, fontChoices, fontFallsBack,
 } from "./theme.mjs";
 import { createPalette } from "./palette.mjs";
 import { createInstanceRecency, recencyIdFromTerminalKey } from "./instance-recency.mjs";
-import { createQuickOpen } from "./quick-open.mjs";
 import { takePickerFocusReturn } from "./overlay-picker.mjs";
 import { createSurfaceReturn } from "./surface-return.mjs";
 import { createFocusRegions, firstTabbable, isShown } from "./focus-regions.mjs";
@@ -37,23 +36,28 @@ import { createFileOpener } from "./open-file.mjs";
 import {
   registerAction, setActiveContexts, getBinding, onKeymapChange, formatChord, handleKeydown, matchEvent, runAction, keymapConflicts, pickerCycleDirection,
   paletteGroupDirection, paletteGroupHint,
-  listActions, readKeyboardLayout, SIDEBAR_KEYS, setChordFamily,
+  listActions, readKeyboardLayout, SIDEBAR_KEYS, SIDEBAR_DELETE, DESKTOP_LEADER, LEADER_CHOICES, setChordFamily,
 } from "./keybindings.mjs";
 import { createChordFamily } from "./chord-family.mjs";
 import { createLeader } from "./leader.mjs";
-import { createLeaderHint } from "./leader-hint.mjs";
+import { createLeaderHint, leaderHelpEnabled, setLeaderHelpEnabled } from "./leader-hint.mjs";
 import { createLeaderDispatch } from "./leader-dispatch.mjs";
-import { leaderApplies, leaderLabel } from "./leader-keys.mjs";
+import { leaderApplies, leaderLabel, supportedLeaderRows, rowKeysText } from "./leader-keys.mjs";
 import { LEADER_TABLE } from "../../client/keymap.mjs";
 import { createKeybindingsEditor } from "./keybindings-editor.mjs";
 import { createConnections, connectionsCSS } from "./connections.mjs";
 import { createTerminalSettings, settingsTerminalCSS } from "./settings-terminal.mjs";
 import { createLifecycleDialog, lifecycleCSS } from './lifecycle-dialog.mjs';
+import { createStatusLine, statusLineCSS } from "./status-line.mjs";
+import { sheetCSS } from "./sheet.mjs";
 import { createForgetDialog, forgetSuccessor } from './forget-dialog.mjs';
 import { createInstanceColorDialog, instanceColorCSS } from './instance-color-dialog.mjs';
+import { createMailSheet, mailSheetCSS } from './mail-sheet.mjs';
 import { createInstanceBackgroundMenu } from './instance-background-menu.mjs';
+import { createInstancePinMenu, PIN_LABELS } from './instance-pin-menu.mjs';
+import { desktopActs } from './desktop-acts.mjs';
 import { successorRow } from "./focus-return.mjs";
-import { createThemePicker, createFontPicker, themePickerCSS } from './theme-picker.mjs';
+import { createAppearanceSheet, themePickerCSS } from './theme-picker.mjs';
 import { rosterKeyAction, moveTarget } from "./roster-keys.mjs";
 import { createViewLifecycle } from "./view-lifecycle.mjs";
 import { reserveKey, whenKeyFree } from "./tab-keys.mjs";
@@ -69,10 +73,13 @@ import { revealInStrip } from "./reveal-in-scrollport.mjs";
 import { createIntentGate, prepareOwnedOpen, runOpenFlow } from "./open-intent.mjs";
 import { createSelectionOwnership, wirePaneSelection } from "./selection-ownership.mjs";
 import { createWorkspaceSwitcher } from "./workspace-switcher.mjs";
-import { NAV, NAV_TABS, navTab, stageSidebarMode, loadStageView } from "./shell-nav.mjs";
+import { NAV, NAV_TABS, PINNED, pinnedRowFor, navTab, stageSidebarMode, loadStageView } from "./shell-nav.mjs";
 import { shellIcon, mountShellIcons, iconElement } from "./shell-icons.mjs";
-import { createSettingsMenu } from "./sidebar-settings.mjs";
-import { createRuntimeBadge, identityCSS } from "./identity-marks.mjs";
+import { createSidebarFoot, emptyRosterText } from "./sidebar-foot.mjs";
+import { createAutomationsFailure, FAILED_RUN_TEXT } from "./automations-failure.mjs";
+import { automationsSupported } from "./views/automations.mjs";
+import { identityCSS } from "./identity-marks.mjs";
+import { rowFactsTitle } from "./row-facts-title.mjs";
 import { createContextPanel, contextPanelCSS } from "./context-panel.mjs";
 import { createInstanceTeamsSection, teamsCSS } from "./instance-teams.mjs";
 import { createInstanceSoulSection, instanceSoulCSS } from "./instance-soul.mjs";
@@ -84,18 +91,19 @@ import { createHostTheme } from "./host-theme.mjs";
 import { createSpawnJobs } from "./spawn-jobs.mjs";
 import { createSpawnFollow, watchOperator } from "./spawn-follow.mjs";
 import { createLaunchFocus } from "./launch-focus.mjs";
+import { noTerminal } from "./provider-row.mjs";
 import { registerSpawnDialogKeys } from "./spawn-dialog-keys.mjs";
 import { revealInScrollport } from "./reveal-in-scrollport.mjs";
-import { createRosterTip, rosterTipFacts, rosterTipCSS } from "./roster-tip.mjs";
+import { rosterRowFacts } from "../../client/roster-row-facts.mjs";
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../client/waiting-on-you.mjs";
 import { syncWaitingRow } from "./waiting-row.mjs";
-import { createRosterPrs, prText, rosterPrCSS } from "./roster-pr.mjs";
 import { createPanelOwner } from "./panel-owner.mjs";
-import { collapseKey, instanceRepoLabel, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE } from "../../client/instance-tree.mjs";
-import { withParentGate } from "../../client/same-work.mjs";
+import { collapseKey, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE, instanceSiblings, relatedSiblings, rowPinned, PIN_FEATURE } from "../../client/instance-tree.mjs";
+import { withParentGate, drawsParentLine } from "../../client/related-work.mjs";
 import { createRetiresInFlight, retiringRows } from "../../client/retire-in-flight.mjs";
-import { treeConnectors, treeGuides, captureTreeRenderState, rosterResponseOwns, clusterSeparator, renderRosterCount,
-  terminalKey, resolveTerminalOpen, createRosterLoading, rosterSignature, markStaleControl, staleBlocked, ROSTER_STALE_TITLE, rosterName } from "./instance-tree-view.mjs";
+import { createRetireGhosts } from "./retire-ghosts.mjs";
+import { treeConnectors, treeGuides, captureTreeRenderState, relationSpan, stateSpan, rosterResponseOwns, clusterSeparator, renderRosterCount,
+  terminalKey, resolveTerminalOpen, createRosterLoading, rosterSignature, ROSTER_STALE_TITLE, rosterName, pinnedMark } from "./instance-tree-view.mjs";
 import {
   tabVisibleInContext, canActivateTab,
   fallbackTabForContext, restoreTerminalTab,
@@ -103,10 +111,11 @@ import {
 import { createWorkspaceTabMemory } from "./workspace-tab-memory.mjs";
 import { retiredTabs, tabShowsRow, otherIncarnation, terminalOrigin } from "./retired-tabs.mjs";
 import { notePanel, panelDeployments, deploymentHeading } from "./view-deployments.mjs";
-import { deploymentState, rowStale, rosterSectionKey, sidebarSections } from "../../client/roster-sections.mjs";
+import { deploymentState, rowStale, rosterSectionKey, sidebarSections, isMultiDeployment, splitByDeployment } from "../../client/roster-sections.mjs";
 import { backgroundHeading } from "./background-heading.mjs";
-import { cliStatus, onCliChange } from "./views/cli-status.mjs";
-import { DESKTOP_TERMS } from "./desktop-terms.mjs";
+import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, anyBelow } from "./roster-disclosure.mjs";
+import { cliStatus, onCliChange, cliHeldBack } from "./views/cli-status.mjs";
+import { DESKTOP_TERMS, DESKTOP_NOUNS } from "./desktop-terms.mjs";
 import { onDeploymentTabRequest } from "./deployment-tabs.mjs";
 import { ROSTER_POLL_FOCUSED_MS, rosterPollDue } from "./roster-cadence.mjs";
 import { scopedRequest } from "./workspace-routes.mjs";
@@ -142,16 +151,41 @@ hostTheme.start();
 window.addEventListener("pagehide", () => hostTheme.dispose(), { once: true });
 mountShellIcons(document);
 const identityStyle = document.createElement("style");
-identityStyle.textContent = identityCSS + contextPanelCSS + teamsCSS + instanceSoulCSS + instanceGitCSS + notificationCSS + connectionsCSS + settingsTerminalCSS + lifecycleCSS + instanceColorCSS + themePickerCSS + rosterTipCSS + rosterPrCSS; document.head.append(identityStyle);
-const rosterTip = createRosterTip(document);
-// The PR of each local instance's branch (forge-roster), re-read at most once a minute.
-const rosterPrs = createRosterPrs({
-  request: (ws) => api(`/api/forge-roster?ws=${encodeURIComponent(ws)}`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }),
-  onChange: () => renderContextRoster(contextInstances),
+identityStyle.textContent = identityCSS + contextPanelCSS + teamsCSS + instanceSoulCSS + instanceGitCSS + notificationCSS + statusLineCSS + sheetCSS + connectionsCSS + settingsTerminalCSS + lifecycleCSS + instanceColorCSS + mailSheetCSS + themePickerCSS; document.head.append(identityStyle);
+// The sidebar's foot (slice 1): its count of the rows that need you, painted with the roster; its button focuses the
+// first of them (focusFirstNeedingYou).
+const sidebarFoot = createSidebarFoot(document, { nouns: DESKTOP_NOUNS, onNeedYou: () => focusFirstNeedingYou() });
+// The pinned Automations row's failure mark (slice 1; paintAutomationsFailed draws it), read with the roster.
+// This machine's own name (slice 1, Joan's call: a local row's line 2 names its machine as a remote row does): the
+// host name the kernel reports (oats-local.yaml `host.name`), read from the schedule list the failure mark reads;
+// until one is known, or where this machine has none, DESKTOP_TERMS.thisMachine.
+let thisHostName = null;
+const automationsFailedListeners = new Set(); // Home's Automations tile (slice 2b) follows the same mark
+const automationsFailure = createAutomationsFailure({
+  read: async (ws, kind) => {
+    const r = await api(`/api/automations?ws=${encodeURIComponent(ws)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind, action: "list" }) });
+    if (r?.status !== "ok") throw new Error(r?.reason?.message || "Automations are unavailable.");
+    return r.result;
+  },
+  supported: () => automationsSupported(cliStatus()),
+  onChange: (failed) => {
+    paintAutomationsFailed(failed);
+    for (const listener of automationsFailedListeners) { try { listener(failed); } catch (e) { console.error(e); } }
+  },
+  onHost: (name) => { if (name !== thisHostName) { thisHostName = name; if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } },
 });
+// A workspace switch (or the chooser) revokes the mark and any read in flight at once, before the new workspace's
+// roster answers: a late answer for the workspace left never marks the one shown (the roster's read asks again).
+onWorkspaceChange(() => { void automationsFailure.refresh(null); });
 // Move to background / out of it (#1579; instance-background-menu.mjs): the row menu's items, gated as the route is.
 const backgroundMenu = createInstanceBackgroundMenu({ deploymentOf: rowDeployment,
   request: async (row, body) => (await desk.api(`/api/instance-background?ws=${encodeURIComponent(rowDeployment(row))}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).body,
+  onGate: () => { if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } });
+// Pin to top / Unpin (feature instance-pin; instance-pin-menu.mjs): the row menu's item and the palette's, gated as the
+// route is. The roster's next read moves the row.
+const pinMenu = createInstancePinMenu({ deploymentOf: rowDeployment,
+  request: async (row, body) => (await desk.api(`/api/instance-pin?ws=${encodeURIComponent(rowDeployment(row))}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).body,
   onGate: () => { if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } });
 let connectionGeneration = 0;
@@ -223,9 +257,27 @@ const ctx = {
   // #1247: this window's own retires in flight. A view that reads its own roster draws its rows through
   // `retiringRows` and draws them again when `subscribeRetires` says the held set changed.
   retiringRows: (rows) => shownRows(rows),
+  // Home (slices 2 and 2b): the roster as the sidebar shows it, a subscription to its paints, a row's activation, a
+  // Workspace tab by its id (Souls, Capabilities, Teams, Machines, Setup), which Esc leaves back to Home, a page by its
+  // stage name (Automations) with the focus kept on a control, and the Automations row's failure mark, read and followed.
+  homeRoster: () => homeRoster(),
+  subscribeHomeRoster: (fn) => subscribeHomeRoster(fn),
+  openAgent: (row) => openRosterInstance(row),
+  openWorkspaceTab: (tab, options) => openWorkspaceTabFocused(tab, options),
+  openPage: (name) => showStageFocused(name),
+  automationsFailed: () => automationsFailure.failed,
+  subscribeAutomationsFailed: (fn) => { automationsFailedListeners.add(fn); return () => automationsFailedListeners.delete(fn); },
+  // A bound action's key as the keyboard reference writes it ("Ctrl+K"), or "" when it has none.
+  chordText: (id) => { const b = getBinding(id, navigator.platform.includes("Mac")); return b ? formatChord(b, navigator.platform.includes("Mac")) : ""; },
   subscribeRetires: (fn) => { retireListeners.add(fn); return () => retireListeners.delete(fn); },
 };
 const openInstanceStart = createInstanceStarter(document, ctx);
+// The status line (status-line.mjs; the Desktop UI rework, slice 4): one line at the bottom of the window, after the
+// app, with the three most useful keys for where the focus is (statusKeys) and one-line messages. Its y/n questions
+// for Stop, Start and Restart were taken out of this slice (the lead, after five review rounds): those keep their
+// dialogs, and the line may ask in a later slice with a design of its own.
+const statusLine = createStatusLine({ doc: document, host: document.body, before: document.getElementById("ws-modal"), keysFor: () => statusKeys(), max: 4 });
+window.addEventListener('pagehide', () => statusLine.dispose(), { once: true });
 
 // Background spawns (Spec C): a confirmed press in the spawn dialog is handed here and the dialog
 // closes; the store runs the transaction, owns the roster's pending rows and the outcome
@@ -334,6 +386,17 @@ window.addEventListener('pagehide', () => spawnJobs.dispose(), { once: true });
 // you accumulate and close, not places you navigate. Selecting a nav item
 // hides the tab layer; activating a tab covers the stage.
 const stageHost = document.getElementById("stagehost");
+// Esc on the Workspace page goes back to Home, whose tiles open it (slices 2 and 2b): only an Esc nothing on the page took
+// (a field, a list, a menu or a dialog handles its own, and marks it), from no text field.
+stageHost.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || stage?.name !== "spawn") return;
+  if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"], dialog, [role="dialog"], [role="menu"], [role="listbox"]')) return;
+  e.preventDefault();
+  void showStageFocused("home");
+});
+// The status line's keys follow the page (slice 3c): a click or a key on it can change what it shows (v, a page opened
+// or closed) without moving the focus.
+for (const type of ["click", "keyup"]) stageHost.addEventListener(type, () => statusLine.refresh());
 let stage = null;           // { name, life, el, mod }
 let stageOp = 0;            // switch generation — a slow mount must not paint over a newer switch
 
@@ -362,7 +425,9 @@ async function showStage(name) {
   setSidebarMode(stageSidebarMode(name));
   setNavActive(name);
   showTabLayer(false);
-  if (stage && stage.name === name) return;   // already on this surface
+  // Already on this surface: a page that has views of its own goes back to its first (Home › Agents to Home: its row
+  // always returns to Home; slice 2b review r3).
+  if (stage && stage.name === name) { try { stage.mod?.arrive?.(); } catch (e) { console.error(e); } return; }
   const myOp = await closeStage();
   if (myOp === null) return;                  // superseded by a faster switch
   let mod;
@@ -428,7 +493,7 @@ onWindowState((state) => {
   // Bound again (a choice, or an adoption): leaving the choice shows the home surface.
   if (!contextRosterEl?.hidden) return;
   contextRosterEl.hidden = false;
-  void showStage("spawn"); // the home surface: Workspace (2026-10-23)
+  void showStage("home"); // the landing surface: Home (slice 2)
 });
 
 /** A stage switch from the keyboard (a chord, the palette, a nav button) keeps focus on a
@@ -447,8 +512,9 @@ async function showStageFocused(name) {
 onDeploymentTabRequest(() => { void showStageFocused("hierarchy"); });
 
 function setNavActive(name) {
+  const row = pinnedRowFor(name);
   for (const b of navEl.querySelectorAll(".nav-item")) {
-    const active = b.dataset.view === name;
+    const active = b.dataset.view === row;
     b.classList.toggle("active", active);
     if (active) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
@@ -493,6 +559,56 @@ let contextRosterGen = 0;
 let shownRoster = null;
 let contextRosterEl = null;
 let contextInstances = [];
+/** Home (slice 2) reads the roster the sidebar shows: its listeners run after each change the roster's paint makes
+ * to the sidebar's list (rows, a loading or failed state, the count), batched by a MutationObserver watching it from
+ * the first subscription, so no paint path has to remember to say so. */
+const homeRosterListeners = new Set();
+let homeRosterObserver = null;
+function subscribeHomeRoster(fn) {
+  homeRosterListeners.add(fn);
+  if (!homeRosterObserver) {
+    const rosterEl = document.getElementById("instance-roster");
+    homeRosterObserver = new MutationObserver(() => {
+      for (const listener of homeRosterListeners) { try { listener(); } catch (e) { console.error(e); } }
+    });
+    if (rosterEl) homeRosterObserver.observe(rosterEl, { childList: true, subtree: true, characterData: true });
+  }
+  return () => homeRosterListeners.delete(fn);
+}
+/** Open a roster row from Home (slice 2) as the roster's own activation does, by activating its row: the row's
+ * click handler holds the gates (a held home, a row whose state isn't known or whose remote can't be addressed, a
+ * stopped row of a stale roster: refused, opening nothing), so Home can't drift from them. A row the roster hides
+ * (under a collapsed parent, in the closed Background section) is shown first: its section opened, its collapsed
+ * ancestors expanded, the list painted again. Returns whether a row was there to activate. */
+function openRosterInstance(i) {
+  const ws = contextWorkspace || currentWorkspace();
+  const id = i ? instanceId(i) : null;
+  const instances = shownRows(contextInstances);
+  if (!id || !contextRosterEl || !instances.some((row) => instanceId(row) === id)) return false;
+  const rowEl = () => [...contextRosterEl.querySelectorAll(".ctx-list .ctx-inst")].find((el) => el.dataset.treeInstance === id) ?? null;
+  if (!rowEl()) {
+    if (backgroundPlacement(instances, backgroundShown()).has(id)) backgroundOpen.add(ws);
+    for (let parent = rosterParentId(instances, id), seen = new Set(); parent && !seen.has(parent); parent = rosterParentId(instances, parent)) {
+      seen.add(parent); setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, collapseKey(ws, parent), true);
+    }
+    renderContextRoster(contextInstances);
+  }
+  const el = rowEl();
+  if (!el) return false;
+  el.click();
+  return true;
+}
+/** Home's view of the roster: the rows the sidebar shows (held retires included), its deployments, the read's
+ * phase ("loading" before a first answer, "failed" when that failed, "unavailable" when the answer says the
+ * kernel could not observe the deployment, with the sidebar's own words for why in `note`: never an empty
+ * workspace; else "ready"), the stale rule, and this machine's name. */
+function homeRoster() {
+  const phase = contextDeploymentNote !== null ? "unavailable"
+    : rosterState?.hasData ? "ready" : rosterState?.state === "failed" ? "failed" : contextInstances.length ? "ready" : rosterState?.settled === "empty" ? "ready" : "loading";
+  return { rows: shownRows(contextInstances), deployments: contextDeployments, phase, note: contextDeploymentNote, stale: (row) => rosterStale || rowStale(row, contextDeployments), here: thisHostName,
+    pins: pinsShown(),
+    retry: () => { void refreshContextRoster({ user: true }); } };
+}
 let contextWorkspace = "";
 // #1237: the dispatch order of every /api/panel read (the roster's and an open's), and the newest roster answer the
 // retired-tab rule ran on ({ read, workspace, panel }): an open whose own read is older than it checks it before its tab.
@@ -502,7 +618,18 @@ let judgedAnswer = null;
 // and settles each; a row is held as retiring (Retiring…, its Retire secondary) from the send until an
 // observed roster read begun after the answer lands (refreshContextRoster's `landed`), or at once released
 // by a refusal. Its mark is the roster's read generation. Every surface draws rows through `shownRows`.
-const retires = createRetiresInFlight({ mark: () => contextRosterGen, onChange: () => retiresChanged() });
+const retiresHeld = createRetiresInFlight({ mark: () => contextRosterGen, onChange: () => retiresChanged() });
+// The retired row's ghost (retire-ghosts.mjs; the Desktop UI rework, slice 4): a retire of this window that answered
+// complete leaves a dim ✕ row where it was for 10 s once the roster no longer lists it. Every retire apply goes
+// through `retires.begin` (the shared confirmation), so its answer's kind is read here, whichever dialog sent it.
+const retireGhosts = createRetireGhosts({ onExpire: () => { if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } });
+const retires = { ...retiresHeld, begin(target) {
+  const held = retiresHeld.begin(target), ws = contextWorkspace || currentWorkspace();
+  const row = contextInstances.find(i => instanceId(i) === instanceId(target)) ?? null;
+  // Any answer that ran something (complete, or accepted and still running: pending) may leave the row gone; the ghost
+  // shows only once the roster no longer lists it, so a retire that did not finish never draws one.
+  return { settle(kind) { held.settle(kind); if (!["refused", "stale", "invalid"].includes(kind) && row) retireGhosts.add(row, ws); } };
+} };
 const retireListeners = new Set();
 // The roster's loading state (desktop/loading-states): the controller owns the
 // pending skeleton, "Refreshing…", the stale line and Retry; shell owns the
@@ -530,16 +657,27 @@ function menuState(value, element) {
   updateActiveContexts();
 }
 const collapsedInstances = new Set();
+// The roots of the roster opened by hand (roster-disclosure.mjs): a root with children starts collapsed in every
+// window, and stays open once opened, in memory per workspace as a collapse is (rehomeWorkspaceState).
+const expandedInstances = new Set();
 // #1579: the workspaces whose Background section this window draws open. Closed by default in every new window,
 // kept in memory per workspace as a collapse is, and re-homed with the collapsed rows (rehomeWorkspaceState).
 const backgroundOpen = new Set();
 // The section exists only while this computer's CLI lists the kernel's feature (BACKGROUND_FEATURE): without it
 // nothing moves, whatever a row carries. A probe that changes the answer repaints the roster.
 const backgroundShown = () => { const features = cliStatus()?.features; return Array.isArray(features) && features.includes(BACKGROUND_FEATURE); };
-let backgroundFeature = backgroundShown();
+// Pinned first (feature instance-pin): a row's `pinned` orders the roster and draws its mark only while this computer's
+// CLI lists the feature (a remote row keeps its pin only from a host that lists it too: remote-roster.mjs remotePanel);
+// without it, it is ignored.
+const pinsShown = () => { const features = cliStatus()?.features; return Array.isArray(features) && features.includes(PIN_FEATURE); };
+// The features that change how the held roster is painted, Background's and the pin's: a probe that changes either
+// repaints it (the rows are the same, so a roster poll's signature would not).
+const rosterFeatures = () => `${backgroundShown()}|${pinsShown()}`;
+let paintedFeatures = rosterFeatures();
 onCliChange(() => {
-  if (backgroundShown() === backgroundFeature) return;
-  backgroundFeature = !backgroundFeature;
+  const now = rosterFeatures();
+  if (now === paintedFeatures) return;
+  paintedFeatures = now;
   if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances);
 });
 // Collapsed agent groups (sidebar group headers), keyed like instances.
@@ -567,7 +705,6 @@ const workspaceLabel = createWorkspaceSwitcher({
   selectWorkspace: (id, how) => switchWorkspace(id, { ...how, takeOver: true }),
   openInNewWindow: typeof desktopBridge.windowOpenWorkspace === "function" ? (id) => { void desktopBridge.windowOpenWorkspace(id); } : null,
   mac: navigator.platform.includes("Mac"),
-  storage: (() => { try { return window.localStorage; } catch { return null; } })(),
   // Its repaint keeps the focus on the row that had it: no new intent (a switch's waiting roster place stays owned).
   applyFocus: fn => tabOpenIntents.applyFocus(fn),
   // Feature-detected while tui-dev lands the approved privileged contract.
@@ -581,7 +718,8 @@ const workspaceLabel = createWorkspaceSwitcher({
   // After the kernel onboarded and the add selected the new deployment: land
   // on its Workspace view.
   onboarded: () => {
-    notifications.notify("Workspace onboarded. The lock is written.");
+    // A confirmation of what was done: the status line's (slice 4), not a card.
+    statusLine.say("Workspace onboarded. The lock is written.");
     void showStage("spawn");
   },
 });
@@ -625,6 +763,11 @@ document.addEventListener("focusout", () => queueMicrotask(() => updateActiveCon
 
 function initContextRoster() {
   contextRosterEl = document.getElementById("instance-roster");
+  // Its heading and name from DESKTOP_NOUNS ("Agents", slice 2), as the markup's own words say before this runs.
+  const rosterTitle = DESKTOP_NOUNS.instances[0].toUpperCase() + DESKTOP_NOUNS.instances.slice(1);
+  contextRosterEl.setAttribute("aria-label", rosterTitle);
+  const rosterHeading = contextRosterEl.querySelector(".ctx-head > span:first-child");
+  if (rosterHeading) rosterHeading.textContent = rosterTitle;
   rosterState = createRosterLoading(document, contextRosterEl, { onRetry: () => { void refreshContextRoster({ user: true }); } });
   renderRosterCount(contextRosterEl.querySelector(".ctx-count"), [], { pending: true });
   // Native pointer/keyboard entry is a newer UI intent, even if no command
@@ -862,7 +1005,8 @@ async function refreshContextRoster({ user = false } = {}) {
     shownRoster = { gen: myGen, read, ws: resolvedWs, instances: contextInstances };
     spawnJobs.observe(resolvedWs, contextInstances);
   }
-  void rosterPrs.refresh(panel.workspace?.remote ? null : resolvedWs);
+  // The pinned Automations row's failure mark (slice 1): re-read with the roster, at most once a minute per workspace.
+  void automationsFailure.refresh(resolvedWs);
   refreshPanelInstance(contextInstances, resolvedWs);
   if (!unchanged) {
     rosterSignaturePainted = signature;
@@ -914,6 +1058,21 @@ function needsInputMark(below) {
   return mark;
 }
 
+/** A retired row's ghost (retire-ghosts.mjs): "✕ name · retired", dim (the muted ink, never opacity), in its row's
+ * place and indent; not a control and not a tab stop, so nothing acts on it. */
+function retiredGhostRow(i) {
+  const wrap = document.createElement("div");
+  wrap.className = "ctx-tree-row ctx-ghost";
+  wrap.style.setProperty("--depth", String(i.depth || 0));
+  const line = document.createElement("span"); line.className = "ctx-ghost-line";
+  // The mark is Lucide's x (the renderer draws icons, never the text glyph: lucide-icons.test.mjs).
+  const mark = document.createElement("span"); mark.className = "ctx-ghost-mark"; mark.setAttribute("aria-hidden", "true");
+  mark.append(iconElement(document, "close", { size: 12 }));
+  const name = document.createElement("span"); name.className = "ctx-ghost-name"; name.textContent = i.instance;
+  line.append(mark, name, " · retired");
+  wrap.append(line);
+  return wrap;
+}
 /** The roster's rows as this window draws them and offers acts on them (#1247): each row of a retire this
  * window has in flight held as retiring (`retireInFlight`), whatever the row says. */
 function shownRows(rows) {
@@ -926,6 +1085,13 @@ function retiresChanged() {
   if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances);
   refreshPanelInstance(contextInstances, contextWorkspace || currentWorkspace());
   for (const fn of [...retireListeners]) { try { fn(); } catch { /* a view's repaint changes nothing here */ } }
+}
+
+/** The empty roster's line (slice 1): "No agents yet · <key> starts one", the key being the spawn action's chord
+ * from the keymap (none bound: the words alone). Said again when the keymap changes (applyChordTitles). */
+function emptyRosterLine() {
+  const mac = navigator.platform.includes("Mac"), chord = getBinding("app.quickOpenSouls", mac);
+  return emptyRosterText(DESKTOP_NOUNS, chord ? formatChord(chord, mac) : "");
 }
 
 function renderContextRoster(instances) {
@@ -942,6 +1108,9 @@ function renderContextRoster(instances) {
   const pending = !!rosterState && !rosterState.hasData, failed = pending && rosterState.state === "failed";
   renderRosterCount(contextRosterEl.querySelector(".ctx-count"), instances, { pending: pending && !failed, failed, stale: rosterStale });
   const ws = contextWorkspace || currentWorkspace();
+  // The foot's "N need you" (slice 1): this workspace's rows with a needs-input claim, through the row's own gate (a
+  // row held stale carries none), every row counted whether a collapse or the closed Background section hides it.
+  sidebarFoot.paint(pending ? 0 : instances.filter((row) => waitingClaim(row, { stale: rosterStale || rowStale(row, contextDeployments) })).length);
   // #558: every paint re-syncs the open terminal tabs through the row's own gate, before any early return:
   // a stale paint (an overdue read) or a pending one (a reset subject: no rows yet) clears their cues too.
   syncTabNeedsInput(pending ? [] : instances, ws);
@@ -953,7 +1122,7 @@ function renderContextRoster(instances) {
     listEl.prepend(note);
   };
   if (pending) {
-    for (const el of listEl.querySelectorAll(":scope > .ctx-tree-row, :scope > .ctx-group, :scope > .ctx-empty, :scope > .ctx-background")) el.remove();
+    for (const el of listEl.querySelectorAll(":scope > .ctx-tree-row, :scope > .ctx-group, :scope > .ctx-bundle-gap, :scope > .ctx-empty, :scope > .ctx-background")) el.remove();
     paintNote();
     tabOpenIntents.applyFocus(restoreTreeState);
     if (failed) applyRosterPlace(); // its Retry is the roster's landing
@@ -976,14 +1145,17 @@ function renderContextRoster(instances) {
   const reported = new Set(instances.map(instanceId));
   if (inFlight.size) instances = instances.map((i) => inFlight.has(instanceId(i)) && !i.rollbackIncomplete
     ? { ...i, pendingSpawn: inFlight.get(instanceId(i)), reportedSpawn: true } : i);
+  // A retired row's ghost stands where the row was, for 10 s (retire-ghosts.mjs): drawn, never counted or acted on.
+  const ghosts = retireGhosts.rows(instances, ws);
   const spawning = decided.filter((p) => !reported.has(instanceId(p)));
   if (spawning.length) {
-    // #1577: a pending row is this window's own, so the panel stamped no same-work gate on it: it takes its parent's
-    // (same-work.mjs `withParentGate`). This Desktop's spawn never passes --same-work, so on a host that declares
-    // the feature it draws no parent line, as its reported row will not.
+    // A pending row is this window's own, so the panel stamped no related-work gate on it: it takes its parent's
+    // (related-work.mjs `withParentGate`). It carries no flag (this Desktop's spawn records no related work), so it
+    // draws no line of its own, as its reported row will not.
     const all = [...instances, ...spawning], byId = new Map(all.map((i) => [instanceId(i), i]));
     instances = [...instances, ...spawning.map((p) => withParentGate(p, byId.get(rosterParentId(all, instanceId(p))) ?? null))];
   }
+  if (ghosts.length) instances = [...instances, ...ghosts];
   // "since <local time>" on a row setting up its worktree: the start of a job of this window for its home, if any.
   const spawnStart = (i) => {
     const job = i.pendingSpawn || jobs.find((p) => p.home === i.home && p.agentsRoot === i.agentsRoot);
@@ -997,21 +1169,36 @@ function renderContextRoster(instances) {
   // (rosterSectionKey). A collapse hides, and rolls up, only rows of its own section, so nothing hides or rolls
   // up across the main tree and the Background section.
   const rowSection = rosterSectionKey(contextDeployments, placement);
+  // A row's disclosure counts only children of its own section: a main row whose children are all in the
+  // Background section has nothing to collapse here. A root of its section with children starts collapsed
+  // (roster-disclosure.mjs): the rows drawn collapsed are the ones closed by hand and the roots not opened by hand.
+  // A row drawn as a pending row, or as a held home (its state takes its meta line), is always drawn open, with no
+  // disclosure (`canCollapse`, below): neither row has room for the roll-up, so a collapse would hide a waiting child.
+  // A choice made by hand stays in the sets and applies again once its lifecycle is over.
+  const childrenHere = sectionChildren(instances, rowSection);
+  const lifecycleRows = new Set(instances.filter((i) => i.pendingSpawn || heldHome(i)).map(instanceId));
+  // A root whose subtree in its section holds a pinned row, its own pin included, starts open (feature instance-pin):
+  // the pin is seen with its group. Closed by hand, it stays closed.
+  const pinnedRows = new Set(instances.filter((i) => rowPinned(i, pinsShown())).map(instanceId));
+  const collapsedNow = collapsedRows(ws, { collapsed: collapsedInstances, expanded: expandedInstances, children: childrenHere,
+    staysOpen: (id) => lifecycleRows.has(id), startsOpen: (id) => pinnedRows.has(id) || (pinnedRows.size > 0 && anyBelow(childrenHere, id, (row) => pinnedRows.has(row))) });
   const visible = instances.filter((i) => instanceVisibleInTree(
-    i, instances, collapsedInstances, ws, false, { section: rowSection },
+    i, instances, collapsedNow, ws, false, { section: rowSection },
   ));
   // A row the roster holds stale (the last read failed, or its deployment's re-read did) carries last-known facts.
   const rowHeldStale = (row) => rosterStale || rowStale(row, contextDeployments);
   // Needs input (Spec D): waiting rows a collapse hides, on their nearest visible ancestor. Derived on every
   // paint over the full roster, so expanding the parent drops it and the children show their own marks.
-  const waitingBelow = waitingRollup(instances, collapsedInstances, ws, { stale: rowHeldStale, section: rowSection });
+  const waitingBelow = waitingRollup(instances, collapsedNow, ws, { stale: rowHeldStale, section: rowSection });
   // The main tree's sections, then the Background section (sidebarSections): null when no row is in it, else its
   // heading's count and wait, and its own tree while it is open. Every row in it may be: then the main tree is
   // empty and the heading is the list.
   const { main, background } = sidebarSections(instances, visible, contextDeployments, DESKTOP_TERMS,
-    { placement, open: backgroundOpen.has(ws), stale: rowHeldStale });
+    { placement, open: backgroundOpen.has(ws), stale: rowHeldStale, pins: pinsShown() });
   if (!visible.length && !background) {
-    listEl.innerHTML = `<div class="ctx-empty">No instances.</div>`;
+    const empty = document.createElement("div"); empty.className = "ctx-empty"; empty.dataset.emptyRoster = "";
+    empty.textContent = emptyRosterLine();
+    listEl.replaceChildren(empty);
     paintNote();
     tabOpenIntents.applyFocus(restoreTreeState);
     applyRosterPlace();
@@ -1022,7 +1209,7 @@ function renderContextRoster(instances) {
   // from SPACING/STRUCTURE (human re-test: no visible glyph): each group
   // gets an invisible separator that still exposes the group boundary to
   // AT (role=separator + aria-label).
-  // Agent groups (Redesign v3): one sequence in name order (#1262), each
+  // Agent groups (Redesign v3): one sequence in spawn order, newest first (rosterOrder), each
   // multi-member relation cluster under its deterministic name and each run
   // of unrelated instances under "independent", in place (rosterGroups,
   // shared with the command palette). A cluster's group is
@@ -1040,13 +1227,34 @@ function renderContextRoster(instances) {
   // one part's: no stem, elbow or sibling link reaches a row of the other part.
   const partGroups = (sections, level) => sections.flatMap((section) => section.groups.map((group, at) => ({ ...group, heading: at === 0 && section.deployment ? section : null, level })));
   const groups = [...partGroups(main, 3), ...(background ? [{ background }, ...partGroups(background.sections, 4)] : [])];
-  // A row's disclosure counts only children of its own section: a main row whose children are all in the
-  // Background section has nothing to collapse here.
-  const parentsHere = new Set();
-  for (const child of instances) {
-    const pid = rosterParentId(instances, instanceId(child)), parent = pid ? instances.find((r) => instanceId(r) === pid) : null;
-    if (parent && rowSection(parent) === rowSection(child)) parentsHere.add(pid);
-  }
+  // The lines, for related work only (no flag, no line; packages/client/related-work.mjs), as the sidebar drew them
+  // before the Desktop UI rework's D26 and as the command palette draws them, with the same builder
+  // (treeConnectors, treeGuides) over the cluster's drawn rows, so a collapsed parent draws no line into rows it
+  // hides: the solid elbow and stem to a child related to its parent, and the dotted link through the dots of
+  // top-level rows a related sibling link joins. Any other child is indented with no line; a top-level row no
+  // related link joins, and its rows, are a gap in the dotted line. A row with no line carries no guides at all.
+  const rowGuides = (items, i) => {
+    const connectors = treeConnectors(items, i, instances);
+    return connectors.length ? treeGuides(document, connectors) : null;
+  };
+  // The relations in words, said after the row's lines to assistive technology (the lines are aria-hidden):
+  // "under <parent>" for a row indented under its parent and "sibling of …" for an explicit sibling link, resolved
+  // per deployment over its full roster as the command palette's are, each with "related work" where its host
+  // reports it (the line's meaning, said at both ends of a sibling link). Its siblings are listed pinned first with
+  // the feature (instance-pin), as the palette and the TUI list them; the related ones before the rest.
+  const ownRows = isMultiDeployment(contextDeployments) ? splitByDeployment(contextDeployments)(instances) : null;
+  const siblingPins = { pins: pinsShown() };
+  const perDeployment = (read) => new Map(ownRows ? [...ownRows.values()].flatMap((list) => [...read(list)]) : read(instances));
+  const siblingsOf = perDeployment((list) => instanceSiblings(list, siblingPins));
+  const relatedSiblingsOf = perDeployment(relatedSiblings);
+  const underWords = (i) => (i.depth || 0) > 0 && i.parentInstance
+    ? `under ${i.parentInstance}${drawsParentLine(i) ? ", related work" : ""}` : null;
+  const siblingWords = (i) => {
+    const all = siblingsOf.get(instanceId(i)) || [], related = relatedSiblingsOf.get(instanceId(i));
+    const joined = all.filter((s) => related?.has(instanceId(s))), rest = all.filter((s) => !related?.has(instanceId(s)));
+    return [joined.length ? `${siblingText(joined)}, related work` : null, siblingText(rest)].filter(Boolean).join(", ");
+  };
+  const relationWords = (i) => [underWords(i), siblingWords(i)].filter(Boolean).join(", ");
   for (const group of groups) {
     if (group.background) {
       const head = backgroundHeading(document, group.background), toggle = head.querySelector(".ctx-background-toggle");
@@ -1062,12 +1270,22 @@ function renderContextRoster(instances) {
       listEl.append(head);
     }
     listEl.append(clusterSeparator(document, { label: group.label, count: group.clusters.reduce((n, c) => n + c.instances.length, 0) }));
-    for (const cluster of group.clusters) {
+    group.clusters.forEach((cluster, clusterAt) => {
       const items = cluster.instances;
+      // Air between bundles (the Desktop UI rework, slice 1): a top-level bundle (a relation cluster) after another
+      // in the same group gets the 12px a group after a group gets from its separator, as a spacer of its own (no row
+      // box is spaced: rows stay the one 44px box). The order never changes.
+      if (clusterAt > 0 && items.length) {
+        const gap = document.createElement("div"); gap.className = "ctx-bundle-gap"; gap.setAttribute("aria-hidden", "true");
+        listEl.append(gap);
+      }
       for (const i of items) {
+        if (i.retiredGhost) { listEl.append(retiredGhostRow(i)); continue; }
         // #802: a home the roster reports setting up its worktree (spawned here or anywhere) wears the pending row's treatment too.
         const held = heldHome(i);
-        if (i.pendingSpawn || held?.kind === "spawning") { listEl.append(pendingSpawnRow(i, items, instances, spawnStart(i))); continue; }
+        if (i.pendingSpawn || held?.kind === "spawning") {
+          listEl.append(pendingSpawnRow(i, spawnStart(i), relationWords(i), rowGuides(items, i))); continue;
+        }
         const rowWrap = document.createElement("div");
         rowWrap.className = "ctx-tree-row";
         rowWrap.style.setProperty("--depth", String(i.depth || 0));
@@ -1077,12 +1295,9 @@ function renderContextRoster(instances) {
         // same-named instances from different agents roots collapse and
         // focus independently (review 46f3fdc).
         const key = collapseKey(ws, instanceId(i));
-        const hasChildren = parentsHere.has(instanceId(i));
-        const collapsed = collapsedInstances.has(key);
-
-        // Design connectors drawn from the dots: rounded solid elbows into
-        // children, solid stems/pass-throughs, dotted sibling links.
-        const guides = treeGuides(document, treeConnectors(items, i, instances));
+        // A held home's row is drawn here too (a pending row drew above): it stays open and offers no collapse.
+        const hasChildren = childrenHere.has(instanceId(i)) && !lifecycleRows.has(instanceId(i));
+        const collapsed = collapsedNow.has(key);
 
         const row = document.createElement("button");
         row.type = "button";
@@ -1095,33 +1310,46 @@ function renderContextRoster(instances) {
         // A row that can't open (unknown state, a remote row the kernel does not report addressable) stays
         // focusable (aria-disabled, spec F): its tools and its context menu (Shift+F10, the Menu key: Inspect/Stop/
         // Retire) must stay reachable from the keyboard. Its activation does nothing and says why.
-        const unavailable = i.running == null || !canAddressRemote(i);
+        // A row on a session provider (provider-row.mjs: "bb", say) that runs has no terminal to open: it is such
+        // a row too, and says where it runs. Stopped, its activation is Start…, as any row's.
+        const elsewhere = noTerminal(i);
+        const unavailable = i.running == null || !canAddressRemote(i) || (!!elsewhere && i.running === true);
         // #802: a home a spawn or a retire left half cleaned, or one being retired (#1247; held: the spawning one drew
         // above), opens and starts nothing either; its context menu offers Retire only (secondary while retiring).
         if (unavailable || held) { row.setAttribute("aria-disabled", "true"); row.classList.add("unavailable"); }
-        // Why it can't open: a short label on the meta line, the full sentence as its title and description.
+        // Why it can't open: the full sentence as its title and description (line 2 stays soul · machine).
         // A sentence that is the row's own text is said with who made it (speaker-line.mjs).
         const reason = rowReason(i);
-        const why = rowReasonLine(reason) || heldLine(held) || runtimeErrorLine(i) || (i.running ? `Open ${i.instance} terminal` : `Start ${i.instance}`);
-        // Workspace v4: an enabled row explains itself in the hover/focus card; an unavailable one keeps its reason as a title.
-        const pr = held || i.server || i.remote ? null : rosterPrs.get(i.home);
+        const why = [rowReasonLine(reason) || heldLine(held) || runtimeErrorLine(i) || (elsewhere && i.running !== false ? null : i.running ? `Open ${i.instance} terminal` : `Start ${i.instance}`),
+          elsewhere && i.running !== false ? elsewhere.sentence : null].filter(Boolean).join(" · ");
+        // Slice 1 (the Desktop UI rework): no hover card. An unavailable row keeps its reason as a title; every row's
+        // waiting facts are its description, and the instance panel shows them in full (its Needs input line).
+        // Line 2: `<soul> · <machine>`, the shared row facts (packages/client roster-row-facts.mjs), the machine in
+        // this Desktop's words for this one. The repository, the branch, the harness and the pull request are the
+        // instance panel's; a row's reason is its description.
+        const facts = rosterRowFacts(i, DESKTOP_TERMS, { deployments: contextDeployments, here: thisHostName });
         const heldStale = rowHeldStale(i);
         // Needs input: this row's own claim (waitingClaim is the only gate), and the waiting rows hidden under it.
         const claim = waitingClaim(i, { stale: heldStale }), below = waitingBelow.get(instanceId(i)) || [];
-        // Spec D (human, 2026-10-20): the name line keeps the name, whole; the roll-up takes the meta line in place
-        // of its text (the repository, pull request and branch stay in the hover card, as a held home's do; a row
-        // with no card says them in its title and description, and the line keeps its own title). A row's own
-        // claim marks its dot instead, so a waiting parent shows both. A held home's state wins that line: its
-        // description says the wait. "New" stays beside the name.
+        // Spec D (human, 2026-10-20): the name line keeps the name, whole; the roll-up takes line 2 in place of its
+        // text, which the row's description then says (soul · machine). A row's own claim marks its dot instead, so a
+        // waiting parent shows both. A held home's state wins that line: its description says the wait. "New" stays
+        // beside the name.
         const attn = held || !below.length ? null : needsInputMark(below.length);
+        const replaced = attn ? ` · ${facts.detail}` : "";
         if (unavailable) {
-          const replaced = attn ? [instanceRepoLabel(i), pr ? prText(pr) : null, i.branch].filter(Boolean).map(part => ` · ${part}`).join("") : "";
           const said = why + replaced + waitingSentence(claim, below, Date.now()); row.title = said; row.setAttribute("aria-description", said);
         }
+        // A held home's state takes its meta line over the mark (below): its description says the wait.
+        else if (held) row.setAttribute("aria-description", why + waitingSentence(claim, below, Date.now()));
         else {
-          rosterTip.bind(row, () => rosterTipFacts(i, why, pr, { below, stale: heldStale }));
-          // A held home's state takes its meta line over the mark (below): its description says the wait.
-          if (held) row.setAttribute("aria-description", why + waitingSentence(claim, below, Date.now()));
+          // The row's runtime error (a stopped row's "OATS says: the last start failed"), with its speaker, is its
+          // title and starts its description: the hover card said it, and a row with no terminal has no panel.
+          // Absolute times only (waitingSentence): the description is painted once, as the row is.
+          const error = runtimeErrorLine(i);
+          const said = ((error ? ` · ${error}` : "") + replaced + waitingSentence(claim, below, Date.now())).replace(/^ · /, "");
+          if (said) row.setAttribute("aria-description", said);
+          if (error) row.title = error;
         }
         // A waiting row's dot is the needs-input mark (the product owner, 2026-10-26): the --warn disc with its "!"
         // cut out, the only yellow mark (unknown liveness is a --muted bullseye), whatever the liveness, never in the
@@ -1140,19 +1368,14 @@ function renderContextRoster(instances) {
         const name = rosterName(document, i.instance);
         const spoken = claim && !held ? document.createElement("span") : null;
         if (spoken) { spoken.className = "sr-only"; spoken.textContent = " Needs input"; }
-        // The meta line (the product owner, 2026-10-26): the soul at the left, the repository at the right; the
-        // soul is cut first, the repository keeps about 10ch. The branch and the pull request are the hover card's
-        // (rosterTipFacts); the pull request's link stays in the row tools.
+        const relation = relationSpan(document, relationWords(i));
+        // Its state in words (a held home's line says its own): what opening it does, running or stopped, is heard.
+        const stateWords = held ? null : stateSpan(document, state);
         const meta = document.createElement("span");
-        meta.className = "ctx-meta ctx-soul-repo";
-        const soulPart = document.createElement("span"); soulPart.className = "ctx-meta-soul";
-        soulPart.textContent = [i.agent, reason?.label].filter(Boolean).join(" · ");
-        const repoPart = document.createElement("span"); repoPart.className = "ctx-meta-repo";
-        repoPart.textContent = instanceRepoLabel(i) || "";
-        meta.append(soulPart, repoPart);
-        meta.title = `Soul: ${i.agent || "unknown"}\nRepository: ${instanceRepoLabel(i)}`;
+        meta.className = "ctx-meta ctx-row-detail";
+        meta.textContent = facts.detail;
         // #802: a quarantined home reads its state (text, never colour alone) and what finishes it, muted; its
-        // repository and branch stay in the hover card.
+        // repository and branch stay in the instance panel.
         const heldLines = [];
         if (held) {
           meta.className = "ctx-meta ctx-spawn-state"; meta.removeAttribute("title"); meta.textContent = held.state;
@@ -1164,19 +1387,28 @@ function renderContextRoster(instances) {
         if (isActive) spawnJobs.seen?.(ws, i);
         if (attn) { meta.className = "ctx-meta ctx-attn-line"; meta.replaceChildren(attn); }
         const isNew = !!spawnJobs.isNew?.(ws, i);
-        if (isNew) {
+        // The disclosure (the product owner, 2026-11-19): a row with children here wears a chevron and the count
+        // of the rows under it right after its name (the product owner, 2026-11-20: "so that all instance names look
+        // aligned on the left"; an instance row has no tools over its end since slice 1); a click on it opens or
+        // closes the row (below). Its words follow the name.
+        const told = hasChildren ? rowDisclosure(document, { count: rowsUnder(childrenHere, instanceId(i)) }) : null;
+        const disclosure = told?.mark ?? null;
+        // A pinned row's mark (feature instance-pin): beside the name, before New, so a pin is seen, not inferred.
+        const pinned = rowPinned(i, pinsShown());
+        if (isNew || disclosure || pinned) {
           const line = document.createElement("span"); line.className = "ctx-name-line";
-          const mark = document.createElement("span"); mark.className = "ctx-new";
-          const markDot = document.createElement("span"); markDot.className = "ctx-new-dot"; markDot.setAttribute("aria-hidden", "true");
-          mark.append(markDot, "New"); line.append(name, mark);
-          copy.append(line, ...[spoken].filter(Boolean), meta, ...heldLines);
-        } else copy.append(name, ...[spoken].filter(Boolean), meta, ...heldLines);
+          line.append(name);
+          if (disclosure) line.append(disclosure);
+          if (pinned) line.append(pinnedMark(document));
+          if (told) line.append(told.spoken);
+          if (isNew) {
+            const mark = document.createElement("span"); mark.className = "ctx-new";
+            const markDot = document.createElement("span"); markDot.className = "ctx-new-dot"; markDot.setAttribute("aria-hidden", "true");
+            mark.append(markDot, "New"); line.append(mark);
+          }
+          copy.append(line, ...[spoken].filter(Boolean), meta, ...heldLines, ...[stateWords, relation].filter(Boolean));
+        } else copy.append(name, ...[spoken].filter(Boolean), meta, ...heldLines, ...[stateWords, relation].filter(Boolean));
         row.append(dot, copy);
-        if (typeof i.harness === "string" && i.harness) {
-          const runtime = createRuntimeBadge(document, i.harness);
-          runtime.classList.add("ctx-runtime");
-          row.append(runtime);
-        }
         // pass the FULL reference: same-named instances in other agents
         // roots must open THEIR tmux session, not the first name match
         // A stale roster (the last read failed) may say running:false for an instance that is running by now:
@@ -1185,32 +1417,37 @@ function renderContextRoster(instances) {
         // A row of a stale deployment (#482: its last re-read failed) is held the same way.
         const staleStart = heldStale && !i.running;
         if (staleStart) { row.title = ROSTER_STALE_TITLE; row.setAttribute("aria-description", ROSTER_STALE_TITLE); }
-        row.addEventListener("click", () => { if (staleStart || unavailable || held) return; spawnJobs.seen?.(ws, i); i.running ? openTerminalTab(i) : openInstanceStart(i); });
+        // The facts the hover card held that line 2 doesn't say (slice 1, an interim the lead agreed): the repository,
+        // the branch and the harness and model, on a line of the row's native tooltip, after what it says already.
+        // Nothing in its description: a screen reader doesn't hear them on every row (a known limitation for the
+        // keyboard until Details serves any row, a later slice); the instance panel shows them with a terminal open.
+        const factsTitle = rowFactsTitle(i);
+        if (factsTitle) row.title = [row.title, factsTitle].filter(Boolean).join("\n");
+        row.addEventListener("click", (e) => {
+          // A click on the disclosure opens or closes the row, whatever the row's state, and opens nothing; the
+          // focus stays on the row, as the tree keys leave it.
+          if (disclosure?.contains(e.target)) {
+            tabOpenIntents.invalidate();
+            setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, key, collapsed);
+            renderContextRoster(contextInstances);
+            const again = [...listEl.querySelectorAll(".ctx-inst")].find((r) => r.dataset.treeInstance === instanceId(i));
+            if (again) setRovingRow(listEl, again);
+            return;
+          }
+          // A provider row that runs has no terminal: its activation says where it runs (the hint's line, announced,
+          // never an alert), supersedes any open under way, and opens nothing. A home the kernel holds, or a row it
+          // does not report addressable, says its own reason, as any row.
+          if (elsewhere && i.running === true && !held && canAddressRemote(i)) { tabOpenIntents.invalidate(); sayInHint(elsewhere.sentence); return; }
+          if (staleStart || unavailable || held) return; spawnJobs.seen?.(ws, i); i.running ? openTerminalTab(i) : openInstanceStart(i);
+        });
         // full keyboard tree operability (roving tabindex; policy in
         // roster-keys.mjs). Enter is the button's native activation.
         row.dataset.rosterChildren = hasChildren ? "1" : "0";
         row.dataset.rosterCollapsed = collapsed ? "1" : "0";
         row.tabIndex = -1;
         row.addEventListener("keydown", onRosterRowKey);
-        rowWrap.append(guides, row);
-        // Row tools (the PR link, Start…) overlay the row end on hover/focus only.
-        const tools = document.createElement("span");
-        tools.className = "ctx-row-tools";
-        if (pr?.url) {
-          const open = document.createElement("button"); open.type = "button"; open.className = "act ctx-pr-open"; open.dataset.verb = "pr";
-          open.append(iconElement(document, "external", { size: 13 })); open.title = `Open pull request ${prText(pr)} on GitHub`;
-          open.setAttribute("aria-label", `Open ${i.instance}'s pull request ${prText(pr)} on GitHub`);
-          open.addEventListener("click", () => ctx.openExternal(pr.url));
-          tools.append(open);
-        }
-        if (i.running === false && !held) {
-          const start = document.createElement("button"); start.className = "act ctx-start";
-          start.textContent = "Start…"; start.setAttribute("aria-label", `Start ${i.instance}`);
-          start.disabled = !canAddressRemote(i);
-          if (heldStale) markStaleControl(start);
-          start.addEventListener("click", () => { if (!staleBlocked(start)) openInstanceStart(i); });
-          tools.append(start);
-        }
+        rowWrap.append(...[rowGuides(items, i), row].filter(Boolean));
+        // Slice 1: no tools overlay. Its acts (Open pull request…, Start…) are the context menu's, for every row.
         const actionTarget = instanceActionTarget(ws, i), menuConnection = connectionGeneration;
         const menuOwner = () => currentWorkspace() === ws && workspaceGeneration() === rosterGeneration && connectionGeneration === menuConnection
           && (!actionTarget || ownsInstanceTarget(actionTarget));
@@ -1222,16 +1459,24 @@ function renderContextRoster(instances) {
           scope: ws, owner: menuOwner, onMenuState: menuState, onFocusChange: () => updateActiveContexts(), dispatch: runAction,
           shortcut: id => { const chord = getBinding(id, isMac); return chord ? formatChord(chord, isMac) : ''; },
           extra: [
+            // A row on a session provider: what the provider offers in place of a terminal, as an external link under
+            // its own label, first; Open in split stays listed, not enabled, and says where the agent runs.
+            ...(elsewhere?.link ? [{ action: 'open-link', label: elsewhere.link.label, reason: '' }] : []),
             { action: 'open-split', actionId: 'instance.openSplit', label: 'Open in split', reason: () => !actionTarget ? 'Instance identity is not fully reported.'
-              : unsupportedLine(i) || (i.running !== true ? 'No live terminal is reported.' : instanceSplitPlan(splitOpenState()).reason) },
+              : unsupportedLine(i) || elsewhere?.sentence || (i.running !== true ? 'No live terminal is reported.' : instanceSplitPlan(splitOpenState()).reason) },
             { action: 'open-pr', actionId: 'instance.openPullRequest', label: 'Open pull request…', reason: !actionTarget ? 'Instance identity is not fully reported.'
               : i.server || i.remote ? 'Remote PR inspection is unavailable; no local fallback.' : '' },
             ...backgroundMenu.items(i, placement),
+            ...pinMenu.items(i),
           ],
           invoke: async (action, instance) => {
             if (currentWorkspace() !== ws || workspaceGeneration() !== rosterGeneration) throw new Error("Workspace changed; select the instance again");
             if (backgroundMenu.handles(action)) return backgroundMenu.run(action, instance);
+            if (pinMenu.handles(action)) return pinMenu.run(action, instance);
             if (action === 'open-split') return openTerminalTab(instance, { inSplit: true, expected: actionTarget, valid: menuOwner });
+            // The system browser, through the window's own handler (main.mjs: http and https only); the url is the
+            // one this row's menu was drawn with (provider-row.mjs noTerminal: validated by the shared home).
+            if (action === 'open-link') { if (elsewhere?.link) ctx.openExternal(elsewhere.link.url); return; }
             if (action === 'open-pr') return instancePrAction.open(actionTarget);
             if (action === "start" || action === "restart") { openInstanceStart(instance, { restart: action === "restart" }); return; }
             if (action === "inspect") {
@@ -1261,12 +1506,10 @@ function renderContextRoster(instances) {
             notifications.notify(headline, { detail });
           },
         });
-        // Only what the row holds overlays its end: a running row without a known pull request has no tools.
-        if (tools.childElementCount) rowWrap.append(tools);
         rowWrap.append(rowMenu);
         listEl.append(rowWrap);
       }
-    }
+    });
   }
   paintNote();
   const heading = listEl.querySelector(".ctx-background-toggle");
@@ -1282,7 +1525,6 @@ function renderContextRoster(instances) {
     if (!restoreTreeState() && toHeading) (heading || [...listEl.querySelectorAll(".ctx-inst")].at(-1))?.focus({ preventScroll: true });
     restoreActionMenu();
   });
-  rosterTip.sync(listEl);
   // roving tabindex: exactly one row enters the tab order — the focused row
   // when it survived the rebuild, else the selected one (its terminal is the
   // active tab), else the Background heading when the closed section holds the selected one (#1579), else the first
@@ -1302,16 +1544,15 @@ function renderContextRoster(instances) {
    unknown outcome reads "Outcome unknown" with a visible Check result (the existing result action).
    #802: a home the roster reports setting up its worktree (spawnInProgress, this window's job or a spawn
    made anywhere) reads "Setting up worktree…" in the same treatment, with no tools, and "since <local
-   time>" when a job of this window knows its start (`startedAt`). A row the roster reports (a held home,
-   or an in-flight job's home) explains itself in the hover card, with the roster's facts. */
-function pendingSpawnRow(i, items, instances, startedAt = null) {
+   time>" when a job of this window knows its start (`startedAt`). Its sentence is its title and description
+   (slice 1: no hover card). */
+function pendingSpawnRow(i, startedAt = null, relation = "", guides = null) {
   const p = i.pendingSpawn ?? null, held = heldHome(i), settingUp = held?.kind === "spawning";
   const unknown = !settingUp && !!p && p.pending !== "spawning", checking = unknown && p.pending === "checking";
   const reported = !p || !!i.reportedSpawn;
   const rowWrap = document.createElement("div");
   rowWrap.className = "ctx-tree-row ctx-spawn-row" + (unknown ? " ctx-spawn-unknown" : "") + (p?.revealed ? " ctx-spawn-revealed" : "");
   rowWrap.style.setProperty("--depth", String(i.depth || 0));
-  const guides = treeGuides(document, treeConnectors(items, i, instances));
   const row = document.createElement("button");
   row.type = "button";
   row.className = "ctx-inst pending";
@@ -1323,8 +1564,11 @@ function pendingSpawnRow(i, items, instances, startedAt = null) {
   const why = settingUp ? held.sentence(i.instance) : unknown ? `The outcome of spawning ${i.instance} is not known yet. Check result asks again.`
     : reported ? `${i.instance} is being spawned. It opens once the spawn finishes.` : `${i.instance} is being spawned. It opens once the roster reports it.`;
   row.setAttribute("aria-description", why);
-  if (reported) rosterTip.bind(row, () => rosterTipFacts(i, why, null, {}));
-  else row.title = why;
+  // A row the roster reports (a home setting up its worktree, an in-flight job's reported home) adds its reported
+  // facts to its tooltip, as an ordinary row does (the slice 1 interim), with its soul, which its state line
+  // replaces; a row only this window knows has none to add, so nothing is guessed.
+  const reportedFacts = reported ? [typeof i.agent === "string" && i.agent ? `Soul: ${i.agent}` : null, rowFactsTitle(i)].filter(Boolean).join(" · ") : "";
+  row.title = [why, reportedFacts].filter(Boolean).join("\n");
   const mark = document.createElement("span");
   mark.setAttribute("aria-hidden", "true");
   mark.className = unknown && !checking ? "ctx-dot unknown" : "ctx-spawn-spinner";
@@ -1334,13 +1578,13 @@ function pendingSpawnRow(i, items, instances, startedAt = null) {
   const meta = document.createElement("span");
   meta.className = "ctx-meta ctx-spawn-state";
   meta.textContent = settingUp ? held.state : checking ? "Checking result…" : unknown ? "Outcome unknown" : "Spawning…";
-  copy.append(name, meta);
+  copy.append(name, meta, ...[relationSpan(document, relation)].filter(Boolean));
   const since = settingUp && startedAt !== null ? waitingClock(startedAt) : "";
   if (since) { const line = document.createElement("span"); line.className = "ctx-meta ctx-held-hint ctx-spawn-since"; line.textContent = `since ${since}`; copy.append(line); }
   row.append(mark, copy);
   row.tabIndex = -1;
   row.addEventListener("keydown", onRosterRowKey);
-  rowWrap.append(guides, row);
+  rowWrap.append(...[guides, row].filter(Boolean));
   if (unknown) {
     const tools = document.createElement("span");
     tools.className = "ctx-row-tools ctx-spawn-tools";
@@ -1413,8 +1657,7 @@ function onRosterRowKey(e) {
   };
   if (action.type === "expand" || action.type === "collapse") {
     if (btn.dataset.rosterBackground === "1") { setBackgroundOpen(ws, action.type === "expand"); return; }
-    const key = collapseKey(ws, id);
-    if (action.type === "expand") collapsedInstances.delete(key); else collapsedInstances.add(key);
+    setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, collapseKey(ws, id), action.type === "expand");
     renderContextRoster(contextInstances);
     focusInstance(id);
     return;
@@ -1467,7 +1710,7 @@ async function showInRoster(instance, { read = true } = {}) {
   if (!row || ws !== currentWorkspace() || !contextRosterEl) return false;
   const placed = backgroundPlacement(contextInstances, backgroundShown()), inBackground = placed.has(instanceId(row));
   for (let id = rosterParentId(contextInstances, instanceId(row)), seen = new Set(); id && !seen.has(id) && placed.has(id) === inBackground; id = rosterParentId(contextInstances, id)) {
-    seen.add(id); collapsedInstances.delete(collapseKey(ws, id));
+    seen.add(id); setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, collapseKey(ws, id), true);
   }
   if (inBackground) backgroundOpen.add(ws);
   renderContextRoster(contextInstances);
@@ -1502,7 +1745,7 @@ function revealPendingSpawn(id) {
   const self = all.at(-1);
   const placed = backgroundPlacement(all, backgroundShown()), inBackground = placed.has(instanceId(self));
   for (let pid = rosterParentId(all, instanceId(self)), seen = new Set(); pid && !seen.has(pid) && placed.has(pid) === inBackground; pid = rosterParentId(all, pid)) {
-    seen.add(pid); collapsedInstances.delete(collapseKey(ws, pid));
+    seen.add(pid); setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, collapseKey(ws, pid), true);
   }
   if (inBackground) backgroundOpen.add(ws);
   spawnJobs.reveal(id);
@@ -1531,7 +1774,7 @@ function showTerminalContext() {
   // terminal restores the prior stage surface.
   setSidebarMode(stageSidebarMode(stage?.name));
   showTabLayer(false);
-  setNavActive(stage?.name || "spawn");
+  setNavActive(stage?.name || "home");
 }
 
 // ── tabs ──────────────────────────────────────────────────────────────────
@@ -1588,6 +1831,8 @@ const contextPanel = createContextPanel({
     forget: (instance, workspace) => openForgetDialog(instance, workspace),
   },
   // Soul tab → the soul in the Workspace view (same hand-off as Quick Open).
+  // Messaging's Mail → the mail sheet for this row (as the chord opens it; mail-sheet.mjs).
+  openMail: ({ instance }) => { if (instance) openInstanceMail(instanceId(instance)); },
   openSoul: async ({ workspace, name, agentsRoot, server }) => {
     const owns = tabOpenIntents.begin();
     let mod;
@@ -1636,8 +1881,11 @@ function updatePanelControl({ present, open, changes }) {
 function syncContextPanel() {
   const tab = tabLayerVisible ? tabs.get(activeTab) : null;
   const terminal = tab?.kind === "terminal" && canActivateTab(tab, currentWorkspace());
+  // Its Needs input facts (slice 1: the hover card's) through the sidebar's own gate: a row held stale has no claim.
+  const instance = terminal ? tab.instanceRef : null;
   contextPanel.setContext({ workspace: currentWorkspace(), owner: tabLayerVisible ? null : stage,
-    instance: terminal ? tab.instanceRef : null, key: terminal && tab.instanceRef ? tab.key : null });
+    instance, key: terminal && tab.instanceRef ? tab.key : null,
+    waiting: instance ? waitingClaim(instance, { stale: rosterStale || rowStale(instance, contextDeployments) }) : null });
 }
 function activeTabTrigger() { return activeTab != null ? tabs.get(activeTab)?.triggerEl ?? null : null; }
 /** Where focus goes when the control holding it disappears: the active tab's trigger when it is shown, else a
@@ -1651,7 +1899,7 @@ function stableFocusTarget() {
     }
     return true;
   };
-  return [activeTabTrigger(), ...["sidebar-toggle", "show-sidebar", "show-panel"].map(id => document.getElementById(id))].find(shown) ?? null;
+  return [activeTabTrigger(), ...["sidebar-help", "show-sidebar", "show-panel"].map(id => document.getElementById(id))].find(shown) ?? null;
 }
 function refreshPanelInstance(instances, workspace) {
   syncTabNeedsInput(instances, workspace); // also on a poll whose roster signature is unchanged (no repaint)
@@ -2217,21 +2465,25 @@ let terminalOpening = null; // the newest terminal open (openTerminalTabFlow): {
  * bare-name open and a sidebar open of the same identity share one tab —
  * and an existing tab can never be activated for a name that has since
  * become ambiguous (resolution refuses before dedup can activate). */
-async function openTerminalTab(ref, { quiet = false, inSplit = false, expected = null, valid = () => true, followed = false, onError, refuse } = {}) {
+async function openTerminalTab(ref, { quiet = false, inSplit = false, expected = null, valid = () => true, followed = false, onError, refuse, focusContent = true } = {}) {
   const notify = onError || (quiet ? (msg) => console.warn(`[terminal open] ${msg}`) : (msg) => alert(msg));
   // Quiet opens must NEVER reject either (review ff70e1c nit): the refusal
   // messages route through notify, but transport failures (the panel fetch,
   // the tab mount) would still escape as an unhandled rejection from an
   // automated caller that does not await. runOpenFlow catches every quiet
   // rejection into notify; interactive opens keep throwing.
-  return runOpenFlow(() => openTerminalTabFlow(ref, notify, { inSplit, expected, valid, followed, refuse }), { quiet, notify });
+  // A row on a session provider has no terminal, whoever asks (the palette, a view's Open, a launch's --instance):
+  // an interactive open says where it runs in a notice, never in a blocking alert(). A quiet open, and a caller
+  // with its own onError, keep their notify.
+  const say = onError || quiet ? undefined : (line) => notifications.notify(line);
+  return runOpenFlow(() => openTerminalTabFlow(ref, notify, { inSplit, expected, valid, followed, refuse, focusContent, say }), { quiet, notify });
 }
 
 async function openTerminalTabFlow(ref, notify, options = {}) {
   if (options.valid && !options.valid()) return;
-  // The post-spawn open (#1246): the roster read that showed the row ready is the current one (no read started
-  // since, same workspace), so the open resolves against its rows instead of reading /api/panel again. Taken
-  // before this open's own repaint below, which starts a read. Every other open reads.
+  // Opens following an observed row (post-spawn or launch) reuse that roster while it is current (no read
+  // started since, same workspace), instead of reading /api/panel again. Taken before this open's own repaint
+  // below, which starts a read. Other opens read for themselves.
   const shown = options.followed && shownRoster?.gen === contextRosterGen && shownRoster.ws === currentWorkspace() ? shownRoster : null;
   const planned = options.inSplit ? instanceSplitPlan(splitOpenState()) : null;
   const layoutIdentity = planned ? instanceSplitIdentity(splitOpenState()) : null;
@@ -2275,6 +2527,14 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
     // finds ITS instance; a bare name resolves only when unambiguous — the
     // first same-named match could be another agents root's tmux session.
     const r = resolveTerminalOpen(panel.instances, ref, ws);
+    // A row on a session provider has no terminal (resolveTerminalOpen): its sentence says where it runs, through
+    // the open's own `say` when it has one (openTerminalTab: a notice, not an alert). An open of a selected target
+    // (the row menu's Open in split) speaks only of that target: the open's own read may hold the home's
+    // replacement before the sidebar does, and that row is not the one that was chosen.
+    if (r.error === "no-terminal") {
+      if (options.expected && !sameInstanceActionTarget(options.expected, r.row, ws)) return notify('The selected instance identity changed. Use the current roster.');
+      return (options.say || notify)(r.sentence);
+    }
     if (r.error) {
       return notify(r.error === "ambiguous"
         ? `several instances are named "${r.name}" — open it from the sidebar tree, which addresses the exact one`
@@ -2286,15 +2546,13 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
     try { await whenKeyFree(key); }
     catch (e) { if (!owns()) return; throw e; }
     if (!owns()) return;
-    // Every jump path through here is user-initiated (palette, roster row,
-    // quick-open, post-spawn open) — activating an existing tab focuses its
-    // terminal input so the user can type into tmux immediately.
+    // Explicit jumps focus terminal input. Launch opens opt out, including tab reuse and readiness.
     // Only a tab of this incarnation (#1237): a respawn under the same home opens its own tab.
     for (const [tid, t] of tabs) if (t.key === key && !otherIncarnation(t.origin?.incarnation, inst.createdAt)) {
       if (!commitDestination()) return notify('The terminal destination changed. Select the instance again.');
       t.instanceRef = inst;
       split = fillEmptyGroup(split, tid);
-      selectTab(tid, { intent: owns, focusContent: true }); return;
+      selectTab(tid, { intent: owns, focusContent: options.focusContent !== false }); return;
     }
     // A caller's own refusal of a NEW tab for the resolved row (the palette's: a held home opens nothing new, #802,
     // #1247); its tab already open is shown above, as any open tab is.
@@ -2304,7 +2562,7 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
     if (pendingTerms.has(pending)) return; // an open for this key is already in flight
     pendingTerms.add(pending);
     try {
-      await openTerminalTabInner(inst, ws, key, owns, notify, commitDestination, read);
+      await openTerminalTabInner(inst, ws, key, owns, notify, commitDestination, read, options.focusContent !== false, options.say || notify);
     } finally {
       pendingTerms.delete(pending);
     }
@@ -2313,7 +2571,7 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
   }
 }
 
-async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert(msg), commitDestination = () => true, read = 0) {
+async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert(msg), commitDestination = () => true, read = 0, focusContent = true, say = notify) {
   // inst is the RESOLVED roster instance (openTerminalTab resolves + keys
   // before dedup; review 7d740f9). Re-check ownership here — whenKeyFree
   // may have waited across a workspace switch.
@@ -2326,7 +2584,15 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
   // retired wins — no tab opens for a row the roster no longer has.
   const judged = judgedAnswer;
   if (judged && judged.read > read && judged.workspace === ws
-    && retiredTabs([[0, { kind: "terminal", workspace: ws, key, origin }]], judged.panel).length) return notify(`unknown instance "${name}"`);
+    && retiredTabs([[0, { kind: "terminal", workspace: ws, key, origin }]], judged.panel).length) {
+    // The newer answer may show this very row moved to a session provider, not retired: it is there and has no
+    // terminal, which is said as any open of such a row says it (the open's own `say`: a notice, never an alert).
+    // Only for the open's own target: a row of the judged answer with this terminal key and no other incarnation.
+    // Another incarnation at the home, or a same-named home elsewhere, is not this instance: it stays unknown.
+    const moved = (judged.panel.instances || []).find((row) => row && typeof row === "object" && terminalKey(ws, row) === key
+      && !otherIncarnation(origin.incarnation, row.createdAt) && noTerminal(row));
+    return moved ? say(noTerminal(moved).sentence) : notify(`unknown instance "${name}"`);
+  }
 
   if (!commitDestination()) return notify('The terminal destination changed. Select the instance again.');
   const wrap = document.createElement("div");
@@ -2373,6 +2639,13 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
       && canActivateTab(tabs.get(made.id), currentWorkspace())
       && tabOpenIntents.ownsFocus(made.id),
     focusInput: () => tabOpenIntents.applyFocus(() => term.focus()),
+    // The Desktop UI rework, slice 4 (the lead, 2026-11-19): when the terminal in front drops or reconnects, the status
+    // line says so in one plain line, no question (it retries by itself; the pane's strip keeps its countdown and its
+    // Reconnect now).
+    onLink: ({ state, server }) => {
+      if (!(tabLayerVisible && activeTab === made.id && canActivateTab(tabs.get(made.id), currentWorkspace()))) return;
+      statusLine.say(state === "disconnected" ? `Disconnected from ${server}; reconnecting (the pane's Reconnect now tries at once).` : `Reconnected to ${server}.`);
+    },
     fit: () => fitTerminal(term, fit),
     // Terminal-allowlisted shortcuts (engine policy: TERMINAL_ALLOWLIST, e.g.
     // app.palette, tabs.next/prev/close, split.*, focus.leaveTerminal) must be
@@ -2406,7 +2679,7 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
     onShow: () => { requestAnimationFrame(() => { try { glyphs.ensure(); fitTerminal(term, fit); } catch {} }); },
     // user-initiated activation → keyboard lands in the xterm textarea
     focusContent: () => tab.focus(),
-    focusOnActivate: true, // addTab's own dedup here is a user jump too
+    focusOnActivate: focusContent, // also applies to addTab's dedup and delayed terminal readiness
     term, // the GPU-restart recovery clears its glyph atlas
   });
   if (!made) { unwire(); term.dispose(); return; } // lost a race to an identical tab
@@ -2425,8 +2698,11 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
 // prove every entry resolves to a real mount-exporting view. The permanent
 // instance tree in the sidebar is the instances surface itself — selecting
 // an instance opens its terminal; there is no separate Instances stage.
+// The pinned destinations (the Desktop UI rework, slices 1, 2 and 2b): Home, Workspace and Automations, rows under the
+// switcher in the roster rows' style. Automations carries a --danger dot while a run failed (automations-failure.mjs,
+// paintAutomationsFailed), its words after the name, so the row's name says it ("Automations, a run failed").
 const navEl = document.getElementById("nav");
-for (const v of NAV) {
+for (const v of PINNED) {
   const b = document.createElement("button");
   b.type = "button";
   b.className = "nav-item";
@@ -2439,22 +2715,46 @@ for (const v of NAV) {
   b.addEventListener("click", () => runAction(`stage.${v.name}`));
   navEl.append(b);
 }
+/** Show or clear the Automations row's failure mark: the --danger dot and, after the name, its words (the row's
+ * accessible name then says "Automations, a run failed"). Absent while nothing failed, so it says nothing then. */
+function paintAutomationsFailed(failed) {
+  const row = document.querySelector('#nav .nav-item[data-view="automations"]');
+  if (!row) return;
+  row.querySelector(":scope > .nav-failed")?.remove();
+  if (!failed) return;
+  const mark = document.createElement("span"); mark.className = "nav-failed";
+  const dot = document.createElement("span"); dot.className = "nav-failed-dot"; dot.setAttribute("aria-hidden", "true");
+  const said = document.createElement("span"); said.className = "sr-only"; said.textContent = FAILED_RUN_TEXT;
+  mark.append(dot, said); row.append(mark);
+}
 
-// The foot's controls use exactly the same registry as keyboard actions (the nav's buttons run theirs above):
-// Spawn instance (Quick Open, app.quickOpenSouls: the product owner, 2026-10-26), the bar's sidebar toggle, and its
-// settings cog's menu.
+// The foot's controls use exactly the same registry as keyboard actions (the nav's buttons run theirs above): New
+// instance (Quick Open, app.quickOpenSouls, the spawn flow) and ? (Keyboard shortcuts, app.shortcuts). Hide sidebar
+// is Ctrl+Shift+B and the palette's; Theme…, Font… and Keyboard shortcuts… are the palette's (slice 1).
 for (const button of document.querySelectorAll("#nav-foot [data-action]")) {
   button.addEventListener("click", () => runAction(button.dataset.action));
 }
-const settingsMenu = createSettingsMenu(document, document.getElementById("sidebar-settings"), {
-  run: (id) => runAction(id), shortcut: (id) => { const chord = getBinding(id, isMac); return chord ? formatChord(chord, isMac) : ""; },
-});
 
 // This is a chooser entry, not a launch or an inspection preselection. Capture
 // workspace visit + selection before import, and contain stale rejections too.
 // The leader's 3 opens the same way on Capabilities (`tab`), and stage.hierarchy on Machines.
-const WORKSPACE_TAB_NAMES = { machines: "Machines", souls: "Souls", capabilities: "Capabilities" };
-async function openWorkspaceSouls(tab = "souls") {
+const WORKSPACE_TAB_NAMES = { machines: "Machines", souls: "Souls", capabilities: "Capabilities", teams: "Teams", sources: "Setup" };
+/** Home's overview opens a Workspace tab from the keyboard (slice 2): the page, on that tab, and the focus on its
+ * tab control, where it was a Home button the switch removed; so Esc, the page's way back to Home, is heard at once
+ * (stageHost's listener). Only while the page that open showed is still the stage, and only when focus has no place
+ * (on <body> or a hidden control): a choice made meanwhile keeps its own focus. */
+async function openWorkspaceTabFocused(tab, options) {
+  const op = stageOp;
+  await openWorkspaceSouls(tab, options);
+  if (stage?.name !== "spawn" || tabLayerVisible || (stageOp !== op && stageOp !== op + 1)) return;
+  const active = document.activeElement;
+  if (active && active !== document.body && isShown(active)) return;
+  const control = document.getElementById(`workspace-tab-${tab}`);
+  if (control && isShown(control)) control.focus();
+  else focusRegions.focusRegion("main");
+}
+
+async function openWorkspaceSouls(tab = "souls", options = undefined) {
   const selectionOwns = tabOpenIntents.begin();
   const owns = () => selectionOwns() && ![...document.querySelectorAll('[aria-modal="true"]')]
     .some(dialog => !dialog.closest("[hidden]"));
@@ -2466,7 +2766,7 @@ async function openWorkspaceSouls(tab = "souls") {
     return;
   }
   if (!owns()) return;
-  mod.preselectWorkspaceTab(tab);
+  mod.preselectWorkspaceTab(tab, options);
   await showStage("spawn");
 }
 
@@ -2484,7 +2784,7 @@ const palette = createPalette({
     const recent = instanceRecency.snapshot(ws);
     const p = await api(`/api/panel${ws ? `?ws=${encodeURIComponent(ws)}` : ""}`);
     // One snapshot: the palette sections and clusters by these deployments, as the sidebar does.
-    return { instances: p.instances || [], deployments: panelDeployments(p), recent };
+    return { instances: p.instances || [], deployments: panelDeployments(p), recent, pins: pinsShown() };
   },
   // A held home (spawning, retiring, left half cleaned) opens nothing from here either, as its roster row does not:
   // the row as this window reads it (its own retires in flight held), said as the row says it.
@@ -2495,24 +2795,35 @@ const palette = createPalette({
   // app.chooseSoul and roster.openNext / openPrevious; the footer names them.
   groupKey: (e) => paletteGroupDirection(e, isMac),
   footer: paletteGroupHint(isMac),
+  // The souls group (slice 4): "New agent: <soul>", from the Spawn view's roster of souls; a pick opens the New agent
+  // form on that soul (openNewAgent).
+  loadSouls: async () => {
+    if (windowState() === "choosing") return { agents: [] }; // no workspace: nothing to read (#481)
+    const ws = currentWorkspace();
+    return api(`/api/agents${ws ? `?ws=${encodeURIComponent(ws)}` : ""}`);
+  },
+  onSoul: (soul) => openNewAgent(soul),
+  // The sections group (slice 4): the pages, from the nav manifest so a new rail destination can never be
+  // palette-invisible (review 8441961 nit), then each tab of the Workspace page, then Connections.
+  sections: () => [
+    ...[...NAV, ...NAV_TABS].map((v) => ({ label: v.label, detail: chordDetail(`stage.${v.name}`), run: () => showStageFocused(v.name) })),
+    ...["souls", "capabilities", "teams", "sources"].map((tab) => ({ label: `Workspace › ${WORKSPACE_TAB_NAMES[tab]}`, run: () => openWorkspaceSouls(tab) })),
+    { label: "Connections", detail: "GitHub CLI accounts on this machine", run: () => openConnections() },
+  ],
   commands: [
-    // View commands derive from the nav manifest so a new rail destination
-    // can never be palette-invisible (review 8441961 nit).
-    ...[...NAV, ...NAV_TABS].map((v) => ({ label: `View: ${v.label}`, detail: chordDetail(`stage.${v.name}`), run: () => showStageFocused(v.name) })),
     { label: "Souls: choose a soul to spawn (Workspace › Souls)", detail: chordDetail("app.chooseSoul"), run: () => runAction("app.chooseSoul") },
-    { label: "Souls: quick open…", detail: chordDetail("app.quickOpenSouls"), run: () => runAction("app.quickOpenSouls") },
     { label: "File: open read-only…", detail: chordDetail("app.openFile"), run: () => runAction("app.openFile") },
+    // The Appearance sheet (slice 4), by its name and by what it holds: Theme: choose… and Font: choose… open it there.
+    { label: "Appearance…", detail: chordDetail("app.themePicker"), run: () => runAction("app.themePicker") },
     { label: "Theme: choose…", detail: chordDetail("app.themePicker"), run: () => runAction("app.themePicker") },
-    { label: "Theme: cycle White / Solarized / Dark / This computer", detail: chordDetail("app.themeToggle"), run: () => toggleTheme() },
+    { label: "Theme: cycle Light / Solarized / Dark / System", detail: chordDetail("app.themeToggle"), run: () => toggleTheme() },
     ...THEMES.map(({ id, label }) => ({ label: `Theme: ${label}`, detail: chordDetail(`app.theme.${id}`), run: () => runAction(`app.theme.${id}`) })),
     { label: "Font: choose…", detail: chordDetail("app.fontPicker"), run: () => runAction("app.fontPicker") },
-    { label: "Shortcuts: edit keyboard shortcuts…", detail: chordDetail("app.shortcuts"), run: () => openShortcutsEditor() },
-    { label: "Settings: Connections…", detail: "GitHub CLI accounts on this machine", run: () => openConnections() },
+    { label: "Keyboard shortcuts…", detail: chordDetail("app.shortcuts"), run: () => openShortcutsEditor() },
+    { label: "Keyboard: show the help sheet when the leader is pressed (on / off)", run: () => {
+      const on = !leaderHelpEnabled(); setLeaderHelpEnabled(on); statusLine.say(on ? "The help sheet shows when the leader is pressed." : "The help sheet no longer shows when the leader is pressed; the leader then ? still pins it.");
+    } },
     { label: "Workspace: switch…", detail: chordDetail("app.workspaces"), run: () => focusWorkspaceList() },
-    // The palette hands focus to its command: back where it was opened first (a row the toggle hides then passes it to
-    // the current row; a terminal keeps it), then the toggle, as its chord does from there.
-    { label: "Workspaces: show only the current workspace (on / off)", detail: chordDetail("workspaces.currentOnly"),
-      run: () => { takePickerFocusReturn(document)?.restore(); runAction("workspaces.currentOnly"); } },
     // One window per workspace (#481): on macOS also File → New Window ⌘⇧N; elsewhere no default chord.
     ...(typeof desktopBridge.windowOpenWorkspace === "function" ? [{ label: "Window: new window",
       detail: () => chordDetail("app.newWindow")() || (isMac ? formatChord("Mod+Shift+N", true) : ""), run: () => runAction("app.newWindow") }] : []),
@@ -2522,6 +2833,13 @@ const palette = createPalette({
     // selected.") the focus stays there, never on <body>; the dialog returns to it when it closes.
     { label: "Instance: name and colour…", detail: chordDetail("instance.edit"),
       run: () => { takePickerFocusReturn(document)?.restore(); openInstanceEdit(paletteTargetId); } },
+    { label: "Agent: mail", detail: chordDetail("instance.mail"),
+      run: () => { takePickerFocusReturn(document)?.restore(); openInstanceMail(paletteTargetId); } },
+    // Pin to top / Unpin (feature instance-pin): listed only where the leader's target offers it, as its row menu does.
+    // Named with D3's noun ("Agent: Pin to top"), from DESKTOP_NOUNS, as the slice 4 palette's own rows are.
+    ...Object.entries(PIN_LABELS).map(([action, label]) => ({ label: `${DESKTOP_NOUNS.instance[0].toUpperCase()}${DESKTOP_NOUNS.instance.slice(1)}: ${label}`,
+      when: () => pinTargetOffer(paletteTargetId) === action,
+      run: () => { takePickerFocusReturn(document)?.restore(); runPinCommand(paletteTargetId, action); } })),
     { label: "Sidebar: toggle (hide/show)", detail: chordDetail("sidebar.toggle"), run: () => toggleSidebar() },
     { label: "Sidebar: reset width", detail: chordDetail("sidebar.resetWidth"), run: () => runAction("sidebar.resetWidth") },
     { label: "Instance panel: show / hide", detail: chordDetail("panel.toggle"), run: () => runAction("panel.toggle") },
@@ -2533,31 +2851,22 @@ const palette = createPalette({
     { label: "Terminal: focus the active terminal input", detail: chordDetail("terminal.focusActive"), run: () => focusActiveTerminal() },
     { label: "Terminal: increase font size", detail: chordDetail("terminal.fontBigger"), run: () => setTerminalFontSize(terminalTypography().fontSize + 1) },
     { label: "Terminal: decrease font size", detail: chordDetail("terminal.fontSmaller"), run: () => setTerminalFontSize(terminalTypography().fontSize - 1) },
-    { label: "Terminal: set font family…", run: () => {
-      const current = terminalTypography().fontFamily;
-      const next = window.prompt("Terminal font family (CSS font-family value)", current);
-      if (next !== null) setTerminalFontFamily(next);
-    } },
+    // Electron has no window.prompt: the Appearance sheet's family field (slice 4).
+    { label: "Terminal: set font family…", run: () => appearance.open({ focus: "family" }) },
     { label: "Terminal: reset typography", detail: chordDetail("terminal.fontReset"), run: () => resetTerminalTypography() },
   ],
 });
 
-// ── Quick Open for souls (⌘P / Ctrl+Alt+P): find a soul, open its spawn dialog ──
-// Selection hands off to Workspace (preselectSpawn — consumed by the view's
-// next roster paint): the spawn dialog scoped to that soul, exactly as its
-// card's Spawn opens it. A soul that can't be spawned here (attached only,
-// refused, no verified CLI) opens its page instead, which says why.
-// Dismissing the dialog returns to where the operator was before Quick Open
-// (surface-return.mjs). Terminal policy (documented): app.quickOpenSouls is
-// terminal-allowlisted — ⌘P on macOS, Alt+P on Linux/Windows (ESC P: Esc, then P), or
+// ── Quick Open, folded into the palette (the Desktop UI rework, slice 4): its souls group ("New agent: <soul>") and
+// Alt+P (app.quickOpenSouls, which opens the palette on its souls, "+").
+// Picking a soul opens the New agent form on it: today the spawn dialog for that soul (soulSpawn below), scoped as its
+// card's Spawn opens it; slice 5's form takes this one call (openNewAgent). Terminal policy (documented):
+// app.quickOpenSouls is terminal-allowlisted — ⌘P on macOS, Alt+P on Linux/Windows (ESC P: Esc, then P), or
 // Ctrl+Alt+P (ESC Ctrl+P) in that family; plain Ctrl+P stays the shell's history.
-const quickOpen = createQuickOpen({
-  loadSouls: async () => {
-    const ws = currentWorkspace();
-    return api(`/api/agents${ws ? `?ws=${encodeURIComponent(ws)}` : ""}`);
-  },
-  onPick: (soul) => soulSpawn.open(soul),
-});
+// The palette's command for the souls, named with the agent noun (DESKTOP_NOUNS), after the list it joins.
+palette.commands.push({ label: `New ${DESKTOP_NOUNS.instance}: choose a soul…`, detail: chordDetail("app.quickOpenSouls"), run: () => runAction("app.quickOpenSouls") });
+/** Open the New agent form on `soul` ({ name, agentsRoot, server? }). The one place slice 5's form plugs in. */
+function openNewAgent(soul) { return soulSpawn.open(soul); }
 /** Quick Open's pick path: the spawn dialog for `soul`, scoped as its card's Spawn opens it (a soul
  * that can't be spawned here opens its page, which says why); dismissing it returns to where the
  * operator was. The leader's N takes it for the target instance's soul (`onMiss`: no such soul). */
@@ -2583,18 +2892,16 @@ const soulSpawn = {
 // Both pickers contain workspace-scoped references. Close synchronously on
 // every workspace visit; their own lifetimes discard late lists and row clicks.
 onWorkspaceChange(() => {
-  quickOpen.close();
   palette.close();
 });
 
-// ── shortcuts editor (the settings cog's Keyboard shortcuts… + palette + Mod+,) ────────────
+// ── shortcuts editor (the foot's ?, the palette's Keyboard shortcuts… and Mod+,) ────────────
 const shortcutsEditor = createKeybindingsEditor({ doc: document, isMac, chordFamily });
 // Stored rebinds vs the effective keymap (spec F review): a clash is never resolved silently;
-// the settings cog and its Keyboard shortcuts… item carry a warn dot and a description until the operator rebinds or resets.
+// the foot's ? carries a warn dot and a description until the operator rebinds or resets.
 function markShortcutClashes() {
   const clashes = keymapConflicts(isMac).length;
-  const item = settingsMenu.items.find(el => el.dataset.menuAction === "app.shortcuts");
-  for (const button of [document.getElementById("sidebar-settings"), item]) {
+  for (const button of [document.getElementById("sidebar-help")]) {
     if (!button) continue;
     button.classList.toggle("has-clash", clashes > 0);
     if (clashes) button.setAttribute("aria-description", `${clashes === 1 ? "1 shortcut you set clashes" : `${clashes} shortcuts you set clash`} with another: open Keyboard shortcuts… to review`);
@@ -2638,13 +2945,14 @@ const connections = createConnections({ doc: document, desk,
 });
 function openConnections(choice = {}) { tabOpenIntents.invalidate(); lifecycleDialog.close(); shortcutsEditor.close(); connections.open(choice); }
 window.addEventListener('pagehide', () => connections.dispose(), { once: true });
+const lifecycleRequest = async (workspace, body) => {
+  const response = await desk.api(`/api/instance-lifecycle?ws=${encodeURIComponent(workspace)}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  return response.body; // retain typed unknown outcomes even on proxy transport failures
+};
 const lifecycleDialog = createLifecycleDialog({ doc: document,
-  request: async (workspace, body) => {
-    const response = await desk.api(`/api/instance-lifecycle?ws=${encodeURIComponent(workspace)}`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-    });
-    return response.body; // retain typed unknown outcomes even on proxy transport failures
-  },
+  request: lifecycleRequest,
   gitRequest: (workspace, body) => api(`/api/instance-git?ws=${encodeURIComponent(workspace)}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   }),
@@ -2671,7 +2979,12 @@ function lifecycleFallbackFocus() {
   for (const r of listEl.querySelectorAll('.ctx-inst[tabindex="0"], .ctx-background-toggle[tabindex="0"]')) r.tabIndex = -1;
   row.tabIndex = 0; return row;
 }
+/** Stop or Retire `instance`: its plan-backed dialog, a sheet. */
 function openLifecycleDialog(operation, instance, workspace) {
+  // Above the tested bound (#1879) Stop and Remove are held back: every path that would open the dialog (the
+  // controls, the menu, a key) says the notice instead, and nothing is planned. The backend refuses it too.
+  const heldBack = cliHeldBack("POST /api/instance-lifecycle plan");
+  if (heldBack) { notifications.notify(heldBack); return; }
   connections.close(); shortcutsEditor.close();
   const order = [...(contextRosterEl?.querySelectorAll(".ctx-list .ctx-inst") || [])].map(r => r.dataset.treeInstance);
   lifecycleRowOrder = { order, at: order.indexOf(instanceId(instance)) };
@@ -2711,6 +3024,9 @@ function forgetNextFocus() {
 }
 function openForgetDialog(instance, workspace) {
   if (workspace !== currentWorkspace() || forgetDialog.busy()) return;
+  // Above the tested bound (#1879) Forget is held back: the notice instead of the dialog. The backend refuses it too.
+  const heldBack = cliHeldBack("POST /api/server-forget");
+  if (heldBack) { notifications.notify(heldBack); return; }
   connections.close(); shortcutsEditor.close(); lifecycleDialog.close();
   const order = [...(contextRosterEl?.querySelectorAll(".ctx-list .ctx-inst") || [])].map(r => r.dataset.treeInstance);
   forgetRowOrder = { order, at: order.indexOf(instanceId(instance)) };
@@ -2727,6 +3043,26 @@ const instanceColorDialog = createInstanceColorDialog({ doc: document,
   generation: workspaceGeneration, subscribeWorkspace: onWorkspaceChange,
   onIntent: () => tabOpenIntents.invalidate(), applyFocus: fn => tabOpenIntents.applyFocus(fn),
 });
+/** The pin item the instance `id` names (leaderTargetId) offers, as its row menu does: "pin-on", "pin-off", or null
+ * (no such row, a row that offers no act of a client's own, a stale one, or no feature where it lives). */
+function pinTargetOffer(id) {
+  const instance = rosterInstance(id);
+  if (!instance || rosterStale || rowStale(instance, contextDeployments)) return null;
+  const offer = desktopActs(instance);
+  if (offer.blocked || offer.limited) return null;
+  return pinMenu.items(instance)[0]?.action ?? null;
+}
+/** Runs Pin to top / Unpin for the instance `id` names, from the palette; a failure is said as the row menu says it. */
+async function runPinCommand(id, action) {
+  const instance = rosterInstance(id);
+  if (!instance || pinTargetOffer(id) !== action) { sayInHint("No instance is focused or selected."); return; }
+  const ws = currentWorkspace(), generation = workspaceGeneration();
+  try { await pinMenu.run(action, instance); }
+  catch (error) {
+    if (currentWorkspace() !== ws || workspaceGeneration() !== generation) return;
+    notifications.notify(`${PIN_LABELS[action]} didn't finish for ${instance.instance}.`, { detail: error?.message || "" });
+  }
+}
 /** Opens it for the instance `id` names (leaderTargetId), as this window's roster shows it (its own retires in
  * flight held); with none, the hint says so. */
 function openInstanceEdit(id) {
@@ -2737,19 +3073,47 @@ function openInstanceEdit(id) {
   instanceColorDialog.open(instance, { held: held ? heldLine(held) : null });
 }
 window.addEventListener('pagehide', () => instanceColorDialog.dispose(), { once: true });
-// The settings cog's Theme…, the palette and the chord (app.themePicker) open it; a choice goes through setTheme,
-// so it is stored as a palette choice is.
-const themePicker = createThemePicker({ doc: document, themes: THEMES, current: currentTheme, choose: setTheme,
-  subscribe: onThemeChange, onIntent: () => tabOpenIntents.invalidate(), applyFocus: fn => tabOpenIntents.applyFocus(fn) });
-window.addEventListener('pagehide', () => themePicker.dispose(), { once: true });
-// The font picker (app.fontPicker, the palette's Font: choose…): the same picker over this platform's
-// fonts; a choice goes through setFont, stored per computer and applied in place (open terminals
-// switch family and refit through onTerminalTypographyChange, keeping their state).
-// Its rows are read at each open and on each font notification, so the Omarchy row's fallback note follows
-// the latest fontDraws verdict (fontFallsBack), not the one at start.
-const fontPicker = createFontPicker({ doc: document, fonts: () => fontChoices(navigator.platform.includes("Mac"), fontFallsBack()), current: currentFont, choose: setFont,
-  subscribe: onFontChange, onIntent: () => tabOpenIntents.invalidate(), applyFocus: fn => tabOpenIntents.applyFocus(fn) });
-window.addEventListener('pagehide', () => fontPicker.dispose(), { once: true });
+// The Appearance sheet (theme-picker.mjs; the Desktop UI rework, slice 4): the theme, the terminals' font and their
+// size in one sheet, from the palette, app.themePicker (on Theme) and app.fontPicker (on Font). A choice goes through
+// setTheme or setFont, stored per computer and applied in place (open terminals switch family and refit through
+// onTerminalTypographyChange, keeping their state). The font rows are read at each open and on each font
+// notification, so the monospace row's fallback note follows the latest fontDraws verdict (fontFallsBack).
+const appearance = createAppearanceSheet({ doc: document, themes: THEMES, currentTheme, chooseTheme: setTheme,
+  // A named font clears a family chosen by name first (it would win over it), the size untouched; while such a family
+  // is in effect, no named font is marked Current (customFamily).
+  fonts: () => fontChoices(navigator.platform.includes("Mac"), fontFallsBack()), currentFont, chooseFont: (id) => { setTerminalFontFamily(""); setFont(id); },
+  customFamily: () => terminalFamilyChosen(),
+  subscribe: fn => { const offs = [onThemeChange(fn), onFontChange(fn), onTerminalTypographyChange(fn)]; return () => offs.forEach(off => off()); },
+  terminalSize: () => createTerminalSettings({ doc: document, chords: { bigger: chordDetail("terminal.fontBigger")(),
+    smaller: chordDetail("terminal.fontSmaller")(), reset: chordDetail("terminal.fontReset")() } }),
+  // Choose…: a field of the sheet (Electron has no window.prompt); the palette's "Terminal: set font family…" opens it.
+  chooseFamily: (family) => setTerminalFontFamily(family),
+  currentFamily: () => terminalTypography().fontFamily,
+  onIntent: () => tabOpenIntents.invalidate() });
+window.addEventListener('pagehide', () => appearance.dispose(), { once: true });
+
+/* The agent's mail (S2-M3; mail-sheet.mjs): a read-only sheet from the right, for the leader's target, opened by its
+ * chord (instance.mail), the palette's entry and Details' Mail button. It reads only `messaging:mail`, through the
+ * capabilities route the Teams card uses, on open and on its own Refresh: never on the poll. */
+const mailSheet = createMailSheet({ doc: document,
+  request: (workspace, body) => api(`/api/capabilities?ws=${encodeURIComponent(workspace)}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  }),
+  generation: workspaceGeneration, subscribeWorkspace: onWorkspaceChange, cli: cliStatus,
+  heldBack: () => cliHeldBack('POST /api/capabilities run'),
+  onIntent: () => tabOpenIntents.invalidate(), applyFocus: fn => tabOpenIntents.applyFocus(fn),
+});
+/** Opens the mail sheet for the instance `id` names (leaderTargetId), as this window's roster shows it; with none,
+ * the hint says so. The sheet already open for it closes (the chord toggles). */
+function openInstanceMail(id) {
+  const instance = rosterInstance(id);
+  if (!instance) { sayInHint("No agent is focused or selected."); return; }
+  const open = mailSheet.current();
+  if (open && open.home === instance.home && open.server === (instance.server ?? null)) { mailSheet.close(); return; }
+  connections.close(); shortcutsEditor.close(); lifecycleDialog.close(); forgetDialog.close();
+  mailSheet.open(instance, rowDeployment(instance));
+}
+window.addEventListener('pagehide', () => mailSheet.dispose(), { once: true });
 
 /** The sidebar's way into the instances, never nothing (the roster's filter was that once): the roster's current
  * row (the roving stop), else its first row, else a control the roster shows (Retry, after a failed read), else, on
@@ -2766,6 +3130,34 @@ function rosterEntry() {
     // Spawn instance is in the foot, shown with the sidebar: it is the roster's way in only while the roster is.
     || (contextRosterEl && !contextRosterEl.hidden && spawn && !spawn.disabled ? spawn : null)
     || document.querySelector('#ws-options [tabindex="0"]') || document.getElementById("ws-add-open");
+}
+
+/** The foot's "N need you" (slice 1): focus the first row in the roster's order that needs you, itself, without
+ * opening it. The row is chosen from the model, in the order the roster paints it (its main tree's sections, groups
+ * and clusters, then the Background section's), with the gate the count uses (waitingClaim, the held-stale rule):
+ * so a row a held parent's collapse hides, which draws no roll-up, is found too. Then its section is opened and
+ * every collapsed ancestor expanded (its parent chain, by identity over the full roster), the list painted again,
+ * and the row focused. Nothing that waits: nothing moves. */
+function focusFirstNeedingYou() {
+  tabOpenIntents.invalidate();
+  const ws = contextWorkspace || currentWorkspace();
+  const instances = shownRows(contextInstances);
+  const stale = (row) => rosterStale || rowStale(row, contextDeployments);
+  const placement = backgroundPlacement(instances, backgroundShown());
+  const { main, background } = sidebarSections(instances, instances, contextDeployments, DESKTOP_TERMS, { placement, open: true, stale });
+  const ordered = [...main, ...(background?.sections ?? [])].flatMap((section) => section.groups.flatMap((group) => group.clusters.flatMap((cluster) => cluster.instances)));
+  const target = ordered.find((row) => waitingClaim(row, { stale: stale(row) }));
+  if (!target) return;
+  const id = instanceId(target);
+  if (placement.has(id)) backgroundOpen.add(ws);
+  for (let parent = rosterParentId(instances, id), seen = new Set(); parent && !seen.has(parent); parent = rosterParentId(instances, parent)) {
+    // Opened through the disclosure's own record (#1970): a root closed by default opens as one closed by hand does.
+    seen.add(parent); setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, collapseKey(ws, parent), true);
+  }
+  renderContextRoster(contextInstances);
+  const list = contextRosterEl?.querySelector(".ctx-list");
+  const row = [...(list?.querySelectorAll(".ctx-inst") ?? [])].find((el) => el.dataset.treeInstance === id);
+  if (row) setRovingRow(list, row);
 }
 
 /** sidebar.focusFilter, kept under its id (a keys.json rebind still applies) since the roster's filter went
@@ -2790,12 +3182,13 @@ function sidebarHidden() {
 }
 function updateSidebarControls() {
   const visible = !sidebarHidden() && !contextPanel.isFocusMode();
-  document.getElementById("sidebar-toggle").setAttribute("aria-expanded", String(visible));
-  // Show sidebar (Spec B) is shown only while the sidebar is away: it is always the collapsed side.
+  // Show sidebar (Spec B) is shown only while the sidebar is away: it is always the collapsed side. The sidebar has no
+  // toggle of its own (slice 1: Ctrl+Shift+B and the palette hide it), so a focused Show sidebar hands its focus to
+  // the roster's way in.
   const show = document.getElementById("show-sidebar");
   const focused = document.activeElement === show;
   show.hidden = visible;
-  if (visible && focused) document.getElementById("sidebar-toggle").focus();
+  if (visible && focused) rosterEntry()?.focus({ preventScroll: true });
 }
 function setSidebarHidden(on) {
   document.getElementById("app").classList.toggle("sidebar-hidden", on);
@@ -3077,7 +3470,15 @@ for (const [id, action, label] of [['instance.openSplit', 'open-split', 'Instanc
 /** The leader's target (leaderTargetId) where the palette was opened from: its instance entries act on it. */
 let paletteTargetId = null;
 registerAction({ id: "app.palette", label: "Open the command palette", context: "global", run: () => { tabOpenIntents.invalidate(); if (!palette.isOpen()) paletteTargetId = leaderTargetId(document.activeElement); palette.toggle(); } });
-registerAction({ id: "app.quickOpenSouls", label: "Quick open a soul to spawn", context: "global", run: () => { tabOpenIntents.invalidate(); quickOpen.toggle(); } });
+// New agent (Alt+N, the Desktop UI rework's key; decided 2026-11-19): what the foot's New agent and Alt+P do.
+registerAction({ id: "app.newAgent", label: `New ${DESKTOP_NOUNS.instance}`, context: "global", run: () => openPaletteOnSouls() });
+// New agent (slice 4): the palette on its souls ("+"); pressed again while it is open, it closes it.
+registerAction({ id: "app.quickOpenSouls", label: `New ${DESKTOP_NOUNS.instance}: choose a soul`, context: "global", run: () => openPaletteOnSouls() });
+function openPaletteOnSouls() {
+  tabOpenIntents.invalidate();
+  if (palette.isOpen()) { palette.close(); return; }
+  paletteTargetId = leaderTargetId(document.activeElement); void palette.open({ query: "+" });
+}
 registerAction({ id: "app.chooseSoul", label: "Souls: choose a soul to spawn (Workspace › Souls)", context: "global", run: () => openWorkspaceSouls() });
 registerAction({ id: "app.shortcuts", label: "Edit keyboard shortcuts", context: "global", run: () => openShortcutsEditor() });
 registerAction({ id: "app.connections", label: "Settings: Connections…", context: "global", run: () => openConnections() });
@@ -3094,15 +3495,14 @@ window.addEventListener("pagehide", () => { tabOpenIntents.invalidate(); unregis
   run: () => showStageFocused(v.name),
 }));
 // A held chord (key repeat) does nothing: it never opens and closes the picker over and over.
-registerAction({ id: "app.themePicker", label: "Choose a theme…", context: "global", run: (e) => { if (!e?.repeat) themePicker.toggle(); } });
-registerAction({ id: "app.fontPicker", label: "Font: choose…", context: "global", run: (e) => { if (!e?.repeat) fontPicker.toggle(); } });
-registerAction({ id: "app.themeToggle", label: "Cycle White / Solarized / Dark / This computer theme", context: "global", run: () => toggleTheme() });
+registerAction({ id: "app.themePicker", label: "Appearance…", context: "global", run: (e) => { if (!e?.repeat) appearance.toggle({ focus: "theme" }); } });
+registerAction({ id: "app.fontPicker", label: "Appearance: font…", context: "global", run: (e) => { if (!e?.repeat) appearance.toggle({ focus: "font" }); } });
+registerAction({ id: "app.themeToggle", label: "Cycle Light / Solarized / Dark / System theme", context: "global", run: () => toggleTheme() });
 // Explicit theme choices are rebindable, but add no default keyboard chords.
 THEMES.forEach(({ id, label }) => registerAction({
   id: `app.theme.${id}`, label: `Theme: ${label}`, context: "global", run: () => setTheme(id),
 }));
 registerAction({ id: "app.workspaces", label: "Focus the list of workspaces", context: "global", run: () => focusWorkspaceList() });
-registerAction({ id: "workspaces.currentOnly", label: "Show only the current workspace", context: "global", run: () => workspaceLabel.toggleCurrentOnly() });
 registerAction({ id: "sidebar.focusFilter", label: "Focus the instance roster", context: "global", run: () => focusRoster() });
 registerAction({ id: "sidebar.toggle", label: "Toggle the sidebar", context: "global", run: () => toggleSidebar() });
 registerAction({ id: "sidebar.resetWidth", label: "Reset the sidebar's width", context: "global", run: () => sidebarWidth.reset() });
@@ -3190,6 +3590,49 @@ function sayInHint(line) {
 }
 for (const type of ["keydown", "pointerdown", "focusin", "focusout"]) {
   window.addEventListener(type, () => { if (hintLineArmed && leaderHint.mode() === "line") { hintLineArmed = false; leaderHint.hide(); } }, true);
+}
+/** The status line's three keys for where the focus is (the Desktop UI rework, slice 4; guide v6 tour step 46: "The
+ * status line always keeps the three most useful keys"), from the live keymap: a key that is unbound is left out. */
+function statusKeys() {
+  const key = id => { const chord = getBinding(id, isMac); return chord ? formatChord(chord, isMac) : null; };
+  const region = focusRegions?.regionOfFocus?.() ?? null;
+  const inTerminal = !!document.activeElement?.closest?.(".xterm");
+  const page = workspacePageKeys(key);
+  const rows = page ? page
+    : region === "roster" ? [["Enter", "open"], [key("sidebar.key.stop"), "stop"], [key("app.palette"), "palette"]]
+    : region === "workspaces" ? [["Enter", "show"], ["↑↓", "move"], [key("app.palette"), "palette"]]
+    : inTerminal ? [[key("app.leader"), "prefix"], [key("tabs.close"), "close tab"], [key("app.palette"), "palette"]]
+    : [[key("app.palette"), "palette"], [key("app.leader"), "prefix"], [key("app.quickOpenSouls"), `new ${DESKTOP_NOUNS.instance}`]];
+  return rows.filter(([keys]) => keys).map(([keys, label]) => ({ keys, label }));
+}
+/** The Workspace page's own keys (the Desktop UI rework, slice 3c, as the prototype's status line): on Souls "↑↓ move ·
+ * Enter open · v table · Esc Home" (v grid in the table), on Capabilities the same without v, and on a soul's, a
+ * capability's or a team's page "↑↓ move · Enter open · Esc back". Only while that page is shown with the focus on it
+ * (or nowhere); null elsewhere, where the three of slice 4 stand. */
+function workspacePageKeys(key) {
+  if (stage?.name !== "spawn" || tabLayerVisible || !stage.el) return null;
+  const host = stage.el, active = document.activeElement;
+  if (active && active !== document.body && !host.contains(active)) return null;
+  const shown = selector => { const el = host.querySelector(selector); return el && !el.closest("[hidden]") ? el : null; };
+  if (shown(".workspace-soul-page") || shown(".workspace-cap-page") || shown(".workspace-team-page")) return [["↑↓", "move"], ["Enter", "open"], ["Esc", "back"]];
+  if (shown(".souls-grid")) {
+    const chord = key("spawn.view"), v = chord && /^[A-Z]$/.test(chord) ? chord.toLowerCase() : chord;
+    return [["↑↓", "move"], ["Enter", "open"], [v, host.querySelector(".souls-grid .souls-table") ? "grid" : "table"], ["Esc", "Home"]];
+  }
+  if (shown(".workspace-discovery")?.dataset.tab === "capabilities") return [["↑↓", "move"], ["Enter", "open"], ["Esc", "Home"]];
+  return null;
+}
+onKeymapChange(() => statusLine.refresh());
+/** The help sheet's title and rows (leader-hint.mjs showHelp): the leader's keys that apply where you are now. */
+function leaderHelp() {
+  const chord = getBinding("app.leader", isMac);
+  const state = leaderState();
+  const rows = supportedLeaderRows().filter(row => leaderApplies(row, state))
+    .map(row => ({ keys: rowKeysText(row, isMac), label: leaderLabel(row.does, actionLabel) }));
+  // D18: an input method may take Ctrl+Space before the window sees it; the Keyboard sheet switches the leader.
+  const shortcuts = getBinding("app.shortcuts", isMac);
+  const note = chord === DESKTOP_LEADER ? `If an input method takes ${formatChord(chord, isMac)}, choose ${formatChord(LEADER_CHOICES[1], isMac)} on Keyboard shortcuts${shortcuts ? ` (${formatChord(shortcuts, isMac)})` : ""}.` : "";
+  return { title: chord ? `After ${formatChord(chord, isMac)}` : "After the leader", rows, note };
 }
 /** What the window shows now, for the rows that apply (leader-keys.mjs leaderApplies). */
 function leaderState() {
@@ -3294,24 +3737,29 @@ const leaderDispatch = createLeaderDispatch({
   // A step made from the list of workspaces leaves the focus there (the operator is browsing workspaces with
   // the moves); from anywhere else, the workspace shown puts it back where it was there (focusArrival).
   workspaceStep: delta => workspaceLabel.step(delta, { focusPlace: focusRegions.regionOfFocus() !== "workspaces" }),
-  help: () => runAction("app.shortcuts"),
+  // The leader then ? pins the help sheet until Esc (D15); the Keyboard shortcuts sheet is Ctrl+, and the palette's.
+  help: () => leaderHint.showHelp({ ...leaderHelp(), pinned: true }),
   list: () => {
     if (sidebarHidden() || contextPanel.isFocusMode()) runAction("sidebar.toggle");
     tabOpenIntents.invalidate();
     focusRegions.focusRegion("roster");
   },
   refresh: () => { void refreshContextRoster({ user: true }); },
+  sidebar: () => runAction("sidebar.toggle"),
 });
 const leader = createLeader({ win: window, isMac, modalOpen,
   // A key the Desktop has no operation for (m) cancels, as one outside the table does. A key whose row
   // does not apply now (nothing to split, no terminal) settles, and its line says why.
   supports: does => leaderDispatch.supports(does),
-  onOpen: () => leaderHint.announce(),
-  onClose: () => { if (leaderHint.mode() === "wait") leaderHint.hide(); },
+  onOpen: () => { leaderHint.announce(); if (leaderHelpEnabled() && leaderHint.helpMode() !== "pinned") leaderHint.showHelp(leaderHelp()); },
+  onClose: () => { if (leaderHint.mode() === "wait") leaderHint.hide(); if (leaderHint.helpMode() === "wait") leaderHint.hideHelp(); },
   // The target is read at the key, not when the leader was pressed: whatever moved focus meanwhile is what the user sees.
   onSettle: does => { const why = notApplicable(does); if (why) sayInHint(why); else leaderDispatch.run(does, leaderOrigin(document.activeElement)); },
 });
 window.addEventListener("pagehide", () => leader.dispose(), { once: true });
+// A pinned help sheet stays until Esc, pressed anywhere (not under a modal, nor while the leader waits).
+const offHelpEscape = leaderHint.closeOnEscape(window, () => modalOpen() || leader.isWaiting());
+window.addEventListener("pagehide", () => offHelpEscape(), { once: true });
 // The chord, from every focus, a terminal's and an editable field's included. Under a modal dialog
 // or the palette it is not there at all (`when`): the key goes where it goes without it.
 registerAction({ id: "app.leader", label: "Leader: the commands that follow one key", context: "global", when: () => !modalOpen(),
@@ -3325,7 +3773,7 @@ function runAsLeaderKey(does, e) {
 }
 // The sidebar's plain keys (the TUI's, shared PLAIN_KEYS): one action per key, the same `does` as
 // the leader's, acting on the focused roster row (on a nav or heading control: the selected row).
-for (const { id, does } of SIDEBAR_KEYS) {
+for (const { id, does } of [...SIDEBAR_KEYS, SIDEBAR_DELETE]) {
   registerAction({ id, label: leaderLabel(does, actionLabel), context: "sidebar", run: (e) => runAsLeaderKey(does, e) });
 }
 // The previous / next instance, the previous / next workspace and the leader's z on chords (the shared
@@ -3341,12 +3789,16 @@ for (const [id, does] of [["roster.openPrevious", "previous"], ["roster.openNext
 // every focus, a terminal's included. Inert under a modal dialog or the palette, as the leader is.
 registerAction({ id: "instance.edit", label: "Instance: name and colour…", context: "global", when: () => !modalOpen(),
   run: (e) => openInstanceEdit(leaderTargetId(e?.target ?? document.activeElement)) });
+// The agent's mail (CHORDS mail): the leader's target, from every focus, a terminal's included. Inert under any other
+// modal dialog or the palette; with the mail sheet open the chord closes it.
+registerAction({ id: "instance.mail", label: "Agent: mail", context: "global", when: () => !modalOpen() || mailSheet.isOpen(),
+  run: (e) => { if (mailSheet.isOpen()) { mailSheet.close(); return; } openInstanceMail(leaderTargetId(e?.target ?? document.activeElement)); } });
 
 // Chord-suffixed tooltips, live against the keymap: any control that
 // declares data-action gets “ … (chord)” appended to its base title.
 const baseTitles = new WeakMap();
 function applyChordTitles() {
-  settingsMenu.refresh();
+  for (const el of document.querySelectorAll("[data-empty-roster]")) el.textContent = emptyRosterLine();
   for (const el of document.querySelectorAll("[data-action]")) {
     if (!baseTitles.has(el)) baseTitles.set(el, el.title || "");
     const chord = getBinding(el.dataset.action, isMac);
@@ -3363,10 +3815,28 @@ onKeymapChange(() => applyChordTitles());
 applyChordTitles();
 
 // A launch's --instance (launch-focus.mjs): its row is selected as "show in roster" selects it, once an observed
-// roster read lists it, unless the person chose something first. Only selects: no terminal opens, nothing starts.
+// roster read lists it, unless the person chose something first. Running rows open through the click's path,
+// keeping keyboard focus on the roster. Other rows select only; a launch never starts an instance.
 const launchFocus = createLaunchFocus({
   watch: () => tabOpenIntents.watch(), operator,
   select: (row) => showInRoster(row, { read: false }),
+  open: async (row, valid) => {
+    const selected = showInRoster(row, { read: false });
+    // showInRoster selects synchronously with read:false, invalidating the previous ticket itself.
+    let owns = tabOpenIntents.watch();
+    try {
+      if (!await selected || !owns() || !valid()) return;
+      if (heldHome(shownRows([row])[0]) || rosterStale || rowStale(row, contextDeployments) || !canAddressRemote(row)) return;
+      const target = instanceActionTarget(currentWorkspace(), row);
+      if (!target) return;
+      const opening = openTerminalTab(row, { expected: target, valid, followed: true, focusContent: false });
+      // The opener begins its own selection intent; failures belong to that intent from here on.
+      owns = tabOpenIntents.watch();
+      await opening;
+    } catch (error) {
+      if (owns() && valid()) alert(error?.message || String(error));
+    }
+  },
   notify: (text) => notifications.notify(text),
 });
 window.addEventListener('pagehide', () => launchFocus.dispose(), { once: true });
@@ -3413,7 +3883,8 @@ function closeWorkspaceTabs(taken) {
 /** A take-over's layout (layout-handover.mjs), handed over by the window the workspace came from: its terminals
  * opened here again (fresh viewers; the agents keep running) and laid out as they were, under ONE intent ticket, so
  * any selection made meanwhile (a click, a key, another open) supersedes what is left of it, as does a switch or a new
- * connection. A terminal that no longer resolves in this workspace's roster, or no longer runs, is left out, as a
+ * connection. A terminal that no longer resolves in this workspace's roster, no longer runs, or whose row now runs
+ * on a session provider (resolveTerminalOpen answers it no-terminal) is left out, quietly, as a
  * stale memory's is (workspace-tab-memory.mjs recall). A layout off the descriptor's shape (main refuses one; this
  * is the backstop) restores nothing, and throws nothing. */
 async function restoreHandedLayout(ws, layout) {
@@ -3486,7 +3957,7 @@ function restoreWorkspaceTabs() {
     activateTab(restored.activeTab, { keepGroupFocus: true });
   } else {
     setSidebarMode(stageSidebarMode(stage?.name));
-    setNavActive(stage?.name || "spawn");
+    setNavActive(stage?.name || "home");
   }
   updateContextTabs();
   focusArrival(restored.place ?? null);
@@ -3509,6 +3980,7 @@ function rehomeWorkspaceState(workspaces) {
   workspaceTabMemory.rehome(map);
   focusPlaces.rehome(map);
   rehomeCollapsed(collapsedInstances, map);
+  rehomeCollapsed(expandedInstances, map);
   // #1579: an open Background section follows its view, as its collapsed rows do.
   const openMoved = [...backgroundOpen].filter((id) => map.has(id));
   for (const id of openMoved) backgroundOpen.delete(id);
@@ -3550,5 +4022,5 @@ import("./views/cli-status.mjs").then(({ refreshCli, reprobeCli }) => {
   desk.onAppFocus?.(() => reprobeCli(ctx));
 });
 
-// Home surface: the Workspace page (Workspace overview), on Souls, when no instance is open (the product owner, 2026-10-23).
-showStage("spawn");
+// The landing surface: Home (the Desktop UI rework, slice 2; before it, the Workspace page, 2026-10-23).
+showStage("home");

@@ -54,7 +54,7 @@ export async function mountSpawn(t, options = {}) {
   globalThis.document = dom.window.document; globalThis.window = dom.window;
   const polls = []; globalThis.setInterval = fn => { polls.push(fn); return 0; };
   // The f3 previews are `--purpose` captures, and a dialog types a purpose to choose one: on a CLI with spawn-name a
-  // typed name goes as `--name <typed>-<role>` instead, which no capture ran. So the host drops spawn-name (the older
+  // typed name goes as `--name <typed>` instead, which no capture ran. So the host drops spawn-name (the older
   // kernel's path, a purpose) unless a test asks for the naming path with options.spawnName; u.setCli() too, so a CLI
   // swapped in mid-test never moves the dialog from one path to the other.
   const naming = value => options.spawnName || !Array.isArray(value?.features) ? value : { ...value, features: value.features.filter(f => f !== 'spawn-name') };

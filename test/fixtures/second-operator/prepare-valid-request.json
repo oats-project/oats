@@ -5,7 +5,7 @@
     "kind": "operator",
     "document": {
       "kind": "operator",
-      "id": "juan-p15-acceptance"
+      "id": "alex-p15-acceptance"
     },
     "pointer": "/source"
   },
@@ -15,7 +15,7 @@
       "kind": "operator",
       "document": {
         "kind": "operator",
-        "id": "juan-p15-acceptance"
+        "id": "alex-p15-acceptance"
       },
       "pointer": "/workspace"
     }
@@ -26,7 +26,7 @@
       "kind": "operator",
       "document": {
         "kind": "operator",
-        "id": "juan-p15-acceptance"
+        "id": "alex-p15-acceptance"
       },
       "pointer": "/member"
     }
@@ -35,7 +35,7 @@
     "policy": {},
     "document": {
       "kind": "operator",
-      "id": "juan-p15-acceptance"
+      "id": "alex-p15-acceptance"
     },
     "bindings": {
       "stores.oats": {

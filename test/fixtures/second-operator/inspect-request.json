@@ -4,14 +4,14 @@
   "source": "oats-kernel-expert",
   "origin": {
     "kind": "operator",
-    "document": { "kind": "operator", "id": "juan-p15-acceptance" },
+    "document": { "kind": "operator", "id": "alex-p15-acceptance" },
     "pointer": "/source"
   },
   "workspace": {
     "source": "git:github.com/awebai/oats",
     "origin": {
       "kind": "operator",
-      "document": { "kind": "operator", "id": "juan-p15-acceptance" },
+      "document": { "kind": "operator", "id": "alex-p15-acceptance" },
       "pointer": "/workspace"
     }
   },
@@ -19,7 +19,7 @@
     "source": "git:github.com/awebai/oats",
     "origin": {
       "kind": "operator",
-      "document": { "kind": "operator", "id": "juan-p15-acceptance" },
+      "document": { "kind": "operator", "id": "alex-p15-acceptance" },
       "pointer": "/member"
     }
   }

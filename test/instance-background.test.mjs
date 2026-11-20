@@ -260,11 +260,15 @@ test("oats instance background refuses a bad value, resolves as instance color d
   const fx = v2Deployment({ t });
   const spawned = okResult(fx.cli(["spawn", "dev", "--purpose", "r", "--no-launch", "--json"]), "spawn");
   const name = spawned.instance;
-  for (const [argv, what] of [[[name], "neither"], [[name, "yes"], "not on|off"], [[name, "on", "off"], "two"], [[name, "ON"], "case"]]) {
+  for (const [argv, what] of [[[name], "neither"], [[name, "yes"], "not on|off"], [[name, "ON"], "case"]]) {
     const e = refused(fx.cli(["instance", "background", ...argv, "--json"]), what);
     assert.equal(e.code, "E_BAD_ARGS", what);
     assert.match(e.message, /^give on or off; usage: oats instance background <instance> on\|off/, what);
   }
+  // Two words: the argument after the state, refused before the command runs (lib/command-flags.mjs).
+  const two = refused(fx.cli(["instance", "background", name, "on", "off", "--json"]), "two");
+  assert.equal(two.code, "E_BAD_ARGS", "two");
+  assert.match(two.message, /^oats instance background: unexpected argument "off" after the state "on": instance background takes one instance and one state\nusage: oats instance background <instance> on\|off/, "two");
   // Resolution: what `oats instance color` answers.
   const colorCode = (argv) => refused(fx.cli(["instance", "color", ...argv, "sage", "--json"]), `color ${argv}`).code;
   const backgroundCode = (argv) => refused(fx.cli(["instance", "background", ...argv, "on", "--json"]), `background ${argv}`).code;

@@ -4,7 +4,8 @@ description: >-
   The way into OATS (Open Agent Team Specification) for a person who has only
   a coding agent. Asks about their project, installs OATS, OATS Desktop and
   the messaging CLI, creates the workspace's messaging account and team (with
-  no sign-in, or on the person's own account if they sign in), writes a new
+  no sign-in, on the person's own account if they sign in, or on their own
+  aweb server), writes a new
   workspace's skeleton (or joins this machine to an existing workspace),
   spawns the workspace's setup expert, which does the rest, and opens the
   Desktop on it. Offers the TUI.
@@ -33,7 +34,8 @@ A **workspace** is one Git repository declaring which repositories belong to
 an organisation and which packages it trusts. A **soul** is a durable agent
 role defined in Git; an **instance** is a soul at work, in its own home and
 terminal. A new workspace's setup expert is `oats.framework`'s soul
-`oats-setup-expert` (capabilities `oats.setup` and `oats.onboarding`),
+`oats-setup-expert` (capabilities `oats.setup` and `oats.onboarding`, and
+`oats.coordination-setup` from oats.framework 1.23.0),
 spawned as `<workspace>-oats-setup-expert`.
 
 **A machine found-list** is a JSON file in your prompt whose
@@ -81,7 +83,10 @@ costs the person a round. After that yes, nothing more is asked.
 - **One yes covers the changes to their computer.** Step 1's message lists
   them in plain words, and their yes covers every one: don't ask again step
   by step. The list, from step 2's checks: the tools you install (on Linux
-  per user, under `~/.local`; on macOS with Homebrew), the line that puts
+  per user, under `~/.local`; on macOS with Homebrew), on their own aweb
+  server (step 1) `aw` at the version this OATS release was tested with on
+  such a server, when none is installed or the installed one is older (a
+  newer one is kept), the line that puts
   them on their PATH in their shell's startup file (`~/.local/bin` on Linux;
   on macOS, Homebrew's `brew shellenv` line, only when Homebrew is new), the
   aweb channel plugin in Claude (Claude only) or pi's aweb extension,
@@ -204,10 +209,10 @@ the final values in one short message before you go on. The rules:
   - New: the **workspace name**: lowercase letters and digits, words joined
     by single `-` (`^[a-z0-9]+(?:-[a-z0-9]+)*$`), for example `acme`. Refuse
     `agents`: OATS keeps instance homes in a folder of that name. Default:
-    their project's name (its repository's, or its folder's), normalised as
-    in the machine's round, with repeated `-` collapsed and a leading or
-    trailing `-` dropped (`My_App_` gives `my-app`); with no project, ask
-    for a name.
+    their project's name: its repository's name when it has one, else its
+    folder's (the repository's wins when they differ), normalised as in the
+    machine's round, with repeated `-` collapsed and a leading or trailing
+    `-` dropped (`My_App_` gives `my-app`); with no project, ask for a name.
 - **New workspace: the host,** the one repository that holds the
   workspace's files:
   - **One repository (a monorepo):** that repository, the files at its root;
@@ -234,6 +239,31 @@ the final values in one short message before you go on. The rules:
   - Tell them they attach themselves to that account later in the setup, with
     the setup expert. Only if they want the team on their own aweb account
     now, they sign in to it in their browser in step 5 instead.
+  - **Hosted aweb, or their own aweb server?** The line says "on aweb's
+    hosted service, unless you run your own aweb server"; hosted is the
+    default. Keep its second half in your own words too: it is how a
+    person with their own server learns this branch exists. With their own
+    server, the same round asks three things, none of them secret: the
+    namespace domain `ND` they control (for example
+    `agents.acme.com`, written in lowercase), the server's public address
+    `U` (`https://…`, the API URL their server gives its users), and whether
+    their server uses the public AWID registry. Answers given in the prompt
+    that started you are used without asking. When it uses a private
+    registry, ask its address too, the registry origin `RG` (`https://…`,
+    the scheme and host only, with no path), also not a secret. Step 9
+    records it for this deployment. Then tell them, in
+    plain words, what must already be in place on their side, since you
+    make none of it: the namespace's controller key on this computer, for
+    this computer account; the `_awid.ND` DNS record published for that
+    key; and their server reachable at `U`. On a private registry, that
+    record must name their registry: a key prepared without
+    `--registry RG` gives a record for the public registry, so tell them
+    to check that its value carries `registry=RG`. Step 9
+    checks them, read-only. On their own server there is no account `N` and
+    no step 5: the team is `<workspace>:ND`, created in step 9 in their
+    namespace, and `A` is `<workspace>-root` as on hosted. Never offer it on
+    a machine found-list, or for an existing workspace: its invite carries
+    the team and the server.
 - **The harness for the setup expert:** `claude`, `codex` or `pi`. Default:
   the one you are, if it is one of these.
 - **The deployment directory `D`:** where OATS lives on this machine.
@@ -352,7 +382,7 @@ On Linux x64, also check the Desktop's system libraries, ALSA and FUSE 2
 for l in libasound.so.2 libfuse.so.2; do PATH="$PATH:/sbin:/usr/sbin" ldconfig -p | grep -q "$l" || echo "MISSING $l"; done
 ```
 
-- **Versions:** Node 22 or later; Git 2.45 or later recommended (partial
+- **Versions:** Node 22.5 or later; Git 2.45 or later recommended (partial
   caches; older Git works with whole-tree fetches); `gh` 2.49 or later
   (step 3 uses `gh attestation`).
 - **The harness** they chose must be installed and logged in (`claude
@@ -399,18 +429,26 @@ for l in libasound.so.2 libfuse.so.2; do PATH="$PATH:/sbin:/usr/sbin" ldconfig -
   whole-tree fetches, and go on.
 - **npm's global folder** must be writable for step 4's installs
   (`test -w "$(npm prefix -g)/lib"`). If it is not (a system Node under
-  `/usr`, as NodeSource installs it), set a per-user prefix,
-  `npm config set prefix ~/.local`, as step 1's list said (when Node will
-  come from NodeSource, the list names the per-user folder and its PATH
-  line). Then start each later command of yours with
-  `export PATH="$HOME/.local/bin:$PATH"`, and add that line to their shell's
-  startup file yourself, so their own terminal finds `oats` too, and tell
-  them: `~/.zshrc` when `$SHELL` ends in `zsh`, else `~/.bashrc` (for fish,
-  `fish -c 'fish_add_path ~/.local/bin'` instead).
+  `/usr`, as NodeSource installs it), make the two changes step 1's list
+  named for it (when Node will come from NodeSource, the list names the
+  per-user folder and its PATH line), each as its own command, never
+  joined into one:
+  - **npm's per-user folder** (in `~/.npmrc`):
 
-  ```bash
-  RC="$HOME/.bashrc"; case "$SHELL" in *zsh) RC="$HOME/.zshrc";; esac; grep -qsF '$HOME/.local/bin' "$RC" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$RC"; echo "$RC"
-  ```
+    ```bash
+    npm config set prefix ~/.local
+    ```
+  - **The line that puts it on their PATH** in their shell's startup file:
+    `~/.zshrc` when `$SHELL` ends in `zsh`, else `~/.bashrc` (for fish,
+    `fish -c 'fish_add_path ~/.local/bin'` instead), so their own terminal
+    finds `oats` too. Tell them which file.
+
+    ```bash
+    RC="$HOME/.bashrc"; case "$SHELL" in *zsh) RC="$HOME/.zshrc";; esac; grep -qsF '$HOME/.local/bin' "$RC" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$RC"; echo "$RC"
+    ```
+
+  Your own shell doesn't read their startup file, so start each later
+  command of yours with `export PATH="$HOME/.local/bin:$PATH"`.
 - **Windows** is not supported.
 
 ## 3. Log in to GitHub
@@ -524,7 +562,7 @@ installed CLI's catalog:
 node -e 'const c=require(process.argv[1]);console.log(c.packages["oats.framework"].ref,c.packages["oats.aweb"].ref)' "$(oats root)/package-catalog.json"
 ```
 
-It prints the two refs, for example `oats-framework/v1.22.1 v1.37.0`. If the
+It prints the two refs, for example `oats-framework/v1.27.0 v1.46.0`. If the
 framework's version (after the `/`) is below `1.19.0`, or with aweb
 `oats.aweb`'s is below `v1.33.1`, this OATS release is older than this
 skill: stop, and tell the person to wait for the next OATS
@@ -535,8 +573,13 @@ wakes an agent when mail arrives (skip this without messaging): Claude
 `claude plugin marketplace add awebai/claude-plugins && claude plugin install aweb-channel@awebai-marketplace`;
 pi `pi install npm:@awebai/pi`, then its entry in pi's `settings.json` set
 to load none of the skills it bundles (pi's extension is installed without
-its skills, so it puts none on the computer; each agent gets its own);
-Codex nothing (the setup expert sets up its wake). Claude's aweb channel
+its skills, so it puts none on the computer; each agent gets its own;
+from 0.5.0 it bundles none, and the setting is harmless, so set it
+whatever the version). Never install `@awebai/claude-skills` in that pi
+folder: its skills would load in every agent there, and each agent gets
+its own skills from OATS. Codex has no channel of its own: it is woken by
+the host wake broker, which the person starts in step 9, item 6, before the
+setup expert is spawned. Claude's aweb channel
 plugin still carries one skill of its own, until aweb ships it without
 (a known gap). The pi entry, which matches `npm:@awebai/pi` alone or with
 `@` and a version, never another `@awebai/pi-…` package, and prints it so
@@ -546,11 +589,67 @@ you can check `"skills":[]`:
 node -e 'const fs=require("fs"),path=require("path"),os=require("os");const f=path.join(process.env.PI_CODING_AGENT_DIR||path.join(os.homedir(),".pi","agent"),"settings.json");const s=JSON.parse(fs.readFileSync(f,"utf8"));const ours=(e)=>/^npm:@awebai\/pi(@|$)/.test(typeof e==="string"?e:e&&e.source||"");s.packages=(s.packages||[]).map((e)=>ours(e)?{...(typeof e==="object"?e:{}),source:typeof e==="string"?e:e.source,skills:[]}:e);fs.writeFileSync(f,JSON.stringify(s,null,2)+"\n");console.log(JSON.stringify(s.packages.filter(ours)))'
 ```
 
+**On hosted aweb** (the default), the latest `aw`:
+
 ```bash
 npm install -g @awebai/aw && aw version
 ```
 
 `aw` must be 1.36.33 or later.
+
+**On their own aweb server** (step 1), `aw` is the version this OATS
+release's `oats.aweb` was tested with, which `oats.aweb` publishes in its
+`aw-compat.json`: hosted aweb upgrades its server before a new `aw` comes
+out, but their own server has no such order. Read that version at the exact
+`oats.aweb` release the installed CLI's catalog names, never at `main`.
+On a private registry (step 1), add ` private` at the end of the line,
+after the catalog's path: that branch needs a later `oats.aweb`. This
+prints `TESTED <version>`, or why it can't:
+
+```bash
+node -e 'const c=require(process.argv[1]).packages["oats.aweb"],m=/^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/.exec(c.url),v=/^v(\d+)\.(\d+)\.(\d+)$/.exec(c.ref);if(!m){console.log("NOT_GITHUB "+c.url);process.exit(1)}if(process.argv.length>3||![undefined,"private"].includes(process.argv[2])){console.log("FAILED usage");process.exit(1)}const f=process.argv[2]?[1,43,0]:[1,42,1];if(!v||v.slice(1).reduce((d,x,i)=>d||x-f[i],0)<0){console.log("TOO_OLD "+c.ref);process.exit(1)}const u="https://raw.githubusercontent.com/"+m[1]+"/"+m[2]+"/"+c.ref+"/"+c.path+"/capabilities/oats-aweb/aw-compat.json";fetch(u).then(r=>{if(!r.ok)throw new Error("HTTP "+r.status+" "+u);return r.json()}).then(j=>{if(Object.keys(j).sort().join()!=="min,tested"||typeof j.tested!=="string"||!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/.test(j.tested))throw new Error("unexpected "+JSON.stringify(j));console.log("TESTED "+j.tested)}).catch(e=>{console.log("FAILED "+e.message);process.exit(1)})' "$(oats root)/package-catalog.json"
+```
+
+- **`TOO_OLD`:** this OATS release's `oats.aweb` is older than `v1.42.1`,
+  the first that sets up a team on a person's own server, or, on a private
+  registry, older than `v1.43.0`, the first that records the registry
+  (`oats aweb setup --registry`).
+  **`NOT_GITHUB` or `FAILED`:** the tested version can't be read. Either
+  way, the own-server branch stops here. Tell the person in one sentence,
+  and offer hosted aweb now (step 1's hosted defaults, `N` among them,
+  shown in one short message) or waiting for the next OATS release.
+- **`TESTED <tested>`:** compare it with the `aw` already installed, in
+  `oats.aweb`'s own version order, where a pre-release of a newer version
+  counts as newer. With `<tested>` written in:
+
+  ```bash
+  node -e 'const P=(s)=>{const m=/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(s);if(!m)return null;const r=[m[1],m[2],m[3]].map(Number);return r.every(Number.isSafeInteger)?{r,p:m[4]?m[4].split("."):[]}:null};const C=(a,b)=>{for(let i=0;i<3;i++)if(a.r[i]!==b.r[i])return a.r[i]-b.r[i];if(!a.p.length||!b.p.length)return b.p.length-a.p.length;for(let i=0;i<Math.min(a.p.length,b.p.length);i++){const x=a.p[i],y=b.p[i],xn=/^\d+$/.test(x),yn=/^\d+$/.test(y);if(x===y)continue;if(xn&&yn)return x.length!==y.length?x.length-y.length:x<y?-1:1;if(xn!==yn)return xn?-1:1;return x<y?-1:1}return a.p.length-b.p.length};const t=P(process.argv[1]),l=/^aw (\S+)$/.exec(process.argv[2]||""),v=l&&P(l[1]);if(!t){console.log("FAILED tested "+process.argv[1]);process.exit(1)}const d=v?C(v,t):-1;console.log(d<0?"INSTALL":d===0?"EQUAL "+l[1]:"NEWER "+l[1])' "<tested>" "$(aw version 2>/dev/null | head -n 1)"
+  ```
+
+  - **`INSTALL`:** no `aw`, a version it can't read, or one below
+    `<tested>` (below `oats.aweb`'s floor included). Install exactly
+    `<tested>`, then check it:
+
+    ```bash
+    npm install -g "@awebai/aw@<tested>" && aw version && file -L "$(command -v aw)" && uname -m
+    ```
+
+    `aw version`'s first line must be exactly `aw <tested>`, and the `file`
+    line must name this machine's architecture, the one `uname -m` prints
+    (`x86-64` for `x86_64`, `aarch64` for `aarch64` on Linux; `x86_64` or
+    `arm64` on macOS). A different version, or a program for another
+    machine or no program at all (npm put a wrong or missing build in
+    place), stops the own-server branch as above. Where `file` itself is
+    missing (`command not found`), say so in the hand-over and rely on
+    `aw version`: a program that runs and prints its version was built for
+    this machine. Keep `aw <tested>` for the hand-over.
+  - **`EQUAL <tested>`:** that version is installed already: install
+    nothing. Keep `aw <tested>` for the hand-over.
+  - **`NEWER <version>`:** a newer `aw` is installed. Keep it, install
+    nothing, and go on: another deployment on this computer may need it.
+    Keep "aw <version> is newer than the tested <tested>; kept" for the
+    hand-over: it is the version this setup ran with.
+  - **`FAILED`** stops the own-server branch as above.
 
 **Then the Desktop. Every step verifies before it installs.** Wait for step
 3's download, then read its log. Run this once: it waits up to a minute
@@ -636,8 +735,9 @@ Categories=Development;
 
 **Only for a new workspace with aweb whose person chose, in step 1, the team
 on their own aweb account now.** Otherwise skip it: step 9 creates the
-workspace's account (the default), joins an existing workspace and signs up a machine
-found-list.
+workspace's account (the default), joins an existing workspace, signs up a machine
+found-list and creates the team on their own aweb server, which has no
+account to sign in to.
 
 The workspace's agents share one team, its **default team**, which the
 person's own aweb account creates here. Say to them, in your words, exactly
@@ -756,8 +856,8 @@ name: acme
 members:
   - git:github.com/acme/acme-oats     # the host; the setup expert adds the others
 packages:
-  oats.framework: v1.22.1             # the installed CLI's catalog versions (below)
-  oats.aweb: v1.37.0                  # messaging: agent identities, mail and chat
+  oats.framework: v1.27.0             # the installed CLI's catalog versions (below)
+  oats.aweb: v1.46.0                  # messaging: agent identities, mail and chat
   oats.machine: v0.1.1                # on a machine found-list only: the machine's steward
 defaults:
   capabilities:
@@ -775,6 +875,11 @@ defaultTeam: acme                     # every soul starts in this team
   9's signup creates, checked there against this line. With step 5's
   sign-in, it is `T` from step 5 instead, written in literally. Its label
   (here `acme`) is the workspace name.
+- **On their own aweb server,** the team is `<workspace>:ND` (here
+  `acme:agents.acme.com`), with `ND` from step 1: the team step 9 creates
+  in their namespace, checked there against this line. It is the only team
+  and the default: no `default:…aweb.ai` team anywhere in the file, and no
+  `localTeams`.
 - **The `oats.machine` line,** at the catalog's
   `packages."oats.machine".ref`, only on a machine found-list.
 - **The `tasks` line** is step 1's tasks answer: `oats.aweb-tasks` without
@@ -802,7 +907,10 @@ workspace: git:github.com/acme/acme-oats
   repos/<owner>/<repo>/branches/<branch> --jq .protected` prints `true`,
   `gh api repos/<owner>/<repo>/rules/branches/<branch> --jq length` prints
   more than 0, or either fails), or the push is refused: push a branch
-  instead, open a pull request, tell them, and stop until it is merged.
+  instead, open a pull request, tell them, and stop until it is merged. A
+  403 from the rules read saying the feature needs an upgrade ("Upgrade to
+  GitHub Pro or make this repository public") is not a failure: the
+  repository's plan has no rulesets, so it counts as 0.
 - If `git config user.name` or `git config user.email` prints nothing in
   `D/<repo>`, commit with the name step 1's yes covered:
   `-c user.name="<their name>" -c user.email="<their noreply address>"`,
@@ -823,6 +931,14 @@ oats onboard D --workspace W --json
 - **The host must be `confirmed`;** a host that can't be read is a GitHub
   access problem (step 3). Another member with `cannot-read` is an access
   question for the setup expert, not a reason to stop.
+- **On Git under 2.45** (step 2; Ubuntu 24.04 ships 2.43), a warning
+  that this Git can't keep a partial cache, so OATS fetches whole trees, is
+  expected. A recent OATS prints it at most once per command that starts or
+  rebuilds caches; an older one prints it once for each repository it
+  starts a cache for. Either form is harmless. Don't show it to the person
+  as an error, and don't try to fix it now: a Git of 2.45 or later,
+  installed later, removes it, and caches already made with whole trees
+  stay that way.
 - **`E_ALREADY_ONBOARDED`:** `D` already is a deployment. Stop and ask the
   person whether to use it as it is or to choose another directory.
 
@@ -877,6 +993,15 @@ oats soul launch set <key> --harness <its harness> --model <its model> --dir D -
 oats soul launch set <key> --harness <its harness> --model <its model> --dir D
 ```
 
+Check a reviewer soul by its model too, since `'*'` replaces the model as
+well as the harness: where it declares `<harness>` but another model, give
+it its own entry the same way, with `--harness <its harness> --model <its
+model>`. Then its `oats spawn <key> --preview --json --dir D` must show a
+`launch.effective` model from a family other than the developers'. Where
+its declared model can't run here, set one that can, from another family;
+with none, name it in the hand-over ("For the person, later"): its reviews
+share the developers' model.
+
 `S` is the exception: it always keeps `<harness>`, the person's choice in
 step 1. When `S` declares another harness, give it its own entry with
 `<harness>` instead:
@@ -902,6 +1027,30 @@ below; for another capability, follow its own setup skill, and stop if its
 readiness still reports a problem.
 
 **With aweb (`oats.aweb`):**
+
+**Their own aweb server on a private registry (step 1): record it first,**
+before item 1, with `RG` written in. Skip this on the public registry and
+on hosted aweb.
+
+```bash
+cd "D" && oats aweb setup --soul S --registry RG
+```
+
+It writes only `settings.oats.aweb.registry` in `D/oats-local.yaml`, the
+one setting that admits a private registry here: every later `oats aweb`
+command and every agent of `D` reads its registry from it. Never set
+`AWID_REGISTRY_URL` instead: oats.aweb refuses a private registry given
+that way (`registry-setting-required`), item 1's check included, until
+this setting is recorded. Success prints one line of JSON whose
+`registry` is `RG` as an origin (the host in lowercase, no trailing `/`).
+Its `next` lists "Restart resident serve" and "Restart wake": both are
+expected and need nothing from you, since this new deployment has no
+resident yet and item 6 installs the broker after this. An
+`E_SETUP_REGISTRY` refusal that starts `settings.oats.aweb.registry:`
+says what is wrong with the address (a path, `/api`, a query): ask the
+person for the registry's origin again and run this again. Anything
+else: stop, spawn nothing, and tell the person what it shows.
+
 1. **Check:**
 
    ```bash
@@ -926,8 +1075,9 @@ readiness still reports a problem.
      `oats sync --dir D`, then check again.
 2. **A new workspace without step 5's sign-in, and a machine found-list:
    sign up the workspace's aweb account and team,** with `N` and `A` from
-   step 1: no API key or token, nothing for the person to type. Preview
-   first, then run it:
+   step 1: no API key or token, nothing for the person to type. On their
+   own aweb server there is no signup: take "Their own aweb server", the
+   last part of this item, instead. Otherwise preview first, then run it:
 
    ```bash
    cd "D" && oats aweb setup --soul S --username N --name A --label L --plan --json
@@ -941,11 +1091,20 @@ readiness still reports a problem.
    - **Then tell the person,** in your words: this is the workspace's
      team, on an aweb account created for it; they attach themselves to it
      later in the setup, with the setup expert.
-   - **`E_SETUP_NATIVE`:** most likely `N` is taken (the preview does not
-     contact aweb, and aw's output is withheld); the run may also have left
-     a root part-way. Never remove `D/.aw`, and never rerun blindly.
+   - **`E_SETUP_USERNAME_UNAVAILABLE`:** aw refused `N` (its message says
+     why: taken, reserved or its format), and nothing was created. On a
+     machine found-list, ask nothing: tell the person what it says, and
+     stop. Otherwise ask the person for another `N`, change the team line in
+     `D/<repo>/oats-workspace.yaml` to `default:<new N>.aweb.ai`, commit and
+     push it, run `oats sync --dir D`, then run the preview and the signup
+     again with the new `N`.
+   - **`E_SETUP_NATIVE`:** aw failed, and its output is withheld (the
+     preview does not contact aweb). An oats.aweb older than the one that
+     answers `E_SETUP_USERNAME_UNAVAILABLE` (awebai/oats-aweb#286) also
+     fails this way when `N` is taken. The run may also have left a root
+     part-way. Never remove `D/.aw`, and never rerun blindly.
      On a machine found-list, ask nothing: tell the person that the run
-     failed, most likely because `N` is taken, and stop.
+     failed, and that `N` may be taken, and stop.
      Otherwise look first, read-only: `test -e "D/.aw" && echo RETAINED`.
      - **Nothing printed:** aw kept nothing, so `N` is free to change. Ask
        the person for another `N`, change the team line in
@@ -958,6 +1117,57 @@ readiness still reports a problem.
        unchanged, and it reuses that root. Anything else, the preview
        failing included: stop, spawn nothing, and tell the person what it
        shows.
+   - **Their own aweb server (step 1), in place of the signup.** Nothing for
+     the person to type, and no key passes through you. `ND`, `U` and `A`
+     come from step 1, and `L` is step 7's label.
+     - **First, the prerequisites, read-only:**
+
+       ```bash
+       cd "D" && aw id namespace check-txt --domain ND --json; echo "exit=$?"
+       ```
+
+       It fails when the controller key for `ND` is not on this computer
+       for this account, or when the `_awid.ND` record is missing, not
+       visible yet, or names another key. Its output says which. Then stop
+       and spawn nothing. Tell the person in one plain sentence which one is
+       missing, and that it's theirs to put in place, on their side. Once
+       they say it is, run this part again from here. Never make the key
+       (`aw id namespace prepare-controller`) or touch `~/.awid`.
+     - **Then create the team,** registered with their server. It takes up
+       to a few minutes. There is no preview, and it prints text, not JSON:
+
+       ```bash
+       cd "D" && AWEB_URL="U" oats aweb setup --soul S --create L --namespace ND --name A
+       ```
+     - **Success** prints `✓ created <T>, accepted it into <root>, recorded
+       roots[<T>]`. `<T>` must be step 7's team line, `L:ND`. Anything else:
+       stop, spawn nothing, and tell the person what it shows. Two more of
+       its lines are expected, and need nothing from you. Since step 7
+       wrote no `localTeams`, it says the workspace "does not allow local
+       teams" and shows `teams:` lines to commit: step 7 committed them
+       already, so when the team they show is step 7's line, nothing is
+       left to do. Its `readiness:` line can say
+       `needs-configuration`: item 5's check decides, not that line.
+     - **`team key: <path>`** is where the key of their agents' group now
+       lives on this computer. Tell the person that, in plain words, and that
+       they keep it backed up and never share it. The path, never the key,
+       goes in the hand-over.
+     - **"already exists in the registry, and its team key is not on this
+       machine":** `L:ND` is taken in their namespace, and nothing was
+       created. Ask the person for another name for the group, in the same
+       form as the workspace name. In `D/<repo>/oats-workspace.yaml`, change
+       the team's label, its `team:` and `defaultTeam` to it, then commit
+       and push it, and run `oats sync --dir D`. Run the create again, with
+       the new label as `L`.
+     - **"re-run the same command to resume",** or a run that was killed or
+       timed out: run the same line again, unchanged. It continues the
+       create, and never makes a second team.
+     - **Anything else** (a refused registration, a team-server record that
+       names another address, a missing controller key): stop, spawn
+       nothing, and tell the person in one sentence what it means. Never
+       rerun it with other values.
+     - **Then tell the person,** in your words: this is the group their
+       agents talk in, on their own server, in their namespace `ND`.
 3. **Existing workspace: the person gets an invite** from a member of `L`,
    whose own agent runs
    `oats aweb invite --soul <their soul> --label L --json` in their
@@ -978,7 +1188,15 @@ readiness still reports a problem.
    owner decides.
 4. **Existing workspace: the person joins in their own terminal,** which you
    open for them ("How to work"), pasting the token at the hidden prompt,
-   with `D`, `S` and `A` filled in:
+   with `D`, `S` and `A` filled in. Before you open it, list the per-team
+   roots `D` already holds, read-only, and keep what it prints (often
+   nothing) for item 5:
+
+   ```bash
+   ls -d "D"/.aweb-roots/*/.aw 2>/dev/null
+   ```
+
+   Then open the window:
 
    ```text
    cd "D" && sh -c 'stty -echo; printf "Invite token: "; read -r T; stty echo; echo; printf "%s\n" "$T" | oats aweb setup --soul S --invite-stdin --name A'
@@ -1001,22 +1219,108 @@ readiness still reports a problem.
    ```
 
 5. **After items 2 to 4, check again** (item 1), and expect `"member": true`.
-   On `"member": false`, stop and spawn nothing. With `"root": null` after
-   item 4's invite-only form, look first, read-only:
-   `ls -d "D"/.aweb-roots/*/.aw 2>/dev/null`. Nothing printed: the join
-   refused before redeeming anything: ask the person for the `E_SETUP_`
-   code their window shows (a code, no secret), tell them in plain words
-   what it means, and that a new invite is the inviter's to send. A path
-   printed for a label other than `L`: the invite was for that team, and
-   this machine joined it instead: tell them so, and that an invite for
-   `L` is the inviter's to send. Otherwise tell the person the run
-   left this machine's root outside `L`, with what the check shows, and
-   don't rerun the signup or the join (you can't see the join's output).
+   On `"member": false`, stop and spawn nothing, and read why from what ran:
+   - **`"root": null` after item 2's signup:** no root was made in `D/.aw`:
+     the signup didn't finish. Tell the person so, with what the check
+     shows, and don't rerun it.
+   - **`"root": null` after a team create in item 2** (a create line, not
+     the signup): the create recorded no root. Run the same create line
+     again, unchanged, then check again.
+   - **`"root": null` after item 4's invite-only form:** run item 4's
+     listing again, read-only, and compare it with what it printed before
+     the window opened: only a path that is new is this join's. The folder
+     before `/.aw` is the team's label as the provider writes a team name:
+     lowercase, each run of `_` or `.` as one `-`, and no `-` at either end
+     (`My_Team.` is `my-team`). Write `L` that way too before you compare.
+     - **No new path:** the join made no root here. It refused before
+       redeeming anything, or aw's own accept failed and the join removed
+       the empty folder it had made. Ask the person for the `E_SETUP_` code
+       their window shows, if any (a code, no secret); with no code, ask
+       what the window's last line says (no secret). Tell them in plain
+       words what it means, and that a new invite is the inviter's to send.
+     - **A new path under another name:** the invite was for that team,
+       and this machine joined it instead: tell them so, and that an invite
+       for `L` is the inviter's to send.
+     - **A new path under `L`'s name:** the join began in `L`'s folder and
+       didn't finish. Tell the person so, with what the check shows.
+   - **`"root": null` after item 4's labelled form:** the join recorded no
+     root: it stopped at a refusal or a failure, which its window shows.
+     Ask for the `E_SETUP_` code there, if any, or else the window's last
+     line (no secret), and tell the person in plain words what it means.
+   - **With a `root`:** the run left this machine's root outside `L`. Tell
+     the person so, with what the check shows.
+
+   Don't rerun the signup or the join (you can't see the join's output).
    When another machine of the same name may already be in the team, say
    that a taken name is a likely cause: the person who invited them can ask
    their own agent whether that name is in the group (its agent reads
    `oats aweb roster --label L`); the fix (a new invite and a name for this
    machine) is the workspace owner's. Never take the other machine's name.
+6. **Codex, or `delivery: session`: the wake broker runs before the spawn.**
+   Skip this item when the setup expert's harness is Claude or pi and the
+   effective `oats.aweb` settings (the soul's or this host's) don't set
+   `delivery: session`: its own channel wakes it (step 4). Any other setup
+   expert is woken only by the host wake broker, and oats.aweb refuses to
+   spawn or start it while no broker runs (`wake-daemon-not-running`). The
+   broker is the person's own user service, so it is theirs to start.
+
+   **On a private registry (step 1), first check the install yourself,**
+   read-only: the broker must carry `RG`, and the status check below can't
+   see which registry a running broker serves.
+
+   ```bash
+   cd "D" && oats aweb wake install --plan --json
+   ```
+
+   It changes nothing, and it refuses whatever the install would refuse.
+   Only `"ok": true` lets you go on to their install below: then no other
+   broker runs on this computer account, or the one that runs is the
+   install's own and already carries `RG`, so the status check below
+   proves the right broker. Otherwise its `error.code` decides:
+   - **`E_WAKE_REGISTRY_CONFLICT`:** this computer account already runs a
+     wake broker for another registry, or for none, most likely for
+     another deployment, and one account's broker serves one registry.
+     Stop, spawn nothing, and tell the person in plain words; the choice is
+     theirs: run this deployment under another computer account, or move
+     the other one, as the message says. Never uninstall the broker or
+     deregister another deployment's homes yourself.
+   - **`E_WAKE_UNSUPPORTED`** (a container, or a machine with neither
+     launchd nor systemd): there is no service to install, and the plain
+     `aw wake run` below would not carry `RG`. Stop and spawn nothing.
+     Tell the person in one sentence, and offer a Claude or pi setup
+     expert instead, which its own channel wakes: with that harness, this
+     item is skipped.
+   - **Any other refusal** (for example a broker started by hand or by
+     another supervisor, `E_WAKE_RUNNING_UNSUPERVISED`, or a service the
+     install didn't write, `E_WAKE_UNIT_CONFLICT`): stop and spawn nothing.
+     A broker that is running now would pass the status check without
+     carrying `RG`. Tell the person in plain words what its message says;
+     the fix is theirs, and the message names it. Once they say it's done,
+     run this check again. Never stop, uninstall or deregister a broker
+     yourself.
+
+   Open their own terminal ("How to work") running this, with `D` filled
+   in:
+
+   ```text
+   cd "D" && oats aweb wake install
+   ```
+
+   In a container, or on a machine with neither launchd nor systemd (the
+   command answers `E_WAKE_UNSUPPORTED`), there is no service to install:
+   on the public registry, the line is `aw wake run`, kept running as a
+   supervised process.
+
+   Then check it yourself:
+
+   ```bash
+   cd "D" && oats aweb wake status --json
+   ```
+
+   Go on to step 10 only when it reports `"daemon": { "running": true }`.
+   Otherwise stop, spawn nothing, and tell the person what the status
+   shows.
+
 The setup expert does the rest of this machine's messaging
 (`/oats-host-delivery`).
 
@@ -1088,8 +1392,12 @@ are cloned, knowledge tools, messaging wanted or not>
   team T on aweb account N, created for the workspace, not yet attached to
   the person (new workspace), or T owned by aweb account <handle>
   (signed in at step 5), or new account N signed up (machine found-list),
-  or joined L by invite (existing) | not set up (the setup expert has no
-  messaging)
+  or joined L by invite (existing), or team T on their own aweb server U,
+  namespace ND, registry public | RG (recorded in
+  `settings.oats.aweb.registry`), aw <tested> (oats.aweb's tested
+  version) or "aw <version> is newer than the tested <tested>; kept", its
+  key at
+  <team key path> | not set up (the setup expert has no messaging)
 - Harness channel mode: development, confirmed by OATS at each start
   (Claude with aweb) | none (Codex, pi or no messaging)
 - Tasks (new workspace with aweb): oats.aweb-tasks | none: the agents use
@@ -1253,7 +1561,13 @@ the setup expert, not in this message. You are done.
   push to a repository other than the new workspace's host they agreed to in
   step 1 (step 6 creates or clones it).
 - **Guess the team id:** it is the signup's `default:N.aweb.ai`, checked in
-  step 9, or step 5's answer after its sign-in.
+  step 9, step 5's answer after its sign-in, or `<workspace>:ND` on their own
+  aweb server, checked against step 9's create.
+- **On their own aweb server:** make or touch the namespace's controller key
+  (`aw id namespace prepare-controller`, `~/.awid`), set or ask for
+  `AWEB_API_KEY`, set `AWID_REGISTRY_URL` (a private registry is
+  recorded by `oats aweb setup --registry` only), or write a hosted
+  `default:…aweb.ai` team or `localTeams` into the workspace.
 - **Write a setup soul into the workspace:** the setup expert is
   `oats.framework`'s.
 - **The Desktop:** never download it through a browser, skip a verification

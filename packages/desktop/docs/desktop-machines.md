@@ -1,8 +1,8 @@
 # A workspace's own machines (#517)
 
 A window shows one workspace, so it offers only the machines that run that
-workspace: **Where to run** in the spawn dialog, the **Registered machines** box of the
-Workspace › Setup tab, and **Add a machine to this workspace…** in both. Every
+workspace: **Where to run** in the spawn dialog, the Workspace page's
+**Machines** list, and **Add a machine to this workspace…** in both. Every
 read and change is the installed CLI's (`oats server … --json`, `oats aweb
 connect --json`); the Desktop keeps no registry.
 
@@ -11,9 +11,10 @@ connect --json`); the Desktop keeps no registry.
 The probe (`oats version --json`) must declare `servers-per-workspace` and
 `server-connect`. The messaging step also needs `capability-route`. Without
 them nothing here changes: `/api/servers` answers the registered list as
-before, Where to run lists every registered server, there is no Add entry and
-no Registered machines box (`machinesGated`, `awebConnectGated` in
-`packages/client/machine-contract.mjs`).
+before, Where to run lists every registered server, there is no Add entry, and
+the Machines list reads no registration: it shows this computer alone (or, in a
+remote-only view, the view's deployments from the panel), with no Add
+(`machinesGated`, `awebConnectGated` in `packages/client/machine-contract.mjs`).
 
 ## The window's key
 
@@ -56,7 +57,7 @@ no Registered machines box (`machinesGated`, `awebConnectGated` in
   runs it again; by then only unreachable hosts are still unknown).
 - A registry that cannot be read is an answer, not a refusal: `servers: []`
   with `error: { code, message }` and the window's `deployment` and `aweb`
-  kept, so the Registered machines box says why with Retry and Add stays offered.
+  kept, so the Machines list says why with Retry and Add stays offered.
 - **`POST /api/server-check?ws=`** `{ id }`: an id whose key is the window's or
   is unknown. **`POST /api/server-remove?ws=`** `{ id }`: the window's key
   only. Both admit the id against a fresh `server list`
@@ -118,28 +119,40 @@ and is not selected.
   the phase, and focus waits on the status line. Close and Escape always work:
   the CLI finishes on its own and a late answer changes nothing.
 - The dialog belongs to its opener (`owns()`): the spawn dialog, or the
-  Registered machines box of one workspace generation. When the opener goes (the spawn
+  Machines list of one workspace generation. When the opener goes (the spawn
   dialog closes, the window changes workspace), the dialog closes, and an
   answer that arrives later neither renders, takes focus nor starts the
   messaging step.
 
-## The Registered machines box (`renderer/workspace-machines.mjs`)
+## The Machines list (`renderer/workspace-machines.mjs`)
 
-On the Setup tab, inside This computer in the List view and below the graph in
-the Graph view: each machine's name, host, folder, OATS
-version and reachable or not, from its last check this run (reachable: the
-check reached its deployment, and `workspaceReadable` is not `false`; the
-kernel's `workspaceReadError` or error message is the state's title), with **Check** and
-**Remove**. In a box narrower than 860px a row keeps the name, the state and
-the actions, and the name's title gives the host, the folder and the version.
-A machine not checked yet this run is checked once in the
-background (two at a time). Remove asks first, in the row ("Remove <id>?
-Instances spawned there keep running and can still be retired from here."),
-and a refusal is said in the row in the CLI's words. A late Check or Remove
-moves focus back to its row only when no newer press or key in the box came
-since and focus is not elsewhere. The box is mounted once per workspace and
-kept across the tab's re-renders: the same element moves between the views. A
-workspace change disposes it (and its dialog).
+The Workspace page's **Machines** section (the Desktop UI rework, slice 3b; until then the Setup tab's
+Registered machines box): the computers this workspace runs on, one row each, and its OATS version. **This computer**
+first, where the view has a deployment here: "reachable" once that deployment is read, "reading…" while it is read,
+"not read" when it can't be (the observation's own words under the list); the CLI probe's OATS version; nothing to
+check or remove. Then each registered machine: its name, reachable or not from its last check this run (reachable: the
+check reached its deployment, and `workspaceReadable` is not `false`; the kernel's `workspaceReadError` or error
+message is the state's title), and the version that check reported.
+
+The guide also asks for the agents on each machine. They are cut from this slice (the effort's lead, after a third
+review major on binding a machine to its roster observation): a count must come from a settled good roster read of that
+machine's own deployment, and the panel did not bind one soundly. The Map and the roster show where agents run.
+
+A registered machine's row is one button: Enter (or a click) opens it under its row, with its name,
+ssh host and folder, then **Check** and **Remove**; the row's title gives the same facts. A machine
+not checked yet this run is checked once in the background (two at a time). Remove asks first, in the
+opened machine ("Remove <id>? Agents started there keep running and can still be retired from
+here."), and a refusal is said there in the CLI's words. A late Check or Remove moves focus back to
+its control only when no newer press or key in the section came since and focus is not elsewhere.
+**Add a machine to this workspace…** sits at the section's head (the dialog above).
+
+The first list read says "Reading the machines of this workspace…" (a status line; the list is `aria-busy`); a failed
+read says why, with Retry, and a repaint keeps focus on Retry while the failure stands. The section is mounted once per
+workspace and stays mounted while the Workspace page repaints (`sync()` repaints it in place on each roster poll), so a
+poll never moves focus off a row, a machine's control or Retry. A workspace change disposes it (and its dialog). Without
+the machine gates nothing is read: the section shows this computer only and offers no Add. A view with no deployment on
+this computer (a remote-only view, or a view whose deployments are all elsewhere) has no "This computer" row: it lists
+the view's other deployments from the panel's #482 `deployments` (their machine, whether reached; no version claimed).
 
 ## Fixtures
 

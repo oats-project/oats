@@ -9,9 +9,11 @@
 // exact status and message aw reported.
 import {join} from 'node:path';
 import {healthSettings} from './health-settings.mjs';
+import {teamKeyIn} from './aweb-team-id.mjs';
 export {healthSettings} from './health-settings.mjs';
 import {assessHealth, combineSeats, retiredHealth} from './health-vocabulary.mjs';
 import {checkDocument} from './status-document.mjs';
+import {sessionProviderBackend} from './wake-receive.mjs';
 
 export const VALIDITY_MS = 300 * 1000;
 const DEFAULT_BUDGET_MS = 45 * 1000;
@@ -37,15 +39,16 @@ function identitiesOf(row, settings) {
   const id = meta.identity ?? {};
   // A Claude or pi home on channel delivery receives through its own channel,
   // which leaves a receipt in the identity directory it runs as; everything
-  // else receives through the host wake broker and leaves none.
-  const native = (meta.delivery ?? 'channel') === 'channel' && ['claude', 'pi'].includes(meta.runtime);
+  // else (a session provider's home included) receives through the host wake
+  // broker and leaves none.
+  const native = (meta.delivery ?? 'channel') === 'channel' && ['claude', 'pi'].includes(meta.runtime) && !sessionProviderBackend(meta.backend);
   if (id.mode === 'global') {
     const custody = settings.residents?.[id.resident];
     if (!custody) return {skip: `resident ${id.resident} is not in settings.oats.aweb.residents`};
     return {identities: [{kind: 'resident', resident: id.resident, team: id.team, alias: id.alias, id: {cwd: custody}, host: {cwd: custody}, cacheFile: residentCacheFile(custody), identity: {kind: 'primary'}, receive: {native: native && !!id.grant?.home, dir: id.grant?.home}}]};
   }
   const team = id.team ?? meta.team, alias = id.alias ?? meta.alias;
-  const rootFor = (t) => settings.roots?.[t] ?? settings.root;
+  const rootFor = (t) => { const key = teamKeyIn(settings.roots, t); return (key !== undefined ? settings.roots[key] : undefined) ?? settings.root; };
   if (!rootFor(team)) return {skip: `no minting root for team ${team}`};
   const cacheFile = join(row.home, '.oats-aweb', 'health.json');
   const identities = [{kind: 'local', team, alias, id: {identityHome: join(row.home, '.aw')}, host: {cwd: rootFor(team)}, cacheFile, identity: {kind: 'primary'}, receive: {native, dir: join(row.home, '.aw')}}];

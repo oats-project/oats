@@ -165,7 +165,9 @@ try {
     removeWritable(join(OUTSIDE_TEMPORARY_PARENT, entry));
   }
 } finally { rmSync(runDir, { recursive: true, force: true }); }
-const warnings = found.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+const records = found.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+const skippedRealAw = records.filter(row => row.kind === "skipped-real-aw");
+const warnings = records.filter(row => row.kind !== "skipped-real-aw");
 // The temporary directories, and the bases tests make outside them (test/helpers/outside-temporary.mjs).
 const temporary = [...new Set([tmpdir(), "/tmp", "/private/tmp", "/var/folders", "/private/var/folders"].flatMap((p) => { try { return [p, realpathSync(p)]; } catch { return [p]; } }))];
 const outsideBases = [...new Set([OUTSIDE_TEMPORARY_PARENT].flatMap((p) => { try { return [p, realpathSync(p)]; } catch { return [p]; } }))].map((p) => join(p, OUTSIDE_TEMPORARY_PREFIX));
@@ -185,6 +187,15 @@ if (run.error) throw run.error;
 if (!desktopReady) console.log(`\n${notice}`);
 
 const relativeFile = (file) => relative(REPO_ROOT, file) || file;
+
+if (skippedRealAw.length) {
+  console.error([
+    "", RULE,
+    `SKIPPED REAL-AW TESTS: ${skippedRealAw.length}. The run FAILS: native-path evidence was not exercised.`,
+    ...skippedRealAw.map(({ file, name }) => `  ${relativeFile(file)}: ${name}`),
+    RULE,
+  ].join("\n"));
+}
 
 if (warnings.length) {
   const byFile = new Map();
@@ -234,4 +245,4 @@ if (reachedPersonalList.length) {
   ].join("\n"));
 }
 
-process.exit(warnings.length || left.length || reachedPersonalList.length ? run.status || 1 : run.status ?? 1);
+process.exit(skippedRealAw.length || warnings.length || left.length || reachedPersonalList.length ? run.status || 1 : run.status ?? 1);

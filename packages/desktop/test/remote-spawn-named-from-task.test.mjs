@@ -47,7 +47,7 @@ test('the gates: instance-suggest-name with spawn-name on this CLI; a namingKey 
   assert.equal(instanceSuggestSupported(without('instance-suggest-name')), false);
   assert.equal(instanceSuggestSupported(without('spawn-name')), false);
   const selector = { soul: 'release-manager', agentsRoot: '/w/agents' };
-  assert.notEqual(namingKey(selector, TASK, 'build'), namingKey(selector, TASK, 'altair'));
+  assert.notEqual(namingKey(selector, TASK, 'build'), namingKey(selector, TASK, 'devbox'));
   assert.notEqual(namingKey(selector, TASK, 'build'), namingKey(selector, TASK));
   assert.equal(namingKey(selector, TASK), namingKey(selector, TASK, null));
 });
@@ -219,14 +219,14 @@ test('the help line says who names an empty name before the press; a typed or to
 });
 
 test('an answer names a spawn on its own machine only: another server asks again', async t => {
-  const servers = [HOST, { id: 'altair', label: 'altair', sshHost: 'altair.lan' }];
+  const servers = [HOST, { id: 'devbox', label: 'devbox', sshHost: 'devbox.lan' }];
   const facts = { members: [], notReached: [], servers: [hostFacts(['spawn-name']).servers[0],
-    { server: 'altair', label: 'altair', group: 'altair:k2', deployment: 'remote:altair:k2', reached: true, error: null, registered: true, features: ['spawn-name'] }] };
+    { server: 'devbox', label: 'devbox', group: 'devbox:k2', deployment: 'remote:devbox:k2', reached: true, error: null, registered: true, features: ['spawn-name'] }] };
   const { u } = await onBuild(t, { cli: NAMING_CLI, servers, teamMembers: facts, nameHere: () => suggested() });
   await u.type('.ftask', TASK); await settle(20);
   assert.equal(u.names.length, 1);
-  await u.change('.fserver', 'altair'); await settle(20);
-  assert.equal(u.names.length, 2, 'asked again for altair');
+  await u.change('.fserver', 'devbox'); await settle(20);
+  assert.equal(u.names.length, 2, 'asked again for devbox');
   await u.change('.fserver', 'build'); await settle(20);
   assert.equal(u.names.length, 2, 'build\'s answer is kept');
 });
@@ -258,16 +258,16 @@ test('the Electron proxy waits for a remote spawn the host names longer than the
 test('the Deployment field: the harness that names it is the chosen deployment\'s default for the soul, not the first one\'s', async t => {
   const local = { id: DEPLOYMENT, machine: 'This Mac', path: DEPLOYMENT, label: 'northwind', local: true, reachable: true, identityFrom: 'reported', primary: true };
   const remoteDeployment = (server, key) => ({ id: `remote:${server}:${key}`, machine: server, path: `/srv/${server}`, label: server, local: false, reachable: true, identityFrom: 'reported', primary: false });
-  const BUILD = remoteDeployment('build', 'k1'), ALTAIR = remoteDeployment('altair', 'k2');
+  const BUILD = remoteDeployment('build', 'k1'), DEVBOX = remoteDeployment('devbox', 'k2');
   const row = (server, harness) => ({ name: 'builder', description: '', kind: 'persistent', work: 'worktree', agentsRoot: `/srv/${server}/agents`, server, remote: true, repoName: server, harness });
   const fact = (server, key) => ({ server, label: server, group: `${server}:${key}`, deployment: `remote:${server}:${key}`, reached: true, error: null, registered: true, features: ['spawn-name'] });
-  const u = await mountSpawn(t, { spawnName: true, cli: NAMING_CLI, deployments: [local, BUILD, ALTAIR], agents: [row('build', 'codex')],
-    catalogs: { [DEPLOYMENT]: [], [BUILD.id]: [row('build', 'codex')], [ALTAIR.id]: [row('altair', 'pi')] },
-    teamMembers: { members: [], notReached: [], servers: [fact('build', 'k1'), fact('altair', 'k2')] }, nameHere: r => suggested('release-notes-builder', r.harness) });
+  const u = await mountSpawn(t, { spawnName: true, cli: NAMING_CLI, deployments: [local, BUILD, DEVBOX], agents: [row('build', 'codex')],
+    catalogs: { [DEPLOYMENT]: [], [BUILD.id]: [row('build', 'codex')], [DEVBOX.id]: [row('devbox', 'pi')] },
+    teamMembers: { members: [], notReached: [], servers: [fact('build', 'k1'), fact('devbox', 'k2')] }, nameHere: r => suggested('release-notes-builder', r.harness) });
   await u.open('builder'); await settle(20);
-  [...u.q('.fdeployment').querySelectorAll('input')].find(i => i.value === ALTAIR.id).click(); await settle(20);
+  [...u.q('.fdeployment').querySelectorAll('input')].find(i => i.value === DEVBOX.id).click(); await settle(20);
   await u.type('.ftask', TASK); await settle(20);
-  assert.equal(u.names.at(-1).harness, 'pi', 'altair\'s default for builder');
+  assert.equal(u.names.at(-1).harness, 'pi', 'devbox\'s default for builder');
   [...u.q('.fdeployment').querySelectorAll('input')].find(i => i.value === BUILD.id).click(); await settle(20);
   assert.equal(u.names.at(-1).harness, 'codex', 'asked again for build, with build\'s');
   assert.ok(u.names.every(n => n.dir === DEPLOYMENT), 'always through this computer\'s deployment');

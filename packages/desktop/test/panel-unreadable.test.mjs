@@ -63,8 +63,8 @@ test('panelData serves error, errorOrigin and errorCause for a local workspace o
   const body = fn('deploymentPanel');
   // Whether a failure is kept is the shared home's one rule (deployment-facts.mjs keptFailure), asked of the entry; the
   // message is served beside who made it (#982).
-  // The rows are the entry's, each stamped with the same-work gate's answer (#1577, same-work.mjs withSameWorkGate).
-  assert.match(body, /const instances = \(observed\?\.instances \|\| \[\]\)\.map\(\(row\) => withSameWorkGate\(row, declared\)\), kept = keptFailure\(observed\);/);
+  // The rows are the entry's, each stamped with the related-work gate's answer (related-work.mjs withRelatedWorkGate).
+  assert.match(body, /const instances = \(observed\?\.instances \|\| \[\]\)\.map\(\(row\) => withRelatedWorkGate\(row, declared\)\), kept = keptFailure\(observed\);/);
   assert.match(body, /\.\.\.\(kept \? \{ error: kept\.message, \.\.\.\(kept\.origin \? \{ errorOrigin: kept\.origin \} : \{\}\) \} : \{\}\),/);
   assert.match(body, /observed\?\.errorCause \? \{ errorCause: observed\.errorCause \}/);
   assert.ok(body.indexOf('if (ws?.remote)') < body.indexOf('errorCause'), 'a remote panel returns before: unchanged');

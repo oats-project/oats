@@ -1,3 +1,5 @@
+import {registryEnv} from './registry-setting.mjs';
+import {awChildEnv} from './aw-child-env.mjs';
 // What the agent status publisher reads and runs on the host: the kernel's
 // public CLI (status, session inspect, instance events, readiness, schedule),
 // aw (the offline identity doctor and the status commands), its designation
@@ -13,8 +15,6 @@ const KERNEL_TIMEOUT_MS = 30 * 1000;
 const AW_TIMEOUT_MS = 15 * 1000;
 /** The kernel events that say what last happened to a home's session. */
 const LIFECYCLE = ['launched', 'restarted', 'stopped'];
-/** Ambient identity selectors that must never redirect an aw call. */
-const AW_UNSET = ['AWEB_IDENTITY_HOME', 'AWEB_URL', 'AWEB_API_KEY', 'AWEB_ROLE_NAME', 'AWEB_ROLE'];
 /** An instance session's own variables, which would scope a kernel call to it. */
 const KERNEL_UNSET = ['OATS_INSTANCE', 'OATS_INSTANCE_HOME', 'OATS_HOME'];
 /** The first aw with `aw status-host` and `aw status publish` (aweb-acah.3.1). */
@@ -48,10 +48,10 @@ const lastJson = (text) => String(text).trim().split('\n').reverse().map(parseJs
 /** `deployment` is where kernel calls run and the log lives; `env` is the
  *  environment the children start from. The kernel is the one that dispatched
  *  this command (OATS_NODE_BIN and OATS_CLI_BIN), else `oats` on PATH. */
-export function healthHost({deployment, env}) {
+export function healthHost({deployment, env, settings={}}) {
   const kernelArgv = env.OATS_NODE_BIN && env.OATS_CLI_BIN ? [env.OATS_NODE_BIN, env.OATS_CLI_BIN] : ['oats'];
   const kernelEnv = without(env, KERNEL_UNSET);
-  const awEnv = {...without(env, AW_UNSET), AW_NO_UPDATE_CHECK: '1'};
+
   // Agents publish in parallel; their log writes run one after another, so
   // two of them never rotate the log at once.
   let logged = Promise.resolve();
@@ -61,7 +61,7 @@ export function healthHost({deployment, env}) {
     const doc = parseJson(r.stdout);
     return r.status === 0 && doc ? doc : {ok: false, error: doc?.error ?? {code: 'E_UNREADABLE', message: (r.stderr || r.stdout).trim().slice(0, 500)}};
   };
-  const aw = (target, args, input) => run('aw', [...(target.identityHome ? ['--identity-home', target.identityHome] : []), ...args], {cwd: target.cwd ?? deployment, env: awEnv, input, timeout: AW_TIMEOUT_MS});
+  const aw = (target, args, input) => run('aw', [...(target.identityHome ? ['--identity-home', target.identityHome] : []), ...args], {cwd: target.cwd ?? deployment, env: awChildEnv(env,registryEnv(settings,args)), input, timeout: AW_TIMEOUT_MS});
   /** An aw status command's answer: {ok, status, code, message, retry_after}. */
   const awAnswer = (r) => {
     const doc = lastJson(r.stdout);

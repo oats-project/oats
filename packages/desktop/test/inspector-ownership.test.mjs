@@ -4,7 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { JSDOM } from 'jsdom';
 import { createSoulInspector, INSPECTION_STALE_TITLE } from '../renderer/soul-inspector.mjs';
 import { createReadinessView } from '../renderer/readiness-view.mjs';
-import { cliStatus } from '../renderer/views/cli-status.mjs';
+import { cliStatus, cliHeldBack } from '../renderer/views/cli-status.mjs';
 import { postJson, wsQuery, workspaceGeneration, currentWorkspace, setWorkspace, rowDeployment } from '../renderer/views/common.mjs';
 import { runtimeState } from '../../client/instance-presentation.mjs';
 import { createSoulMark } from '../renderer/identity-marks.mjs';
@@ -135,7 +135,7 @@ for (const outcome of ['resolve', 'reject']) {
 function mutant(from, to) {
   const source = createSoulInspector.toString();
   assert.equal(source.split(from).length, 2, 'mutation targets exactly one production guard');
-  return runInNewContext(`(${source.replace(from, to)})`, { postJson, wsQuery, workspaceGeneration, rowDeployment, runtimeState, createSoulMark, createReadinessView, cliStatus, iconElement, originText, createTeamsPanel, teamsOperations, soulTeams, ageText, inspectData, inspectFacts, createDataState, skeletonBlock, skeleton, captureFocusState, desktopFacts, coreEntries, coreNote, whyElement, isCoreCapability, layerLabel, buildState, INSPECTION_STALE_TITLE, createDeploymentScopeLine });
+  return runInNewContext(`(${source.replace(from, to)})`, { postJson, wsQuery, workspaceGeneration, rowDeployment, runtimeState, createSoulMark, createReadinessView, cliStatus, cliHeldBack, iconElement, originText, createTeamsPanel, teamsOperations, soulTeams, ageText, inspectData, inspectFacts, createDataState, skeletonBlock, skeleton, captureFocusState, desktopFacts, coreEntries, coreNote, whyElement, isCoreCapability, layerLabel, buildState, INSPECTION_STALE_TITLE, createDeploymentScopeLine });
 }
 test('mutation: pending ownership is essential during availability sync', async () => {
   const factory = mutant('pendingOperations.has(control) || !available()', '!available()');

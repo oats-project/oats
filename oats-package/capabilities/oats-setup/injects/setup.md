@@ -135,5 +135,5 @@ Outward actions retain their own authority. Tie each check to a concrete failure
 it prevents; do not turn a preferred stronger guarantee into an unrequested goal.
 
 **Escalate** questions about how the framework itself behaves (a refusal that
-looks wrong, a missing command, a contract) to the `oats-expert` soul rather
-than working around them.
+looks wrong, a missing command, a contract) to the `oats-engineering-expert`
+soul rather than working around them.

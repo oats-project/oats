@@ -33,8 +33,8 @@ catalog (`oats souls --json`); a catalog that could not be read, or a name it
 reports twice, refuses rather than falling back to the roster.
 Choices include purpose **or** name (exclusive; the kernel owns naming rules and
 refuses with `E_INSTANCE_NAME_INVALID`/`E_INSTANCE_NAME_TAKEN`). The spawn
-dialog sends a typed name as `name`, with the soul's role as its suffix
-(`nameWithRole`, `packages/client/instance-name.mjs`), when the CLI advertises
+dialog sends a typed name as `name`, lowercased and with nothing appended
+(`finalName` in `renderer/spawn-dialog.mjs`), when the CLI advertises
 `spawn-name` and, for a spawn on a server (`/api/spawn` with `serverId`), so
 does that host: the CLI relays host features (`server-probe-features`) and the
 server's registered roster group (`/api/team-members` `servers[].features`)
@@ -642,7 +642,7 @@ parent when there is a relation (the placement the kernel will record:
 `pendingPlacement`), with the kernel's name from the decision. It reads
 **Spawning…** beside a small spinner (the text carries the state; the spinner
 stands still under reduced motion), is `aria-disabled` with no instance actions
-and no hover card, and is announced once through the roster's polite live
+(its sentence is its title and description), and is announced once through the roster's polite live
 region. It carries the real row's identity (`data-tree-instance` is the decided
 home), so when the roster reports that home the real row replaces it in place
 and a focused pending row stays focused. While the job is in flight, a reported

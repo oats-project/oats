@@ -920,3 +920,28 @@ test("the shell gives the switcher the bridge's workspaceRemoveListed as removeL
   const call = source.slice(source.indexOf("const workspaceLabel = createWorkspaceSwitcher({"));
   assert.match(call.slice(0, call.indexOf("\n});")), /\n\s*removeListed: desktopBridge\.workspaceRemoveListed \|\| null,/);
 });
+
+test("#1879: above the tested bound a stale row's Remove is held back with the notice, and comes back when the CLI is within the bound", async (t) => {
+  const cs = await import("../renderer/views/cli-status.mjs");
+  const cli = (extra = {}) => ({ ok: true, bin: "/oats", version: "0.70.1", source: "path", required: { desktopApi: 1, range: ">=0.26.0, tested through 0.69" }, tried: [], features: [], ...extra });
+  let probe = cli({ aboveTested: true, testedThrough: "0.69" });
+  const cliCtx = { api: async () => probe };
+  await cs.refreshCli(cliCtx);
+  t.after(() => cs.resetCliStateForTests());
+  const s = staleSetup([listed("gone", "missing")]);
+  await s.controller.openModal();
+  const notice = cs.cliHeldBack("main deployments remove");
+  assert.match(notice, /^This Desktop was tested with oats CLIs up to 0\.69; the installed CLI is 0\.70\.1\. /);
+  assert.equal(s.removeOf("gone").disabled, true);
+  assert.equal(s.removeOf("gone").title, notice);
+  s.removeOf("gone").click(); await settle();
+  assert.deepEqual(s.calls.removed, [], "nothing is asked of main");
+  probe = cli({ version: "0.69.25" });
+  await cs.refreshCli(cliCtx);
+  assert.equal(s.removeOf("gone").disabled, false);
+  assert.equal(s.removeOf("gone").title, "Remove gone from this computer's list. Nothing on disk changes.");
+  probe = cli({ aboveTested: true, testedThrough: "0.69" });
+  await cs.refreshCli(cliCtx);
+  assert.equal(s.removeOf("gone").disabled, true, "and held back again");
+  s.controller.dispose(); s.dom.window.close();
+});

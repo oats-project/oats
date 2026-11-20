@@ -1,7 +1,7 @@
 {
   "capability": "oats.aweb",
   "command": "aweb",
-  "version": "1.37.0",
+  "version": "1.46.0",
   "compatibility": {
     "oats": ">=0.68.0"
   },
@@ -18,7 +18,7 @@
       "runtime": "pi",
       "package": "npm:@awebai/pi",
       "why": "the aweb channel extension for pi sessions — real-time mail/chat awakenings; without it a pi instance can send with `aw` but is never woken by incoming messages",
-      "install": "pi install npm:@awebai/pi, then make its entry {\"source\": \"npm:@awebai/pi\", \"skills\": []} in the pi folder's settings.json (PI_CODING_AGENT_DIR, else ~/.pi/agent), so pi loads the extension without its bundled skills (README, \"The pi extension without its skills\")",
+      "install": "pi install npm:@awebai/pi, then, if the @awebai/pi installed is below 0.5.0, make its entry {\"source\": \"npm:@awebai/pi\", \"skills\": []} in the pi folder's settings.json (PI_CODING_AGENT_DIR, else ~/.pi/agent), so pi loads the extension without its bundled skills. Never install @awebai/claude-skills in a pi folder that OATS homes use: a home's skills come from its capabilities (README, \"The pi extension without its skills\")",
       "when": {
         "delivery": "channel"
       }
@@ -41,7 +41,7 @@
         "delivery": "session"
       },
       "why": "an ambient aweb pi extension, if one is installed, must honour AWEB_DELIVERY=session (0.3.10 and later); an older one would open a second event stream beside the wake broker; no extension at all is fine",
-      "install": "pi install npm:@awebai/pi@latest, then make its entry {\"source\": \"npm:@awebai/pi@latest\", \"skills\": []} in the pi folder's settings.json (PI_CODING_AGENT_DIR, else ~/.pi/agent), so pi loads the extension without its bundled skills (README, \"The pi extension without its skills\")",
+      "install": "pi install npm:@awebai/pi@latest, then, if the @awebai/pi installed is below 0.5.0, make its entry {\"source\": \"npm:@awebai/pi@latest\", \"skills\": []} in the pi folder's settings.json (PI_CODING_AGENT_DIR, else ~/.pi/agent), so pi loads the extension without its bundled skills. Never install @awebai/claude-skills in a pi folder that OATS homes use: a home's skills come from its capabilities (README, \"The pi extension without its skills\")",
       "ifInstalled": true
     },
     {
@@ -78,7 +78,8 @@
     "resident": "bin/oats-aweb.mjs resident",
     "wake": "bin/oats-aweb.mjs wake",
     "probe": "bin/oats-aweb-probe.mjs",
-    "health": "bin/oats-aweb.mjs health"
+    "health": "bin/oats-aweb.mjs health",
+    "mail": "bin/oats-aweb.mjs mail"
   },
   "binding": {
     "version": 1,
@@ -91,38 +92,14 @@
       "wider"
     ],
     "reasons": [
-      "aw mail inbox does not advertise --count-only; unread-delivery attention counts are unknown. Upgrade aw to a build with read-only count support; failed counts never clear existing claims.",
-      "messaging-enabled standalone preparation needs an explicit context key",
-      "messaging binding needs one soul declaration",
-      "messaging workspace must declare private: per-human",
-      "an explicit responsible-human binding is required",
-      "an explicit wider-membership consent list is required",
-      "a selected wider-team binding is required",
-      "a selected wider alias needs an explicit workspace team mapping",
-      "multiple soul messaging declarations",
-      "adoption team aliases have conflicting mappings",
-      "messaging settings and explicit binding selections are required",
-      "messaging declarations contain incompatible requirements",
-      "messaging input must match the supported binding contract",
-      "explicit native messaging authorization is required",
-      "a required native messaging host resource is unavailable",
-      "the selected messaging provider is unavailable",
-      "the requested messaging configuration is not qualified",
-      "messaging response exceeds the supported wire limits",
-      "an admitted captured instance intent is required for execution",
-      "an explicit private-team binding is required",
-      "selected binding and inline captured invocation are required",
-      "an explicit captured instance home is required",
-      "captured messaging requires explicit delivery: session",
-      "selected wider memberships need their explicitly qualified native setup; they were not omitted",
-      "caller-owned OATS_CLI_BIN and readable kernel version are required",
-      "oats >=0.24.2 is required for captured HOME custody and retained runtime inspection",
-      "the exact retained runtime profile must be readable",
-      "the kernel must report the exact retained resolution",
-      "a retained launchSelection runtime/model observation is required",
-      "Pi strict print does not support session input; retain messaging and configure an input-capable profile",
-      "a supported input-capable ordinary Claude/Codex profile is required"
-    ]
+        "registry-setting-required: settings.oats.aweb.registry: `oats aweb setup --registry <origin>`; restart serve: `oats aweb resident create <name>`; restart wake: `oats aweb wake install` (own shell).",
+        "aw mail inbox does not advertise --count-only; unread-delivery attention counts are unknown. Upgrade aw to a build with read-only count support; failed counts never clear existing claims.",
+        "messaging settings and explicit binding selections are required",
+        "messaging input must match the supported binding contract",
+        "the requested messaging configuration is not qualified",
+        "messaging response exceeds the supported wire limits",
+        "captured bindings are not supported since oats.aweb 1.42.0; readiness takes a workspace context (oats readiness)"
+      ]
   },
   "hooks": {
     "spawn": {
@@ -145,13 +122,17 @@
         "channel",
         "session"
       ],
-      "description": "channel (default): Claude Code selects the aweb-channel plugin (admission/connection unverified) and pi selects the @awebai/pi extension for in-session delivery; Codex and any other runtime without an aweb channel go through the host wake broker (AWEB_DELIVERY=session). Every start re-decides by runtime and leaves the home on exactly one path. session: every runtime goes through the host wake broker (AWEB_DELIVERY=session), no channel flag."
+      "description": "channel (default): Claude Code selects the aweb-channel plugin (admission/connection unverified) and pi selects the @awebai/pi extension for in-session delivery; Codex and any other runtime without an aweb channel go through the host wake broker (AWEB_DELIVERY=session). Every start re-decides by runtime and leaves the home on exactly one path. session: every runtime goes through the host wake broker (AWEB_DELIVERY=session), no channel flag. A launch on a session provider (OATS_BACKEND is neither tmux nor unset) goes through the host wake broker under either value."
     },
     "claudeChannelMode": {
       "hostOnly": true,
       "values": ["approved", "development"],
       "default": "development",
       "description": "Host-selected Claude/channel request, only in oats-local.yaml. Development is the default for new compositions: development passes --dangerously-load-development-channels, and OATS confirms Claude's development-channel prompt at launch. Approved (the recommended unattended route) passes --channels and, with the machine's managed policy, avoids the prompt: Claude admits the plugin when that policy sets channelsEnabled and lists aweb-channel@awebai-marketplace in allowedChannelPlugins (see the oats-aweb skill, section 4). No automatic fallback, migration or flip-back; a future default change requires an explicit reviewed release. Pi, Codex and session routes are unchanged."
+    },
+    "registry": {
+      "hostOnly": true,
+      "description": "Explicit operator registry admission origin (http/https, no path, credentials, query or fragment). Recorded only in oats-local.yaml by oats aweb setup --registry <origin>. Passed as AWID_REGISTRY_URL to registry-dependent calls, sessions and service units; saved aw registry URLs grant no private-network access."
     },
     "root": {
       "hostOnly": true,
@@ -233,6 +214,29 @@
           "name": "label",
           "flag": "--label",
           "description": "Declared team label; defaults to selected default team."
+        }
+      ]
+    },
+    "mail": {
+      "kind": "view",
+      "command": "mail",
+      "context": "home",
+      "description": "Read-only: this instance's mail, received and sent, newest first. Never acknowledges.",
+      "args": [
+        {
+          "name": "limit",
+          "flag": "--limit",
+          "description": "max messages, default 50, at most 200"
+        },
+        {
+          "name": "cursor",
+          "flag": "--cursor",
+          "description": "nextCursor from a previous answer"
+        },
+        {
+          "name": "conversation",
+          "flag": "--conversation",
+          "description": "one conversation id: its messages, newest first"
         }
       ]
     }

@@ -427,7 +427,7 @@ function tmpFor() {
 /** `oats tui --dir <the deployment>`, the real CLI with TMPDIR `tmp`, typed at a terminal's prompt
  *  through a wrapper that writes its own pid and then becomes the CLI. The shell records the exit
  *  status. Resolves once the agent's row is selected and can be opened: the cheat sheet offers Enter. */
-async function tui(term, { tmp = tmpFor() } = {}) {
+async function tui(term, { tmp = tmpFor(), first = NAME } = {}) {
   const n = ++started;
   const pidFile = join(base, `tui-${n}.pid`), statusFile = join(base, `tui-${n}.status`);
   await term.command(`sh -c ${shq(`echo $$ > ${shq(pidFile)}; TMPDIR=${shq(tmp)} exec ${TUI} --dir ${shq(fx.dep)}`)}; echo $? > ${shq(statusFile)}`, "the oats tui command");
@@ -469,7 +469,9 @@ async function tui(term, { tmp = tmpFor() } = {}) {
       await pairs.repeatable(term, "Escape", () => run.sheet().startsWith(LEAD), "the list's focus, its cheat sheet drawn");
     },
     async ready(why) {
-      await until(term, () => run.openable(), `the agent's row, selected and running, with "Enter open" in the cheat sheet after the leader and the palette, ${why}`);
+      // `first`: the row the list starts on, its top one (alpha's, unless a test spawned newer agents).
+      const opens = () => (first === NAME ? run.openable() : selectedRunning(term, first) && run.sheet().startsWith(OPEN_HINT));
+      await until(term, opens, `the agent's row, selected and running, with "Enter open" in the cheat sheet after the leader and the palette, ${why}`);
       assert.equal(run.status(), null, `oats tui still runs ${why}`);
     },
     /** The line after an open, in the sidebar under the title, or null when nothing stands there:
@@ -1255,8 +1257,9 @@ for (const [how, end, expected] of [
 // new by each test and killed after it, so nothing after them lists those
 // agents running.
 const OTHERS = ["bravo", "charlie", "delta"];
-/** The four agents, in the order the list draws them (name order) and so the tabs are opened. */
-const FOUR = [NAME, ...OTHERS];
+/** The four agents, in the order the list draws them (newest first: alpha was spawned before the
+ *  others, delta last) and so the tabs are opened. */
+const FOUR = [...OTHERS].reverse().concat(NAME);
 let othersSpawned = null;
 /** The four agents' windows, new; the three others' homes spawned at the first call, and their
  *  windows killed after the test. */
@@ -1310,7 +1313,7 @@ for (const [how, end, expected] of [
   test(`${how} with four agents' terminals open as tabs of the real oats tui: the private server is gone, no viewer session of any tab and no viewer's own key table is left on the agents' server, and every agent keeps running${how === "kill -9" ? "; the run directory is left for the next run's sweep" : "; the run directory is removed"}`, { skip: NO_TMUX }, async (t) => {
     await fourAgents(t);
     const term = await terminal(t);
-    const run = await tui(term);
+    const run = await tui(term, { first: FOUR[0] });
     for (let k = 0; k < FOUR.length; k++) await openTab(term, run, k);
     const dir = run.dir(), socket = panelSocket(dir);
     await until(term, () => viewerSessions().length === 4 && viewerSessions().every((session) => attached().includes(session)), "four viewer sessions, each attached", () => [`viewer sessions: ${JSON.stringify(viewerSessions())}, attached: ${JSON.stringify(attached())}`], 30000);

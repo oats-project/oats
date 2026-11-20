@@ -1,4 +1,5 @@
 import { takePickerFocusReturn } from './overlay-picker.mjs';
+import { DESKTOP_NOUNS } from './desktop-terms.mjs';
 import { AUTH_PANE_LABEL, FORGE_API, forgeReason, hostName, loginName, ref } from './forge-contract.mjs';
 export const connectionsCSS = `
 .forge-settings { width:min(760px,calc(100vw - 32px)); max-height:90vh; overflow:auto; padding:18px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--fg); box-shadow:var(--shadow-popover); }
@@ -18,6 +19,10 @@ export const connectionsCSS = `
 const keys = new Map([['\r', 'enter'], ['\x1b[A', 'up'], ['\x1b[B', 'down'], ['\x1b[C', 'right'], ['\x1b[D', 'left'],
   ['\t', 'tab'], ['\x1b', 'escape'], ['y', 'yes'], ['Y', 'yes'], ['n', 'no'], ['N', 'no'], ['\x03', 'interrupt']]);
 export const authKeyName = bytes => keys.get(bytes) || null;
+/** The Connections dialog's own words (slice 3b: copy only). `agent` is DESKTOP_NOUNS.instance. */
+export const CONNECTIONS_COPY = Object.freeze({
+  githubPurpose: agent => `Gives each ${agent}'s branch and pull request in its details. Connect with the GitHub CLI, as yourself.`,
+});
 /** Settings is machine-scoped. Auth-open ownership is deliberately separate
  * from connection generation: Connect itself increments that generation.
  * `sections` are further Settings sections (Terminal), each a factory
@@ -65,7 +70,7 @@ export function createConnections({ doc, request, desk, terminalFactory, subscri
       ui.host.value = value.hostRef;
       ui.status.textContent = value.status === 'connected' ? `Connected as ${value.login} on ${value.host}` : `Not connected on ${value.host}`;
       ui.connect.hidden = value.status !== 'not-connected'; ui.disconnect.hidden = value.status !== 'connected';
-      ui.observed.textContent = 'Status is read on demand. Credentials stay with GitHub CLI on this machine.';
+      ui.observed.textContent = 'Status is read when you open this or press Refresh. Your credentials stay with GitHub CLI on this computer.';
     } else {
       ui.status.textContent = forgeReason(value?.reason?.code).message;
       selectedHost = null; ui.host.replaceChildren(); ui.observed.textContent = 'No current connection state is established. Refresh to retry.';
@@ -165,7 +170,9 @@ export function createConnections({ doc, request, desk, terminalFactory, subscri
       const disconnectButton = button('Disconnect', () => void disconnect());
       connectButton.hidden = true; disconnectButton.hidden = true;
       const actions = node('div', undefined, 'forge-actions'); actions.append(refreshButton, connectButton, disconnectButton);
-      card.append(node('h3', 'GitHub'), label, status, observed, actions);
+      // What the connection is for, in one line (the Desktop UI rework, slice 3b; guide tour step 40).
+      const purpose = node('p', CONNECTIONS_COPY.githubPurpose(DESKTOP_NOUNS.instance), 'forge-hint'); purpose.dataset.purpose = 'github';
+      card.append(node('h3', 'GitHub'), purpose, label, status, observed, actions);
       const auth = node('section'); auth.setAttribute('aria-label', 'GitHub CLI sign-in');
       dialog.append(header, node('h3', 'Connections'), card, auth);
       extras = sections.map(make => make()).filter(extra => extra?.element);

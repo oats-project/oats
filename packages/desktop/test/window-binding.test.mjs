@@ -8,7 +8,7 @@ import { validWorkspaceId, WORKSPACE_ID_MAX } from "../renderer/workspace-id.mjs
 import { workspaceHash, hashWorkspace, frameWorkspace, trustedRendererUrl } from "../renderer/window-binding.mjs";
 
 const RENDERER = "file:///Applications/OATS%20Desktop.app/Contents/Resources/app/renderer/index.html";
-const IDS = ["/Users/juan/Agents/oats", "ws:0123456789abcdef0123", "remote:altair:/home/juan/agents", "a b&c=d#e?f%g", "ünï/çødé"];
+const IDS = ["/Users/alex/Agents/oats", "ws:0123456789abcdef0123", "remote:devbox:/home/alex/agents", "a b&c=d#e?f%g", "ünï/çødé"];
 
 test("workspace ids: the validId rule (non-empty, bounded, no C0 or DEL controls)", () => {
   for (const id of IDS) assert.equal(validWorkspaceId(id), true, id);

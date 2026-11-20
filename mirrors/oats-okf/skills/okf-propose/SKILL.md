@@ -1,51 +1,51 @@
 ---
 name: okf-propose
 description: >-
-  The compulsory harvest procedure for working instances with oats.okf:
-  keep instance knowledge current and, at every harvest checkpoint (a PR
+  The compulsory proposing procedure for working instances with oats.okf 6:
+  keep instance knowledge current and, at every knowledge checkpoint (a PR
   handed over for review, a finished task, and in a long-lived role such as
   a maintainer's a feature ready, a release or deploy shipped, or a direction
-  decision taken with the human), judge
-  durable claims, write one proposal and launch one knowledge harvester.
-  Read at task start and at each checkpoint. Covers the checkpoints, the
-  soul opt-out, promotion and duplicate checks, the checkpoint record,
-  one-at-a-time spawning, proposal provenance, carrying a proposal over and
-  hand-back. The harvester's own publication procedure is knowledge-harvest,
-  not this skill.
+  decision taken with the human), judge durable claims yourself, write them
+  in a clone of the knowledge base with `oats okf propose --plan`, run
+  `--apply` (it prints the outgoing diff and stops), read the diff, and run
+  `--apply` again to open one reviewed PR per base. Read at task start and at
+  each checkpoint. Covers the checkpoints, the soul opt-out, what still
+  refuses and the warnings the maintainer resolves, the checkpoint record and
+  hand-back. The knowledge maintainer gates every merge; you never shepherd
+  the PR.
 ---
 
 # Propose knowledge at checkpoints
 
 This duty comes from `oats.okf`, not from a task briefing. Keep STATE.md,
 log.md and notes/ current throughout the work; use `okf-instance-knowledge`
-for what to capture. Never write accepted knowledge yourself.
+for what to capture. You propose knowledge yourself, as a pull request on
+the knowledge base; the **knowledge maintainer** reviews it and gates every
+merge. Never push to an accepted branch, never merge your own proposal.
 
 ## Read your duty from the provider
 
-At task start and before a harvest checkpoint, run `oats okf status` from
-instance home. Its `result.harvest` is the state the provider wrote at spawn:
+At task start and before a checkpoint, run `oats okf status` from instance
+home. Its `result.harvest` (and the same value as `result.publish`) is the
+state the provider wrote at spawn:
 
 - `on`: follow the checkpoint procedure below.
-- `off` (`reason: soul-opt-out`): no harvest duty; never propose or spawn a
-  harvester, but still consult and keep instance knowledge current.
+- `off` (`reason: soul-opt-out`): no duty to propose; never propose, but
+  still consult and keep instance knowledge current.
 - `unknown` (`reason: spawn-state-missing`), or a command failure: do not
   propose. Report it; a new spawn with the current provider establishes the
   state. Never infer `on`, read the soul file to decide, or repair the policy
-  by hand. A restart does not recompose an old home's provider.
+  by hand.
 
-This is the one provider-owned answer. A task briefing does not decide your
-duty. The private `okf-harvest-policy.json` in home is written by the provider,
-not a user setting or a publication authorization; the harvester still checks
-the source independently.
+A task briefing does not decide your duty, and `oats okf propose` refuses an
+opted-out or unknown home on its own.
 
-## When to harvest
+## When to propose
 
-A **harvest checkpoint** is any of these moments. Each one is yours to act
-on, and none waits for a task to close:
+A **knowledge checkpoint** is any of these moments:
 
 - **You hand over a PR for review:** you open it, or mark it ready, and tell
-  its reviewer or maintainer. The work it carries is done enough to know
-  what it taught.
+  its reviewer or maintainer.
 - **You finish a task,** before you hand back or retire.
 - **In a long-lived role** whose task never finishes (a maintainer, an
   expert holding an area, a support desk):
@@ -54,183 +54,167 @@ on, and none waits for a task to close:
   - **a direction decision is taken with your human.**
 
 These are not checkpoints: a commit, a review round or a new head of the
-same PR, and each decision you make while working (a direction decision taken
-with your human is the checkpoint above). Capture decisions and discoveries
-the moment they happen, in notes/; the next checkpoint carries them.
+same PR, and each decision you make while working. Capture decisions and
+discoveries the moment they happen, in notes/; the next checkpoint carries
+them. **One proposal per checkpoint, carrying only what no earlier proposal
+carried.**
 
-**One proposal per checkpoint, carrying only what no earlier proposal
-carried.** A PR handed over and then the same task closing are two
-checkpoints, and the second proposes only what was learned since the first.
+## Judge first
 
 At a checkpoint, first update STATE.md, log.md and the relevant notes. Then:
 
-1. **Respect the soul opt-out.** `knowledge: { harvest: off }` removes the
-   harvest duty, not consultation or working-memory upkeep. An opted-out
-   soul never proposes or spawns a harvester. No task, note, host or spawn
-   setting can turn that duty back on. The harvester's required spawn hook
-   independently refuses an opted-out recorded source.
-2. **Read `knowledge-theory` and apply its promotion test.** Keep only what
-   changes how a future instance of this soul decides or acts and cannot be
-   recovered by reading the repository. No code descriptions, task residue,
-   secrets, personal data or tool noise. Nothing durable, no proposal.
-3. **Consult accepted knowledge first:** `oats okf search` for the claim,
-   then `cat` the relevant concept. Already accepted with nothing to add:
-   no proposal. A refinement or candidate supersession cites the accepted
-   concept and says what changes and why. A blocked read is not evidence
-   that the claim is new: record the blocker rather than inventing knowledge.
-4. **Claim only for nodes your soul owns.** Each concept is its own claim
-   within the one proposal. For a lesson whose home is a node you only read,
-   name the lesson and that node in one line in your hand-back for its owner;
-   do not claim it in this harvest.
-5. **Check your log for this checkpoint.** Do not submit the same work again
-   after a restart, compaction, a review fix or a hand-over acknowledgment.
-   Recover an uncertain spawn's recorded result before any further action;
-   a missing reply is not permission to spawn a duplicate.
-6. **Record the checkpoint in log.md, whatever its outcome:** what the
+1. **Respect the soul opt-out.** `knowledge: { harvest: off }` (also spelled
+   `publish: off`) removes the duty to propose, not consultation or
+   working-memory upkeep. No task, note, host or spawn setting turns it back
+   on, and `oats okf propose` refuses such a home (`E_OPTED_OUT`).
+2. **Apply `knowledge-theory`'s promotion test:** keep what changes how a
+   future instance decides or acts and cannot be recovered by reading the
+   repository. No code descriptions, task residue, secrets, personal data or
+   tool noise.
+3. **When in doubt, propose: the maintainer judges.** A quick
+   `oats okf search` for the claim is enough. Duplicates, the canonical home
+   and the subject are the maintainer's to settle. A lesson goes to the node
+   or subject it belongs in, even one your soul only reads: a warning tells
+   the maintainer.
+4. **Check your log for this checkpoint.** Do not propose the same work
+   again after a restart, compaction, a review fix or a hand-over
+   acknowledgment.
+5. **Record the checkpoint in log.md, whatever its outcome:** what the
    checkpoint was (`PR #123 handed over`, `v2.4.0 shipped`), and either the
-   proposal and its harvester, or `nothing to propose` with the reason in a
-   few words. A checkpoint with no line in log.md is a harvest skipped.
+   proposal's PR URLs, or `nothing to propose` with the reason in a few
+   words. A checkpoint with no line in log.md is a proposal skipped.
 
-## Write one self-contained proposal
+Never include personal data about people outside the team (clients,
+correspondents, any other third party): a name, a contact detail, or anything
+else that identifies a person, including detail derived from correspondence.
+Keep the lesson and leave the person out. Naming the author of a published
+source you cite is fine. That covers the names you choose as well: a note's
+file name, a task ref and an instance's name are published as provenance when
+knowledge is proposed.
 
-Write `proposals/<YYYY-MM-DD>-<slug>.md` in your instance home, not the work
-repository. Use this form:
+## The steps
 
-```markdown
-# OKF proposal: <one-line claim>
+Run each from your instance home.
 
-Source: instance <your instance name>, home <your instance home>, soul <your soul's name>, incarnation <your instance.json createdAt>
+1. **`oats okf propose --plan`** clones each base your soul proposes to, at
+   its accepted branch, into `proposals/<date>-<slug>/work/<alias>`, and
+   prints the slug it made, the write surface and the open proposals on each
+   base. It refuses before cloning: `E_SOURCE` (not a working OATS home),
+   `E_OPTED_OUT`, `E_PROPOSAL_EXISTS` (a slug you gave is taken), `E_OWNER`
+   (your `okf.json` and the base disagree on an owned node: report it).
+2. **Write the knowledge** in the clone with your native file tools (load
+   **okf-authoring** for the craft): one concept per Markdown file, with
+   frontmatter. Edit files only: do not commit, branch or push in the clone.
+   `proposal.md` is optional. Left as the skeleton, the PR text is built from
+   your claims' titles and descriptions. Fill it to say why and what you
+   observed: `# OKF proposal: <one-line claim>`, `## What`, `## Why`,
+   `## Evidence`, and `## Backing notes` with one `- notes/<file>.md` line per
+   note, relative to your home. No provenance block: the command writes it.
+3. **`oats okf propose --apply`** checks everything and pushes nothing: it
+   validates the proposed tree, hashes the named notes, runs the content
+   screen over everything that would leave this host (the tree delta, file
+   names, the commit text, the PR body) and prints the **complete outgoing
+   diff**, the commit text and the PR body, then stops.
+4. **Read the printed diff once, in full, as a reviewer would:** against
+   `knowledge-theory`'s reject list (no code descriptions, task residue,
+   secrets or verbatim third-party text), against the personal-data
+   sentence above (note file names, task refs and your instance name
+   included), and for private paths. A clean screen is a bounded detector, not clearance.
+   Fix what you would not merge.
+5. **`oats okf propose --apply` again** publishes exactly what the last
+   check printed: one `okf-proposal` PR per changed base, on a new
+   `okf-proposal/<date>-<uuid>` branch. If anything changed since, it
+   refuses `E_DIGEST` and pushes nothing.
 
-## What
-<Claim, one concept each; name its owned node.>
+**After you fix something in step 4, or after `E_DIGEST`,** run
+`oats okf propose --check`: it prints the new diff and records it. Read it,
+then run `--apply`. A bare `--apply` only checks when no check was recorded
+yet.
 
-## Why
-<Why it outlives this task; what a future instance would do differently.>
+With more than one open proposal in your home, give `--slug <slug>` to each
+command. The 6.2 steps still work, with the same result:
+`oats okf propose --plan --slug <slug>`, then
+`oats okf propose --check --slug <slug>` (prints the check and a digest),
+then `oats okf propose --apply --slug <slug> --digest <digest>`.
 
-## Evidence
-<What was observed and when; task refs; accepted concepts confirmed,
-refined or contradicted, cited with their accepted commit. State limits.>
+On a base with the subject layout (`layout: subjects` in the plan), write a
+claim under `claims/` with `about: [<kind>/<slug>, ...]` if your soul
+declares `subjects` (okf.json version 2). Write in your nodes if it declares
+`owns` (version 1): `about:` is then added from the subject whose
+`legacy-nodes` names the node. Never write an `id`, and never edit a
+generated index (`subjects/**/index.md`, `verdicts/index.md`, the root
+`index.md`'s `## Subjects` section): the check regenerates them. To propose
+again a claim a verdict rejected, add `reconsiders: <id>` and new evidence.
 
-## Backing notes
-- notes/<file>.md
-```
+## What refuses, and what only warns
 
-Use **exactly one** `Source:` line, filled from your instance's identity.
-Copy `createdAt` verbatim from your home's `instance.json` into `incarnation`;
-it is not the proposal date, a session start time or a newly generated ID.
-Do not edit the record. The hook matches it exactly against the live record
-and public event history, so a current proposal can use a reused instance
-name without taking another incarnation's evidence. It is a consistency
-pointer, never proof of authorship or authority.
+These refuse, and nothing is pushed:
 
-Legacy lines without `, incarnation <createdAt>` still work only when the
-source's event history has one known incarnation. If a reused name refuses,
-re-judge the claims and named notes in the current instance and write a new
-proposal with its incarnation, or re-propose from an instance with a fresh
-name. Never stamp an old proposal with a replacement's `createdAt` to bypass
-the refusal. A mismatch, incomplete/unknown history or invalid live record
-still refuses; no fallback to older recovery. Retired-source capture still
-requires a single known incarnation, even with the new line.
+- `E_SCOPE`: `okf-base.json`, a non-Markdown file (v1 anywhere; v2 under
+  `claims/` or `subjects/`), a hidden, executable, symlinked or
+  out-of-root path, or a hand-edited generated index.
+- `E_VALIDATION`: the base would be invalid (unparseable or missing
+  frontmatter, a missing `type`, a malformed list, a duplicate id, a file
+  outside every node): fix the Markdown.
+- `E_CONTENT_REFUSED` (findings name locations only; rule `host-term` is the
+  host's own list): remove the content, never work around the screen.
+- `E_PROPOSAL_FORMAT`: `proposal.md` carries a provenance block, or is not
+  readable UTF-8.
+- `E_DIGEST`: the proposal changed since the check you read.
 
-The optional `## Backing notes` section lists one
-`- notes/<file>.md` per note, relative to your home. Only those named notes
-are read; the harvester does not browse your entire home or transcript.
+Everything else is a **warning** in `warnings[]` and a row of the PR body's
+`## Check warnings`, which the maintainer resolves before merging. Each row
+names the rule it replaces; none needs anything from you:
 
-No secrets, credentials or private paths outside the Source line.
-Never include personal data about people outside the team (clients, correspondents,
-any other third party): a name, a contact detail, or anything else that identifies
-a person, including detail derived from correspondence. Keep the lesson and leave
-the person out. Naming the author of a published source you cite is fine.
-That covers the names you choose as well: a note's file name, a task ref and an
-instance's name are published as provenance when knowledge is harvested.
+- `W_SCOPE`: a path outside your write surface (another node, `verdicts/`,
+  `subjects/workstream/`, a delete, a supersession no claim of yours makes).
+  The maintainer moves it, or removes it.
+- `W_SUBJECT`: a claim with no subject, or one naming no subject file. The
+  maintainer assigns it.
+- `W_LINT`: a broken link, a concept no index lists, a missing title or
+  description. The maintainer fixes it.
+- `W_VERDICT`: a claim carrying a rejected id without `reconsiders:`. The
+  maintainer judges whether it is the same claim.
+- `W_PROPOSAL`: `proposal.md` left unfilled, without a title or a section,
+  or with a note reference it cannot read (dropped from the evidence).
 
-## Launch the harvester
+Two warnings stay out of the PR body: `E_NOTE` (a named note that is missing
+or unreadable is listed without a hash: drop any claim that needed it), and
+`W_ID_MISSING` (an accepted claim waits for the maintainer's id). A
+`W_ATTRIBUTION` warning means a trailer was left out of the commit because
+the content screen refuses its value.
 
-**One harvester at a time per instance.** Read log.md for your last
-harvester's name, then `oats status`. While it still lists that harvester,
-do not spawn another, even if it has handed over or appears idle: retired is
-not the same as stopped. Keep the proposal instead (below).
+## Publication
 
-**Name your harvester explicitly with `--name`.** Never leave it to the
-kernel's numbered default or use `--purpose`: a retired harvester's messaging
-alias can remain occupied even when no instance is listed. For each new
-proposal, run this once from instance home to print a fresh name:
+Before it pushes anything, `--apply` checks that this host can open the PR.
+`E_GH_UNAVAILABLE`, `E_CREDENTIAL` or `E_HOST_CREDENTIAL` mean it cannot:
+nothing was pushed and the proposal is unchanged. Report the message to
+whoever runs the host, and once it is fixed run the same `--apply` again.
+
+**A publication error is reported, never retried.** `E_BASE_MOVED`,
+`E_PUSH_UNCERTAIN`, `E_GH` and `E_PR_UNCERTAIN` retain the clone, the texts
+and the safe result in the proposal directory. A remote branch or PR may
+exist after an uncertain one: never assume it does not, never clean it up.
+When the push went through, the message names the commands that finish or
+remove it: pass them on in your report, and do not run them. A second
+publication of the same proposal refuses (`E_PROPOSAL_EXISTS`).
+
+## After apply
+
+Record each PR URL in log.md and go back to work. You never shepherd the PR:
+the `proposal-review` trigger spawns the knowledge maintainer, which reviews,
+amends, merges or closes it, and reports to no one. Where no trigger is
+installed, you may spawn one reviewer, and not wait for it:
 
 ```sh
-node --input-type=module <<'JS'
-import { readFileSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-const { instance } = JSON.parse(readFileSync('instance.json', 'utf8'));
-if (typeof instance !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(instance)) {
-  throw new Error('instance.json must name the source instance as a slug');
-}
-const prefix = instance.slice(0, 21).replace(/-+$/, '');
-console.log(`${prefix}-${randomUUID().replaceAll('-', '')}-harvester`);
-JS
+oats spawn oats.okf/knowledge-maintainer --task "Review knowledge-base PR <url> at <head>. Load the knowledge-review skill first." --relation unrelated
 ```
 
-The name is `<source-prefix>-<fresh-uuid-without-dashes>-harvester`: at most
-21 source characters + 1 dash + 32 UUID characters + 10 for `-harvester` =
-64, within both the kernel and aweb alias limits. Removing a trailing dash
-from the prefix keeps it a slug. The full random UUID distinguishes proposals,
-including ones from sources with the same truncated prefix; a timestamp alone
-can collide across hosts or within a minute. Use only non-sensitive source
-names, since the harvester name is also its messaging alias and provenance.
+Keep the backing notes until the PR is settled; the maintainer never reads
+them in your home (the hashes in the provenance fix what you relied on).
 
-Record the printed name with the proposal path in log.md **before preview**.
-Check `oats status` for that exact name (and `oats souls` for a soul-name
-conflict); it must be unused in the deployment. The kernel checks again at
-spawn: this check is not a reservation or proof that a messaging alias is free.
-Reuse this recorded name after interruption; do not regenerate it for the
-same proposal or between preview and apply.
+## Hand-back
 
-Replace `<harvester-name>` with that exact name and `<proposal>` with the
-proposal path. From instance home, first append `--preview` to this complete
-command and read the resolved harvester composition, then run the same
-command without `--preview`:
-
-```sh
-oats spawn oats.okf/knowledge-harvester --name <harvester-name> --task-file <proposal> --relation unrelated
-```
-
-Use that relation exactly as written, without extra relation flags. The
-kernel picks the harness and model; pass no harness, model, wrapper or
-permission bypass. A scaffold is not a running harvester.
-
-Record the checkpoint, proposal path and returned harvester instance name
-in log.md; keep STATE.md's current picture up to date. Report a refused or
-uncertain spawn, do not retry it in a loop or spawn around it.
-
-On `E_INSTANCE_NAME_TAKEN`, stop, record the chosen name and refusal, and
-report it in your hand-back. Do not drop `--name`, switch to `--purpose`,
-append a counter, regenerate a UUID or launch a replacement in a retry loop.
-A later explicitly resolved attempt may choose and record a new unused name;
-first establish that this proposal has no harvester already started. For an
-uncertain result, recover the spawn/session record before any further action.
-A messaging identity-minting failure is not `E_INSTANCE_NAME_TAKEN`: report
-that exact failure to your spawner/operator and stop. Never remove a stale
-certificate, re-onboard an identity or rename around that failure yourself.
-
-**While your last harvester is still listed,** keep the proposal and its
-backing notes, and note it as pending in STATE.md and log.md. At your next
-checkpoint, add that checkpoint's claims to the pending proposal and launch
-it then, once the last harvester is gone. Never sleep, poll or busy-wait for
-it. If it is still listed at hand-back, name it, the pending proposal and
-its claims in your hand-back. Do not wait for it to finish.
-
-## What happens after launch
-
-The harvester verifies the recorded source, its owned nodes and opt-out,
-then snapshots the proposal and named evidence at spawn. It judges claims
-against the accepted base, drops unsuitable or duplicate claims, and opens
-reviewed knowledge PRs for eligible claims. A submitted PR is not accepted
-knowledge. The knowledge maintainer reviews it; the source never merges its
-own knowledge. The harvester retires once it has handed over.
-
-Keep backing notes until that harvester retires. Retirement recovery can
-supply the source evidence before capture; do not dispose of that recovery
-before capture. After a successful capture, the snapshot is independent of
-the source home and recovery. This preserves evidence; it does not itself
-control the harvester session's lifetime. The explicit live-incarnation check
-extends the 5.1.0 source checks; snapshotting, opt-out and review flow are
-unchanged.
+Say which checkpoint you ran and its outcome: "done, proposed: <PR URLs>",
+"done, nothing to propose: <reason>", "done, proposal pending: <slug and
+why>" or "done, no duty to propose" (opt-out).

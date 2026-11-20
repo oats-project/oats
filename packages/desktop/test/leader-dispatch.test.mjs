@@ -27,7 +27,7 @@ test("the rows that apply: terminal rows with a terminal, tab keys with two tabs
   const does = (state) => LEADER_TABLE.filter(row => leaderApplies(row, state)).map(row => row.does);
   assert.deepEqual(does(STATE), LEADER_TABLE.map(row => row.does).filter(d => d !== "tab-move"));
   const none = does({});
-  assert.deepEqual(none, ["palette", "instances", "souls", "capabilities", "workspace-previous", "workspace-next", "stop", "restart", "start", "retire", "spawn", "spawn-another", "filter", "workspaces", "help", "list"]);
+  assert.deepEqual(none, ["palette", "instances", "souls", "capabilities", "workspace-previous", "workspace-next", "sidebar", "stop", "restart", "start", "retire", "spawn", "spawn-another", "filter", "workspaces", "help", "list"]);
   assert.ok(!does({ ...STATE, tabs: 1 }).includes("tab-previous") && !does({ ...STATE, tabs: 1 }).includes("tab-next"));
   assert.ok(!does({ ...STATE, canSplitRow: false }).includes("split-right") && does({ ...STATE, canSplitRow: false }).includes("split-down"));
   assert.ok(["group-next", "group-previous", "group-close"].every(row => !does({ ...STATE, split: false }).includes(row)), "Tab, Shift+Tab and x while split");

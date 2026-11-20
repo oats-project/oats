@@ -27,7 +27,7 @@ truthful about unavailable and unknown facts.
 ## Admission and execution
 
 One route: **POST `/api/instance-git?ws=<workspace-id>`**. Exactly one nonempty
-`ws`, no other query keys. The existing loopback Host and POST Origin guards run
+`ws`, no other query keys. The server-wide credential check and the loopback Host and POST Origin guards run
 before parsing/lookup. Main's API proxy pins this instance-addressed route to an
 advertised workspace. JSON must be an object, bounded to 64 KiB of UTF-8 bytes.
 

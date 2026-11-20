@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import {
   registerAction, setBinding, resetAllBindings, getBinding, defaultBinding, keymapConflicts, setChordFamily, activeChordFamily, runAction, listActions,
-  matchEvent, setActiveContexts,
+  matchEvent, setActiveContexts, DEFAULT_KEYMAPS, TERMINAL_ALLOWLIST,
 } from "../renderer/keybindings.mjs";
 import { createKeybindingsEditor, groupActions, shortcutMatches, CHORD_FAMILY_WORDS } from "../renderer/keybindings-editor.mjs";
 import { createChordFamily } from "../renderer/chord-family.mjs";
@@ -343,20 +343,19 @@ test("a stored rebind that clashes with another binding is surfaced, never chang
   assert.equal(doc.querySelector(".kb-clashes").hidden, true);
 });
 
-test("shell wiring: the settings cog and its Keyboard shortcuts… item carry the clash marker, recomputed on keymap change", async () => {
+test("shell wiring: the foot's ? (Keyboard shortcuts) carries the clash marker, recomputed on keymap change", async () => {
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
   const mark = src.match(/function markShortcutClashes\(\) \{[^]*?\n\}/)?.[0];
   assert.ok(mark, "markShortcutClashes");
   assert.match(mark, /keymapConflicts\(isMac\)/);
-  assert.match(mark, /settingsMenu\.items\.find\(el => el\.dataset\.menuAction === "app\.shortcuts"\)/, "the menu's Keyboard shortcuts… item");
-  assert.match(mark, /for \(const button of \[document\.getElementById\("sidebar-settings"\), item\]\) \{[^]*?classList\.toggle\("has-clash"[^]*?aria-description/,
-    "the cog and the item, both");
+  assert.match(mark, /for \(const button of \[document\.getElementById\("sidebar-help"\)\]\) \{[^]*?classList\.toggle\("has-clash"[^]*?aria-description/,
+    "the foot's ? (slice 1: the settings cog and its menu are gone)");
   assert.match(src, /onKeymapChange\(\(\) => \{[^]*?markShortcutClashes\(\)/);
   const css = readFileSync(new URL("../renderer/shell.css", import.meta.url), "utf8");
   // --danger: a key no longer does what it says (yellow means needs input only, 2026-10-26).
-  assert.match(css, /#sidebar-settings\.has-clash::after \{[^}]*background: var\(--danger\)/);
-  assert.match(css, /\.sidebar-settings-menu button\.has-clash > \.sidebar-settings-label::after \{[^}]*background: var\(--danger\)/);
+  assert.match(css, /#sidebar-help\.has-clash::after \{[^}]*background: var\(--danger\)/);
+  assert.doesNotMatch(css, /sidebar-settings/, "no rule is left for the cog");
   assert.doesNotMatch(css, /#sidebar-shortcuts/, "the foot's shortcuts button is gone");
 });
 
@@ -708,52 +707,52 @@ test("the editor opens on a Leader group, then Sidebar keys, then the groups as 
   const rows = [...leader.querySelectorAll(".kb-row")];
   // First the rebindable leader itself, marked as working in a terminal.
   assert.equal(rows[0].querySelector(".kb-label").textContent, "Leader: the commands that follow one key");
-  assert.deepEqual([...rows[0].querySelectorAll("button.kb-chord kbd")].map((k) => k.textContent), ["Ctrl", "X"]);
+  assert.deepEqual([...rows[0].querySelectorAll("button.kb-chord kbd")].map((k) => k.textContent), ["Ctrl", "Space"]);
   assert.equal(f.marks("Leader: the commands that follow one key", "terminal"), "terminal");
   // Then one read-only row per entry of the table the Desktop runs: no m.
   const fixed = rows.slice(1);
-  assert.equal(fixed.length, 25, "26 rows of the TUI's table, less m");
+  assert.equal(fixed.length, 26, "27 rows of the TUI's table (b since the UI rework), less m");
   assert.ok(fixed.every((row) => row.classList.contains("kb-row-fixed") && !row.querySelector("button")), "read-only: no button to record or reset");
   const palette = fixed[0];
   assert.equal(palette.querySelector(".kb-label").textContent, "Command palette", "a key that runs one action shows its label");
-  assert.equal(palette.querySelector(".kb-chord .sr-only").textContent, "Ctrl+X then K or Space, fixed");
-  assert.deepEqual([...palette.querySelectorAll(".kb-keys kbd")].map((k) => k.textContent), ["Ctrl+X", "K", "Space"]);
+  assert.equal(palette.querySelector(".kb-chord .sr-only").textContent, "Ctrl+Space then K or Space, fixed");
+  assert.deepEqual([...palette.querySelectorAll(".kb-keys kbd")].map((k) => k.textContent), ["Ctrl+Space", "K", "Space"]);
   assert.ok(fixed.some((row) => row.querySelector(".kb-label").textContent === "Instance roster"), "Esc");
   // ↑ / ↓ are the workspace moves, in the Desktop's words; the previous / next instance are no leader row (chords alone).
   const labelled = (text) => fixed.find((row) => row.querySelector(".kb-label").textContent === text);
   for (const [text, cap] of [["Show the previous workspace in the list", "↑"], ["Show the next workspace in the list", "↓"]]) {
     assert.ok(labelled(text), text);
-    assert.deepEqual([...labelled(text).querySelectorAll(".kb-keys kbd")].map((k) => k.textContent), ["Ctrl+X", cap], text);
+    assert.deepEqual([...labelled(text).querySelectorAll(".kb-keys kbd")].map((k) => k.textContent), ["Ctrl+Space", cap], text);
   }
   assert.equal(labelled("Open the previous instance's terminal") ?? labelled("Open the next instance's terminal") ?? null, null, "not the leader's");
   // Tab and Shift+Tab are the next and the previous group, by their actions' labels, in the table's order.
-  for (const [text, caps] of [["Focus the next editor group", ["Ctrl+X", "Tab"]], ["Focus the previous editor group", ["Ctrl+X", "Shift+Tab"]]]) {
+  for (const [text, caps] of [["Focus the next editor group", ["Ctrl+Space", "Tab"]], ["Focus the previous editor group", ["Ctrl+Space", "Shift+Tab"]]]) {
     assert.ok(labelled(text), text);
     assert.deepEqual([...labelled(text).querySelectorAll(".kb-keys kbd")].map((k) => k.textContent), caps, text);
   }
   assert.equal(fixed.indexOf(labelled("Focus the previous editor group")), fixed.indexOf(labelled("Focus the next editor group")) + 1, "Shift+Tab right after Tab");
-  assert.equal(labelled("Focus the previous editor group").querySelector(".kb-chord .sr-only").textContent, "Ctrl+X then Shift+Tab, fixed");
+  assert.equal(labelled("Focus the previous editor group").querySelector(".kb-chord .sr-only").textContent, "Ctrl+Space then Shift+Tab, fixed");
   // The quiet line: the leader is the TUI's, the direct chords are extras, and where 1 and 3 differ.
   const extras = leader.querySelector(".kb-extras");
   assert.match(extras.textContent, /the TUI's/);
-  assert.match(extras.textContent, /Ctrl\+X then 1 is Instances and Ctrl\+X then 3 is Capabilities, while Ctrl\+1 stays Machines and Ctrl\+3 stays Automations/);
+  assert.match(extras.textContent, /Ctrl\+Space then 1 is Instances and Ctrl\+Space then 3 is Capabilities, while Ctrl\+1 stays Machines and Ctrl\+3 stays Automations/);
   // The stage rows say it too.
-  assert.match(f.rowFor("View: Workspace › Machines").querySelector(".kb-note").textContent, /Ctrl\+X then 1 is Instances/);
-  assert.match(f.rowFor("View: Automations").querySelector(".kb-note").textContent, /Ctrl\+X then 3 is Capabilities/);
+  assert.match(f.rowFor("View: Workspace › Machines").querySelector(".kb-note").textContent, /Ctrl\+Space then 1 is Instances/);
+  assert.match(f.rowFor("View: Automations").querySelector(".kb-note").textContent, /Ctrl\+Space then 3 is Capabilities/);
 });
 
 test("the leader's rows are found by their keys and by \"leader\", and Up/Down reach them", (t) => {
   const f = setupLinux(t, { extra: LEADER_EXTRA });
   f.editor.open();
-  f.type("ctrl+x k");
+  f.type("ctrl+space k");
   const found = () => [...f.doc.querySelectorAll(".kb-row")].filter((r) => !r.closest("[hidden]"))
     .map((r) => `${r.closest(".kb-group").dataset.label}: ${r.querySelector(".kb-label").textContent}`);
   // The leader's row alone: no key of the palette's own chord Alt+K starts with "x".
   assert.deepEqual(found().sort(), ["Leader: Command palette"]);
-  f.type("ctrl+x shift+n");
+  f.type("ctrl+space shift+n");
   assert.ok(f.shown().includes("Spawn another of the instance's soul…"));
   f.type("leader");
-  assert.equal(f.shown().length, 26, "the group's name finds all of it");
+  assert.equal(f.shown().length, 27, "the group's name finds all of it");
   f.type("");
   // Arrow walk: the leader's row, then its fixed rows.
   const chords = [...f.doc.querySelectorAll('.kb-group[data-label="Leader"] .kb-chord')];
@@ -943,7 +942,7 @@ test("Settings: Connections is in the shortcuts list (Global, by its label) and 
 
 // ── What has no button (the sidebar's simpler foot) is taught by the editor's own rows ───────────
 // The palette and Connections have no button (the settings cog's menu holds Theme… and Keyboard
-// shortcuts… alone); Machines is a tab of the Workspace page, and Spawn instance (Quick Open), Workspace overview and
+// shortcuts… alone); Machines is a tab of the Workspace page, and Spawn instance (Quick Open), Workspace and
 // Automations are small buttons (the product owner, 2026-10-26). These are all taught in the shortcuts editor, by
 // their rows alone (no line above them). The rows are the shipped registrations, run as shipped.
 async function shippedRows() {
@@ -956,7 +955,7 @@ async function shippedRows() {
   assert.ok(statements.every(Boolean), "the shipped registrations");
   const rows = [];
   for (const statement of statements) {
-    runInNewContext(statement, { NAV, NAV_TABS, registerAction: ({ id, label, context }) => { rows.push([id, label, context]); } });
+    runInNewContext(statement, { NAV, NAV_TABS, DESKTOP_NOUNS: { instance: "agent", instances: "agents" }, registerAction: ({ id, label, context }) => { rows.push([id, label, context]); } });
   }
   return rows;
 }
@@ -977,8 +976,8 @@ for (const [platform, isMac] of [["macOS", true], ["Linux", false]]) {
       // in the family in use (macOS has none: ⌘K).
       const leaderRow = f.doc.querySelector('.kb-group[data-label="Leader"] .kb-row-fixed');
       assert.equal(leaderRow.querySelector(".kb-label").textContent, "Open the command palette", "the Leader group's first key");
-      assert.deepEqual(caps(leaderRow), [isMac ? "⌃X" : "Ctrl+X", "K", "Space"]);
-      assert.equal(leaderRow.querySelector(".kb-chord .sr-only").textContent, `${isMac ? "⌃X" : "Ctrl+X"} then K or Space, fixed`);
+      assert.deepEqual(caps(leaderRow), [isMac ? "⌃Space" : "Ctrl+Space", "K", "Space"]);
+      assert.equal(leaderRow.querySelector(".kb-chord .sr-only").textContent, `${isMac ? "⌃Space" : "Ctrl+Space"} then K or Space, fixed`);
       const palette = rowIn("Global", "Open the command palette");
       const paletteKeys = isMac ? ["⌘", "K"] : { alt: ["Alt", "K"], "ctrl+alt": ["Ctrl", "Alt", "K"], "ctrl+shift": ["Ctrl", "Shift", "K"] }[family];
       assert.deepEqual(caps(palette), paletteKeys);
@@ -992,19 +991,19 @@ for (const [platform, isMac] of [["macOS", true], ["Linux", false]]) {
       assert.equal(settings.querySelector("button.kb-chord").getAttribute("aria-label"), "Change shortcut for Settings: Connections…, currently unbound");
       // Each lands where its row says, on its default chord in either family.
       const mod = (k) => (isMac ? ["⌘", k] : ["Ctrl", k]);
-      // The sidebar's Spawn instance runs Quick Open: its row, in the family in use.
-      assert.deepEqual(caps(rowIn("Global", "Quick open a soul to spawn")),
+      // The sidebar's New agent opens the palette on its souls (slice 4): its row, in the family in use.
+      assert.deepEqual(caps(rowIn("Global", "New agent: choose a soul")),
         isMac ? ["⌘", "P"] : { alt: ["Alt", "P"], "ctrl+alt": ["Ctrl", "Alt", "P"], "ctrl+shift": ["Ctrl", "Shift", "P"] }[family]);
       assert.deepEqual(caps(rowIn("Global", "Souls: choose a soul to spawn (Workspace › Souls)")), isMac ? ["⌘", "N"] : ["Ctrl", "Shift", "N"]);
       const machines = rowIn("Global", "View: Workspace › Machines");
       assert.ok(machines, "Machines says it is the Workspace page's tab");
       assert.deepEqual(caps(machines), mod("1"));
-      assert.equal(machines.querySelector(".kb-note").textContent, `${isMac ? "⌃X" : "Ctrl+X"} then 1 is Instances, as in the TUI`);
-      assert.deepEqual(caps(rowIn("Global", "View: Workspace overview")), mod("2"));
+      assert.equal(machines.querySelector(".kb-note").textContent, `${isMac ? "⌃Space" : "Ctrl+Space"} then 1 is Instances, as in the TUI`);
+      assert.deepEqual(caps(rowIn("Global", "View: Workspace")), mod("2"));
       const automations = rowIn("Global", "View: Automations");
       assert.ok(automations, "Automations is a page of its own");
       assert.deepEqual(caps(automations), mod("3"));
-      assert.equal(automations.querySelector(".kb-note").textContent, `${isMac ? "⌃X" : "Ctrl+X"} then 3 is Capabilities, as in the TUI`);
+      assert.equal(automations.querySelector(".kb-note").textContent, `${isMac ? "⌃Space" : "Ctrl+Space"} then 3 is Capabilities, as in the TUI`);
       assert.equal(f.rowFor("View: Workspace › Automations"), undefined, "no Automations tab");
       assert.match(f.doc.querySelector(".kb-extras").textContent, new RegExp(`${isMac ? "⌘1" : "Ctrl\\+1"} stays Machines and ${isMac ? "⌘3" : "Ctrl\\+3"} stays Automations\\.$`));
       // The rows alone: nothing above them but the editor's own lines (the family choice on Linux/Windows when given).
@@ -1036,7 +1035,7 @@ const MAC_USEFUL = [
   ["Command palette", "⌘K"], ["Quick open a soul to spawn", "⌘P"], ["Previous / next tab", "⌥← / ⌥→"],
   ["Go to tab 1–9", "⌥⌘1 to ⌥⌘9"], ["Previous / next workspace", "⌥↑ / ⌥↓"], ["Split right / split down", "⌘\\ / ⇧⌘\\"],
   ["Previous / next split pane", "⌥⇧← / ⌥⇧→"], ["Close tab", "⌘W"], ["Focus mode", "⌥⌘Z"],
-  ["Scroll back in a terminal", "Wheel up, ⇧PgUp or ⌃B then ["], ["The leader, then ? for everything", "⌃X then ?"],
+  ["Scroll back in a terminal", "Wheel up, ⇧PgUp or ⌃B then ["], ["The leader, then ? for everything", "⌃Space then ?"],
 ];
 const MOST_USEFUL = {
   mac: { alt: MAC_USEFUL, "ctrl+alt": MAC_USEFUL, "ctrl+shift": MAC_USEFUL },
@@ -1046,21 +1045,21 @@ const MOST_USEFUL = {
       ["Go to tab 1–9", "Alt+1 to Alt+9"], ["Previous / next workspace", "Alt+↑ / Alt+↓"],
       ["Split right / split down", "Alt+E / Alt+Shift+E"], ["Previous / next split pane", "Alt+Shift+← / Alt+Shift+→"],
       ["Close tab", "Alt+W"], ["Focus mode", "Alt+Z"],
-      ["Scroll back in a terminal", "Wheel up, Shift+PgUp or Ctrl+B then ["], ["The leader, then ? for everything", "Ctrl+X then ?"],
+      ["Scroll back in a terminal", "Wheel up, Shift+PgUp or Ctrl+B then ["], ["The leader, then ? for everything", "Ctrl+Space then ?"],
     ],
     "ctrl+alt": [
       ["Command palette", "Ctrl+Alt+K"], ["Quick open a soul to spawn", "Ctrl+Alt+P"], ["Previous / next tab", "Alt+Shift+← / Alt+Shift+→"],
-      ["Go to tab 1–9", "Ctrl+Alt+1 to Ctrl+Alt+9"], ["Previous / next workspace", "Ctrl+X then ↑ / ↓"],
+      ["Go to tab 1–9", "Ctrl+Alt+1 to Ctrl+Alt+9"], ["Previous / next workspace", "Ctrl+Space then ↑ / ↓"],
       ["Split right / split down", "Ctrl+Alt+E / Ctrl+Alt+Shift+E"], ["Previous / next split pane", "Ctrl+Alt+Shift+A / Ctrl+Alt+A"],
       ["Close tab", "Ctrl+Alt+W"], ["Focus mode", "Ctrl+Alt+Z"],
-      ["Scroll back in a terminal", "Wheel up, Shift+PgUp or Ctrl+B then ["], ["The leader, then ? for everything", "Ctrl+X then ?"],
+      ["Scroll back in a terminal", "Wheel up, Shift+PgUp or Ctrl+B then ["], ["The leader, then ? for everything", "Ctrl+Space then ?"],
     ],
     "ctrl+shift": [
       ["Command palette", "Ctrl+Shift+K"], ["Quick open a soul to spawn", "Ctrl+Shift+P"], ["Previous / next tab", "Alt+Shift+← / Alt+Shift+→"],
-      ["Go to tab 1–9", "Ctrl+Alt+1 to Ctrl+Alt+9"], ["Previous / next workspace", "Ctrl+X then ↑ / ↓"],
+      ["Go to tab 1–9", "Ctrl+Alt+1 to Ctrl+Alt+9"], ["Previous / next workspace", "Ctrl+Space then ↑ / ↓"],
       ["Split right / split down", "Ctrl+Shift+E / Ctrl+Shift+D"], ["Previous / next split pane", "Ctrl+Alt+Shift+A / Ctrl+Alt+A"],
       ["Close tab", "Ctrl+Shift+W"], ["Focus mode", "Ctrl+Shift+M"],
-      ["Scroll back in a terminal", "Wheel up, Shift+PgUp or Ctrl+B then ["], ["The leader, then ? for everything", "Ctrl+X then ?"],
+      ["Scroll back in a terminal", "Wheel up, Shift+PgUp or Ctrl+B then ["], ["The leader, then ? for everything", "Ctrl+Space then ?"],
     ],
   },
 };
@@ -1112,11 +1111,11 @@ test("Most useful follows a rebind, an unbind and a reset in the list below, the
   // Unbound: the leader's key for it stands in.
   f.doc.querySelector('button.kb-chord[data-action-id="tabs.close"]').click();
   f.doc.dispatchEvent(key(f.doc, "Backspace"));
-  assert.equal(useful("Close tab"), "Ctrl+X then W");
+  assert.equal(useful("Close tab"), "Ctrl+Space then W");
   setBinding("tabs.prevPage", null);
-  assert.equal(useful("Previous / next tab"), "Ctrl+X then ← / Alt+Shift+→", "one of a pair");
+  assert.equal(useful("Previous / next tab"), "Ctrl+Space then ← / Alt+Shift+→", "one of a pair");
   setBinding("tabs.nextPage", null);
-  assert.equal(useful("Previous / next tab"), "Ctrl+X then ← / →", "both: the leader once");
+  assert.equal(useful("Previous / next tab"), "Ctrl+Space then ← / →", "both: the leader once");
   // A tab key off the pattern: the nine are listed.
   setBinding("tabs.goto5", "Ctrl+Alt+F5");
   assert.equal(useful("Go to tab 1–9"), "Ctrl+Alt+1 / Ctrl+Alt+2 / Ctrl+Alt+3 / Ctrl+Alt+4 / Ctrl+Alt+F5 / Ctrl+Alt+6 / Ctrl+Alt+7 / Ctrl+Alt+8 / Ctrl+Alt+9");
@@ -1138,28 +1137,14 @@ test("Most useful follows a rebind, an unbind and a reset in the list below, the
   assert.equal(f.doc.querySelector(".kb-useful").hidden, false);
 });
 
-// Show only the current workspace (2026-10-23): the shell's own registration, run as shipped, is a Global row of the
-// shortcuts list with its label and default chord (⌥⇧⌘O on macOS, Ctrl+Alt+Shift+O elsewhere), found by search, in
-// the palette's list of actions, and running it toggles the list of workspaces (workspaceLabel.toggleCurrentOnly).
-for (const isMac of [true, false]) test(`Show only the current workspace: the shell's registration is a Global row (${isMac ? "macOS" : "Linux/Windows"}), and runs the toggle`, (t) => {
+// Show only the current workspace (2026-10-23) left in slice 1 of the Desktop UI rework: no registration, no default
+// chord (⌥⇧⌘O / Ctrl+Alt+Shift+O is free again), no terminal allowance, no row in the shortcuts list.
+test("Show only the current workspace is gone: no registration, no default chord, no terminal allowance", () => {
   const shell = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
-  const line = shell.match(/^registerAction\(\{ id: "workspaces\.currentOnly",[^\n]*\}\);$/m)?.[0];
-  assert.ok(line, "the shipped registration");
-  assert.match(line, /run: \(\) => workspaceLabel\.toggleCurrentOnly\(\)/);
-  const f = setupLinux(t, { isMac });
-  let toggled = 0;
-  const off = runInNewContext(line, { registerAction, workspaceLabel: { toggleCurrentOnly: () => { toggled++; } } });
-  t.after(off);
-  const action = listActions().find((a) => a.id === "workspaces.currentOnly");
-  assert.deepEqual([action?.label, action?.context], ["Show only the current workspace", "global"], "the palette lists it by this label");
-  f.editor.open();
-  const row = f.rowFor("Show only the current workspace");
-  assert.ok(row, "listed"); assert.equal(row.closest(".kb-group").dataset.label, "Global");
-  assert.equal(row.querySelector(".kb-chord").textContent, isMac ? "⌥⇧⌘O" : "CtrlAltShiftO", "its keycaps");
-  f.type("current workspace"); assert.ok(f.shown().includes("Show only the current workspace"));
-  assert.equal(toggled, 0, "listing it runs nothing");
-  runAction("workspaces.currentOnly"); runAction("workspaces.currentOnly");
-  assert.equal(toggled, 2, "each run toggles once");
+  assert.doesNotMatch(shell, /workspaces\.currentOnly/);
+  for (const keymap of Object.values(DEFAULT_KEYMAPS)) assert.equal(Object.hasOwn(keymap, "workspaces.currentOnly"), false);
+  assert.equal(TERMINAL_ALLOWLIST.includes("workspaces.currentOnly"), false);
+  assert.equal(listActions().some((a) => a.id === "workspaces.currentOnly"), false);
 });
 
 // #1502: the Tabs group's one read-only row says how to scroll back in a terminal: the wheel, Shift+PgUp and

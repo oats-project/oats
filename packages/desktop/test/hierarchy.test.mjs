@@ -450,7 +450,7 @@ const CLI_OK = { ok: true, bin: "/seed/oats", version: "0.18.0", source: "path",
 
 /** The Deployments view mounted on a fixture roster. `agents(path)` answers /api/agents (a value, a promise, or a throw).
  * `inPage`: as the app mounts it since 2026-10-26, inside the Workspace page (views/spawn.mjs), on its Machines tab
- * (preselected, as stage.hierarchy does; syncMachines mounts the view in .workspace-machines-panel with the page's
+ * (preselected, as stage.hierarchy does, then its Map chosen; syncMachines mounts the view in .workspace-machines-panel with the page's
  * ctx, whose openView("spawn") is the page's Souls tab). The page and the view then read the same fixture, as they read
  * the same server; `pagePoll` is the page's own roster poll. */
 async function card(t, { instances, deployments = null, agents = () => ({ agents: [PACKAGE_SOUL, ELSEWHERE_SOUL] }), ctx: extra = {}, inPage = false } = {}) {
@@ -463,7 +463,7 @@ async function card(t, { instances, deployments = null, agents = () => ({ agents
   common.setWorkspace("/team");
   const unmounts = [];
   t.after(() => { for (const off of unmounts.reverse()) off(); common.setWorkspace(old.ws); Object.assign(globalThis, { window: old.window, document: old.document, setInterval: old.setInterval }); dom.window.close(); });
-  // Every roster poll is the test's to run: the view's first, then (in the page) the page's own.
+  // Every roster poll is the test's to run: the view's; in the page, the page's own first (the view mounts with its Map).
   const polls = [];
   globalThis.setInterval = (fn) => { polls.push(fn); return 0; };
   const calls = [], opened = [], started = [], views = [], notes = [];
@@ -484,8 +484,10 @@ async function card(t, { instances, deployments = null, agents = () => ({ agents
     assert.equal(spawn.preselectWorkspaceTab("machines"), true);
     spawn.mount(doc.getElementById("spawn"), ctx);
     unmounts.push(() => { spawn.unmount(); resetCliStateForTests(); });
+    // The Machines tab opens on its list of computers (slice 3b): its Map is this view.
+    doc.querySelector('#spawn .workspace-tools[data-tools=machines] [data-machines-view=map]').click();
     host = doc.querySelector("#spawn .workspace-machines-panel");
-    assert.equal(polls.length, 2, "the view's roster poll, then the page's");
+    assert.equal(polls.length, 2, "the page's roster poll, then the view's (mounted when its Map is chosen)");
     for (let i = 0; i < 4; i++) await tick();
   } else {
     unmounts.push(hier.mount(host, ctx));
@@ -496,8 +498,8 @@ async function card(t, { instances, deployments = null, agents = () => ({ agents
   const node = (name) => [...host.querySelectorAll(".hnode")].find((n) => n.dataset.name === name);
   return { dom, doc, host, calls, opened, started, views, notes, node, spawn,
     select: async (name) => { node(name).dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, button: 0 })); await tick(); await tick(); },
-    poll: async () => { polls[0](); await tick(); await tick(); },
-    pagePoll: async () => { polls[1](); for (let i = 0; i < 4; i++) await tick(); },
+    poll: async () => { polls[inPage ? 1 : 0](); await tick(); await tick(); },
+    pagePoll: async () => { polls[0](); for (let i = 0; i < 4; i++) await tick(); },
     key: (key) => { const e = new dom.window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }); host.querySelector(".hier-canvas").dispatchEvent(e); return e; },
     term: () => host.querySelector(".pterm"), soul: () => host.querySelector(".psoul"), status: () => host.querySelector(".pstatus").textContent,
     agentsReads: () => calls.slice(inPage ? mounted : 0).filter((p) => p.startsWith("/api/agents")) };
@@ -522,7 +524,7 @@ test("Go to instance: a running row opens its exact terminal, a stopped one says
   const held = row("held", { running: false, spawnInProgress: true });
   const u = await card(t, { instances: [row("run"), row("stop", { running: false }), row("unk", { running: null }), held,
     row("herdr", { running: null, runtimeState: "unsupported", runtimeError: HERDR }),
-    row("far", { server: "altair", addressable: false, savedRoute: true, home: "/srv/agents/dev-pkg/instances/far", agentsRoot: "/srv/agents" })] });
+    row("far", { server: "devbox", addressable: false, savedRoute: true, home: "/srv/agents/dev-pkg/instances/far", agentsRoot: "/srv/agents" })] });
   const expect = { run: ["Go to instance", false, "Open this exact instance terminal"], stop: ["Start…", false, "Stopped: no terminal to go to. Opens the Start dialog."],
     unk: ["Go to instance", true, GENERIC], held: ["Start…", true, heldLine(heldHome(held))], herdr: ["Go to instance", true, HERDR], far: ["Go to instance", true, GENERIC] };
   for (const [name, [label, disabled, title]] of Object.entries(expect)) {
@@ -602,14 +604,14 @@ test("Go to soul: a namesake that joined the soul's root by the time the handoff
 });
 
 test("Go to soul: a remote row's soul is its agent dir on its own host and root", async (t) => {
-  const remote = { instance: "far-1", agent: "remote-dev", agentsRoot: "/srv/agents", home: "/srv/agents/remote-dev/instances/far-1", server: "altair", addressable: true, running: true };
-  const u = await card(t, { instances: [remote, { ...remote, instance: "far-2", home: "/srv/agents/remote-dev/instances/far-2", server: "vega" }],
-    agents: () => ({ agents: [{ name: "remote-dev", agentsRoot: "/srv/agents", server: "altair" }, { name: "remote-dev", agentsRoot: "/other/agents", server: "vega" }] }) });
+  const remote = { instance: "far-1", agent: "remote-dev", agentsRoot: "/srv/agents", home: "/srv/agents/remote-dev/instances/far-1", server: "devbox", addressable: true, running: true };
+  const u = await card(t, { instances: [remote, { ...remote, instance: "far-2", home: "/srv/agents/remote-dev/instances/far-2", server: "laptop" }],
+    agents: () => ({ agents: [{ name: "remote-dev", agentsRoot: "/srv/agents", server: "devbox" }, { name: "remote-dev", agentsRoot: "/other/agents", server: "laptop" }] }) });
   await u.select("far-1");
   assert.equal(u.soul().disabled, false); assert.equal(u.soul().title, "Open remote-dev on the Workspace page");
   const second = [...u.host.querySelectorAll(".hnode")].find((n) => n.dataset.name === "far-2");
   second.dispatchEvent(new u.dom.window.MouseEvent("click", { bubbles: true, button: 0 })); await tick(); await tick();
-  assert.equal(u.soul().disabled, true, "vega's remote-dev is of another root");
+  assert.equal(u.soul().disabled, true, "laptop's remote-dev is of another root");
   assert.equal(u.soul().title, "remote-dev is not among this deployment's souls now.");
 });
 
@@ -672,17 +674,17 @@ test("Go to soul: checking until the catalog answers, and a late answer for an e
 test("Go to soul in a view of two deployments: the primary deployment's row goes, another deployment's row says why and reads nothing", async (t) => {
   const deployments = [
     { id: "/team", machine: "", path: "/team", label: "~/team", local: true, reachable: true, identityFrom: "reported", primary: true },
-    { id: "remote:altair", machine: "altair", path: "/srv", label: "~/srv", local: false, reachable: true, identityFrom: "reported", primary: false },
+    { id: "remote:devbox", machine: "devbox", path: "/srv", label: "~/srv", local: false, reachable: true, identityFrom: "reported", primary: false },
   ];
   const u = await card(t, { deployments, instances: [row("here", { deployment: { id: "/team", path: "/team" } }),
-    row("there", { deployment: { id: "remote:altair", machine: "altair", path: "/srv" }, server: "altair", addressable: true,
+    row("there", { deployment: { id: "remote:devbox", machine: "devbox", path: "/srv" }, server: "devbox", addressable: true,
       agentsRoot: "/srv/agents", home: "/srv/agents/dev-pkg/instances/there" })] });
   await u.select("here");
   assert.equal(u.soul().disabled, false);
   assert.deepEqual(u.agentsReads(), ["/api/agents?ws=%2Fteam"]);
   await u.select("there");
   assert.equal(u.soul().disabled, true);
-  assert.equal(u.soul().title, "This instance is on altair · ~/srv; the Workspace page shows only the souls of This Mac · ~/team.");
+  assert.equal(u.soul().title, "This instance is on devbox · ~/srv; the Workspace page shows only the souls of This Mac · ~/team.");
   assert.deepEqual(u.agentsReads(), ["/api/agents?ws=%2Fteam"], "no catalog read for a deployment the Workspace page cannot show");
 });
 

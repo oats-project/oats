@@ -8,15 +8,14 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/same-work.mjs";
+import * as relatedWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
-const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
+const tree = { ...treeShared, ...treeView, ...relatedWork }; // the renderer's client imports, shipped
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget, sameInstanceActionTarget } from "../renderer/instance-action-target.mjs";
 import { instanceSplitPlan } from "../renderer/instance-split.mjs";
 import { runtimeState, unsupportedSession } from "../../client/instance-presentation.mjs";
 import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
-import { createRuntimeBadge } from "../renderer/identity-marks.mjs";
 import { spokenText } from "./helpers/spoken-text.mjs";
 
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
@@ -35,13 +34,13 @@ function fixture(t, rows, extra = {}) {
   const doc = dom.window.document;
   const announced = new Set(), checked = [];
   const context = {
-    ...tree, document: doc, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, createRuntimeBadge,
+    ...tree, document: doc, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason,
     instanceActionTarget, instanceSplitPlan, connectionGeneration: 0, menuState() {}, sayInHint() {}, runAction: assert.fail,
     applyChordTitles() {}, updateActiveContexts() {}, getBinding: () => null, formatChord: c => c, isMac: true,
     contextRosterEl: doc.querySelector("#instance-roster"), contextWorkspace: "A",
     rosterState: { hasData: true, state: "ready" }, rosterStale: false, contextDeploymentNote: null, ...viewContext(),
     currentWorkspace: () => "A", workspaceGeneration: () => 0, collapsedInstances: new Set(),
-    rosterTip: { bind() {}, hide() {}, sync() {} }, rosterTipFacts: () => ({}), rosterPrs: { get: () => null, refresh() {} },
+    
     spawnJobs: { rows: ws => ws === "A" ? rows() : [], announce: id => !announced.has(id) && !!announced.add(id), check: id => checked.push(id), ...(extra.jobs || {}) },
     tabs: new Map(), activeTab: null, tabOpenIntents: { applyFocus: f => f() },
     // A pending row opens nothing: any navigation is a test failure.
@@ -75,25 +74,26 @@ test("a pending spawn shows under its parent: “Spawning…” text and a spinn
   assert.match(u.doc.querySelector(".ctx-count").textContent, /^3 running$/, "the pending row is not counted");
 });
 
-// #1577: the Desktop's spawn never passes --same-work, so a pending row is never flagged; it takes its parent's
-// gate (same-work.mjs withParentGate) and draws no line to it where the host declares instance-same-work.
-test("a pending spawn under a parent whose host declares instance-same-work draws no parent line; elsewhere today's", async t => {
-  const guides = (u, name) => [...u.row(name).closest(".ctx-tree-row").querySelectorAll(".ctx-guide")]
-    .map(g => `${g.className.replace("ctx-guide ", "")}@${g.style.getPropertyValue("--guide-level")}`);
-  const declared = roster.map(row => ({ ...row, sameWorkKnown: true, ...(row.instance === "child-a" ? { sameWork: true } : {}) }));
+// A pending row is never flagged (the Desktop's spawn records no related work); it takes its parent's gate
+// (related-work.mjs withParentGate), which orders it after the joined children. It draws no line of its own; a
+// pending child keeps its indent and says "under <parent>", without "related work".
+test("a pending spawn under a parent: listed after the joined children, indented, said under its parent, no line of its own", async t => {
+  const declared = roster.map(row => ({ ...row, relatedWorkKnown: relatedWork.RELATED_WORK_FEATURE, ...(row.instance === "child-a" ? { relatedWork: true } : {}) }));
   const u = fixture(t, () => [pending()]);
   u.render(declared);
   const names = [...u.list.querySelectorAll(".ctx-name")].map(n => n.dataset.name);
   assert.deepEqual(names.slice(0, 3), ["root", "child-a", "dev-new"], "the joined child first, the pending row after it");
-  assert.deepEqual(guides(u, "root"), ["down@0"]);
-  assert.deepEqual(guides(u, "child-a"), ["elbow@0"], "the parent's vertical ends at its last joined child");
-  assert.deepEqual(guides(u, "dev-new"), [], "no elbow: the pending row keeps its indent, no line");
+  const guides = name => [...u.row(name).closest(".ctx-tree-row").querySelectorAll(":scope > .ctx-guides > .ctx-guide")].map(g => g.className.replace("ctx-guide ", ""));
+  assert.deepEqual(["root", "child-a", "dev-new"].map(guides), [["down"], ["elbow"], []], "the related child's elbow ends the parent's line before the pending row");
+  assert.equal(u.row("dev-new").closest(".ctx-tree-row").querySelector(".ctx-guides"), null, "the pending row carries no guides");
   assert.equal(u.row("dev-new").closest(".ctx-tree-row").style.getPropertyValue("--depth"), "1");
-  // A host without the feature (no stamp on the parent): today's lines.
+  assert.equal(u.row("dev-new").querySelector(".ctx-relation").textContent, ", under root");
+  assert.equal(u.row("child-a").querySelector(".ctx-relation").textContent, ", under root, related work");
+  // A host without the feature (no stamp on the parent): no lines either.
   const today = fixture(t, () => [pending()]);
   today.render(roster);
-  assert.deepEqual(guides(today, "child-a"), ["elbow@0", "line@0"]);
-  assert.deepEqual(guides(today, "dev-new"), ["elbow@0"]);
+  assert.equal(today.list.querySelector(".ctx-guide, .ctx-guides"), null);
+  assert.equal(today.row("dev-new").querySelector(".ctx-relation").textContent, ", under root");
 });
 
 test("a background spawn into the view's second deployment sits under that deployment's heading (#482)", async t => {

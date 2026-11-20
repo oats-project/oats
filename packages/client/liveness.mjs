@@ -4,13 +4,18 @@
  * of the serving process is liveness-main.mjs (see packages/desktop/server/oats-web.mjs), so a slow
  * terminal server cannot stall request handling. */
 import { createTmuxStatusReader, DEFAULT_TMUX_SESSION } from './tmux-status.mjs';
-import { unsupportedSession, unsupportedSessionOrigin } from './instance-presentation.mjs';
+import { unsupportedSession, unsupportedSessionOrigin, sessionProvider } from './instance-presentation.mjs';
 
 export { DEFAULT_TMUX_SESSION };
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-/** rows: [{ instance, running?, tmux?, sessionTarget?, runtimeState?, runtimeError? }] in, one liveness
+/** rows: [{ instance, running?, tmux?, sessionTarget?, backend?, runtimeState?, runtimeError? }] in, one liveness
  * per row out. A Herdr-recorded row is never probed: it is unsupported, with the kernel's reason.
+ *
+ * A row on a session provider (instance-presentation.mjs `sessionProvider`: its `backend` is a provider's
+ * name, "bb" say) is never probed either: it has no tmux target, so the reader would call it stopped. Its
+ * `running`, `runtimeState` and `runtimeError` stay the kernel's, as for a `running: null` row, and the
+ * answer carries no `tmux`. A row with no `backend`, or with "tmux", is read as before.
  *
  * The probe refines a row only when the kernel answered `running` true or false. A row it answered
  * `running: null` is not probed: its `running`, `runtimeState` and `runtimeError` stay the kernel's,
@@ -27,6 +32,11 @@ export function observeLiveness(rows, { tmuxReader = createTmuxStatusReader(), s
     const unsupported = unsupportedSession(row);
     if (unsupported) return { running: null, runtimeState: 'unsupported', runtimeError: unsupported.slice(0, 300), tmux: null };
     // After the unsupported check: an older kernel's Herdr row is `unreachable` with a sessionTarget, and reads unsupported.
+    if (sessionProvider(row)) {
+      const running = typeof row.running === 'boolean' ? row.running : null;
+      return { running, ...(row.runtimeState !== undefined || running === null ? { runtimeState: row.runtimeState ?? 'unreachable' } : {}),
+        ...(row.runtimeError ? { runtimeError: String(row.runtimeError).slice(0, 300) } : {}) };
+    }
     if (row.running === null) return { running: null, runtimeState: row.runtimeState ?? 'unreachable', ...(row.runtimeError ? { runtimeError: String(row.runtimeError).slice(0, 300) } : {}) };
     const tmux = record(row.tmux) ? row.tmux : undefined;
     const { tmux: observed, running, runtimeState, runtimeError } = tmuxReader({ instance: row.instance, tmux }, session);
@@ -37,12 +47,13 @@ export function observeLiveness(rows, { tmuxReader = createTmuxStatusReader(), s
 /** Who makes the `runtimeError` of a row's answer, when the answer has one: "kernel", "terminal-probe",
  * or null for the stand-in of an older kernel's Herdr row. By the order `observeLiveness` takes, which is
  * a function of the row alone: an invalid row and a probed one are the terminal check's, a Herdr row's
- * text is the kernel's or the stand-in, and a row the kernel answered `running: null` keeps the kernel's.
+ * text is the kernel's or the stand-in, and a row on a session provider and one the kernel answered
+ * `running: null` keep the kernel's.
  * The collector's answer crosses a process as JSON, so the speaker is not put on that wire: the reader of
  * the answers asks here, of the row it sent (deployment-panel.mjs `livenessAnswers`). Not on the stable surface. */
 export function livenessOrigin(row) {
   if (!record(row) || typeof row.instance !== 'string') return 'terminal-probe';
   if (unsupportedSession(row)) return unsupportedSessionOrigin(row);
-  if (row.running === null) return 'kernel';
+  if (sessionProvider(row) || row.running === null) return 'kernel';
   return 'terminal-probe';
 }

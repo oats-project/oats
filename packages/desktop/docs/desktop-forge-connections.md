@@ -1,7 +1,7 @@
 # Desktop forge connections
 
 Connections are **workstation/ADE accounts**, not capabilities. Settings (the
-command palette's **Settings: Connections…**) → Connections contains the GitHub card, beside the
+command palette's **Connections**, among its sections) → Connections contains the GitHub card, beside the
 Terminal section (font size; `settings-terminal.mjs`); the selected instance's Developer tab (Git and GitHub)
 shows pull-request facts. Every local workspace uses gh's native account store.
 No OATS config, soul, instance, lock or catalog is changed. GitLab and automatic
@@ -46,7 +46,7 @@ without persisting a connection-fact cache.
 
 ## Read-only HTTP boundaries
 
-Both new routes are POSTs behind the existing loopback Host and POST Origin
+Both new routes are POSTs behind the server-wide credential check and the loopback Host and POST Origin
 guards. Neither command execution nor auth mutation is exposed through GET.
 Requests are JSON objects bounded to 64 KiB. Unknown fields refuse.
 

@@ -43,7 +43,7 @@ test('teamsApi 2, local teams allowed: the deployment\'s own default and teams; 
   const added = teamsData(capture('teams-add'), DEP);
   assert.equal(added.changed, true); assert.ok(added.teams.some((r) => r.label === 'mine' && r.from === 'local'));
   const after = teamsData(capture('teams-after'), DEP);
-  assert.deepEqual(after.defaultTeam, { label: 'mine', team: 'mine:juan.aweb.ai', from: 'deployment' });
+  assert.deepEqual(after.defaultTeam, { label: 'mine', team: 'mine:alex.aweb.ai', from: 'deployment' });
 });
 
 test('teamsApi 2 refuses what is not its shape', () => {

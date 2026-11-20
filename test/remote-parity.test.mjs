@@ -180,7 +180,10 @@ test("server roster: instance rows carry the remote status facts, null where the
     startedAt: "2026-09-29T10:00:00.000Z", createdAt: "2026-09-29T09:00:00.000Z", model: "opus", runtimeState: "working",
     parentInstance: "boss", siblingInstance: "dev-b", relation: "child", relativeTo: "boss", spawnOrigin: "instance",
     // #675: the host's work record and its own drift observation, relayed as it answered them.
-    work: "worktree", repo: "/srv/ws/repo", branch: "agents/dev-a", modelFrom: "soul", color: "sage", background: true, sameWork: true, attributedHuman: "Ada Lovelace",
+    work: "worktree", repo: "/srv/ws/repo", branch: "agents/dev-a", modelFrom: "soul", color: "sage", background: true, pinned: true, relatedWork: true, sameWork: true, attributedHuman: "Ada Lovelace",
+    // Feature instance-board: relayed as the host's row says it, read by this kernel's rule.
+    board: { facts: [{ key: "pr", label: "Pull request", value: "#1990", unit: null, link: "https://github.com/oats-project/oats/pull/1990", at: "2026-09-29T10:05:00.000Z" }],
+      questions: [{ id: "q1", question: "Squash?", options: ["yes", "no"], hasContext: false, since: "2026-09-29T10:06:00.000Z" }] },
     spawnedBy: { instance: "boss", home: "/srv/ws/agents/dev/instances/boss" },
     soul: { repoKey: "github.com/acme/agents", commit: "1111111111111111111111111111111111111111", current: "2222222222222222222222222222222222222222", status: "moved" },
     modules: [
@@ -191,9 +194,19 @@ test("server roster: instance rows carry the remote status facts, null where the
   const bare = { instance: "dev-b", home: "/srv/ws/agents/dev/instances/dev-b", running: false };
   // Feature instance-color: a colour outside the palette is relayed as none.
   // Feature instance-background: only `true` is relayed; anything else is absent, never false.
-  // Feature instance-same-work: anything but `sameWork: true` is relayed as absent.
-  const odd = { instance: "dev-c", home: "/srv/ws/agents/dev/instances/dev-c", running: false, color: "teal", background: "yes", sameWork: "true" };
-  const status = { root: "/srv/ws/agents", agents: [{ name: "dev", harness: "claude", instances: [full, bare, odd] }] };
+  // Feature instance-related-work: anything but `relatedWork: true` is relayed as absent; a `sameWork: true`, from a
+  // host that does not say it is older (no features here), is relayed only beside it (a parent binding, by both
+  // names), and never read as the flag on its own.
+  // Feature instance-pin: only exactly `true` is relayed; `"true"` and `1` are absent, never false.
+  // Feature instance-board: a board out of its rules (a link that is not https) is relayed as an empty board;
+  // null stays null; a row without the key carries none.
+  const odd = { instance: "dev-c", home: "/srv/ws/agents/dev/instances/dev-c", running: false, color: "teal", background: "yes", pinned: "true", relatedWork: "true", sameWork: true,
+    board: { facts: [{ key: "pr", label: "PR", value: "#1", unit: null, link: "javascript:alert(1)", at: "2026-09-29T10:05:00.000Z" }], questions: [] } };
+  const oddPin = { instance: "dev-d", home: "/srv/ws/agents/dev/instances/dev-d", running: false, pinned: 1, board: null };
+  // A board over the row's 8 KiB bound, each fact within its own: an empty board, never a failed roster.
+  const wide = { key: "w", label: "界".repeat(40), value: "界".repeat(80), unit: "界".repeat(16), link: `https://example.com/${"x".repeat(492)}`, at: "2026-09-29T10:05:00.000Z" };
+  const overBound = { instance: "dev-e", home: "/srv/ws/agents/dev/instances/dev-e", running: false, board: { facts: Array.from({ length: 12 }, (_, i) => ({ ...wide, key: `w${i}` })), questions: [] } };
+  const status = { root: "/srv/ws/agents", agents: [{ name: "dev", harness: "claude", instances: [full, bare, odd, oddPin, overBound] }] };
   const { exec } = countingExec(() => JSON.stringify(status));
   const out = await rosterGroups({ io: { execFileAsync: async (...call) => exec(...call) } });
   const rows = out.groups[0].instances;
@@ -203,8 +216,17 @@ test("server roster: instance rows carry the remote status facts, null where the
   assert.equal(rows.find((r) => r.instance === "dev-c").color, null, "a colour outside the palette is relayed as null");
   assert.equal(rows.find((r) => r.instance === "dev-a").background, true, "background is relayed");
   for (const n of ["dev-b", "dev-c", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "background"), false, `${n}: no background key`);
-  assert.equal(a.sameWork, true, "sameWork: true is relayed as the host reported it");
-  for (const name of ["dev-b", "dev-c", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === name), "sameWork"), false, `${name}: no sameWork, never false or null`);
+  assert.equal(a.relatedWork, true, "relatedWork: true is relayed as the host reported it");
+  assert.equal(a.pinned, true, "pinned: true is relayed");
+  assert.deepEqual(a.board, full.board, "a board is relayed as the host's row says it");
+  assert.deepEqual(rows.find((r) => r.instance === "dev-c").board, { facts: [], questions: [] }, "a board out of its rules is an empty board");
+  assert.equal(rows.find((r) => r.instance === "dev-d").board, null, "null stays null");
+  assert.deepEqual(rows.find((r) => r.instance === "dev-e").board, { facts: [], questions: [] }, "a board over the row bound is an empty board");
+  for (const n of ["dev-b", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "board"), false, `${n}: no board key from a row without one`);
+  for (const n of ["dev-b", "dev-c", "dev-d", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "pinned"), false, `${n}: no pinned key, never false or null`);
+  for (const name of ["dev-b", "dev-c", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === name), "relatedWork"), false, `${name}: no relatedWork, never false or null`);
+  assert.equal(a.sameWork, true, "sameWork: true is relayed beside relatedWork: true");
+  for (const r of rows.filter((r) => r.instance !== "dev-a")) assert.equal(Object.hasOwn(r, "sameWork"), false, `${r.instance}: no sameWork key without relatedWork`);
   for (const k of FIELDS) assert.deepEqual(a[k], full[k], k);
   assert.equal(a.savedRoute, false);
   assert.equal(a.running, true); assert.equal(a.harness, "claude");
@@ -497,7 +519,7 @@ test("a remote without the session commands: the fallback hint names the instanc
 // ---- item 4: the Desktop's reads and lifecycle plans, routed ----
 
 const SURFACE_PROBE = { ...FULL_PROBE, remote: [...FULL_PROBE.remote, "readiness", "instance-events", "instance-git", "lifecycle-plans"],
-  features: [...FULL_PROBE.features, "readiness", "instance-events-2", "instance-git", "lifecycle-plans", "retire-retention", "instance-color", "instance-background", "instance-same-work"],
+  features: [...FULL_PROBE.features, "readiness", "instance-events-2", "instance-git", "lifecycle-plans", "retire-retention", "instance-color", "instance-background", "instance-pin", "instance-related-work"],
   readinessApi: 2, eventsApi: 2, instanceGitApi: 1, lifecycleApi: 1 };
 const HOME_A = homeOf("dev", "dev-a");
 const ENVELOPES = {
@@ -510,7 +532,8 @@ const ENVELOPES = {
   stopApply: { schemaVersion: 1, ok: true, result: { ok: true, results: [], replayed: false } },
   color: { schemaVersion: 1, ok: true, result: { instanceColorApi: 1, instance: "dev-a", home: HOME_A, color: "sage", changed: true } },
   background: { schemaVersion: 1, ok: true, result: { instanceBackgroundApi: 1, instance: "dev-a", home: HOME_A, background: true, changed: true } },
-  sameWork: { schemaVersion: 1, ok: true, result: { instance: "dev-a", sameWork: true } },
+  relatedWork: { schemaVersion: 1, ok: true, result: { instance: "dev-a", relatedWork: true, sameWork: true } },
+  pin: { schemaVersion: 1, ok: true, result: { instancePinApi: 1, instance: "dev-a", home: HOME_A, pinned: true, changed: true } },
   // `facts.ownWorktree` (awebai/oats#988): the host's plan crosses with its facts as the host answered them.
   retirePlan: { schemaVersion: 1, ok: true, result: { planRevision: "r2", home: HOME_A, facts: { workMode: "worktree", ownWorktree: true }, defaults: { retainWorktree: true }, notes: [] } },
 };
@@ -530,7 +553,8 @@ function surfaceSetup(name, probe = SURFACE_PROBE) {
     [`retire dev-a --plan --home ${HOME_A} --dir ${WS} --json`]: answer(ENVELOPES.retirePlan),
     [`instance color dev-a sage --home ${HOME_A} --dir ${WS} --json`]: answer(ENVELOPES.color),
     [`instance background dev-a on --home ${HOME_A} --dir ${WS} --json`]: answer(ENVELOPES.background),
-    [`instance same-work dev-a on --home ${HOME_A} --dir ${WS} --json`]: answer(ENVELOPES.sameWork),
+    [`instance related-work dev-a on --home ${HOME_A} --dir ${WS} --json`]: answer(ENVELOPES.relatedWork),
+    [`instance pin dev-a on --home ${HOME_A} --dir ${WS} --json`]: answer(ENVELOPES.pin),
     [`instance events dev-a --home /srv/elsewhere/dev-a --dir ${WS} --json`]: { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { code: "E_HOME_MISMATCH", message: "not a home of dev-a under /srv/ws" } }), exit: 1 },
   } });
   const env = cliEnv(dir, host);
@@ -552,8 +576,12 @@ const SURFACE_CALLS = [
   ["instance-color", ["instance", "color", "dev-a", "sage", "--server", "build", "--json"], ENVELOPES.color],
   // Feature instance-background: the same.
   ["instance-background", ["instance", "background", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.background],
-  // Feature instance-same-work: the feature alone, as instance color.
-  ["instance-same-work", ["instance", "same-work", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.sameWork],
+  // Feature instance-related-work: the feature alone, as instance color.
+  ["instance-related-work", ["instance", "related-work", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.relatedWork],
+  // ... and by its deprecated alias, sent to that host by the new name.
+  ["instance-related-work", ["instance", "same-work", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.relatedWork],
+  // Feature instance-pin: the feature alone, as instance background.
+  ["instance-pin", ["instance", "pin", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.pin],
 ];
 
 test("routed readiness, instance events, git, diff, stop and retire plans: run on the host, their envelope relayed unchanged", () => {
@@ -567,6 +595,100 @@ test("routed readiness, instance events, git, diff, stop and retire plans: run o
   const r = cli(env, ["instance", "git", "dev-a", "--server", "build", "--home", HOME_A, "--dir", "/srv/other", "--json"]);
   assert.ok(host.calls().some((c) => c.includes(`instance git dev-a --home ${HOME_A} --dir /srv/other --json`)), host.calls().join("\n"));
   void r;
+});
+
+test("server roster, feature instance-related-work: from a host that advertises only instance-same-work, its row's sameWork: true is relayed as relatedWork: true beside it; from any other host a sameWork key alone is no flag; sameWork: true is relayed only beside relatedWork: true", async () => {
+  writeServers({ build: { sshHost: "build-host", workspace: "/srv/ws" } });
+  const rowsFrom = async (features) => {
+    const status = { root: "/srv/ws/agents", ...(features ? { features } : {}), agents: [{ name: "dev", harness: "claude", instances: [
+      { instance: "dev-old", home: "/srv/ws/agents/dev/instances/dev-old", running: false, parentInstance: "boss", sameWork: true },
+      { instance: "dev-odd", home: "/srv/ws/agents/dev/instances/dev-odd", running: false, parentInstance: "boss", sameWork: "true" },
+      { instance: "dev-new", home: "/srv/ws/agents/dev/instances/dev-new", running: false, siblingInstance: "boss", relatedWork: true },
+      { instance: "dev-both", home: "/srv/ws/agents/dev/instances/dev-both", running: false, parentInstance: "boss", relatedWork: true, sameWork: true },
+      { instance: "dev-off", home: "/srv/ws/agents/dev/instances/dev-off", running: false, parentInstance: "boss" }] }] };
+    const { exec } = countingExec(() => JSON.stringify(status));
+    const out = await rosterGroups({ io: { execFileAsync: async (...call) => exec(...call) } });
+    const rows = out.groups[0].instances;
+    for (const r of rows) assert.equal(Object.hasOwn(r, "sameWork"), r.sameWork === true && r.relatedWork === true, `${r.instance}: sameWork only as true, beside relatedWork (${JSON.stringify(features)})`);
+    const keys = (r) => [Object.hasOwn(r, "relatedWork") ? r.relatedWork : "absent", Object.hasOwn(r, "sameWork") ? r.sameWork : "absent"];
+    return Object.fromEntries(rows.map((r) => [r.instance, keys(r)]));
+  };
+  const A = "absent";
+  assert.deepEqual(await rowsFrom(["instance-same-work", "instance-pin"]), { "dev-old": [true, true], "dev-odd": [A, A], "dev-new": [true, A], "dev-both": [true, true], "dev-off": [A, A] }, "an older host: its flag, by both names");
+  for (const features of [["instance-related-work"], ["instance-same-work", "instance-related-work"], [], null]) {
+    assert.deepEqual(await rowsFrom(features), { "dev-old": [A, A], "dev-odd": [A, A], "dev-new": [true, A], "dev-both": [true, true], "dev-off": [A, A] }, JSON.stringify(features));
+  }
+});
+
+test("routed instance related-work (and its alias instance same-work) against a host with only instance-same-work: asked by the old name, its answer with relatedWork beside sameWork; on for an instance bound to a sibling is E_REMOTE_INCOMPATIBLE with nothing sent", () => {
+  const dir = mkdtempSync(join(base, "rw-old-"));
+  const HOME_S = homeOf("dev", "dev-s");
+  const roster = { root: `${WS}/agents`, agents: [{ name: "dev", instances: [
+    { instance: "dev-a", home: HOME_A, running: true, parentInstance: "boss" },
+    { instance: "dev-s", home: HOME_S, running: false, siblingInstance: "boss" }] }] };
+  const probe = { ...SURFACE_PROBE, version: "0.69.21", features: [...SURFACE_PROBE.features.filter((f) => f !== "instance-related-work"), "instance-same-work"] };
+  const host = fakeHost(dir, { probe, answers: {
+    [`status --json --dir ${WS}`]: { stdout: JSON.stringify(roster) },
+    [`instance same-work dev-a on --home ${HOME_A} --dir ${WS} --json`]: answer({ schemaVersion: 1, ok: true, result: { instance: "dev-a", sameWork: true } }),
+    [`instance same-work dev-a off --home ${HOME_A} --dir ${WS} --json`]: answer({ schemaVersion: 1, ok: true, result: { instance: "dev-a", sameWork: false } }),
+    [`instance same-work dev-s off --home ${HOME_S} --dir ${WS} --json`]: answer({ schemaVersion: 1, ok: true, result: { instance: "dev-s", sameWork: false } }),
+  } });
+  const env = cliEnv(dir, host);
+  mkdirSync(env.OATS_HOME_DIR, { recursive: true });
+  writeFileSync(join(env.OATS_HOME_DIR, "servers.json"), JSON.stringify({ servers: { build: { sshHost: "build-host", workspace: WS, oatsPath: host.oatsPath } } }));
+  let r = cli(env, ["instance", "related-work", "dev-a", "on", "--server", "build", "--json"]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.deepEqual(r.json(), { schemaVersion: 1, ok: true, result: { instance: "dev-a", relatedWork: true, sameWork: true } });
+  assert.doesNotMatch(r.stderr, /renamed/, "the new spelling says no deprecation");
+  r = cli(env, ["instance", "related-work", "dev-a", "off", "--server", "build", "--json"]);
+  assert.deepEqual(r.json(), { schemaVersion: 1, ok: true, result: { instance: "dev-a", relatedWork: false, sameWork: false } });
+  // The alias: the same route and answer, its deprecation on stderr only.
+  r = cli(env, ["instance", "same-work", "dev-a", "on", "--server", "build", "--json"]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), { schemaVersion: 1, ok: true, result: { instance: "dev-a", relatedWork: true, sameWork: true } });
+  assert.deepEqual(r.stderr.split("\n").filter((l) => l.includes("renamed")), ["oats: oats instance same-work is renamed: use oats instance related-work"]);
+  // off goes as asked, whatever the binding would be.
+  r = cli(env, ["instance", "related-work", "dev-s", "off", "--server", "build", "--json"]);
+  assert.deepEqual(r.json(), { schemaVersion: 1, ok: true, result: { instance: "dev-s", relatedWork: false, sameWork: false } });
+  const before = host.calls().filter((c) => c.includes(" same-work ")).length;
+  r = cli(env, ["instance", "related-work", "dev-s", "on", "--server", "build", "--json"]);
+  assert.equal(r.status, 1);
+  assert.deepEqual({ code: r.json().error.code, message: r.json().error.message }, { code: "E_REMOTE_INCOMPATIBLE", message: "remote oats 0.69.21 at build-host does not advertise instance-related-work, which a sibling binding needs (its instance-same-work binds a parent only); upgrade it there; nothing was sent" });
+  assert.equal(host.calls().filter((c) => c.includes(" same-work ")).length, before, "nothing was sent");
+  // The lineage is read in the scope the verb is sent to: an explicit --dir names another deployment there.
+  const HOME_O = "/srv/other/agents/dev/instances/dev-o";
+  writeFileSync(join(dir, "remote-oats"), readFileSync(join(dir, "remote-oats"), "utf8").replace("case \"$*\" in\n", `case "$*" in\n  *${JSON.stringify("status --json --dir /srv/other")}*) printf '%s' '${JSON.stringify({ root: "/srv/other/agents", agents: [{ name: "dev", instances: [{ instance: "dev-o", home: HOME_O, running: false, siblingInstance: "boss" }] }] })}';;\n`));
+  r = cli(env, ["instance", "related-work", "dev-o", "on", "--home", HOME_O, "--dir", "/srv/other", "--server", "build", "--json"]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(r.json().error.code, "E_REMOTE_INCOMPATIBLE");
+  assert.ok(host.calls().some((c) => c.includes("status --json --dir /srv/other")), host.calls().join("\n"));
+  assert.equal(host.calls().filter((c) => c.includes(" same-work ")).length, before, "nothing was sent for the explicit scope either");
+  assert.equal(host.calls().filter((c) => c.includes(" related-work ")).length, 0, "the new name is never sent to that host");
+});
+
+test("routed oats status --server --json: each instance row carries relatedWork by the roster's rule, an older host's sameWork: true as relatedWork: true beside it, and sameWork: true only beside relatedWork: true", () => {
+  const statusOf = (features) => ({ schemaVersion: 1, ok: true, result: { root: `${WS}/agents`, ...(features ? { features } : {}), agents: [{ name: "dev", instances: [
+    { instance: "dev-old", home: homeOf("dev", "dev-old"), running: false, parentInstance: "boss", sameWork: true },
+    { instance: "dev-odd", home: homeOf("dev", "dev-odd"), running: false, parentInstance: "boss", sameWork: "true", relatedWork: "true" },
+    { instance: "dev-false", home: homeOf("dev", "dev-false"), running: false, parentInstance: "boss", sameWork: false, relatedWork: false },
+    { instance: "dev-new", home: homeOf("dev", "dev-new"), running: false, siblingInstance: "boss", relatedWork: true, color: "sage" },
+    { instance: "dev-both", home: homeOf("dev", "dev-both"), running: false, parentInstance: "boss", relatedWork: true, sameWork: true }] }] } });
+  for (const [features, old] of [[["instance-same-work"], true], [["instance-related-work"], false], [["instance-same-work", "instance-related-work"], false], [null, false]]) {
+    const dir = mkdtempSync(join(base, "status-rw-"));
+    const host = fakeHost(dir, { probe: FULL_PROBE, answers: { [`status --dir ${WS} --json`]: { stdout: JSON.stringify(statusOf(features)) }, [`status --json --dir ${WS}`]: { stdout: JSON.stringify(statusOf(features)) } } });
+    const env = cliEnv(dir, host);
+    mkdirSync(env.OATS_HOME_DIR, { recursive: true });
+    writeFileSync(join(env.OATS_HOME_DIR, "servers.json"), JSON.stringify({ servers: { build: { sshHost: "build-host", workspace: WS, oatsPath: host.oatsPath } } }));
+    const r = cli(env, ["status", "--server", "build", "--json"]);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const rows = Object.fromEntries(r.json().result.agents[0].instances.map((i) => [i.instance, i]));
+    const flag = (name, key = "relatedWork") => (Object.hasOwn(rows[name], key) ? rows[name][key] : "absent");
+    assert.deepEqual({ old: flag("dev-old"), odd: flag("dev-odd"), false: flag("dev-false"), new: flag("dev-new"), both: flag("dev-both") }, { old: old ? true : "absent", odd: "absent", false: "absent", new: true, both: true }, JSON.stringify(features));
+    assert.deepEqual({ old: flag("dev-old", "sameWork"), odd: flag("dev-odd", "sameWork"), false: flag("dev-false", "sameWork"), new: flag("dev-new", "sameWork"), both: flag("dev-both", "sameWork") },
+      { old: old ? true : "absent", odd: "absent", false: "absent", new: "absent", both: true }, `${JSON.stringify(features)}: sameWork`);
+    assert.equal(rows["dev-new"].color, "sage", "the rest of the row is the host's");
+    assert.equal(rows["dev-old"].parentInstance, "boss");
+  }
 });
 
 test("routed Desktop reads and plans: a host without the feature is refused before anything is sent; a bad home is refused here or relayed from the host", () => {

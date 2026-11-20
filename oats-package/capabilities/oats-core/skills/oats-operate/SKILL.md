@@ -5,7 +5,7 @@ description: >-
   directories, extra trees (`oats worktree add|remove`), what a module is, reading `oats status` (modules, soul source,
   drift), spawning with preview then apply, relations, upgrading stopped homes' package modules, stopping or retiring
   instances you spawned, setting needs-input whenever you need anything
-  from a human (`oats instance attention`), being spawned by a trigger, lifecycle events
+  from a human (`oats instance attention`), asking a decision with options and keeping facts in view on your board (`oats instance board`), being spawned by a trigger, lifecycle events
   and doctor. oats.core is day-to-day OATS operation, working with OATS from
   inside an instance; which souls exist is `/oats-souls`, and the setup and
   config of an OATS workspace is oats.setup.
@@ -23,10 +23,9 @@ walking up to `oats-local.yaml`), or pass `--dir <deployment>`. Use `--json`
 when you parse output. Flags take `--flag value` or `--flag=value`. When a flag
 is not shown here, read `oats help`; never invent one.
 
-The CLI needs Node.js 22 or later. On Node 18 and 20, every command refuses
-with `E_NODE_UNSUPPORTED` before it runs; move to Node 22 or later. This
-includes `version`, the reader and capability commands. An older Node that
-cannot parse the entry may fail before it can print that refusal.
+Use Node.js 22.5 or later. Node 18 and 20 refuse every command with
+`E_NODE_UNSUPPORTED`, including `version`, the reader and capabilities.
+An older Node that cannot parse the entry may fail before that refusal.
 
 ## Your two directories
 
@@ -47,16 +46,19 @@ cannot parse the entry may fail before it can print that refusal.
   notes, whatever your knowledge capability keeps. OATS operational commands
   run here.
 - **`work/` is where repository work happens**: reading, editing, building,
-  testing, Git. In `worktree` and `checkout` mode, so do the extra trees
-  (`.work-<purpose>` in the home) that `oats worktree add` makes (below).
+  testing, Git. In `worktree`, `checkout`, `workspace` and `directory` mode,
+  so do the extra trees (`.work-<purpose>` in the home) that
+  `oats worktree add` makes (below).
   Never run Git from the home root or from the operator's own checkout.
 - **A change to a soul is repository work**: an ordinary, reviewed change to
   the member repository that defines it, made in a work tree.
 
 Work modes (from the soul's `work:`): `worktree` — your own branch in a Git
 worktree of the soul's repository; `checkout` — a shared checkout;
-`directory` — an owned directory, no repository; `workspace` — `work/` is the
-deployment directory itself, read-only across members, for coordination.
+`directory` — an owned directory, no repository; work that needs a branch
+goes in an extra tree, named with `--repo`; `workspace` — `work/` is the
+deployment directory itself, read-only across members; work that needs a
+member's branch goes in an extra tree, named with `--repo`.
 `attached` is chosen only at spawn (`--work attached --work-dir <owner work>`):
 the new instance shares its owner's work tree and is always its child.
 
@@ -202,10 +204,8 @@ oats doctor                  # this deployment's local file and lock, plus diagn
                              # and, from OATS 0.50.0, what retires left (recovery copies, retained worktrees)
 ```
 
-Doctor's `git-version:` information line reports the Git version and partial-cache
-support (in `information[]` with `--json`). Git before 2.45 works with whole-tree
-fetches; the line is not a warning or a refusal. A newer Git supports partial
-caches, while a remote or an existing whole-tree cache may still use whole trees.
+Doctor's `git-version:` line (`information[]` in JSON) reports cache support, never a warning or refusal.
+Git before 2.45 works with whole-tree fetches; newer Git supports partial caches, but a remote or existing cache may still use whole trees.
 
 ## Spawn: preview, then apply
 
@@ -251,10 +251,11 @@ overrides its start point. When the clone is of the soul's repository, the
 default is the commit observed by spawn, even when the local clone is behind.
 A `--repo` that is not a clone of the soul's repository starts at its `HEAD`.
 
-**Naming.** Name an instance for its work, with the soul's role last:
-`--name <descriptive>-<role>`, for example `--name desktop-improvements-expert`
-for an `oats-desktop-expert`. `/oats-souls` has the rules, and when spawn's
-`--purpose` fits instead.
+**Naming.** Name an instance for its work, with its role in your coordination
+last: `--name <descriptive>-<role>`, for example
+`--name desktop-improvements-developer` for the developer of the Desktop
+improvements. `/oats-souls` has the rules, and when spawn's `--purpose` fits
+instead.
 
 **Teams to join.** The preview's `teams` lists the teams the soul may join
 (`default` first, each with `via`: why), and `defaultTeam` the one its
@@ -334,6 +335,18 @@ runs every module's retire hook (identities, scheduled jobs) and retains a
 worktree with work in it unless told to discard. An extra tree in the home is
 removed when it is clean and retained when it holds work; discarding does not
 apply to it.
+From OATS 0.69.20, a home whose recorded retire hooks cannot run refuses with
+`E_UNIDENTIFIED_INSTANCE_HOME` before stopping anything, children included;
+`--plan` and Desktop Remove refuse the same way. This affects homes spawned
+before `capabilityRuntime` and captured homes from before 0.26, unless their
+record positively proves no cleanup hook is owed (a captured home must prove
+no capability's spawn hook ran). Read the named capabilities, inspect the
+home and clean up external identities/memberships with the provider's own
+tooling. Then `oats retire <instance> --force` removes the home while warning
+that skipped hooks did not revoke that state. For your own instance, keep
+`--self`: its deferred completion carries the force choice. Missing information
+never proves there is nothing to undo.
+
 From OATS 0.48.0, retiring an instance stops its recorded children first and keeps them; if one
 will not stop, retire refuses with `E_CHILDREN_RUNNING` and retires nothing
 (`--force` does not bypass it), including your own `--self` retirement.
@@ -380,6 +393,60 @@ oats instance attention --clear                                  # once you have
   itself, naming the child (`<child> asks: …`), and relays the answer back.
   Clear it once relayed. Each instance's claim is its own: never set one for
   another home.
+
+### Your board: questions with options, and facts in view
+
+When `oats version --json` lists `instance-board` in its `features`, your
+instance has a board: what your person sees around your terminal when they
+open you. Run its commands from your home, like `attention`. An OATS that
+doesn't list it has no board: use `oats instance attention --message`
+instead.
+
+**A decision between 2 and 4 options:** ask it on the board, in the request
+shape. Write it so someone who hasn't followed your work can decide. Run it
+as one command: the context file is made and removed outside your home, and
+the command's exit status is the ask's:
+
+```bash
+( ctx=$(mktemp) && trap 'rm -f "$ctx"' EXIT && cat > "$ctx" <<'TXT' && oats instance board ask "<the question, one sentence>" \
+  --option "<choice>: <what happens if they pick it>" \
+  --option "<choice>: <what happens>" --context-file "$ctx"
+<summary, one line, at most 80 characters>
+<context, 2-4 lines: what you did so far and what you found>
+<what happens next: what you will do with the answer>
+<links: the PR, the branch, files>
+TXT
+)
+```
+
+- Up to 4 `--option`s. The question is one line, at most 200 characters;
+  each option one line, at most 60; the context at most 2000 characters, with
+  newlines. The command answers the question's id (`q1`, `q2`…, or your own
+  `--id`).
+- It sets needs-input for you while the question is open (producer
+  `oats.board`): don't also set `attention` for it. End your turn.
+- **The answer arrives typed in your terminal as `<id>: <text>`**, for
+  example `q2: Squash: one clean commit`. It may be one of your options or
+  free text. Read it by its id, act on it, then close the question:
+  `oats instance board ask --clear <id>`. The last `--clear` clears the
+  needs-input.
+- A question belongs to the session it was asked in: after a restart, ask it
+  again if you still need the answer.
+- **When the board refuses** (read the error's code with `--json`):
+  `E_EVENTS_FAILED` means the question IS on the board but its needs-input
+  claim isn't: run the same command again, which asks nothing twice.
+  `E_BOARD_FAILED` means the board can't read your session: use `oats
+  instance attention --message`. `E_BOARD_FULL`: clear a question you have
+  read, or unset a fact, first. `E_BAD_ARGS`: fix the text the message names.
+- Anything else you need from a person (a credential, an approval with no
+  options, an open question) stays `attention`.
+
+**Facts in view:** `oats instance board set <key> --label <text> --value
+<text> [--unit <text>] [--link <https-url>]`, and `oats instance board unset
+<key>` when it no longer matters. Set only what your person must keep in view
+while you work: the PR, the one number that matters, the branch. At most 12.
+Update a fact by setting its key again (the board keeps its last values). Never
+put a secret in a fact, a question or a context.
 
 The Claude Code emitter is separate and automatic. In a Claude instance,
 oats.core's hooks report a pending permission prompt or question themselves

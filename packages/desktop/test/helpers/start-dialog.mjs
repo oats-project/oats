@@ -11,6 +11,7 @@ import { createInstanceStarter } from '../../renderer/start-instance.mjs';
 import { currentWorkspace, setWorkspace, httpError } from '../../renderer/views/common.mjs';
 import { SPAWNERR_BLOCK, HANDLER } from './workspace-views-fixture.mjs';
 import { deploymentDoubles } from './deployment-doubles.mjs';
+import { handlerAuth, authorized } from './handler-auth.mjs';
 
 export const CODE = 'E_LAUNCH_CONFIG_AMBIGUOUS', OTHER_CODE = 'E_LAUNCH_CONFIG_UNKNOWN';
 export const LABEL = 'No launch configuration (the harness as installed)';
@@ -39,10 +40,10 @@ export function http({ invoke = assert.fail, spawnAgent = assert.fail } = {}) {
   const spawnErrorPayload = new Function(`${SPAWNERR_BLOCK}\nreturn spawnErrorPayload;`)();
   const deps = { createServer: fn => fn, ...deploymentDoubles(() => [workspace]), cliState: HERE, ctxs: ['/team'], homedir: () => '/home/person',
     agentsData: () => ({ agents }), deploymentRows: () => instances, spawnPreview: { cache: { invalidate() {} } }, spawnErrorPayload, displayLine, spawnAgent, spawnApplyFailure,
-    launchConfigRequest: (request, context) => launchConfigRequest(request, { ...context, invoke }) };
+    launchConfigRequest: (request, context) => launchConfigRequest(request, { ...context, invoke }), ...handlerAuth };
   const handler = new Function(...Object.keys(deps), `${HANDLER}\nreturn server;`)(...Object.values(deps));
   return async ({ url = '/api/launch-configs?ws=%2Fteam', body }) => {
-    const req = new EventEmitter(); Object.assign(req, { url, method: 'POST', headers: { host: 'localhost:4820', origin: 'http://localhost:4820' } }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method: 'POST', headers: authorized({ host: 'localhost:4820', origin: 'http://localhost:4820' }) }); let result;
     const res = { writeHead(status) { result = { status }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(JSON.stringify(body))); req.emit('end'); await done; return result;
   };

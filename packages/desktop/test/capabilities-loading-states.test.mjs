@@ -69,7 +69,7 @@ async function setup(t, { holdRoster = false, holdReads = false, cli = CLI, soul
     doc, timers, rosters, reads, calls, q,
     tab: async name => { doc.getElementById(`workspace-tab-${name}`).click(); await settle(); },
     count: name => q(`#workspace-tab-${name} .workspace-count`),
-    rows: () => [...doc.querySelectorAll('.catalog-table .catalog-row:not(.head):not(.skeleton-catalog-row)')],
+    rows: () => [...doc.querySelectorAll('.cap-list button.cap-row')],
     state: () => q('.catalog-state'), skeleton: () => q('.catalog-state [data-skeleton]'), status: () => q('.discovery-load-status'), notice: () => q('.discovery-notice'),
     reads_: () => calls.filter(c => c.path.startsWith('/api/workspace-sync')).map(c => c.body),
     resolveRead: async (index, reply) => { reads[index].resolve(reply); await settle(); },
@@ -91,15 +91,12 @@ test('pending: both tab counts are pills; on Capabilities the real card rows as 
   assert.doesNotMatch(u.doc.body.textContent, /Reading the workspace capabilities/);
   assert.equal(u.skeleton(), null, 'nothing before 150ms'); u.timers.advance(PENDING_DELAY_MS);
   const sk = u.skeleton(); assert.ok(sk); assert.equal(sk.getAttribute('aria-hidden'), 'true'); assert.equal(sk.textContent, '');
-  const bones = sk.querySelectorAll('button.catalog-row.skeleton-catalog-row'); assert.ok(bones.length >= 5, 'card rows wearing the table classes');
-  for (const row of bones) { assert.equal(row.disabled, true); assert.equal(row.tabIndex, -1); assert.ok(row.querySelector('.catalog-tile.skeleton')); assert.ok(row.querySelector('.catalog-cap .skeleton-name')); }
-  // The settled card's cells, one per grid track and placed by the same classes (wide and narrow): tile | capability | used by | chevron.
-  const cells = row => [...row.children].map(el => ['catalog-tile', 'catalog-cap', 'catalog-used', 'catalog-chevron'].find(c => el.classList.contains(c)) ?? null);
-  assert.deepEqual(cells(bones[0]), ['catalog-tile', 'catalog-cap', 'catalog-used', 'catalog-chevron']);
-  const boneHead = sk.querySelector('.catalog-head').children.length;
+  const bones = sk.querySelectorAll('.cap-list > li > .cap-row.skeleton-catalog-row'); assert.ok(bones.length >= 5, 'rows wearing the list classes');
+  // The settled row's two lines: its name line, then its one line of what it does; nothing in it takes focus.
+  for (const row of bones) { assert.equal(row.tagName, 'DIV'); assert.ok(row.querySelector('.skeleton-name')); assert.ok(row.querySelector('.skeleton-desc')); }
+  assert.equal(sk.querySelectorAll('button, [tabindex]').length, 0);
   await u.resolveRead(0, okRead());
-  assert.deepEqual(cells(u.rows()[0]), ['catalog-tile', 'catalog-cap', 'catalog-used', 'catalog-chevron'], 'the skeleton is the settled card');
-  assert.equal(boneHead, u.q('.catalog-head').children.length, 'and its head has the same columns');
+  assert.equal(u.rows()[0].firstElementChild.className, 'cap-row-line', 'the skeleton is the settled row: its name line first');
   assert.equal(u.skeleton(), null); assert.equal(u.rows().length, 10); assert.equal(u.state().getAttribute('aria-busy'), null);
   assert.equal(u.count('capabilities').textContent, '10'); assert.equal(u.status().textContent, '');
 });
@@ -185,7 +182,7 @@ test('opened from a soul before the catalog is read: the page stands with the ca
   const u = await setup(t, { holdReads: true });
   u.q('.soul-card').click(); await settle();
   assert.equal(u.q('.workspace-soul-page').hidden, false, 'the soul page');
-  const row = u.q('.workspace-soul-page .soul-caps [data-capability="nw-house-style"]'); assert.ok(row, 'the soul lists it'); row.click(); await settle();
+  const row = u.q('.workspace-soul-page .soul-capabilities .cap-row[data-capability="nw-house-style"]'); assert.ok(row, 'the soul lists it'); row.click(); await settle();
   const before = pageOf(u); assert.ok(before); assert.equal(before.dataset.capability, 'nw-house-style'); assert.equal(before.dataset.catalogPending, 'true');
   assert.ok(before.querySelector('.page-lede.skeleton'), 'a lede-sized line where the description goes');
   assert.ok(before.querySelector('.page-facts-skeleton[aria-hidden=true]'), 'a facts-sized block in Comes from'); assert.equal(before.querySelector('.page-notice').childElementCount, 0);
@@ -193,7 +190,7 @@ test('opened from a soul before the catalog is read: the page stands with the ca
   await u.resolveRead(0, okRead());
   const after = pageOf(u); assert.notEqual(after, before, 'filled in place'); assert.equal(after.dataset.catalogPending, undefined);
   assert.equal(after.querySelector('.page-lede.skeleton'), null); assert.equal(after.querySelector('.page-facts-skeleton'), null);
-  assert.match(after.querySelector('.page-side').textContent, /Path.*capabilities\/nw-house-style/s, "the catalog's facts");
+  assert.match(after.querySelector('details.cap-fold[data-fold="source"]').textContent, /Path.*capabilities\/nw-house-style/s, "the catalog's facts");
   assert.equal(u.doc.activeElement, after.querySelector('.page-back'), 'focus is kept on the same control');
   assert.equal(u.q('.workspace-cap-page').hidden, false);
 });
@@ -201,7 +198,7 @@ test('opened from a soul before the catalog is read: the page stands with the ca
 test('a catalog refresh while the page is open updates it in place: a failed re-read shows the stale line with Retry (reads live); an unchanged catalog never rebuilds it', async t => {
   const u = await setup(t, { holdReads: true });
   await u.resolveRead(0, okRead()); await u.tab('capabilities');
-  u.q('.catalog-row[data-capability="nw-house-style"]').click(); await settle();
+  u.q('.cap-row[data-capability="nw-house-style"]').click(); await settle();
   const first = pageOf(u); assert.ok(first); assert.equal(first.querySelector('.page-notice').childElementCount, 0);
   await u.cliEmit(); await u.resolveRead(1, okRead());
   assert.equal(pageOf(u), first, 'identical catalog: the same page node');
@@ -235,7 +232,7 @@ test('the page\'s age line ticks with the roster poll, and a failed Retry with a
   await u.resolveRead(1, { workspaceSyncApi: 1, status: 'unavailable', reason: { code: 'E_CLI_FAILED', message: 'bridge down' }, lastGood: { capabilities: CATALOG, observedAt: old } });
   assert.equal(u.notice().querySelector('.loading-notice'), line, 'a failed Retry updates the line in place'); assert.equal(u.doc.activeElement, retry, 'Retry keeps focus');
   assert.equal(u.status().textContent, "Couldn't refresh capabilities.");
-  u.q('.catalog-row[data-capability="nw-house-style"]').click(); await settle();
+  u.q('.cap-row[data-capability="nw-house-style"]').click(); await settle();
   const pageLine = pageOf(u).querySelector('.page-notice .loading-notice'); assert.ok(pageLine);
   assert.equal(pageLine.querySelector('.loading-notice-text').textContent, "Couldn't refresh capabilities · observed 3 min ago");
   now = base + 6 * 60_000; u.poll(); await settle();
@@ -243,21 +240,16 @@ test('the page\'s age line ticks with the roster poll, and a failed Retry with a
   assert.equal(pageLine.querySelector('.loading-notice-text').textContent, "Couldn't refresh capabilities · observed 9 min ago", 'the age ticked with the poll');
 });
 
-test('roster-derived "Used by" claims wait for a settled good roster: "—" with the reason while the roster is failed or stale, in the table and on the page', async t => {
+test('roster-derived "Used by" claims wait for a settled good roster: "—" with the reason while the roster is failed or stale, on the page', async t => {
   const u = await setup(t, { holdRoster: true, holdReads: true });
   u.rosters[0].resolve({ agents }); await settle(); await u.resolveRead(0, okRead()); await u.tab('capabilities');
-  const cell = () => u.q('.catalog-row[data-capability="nw-brand-voice"] .catalog-used-count');
-  assert.equal(cell().textContent, 'Not used', 'a good roster: the claim');
   u.poll(); await tick(); u.rosters[1].reject(new Error('down')); await settle();
-  assert.equal(cell().textContent, '—'); assert.equal(cell().getAttribute('aria-description'), 'Unavailable: roster is not current'); assert.equal(cell().dataset.rosterState, 'stale');
-  u.q('.catalog-row[data-capability="nw-brand-voice"]').click(); await settle();
+  u.q('.cap-row[data-capability="nw-brand-voice"]').click(); await settle();
   const page = pageOf(u); assert.equal(page.querySelector('.used-unknown')?.textContent, '—', 'the page makes no claim either');
   assert.equal(page.querySelector('.used-unknown').getAttribute('aria-description'), 'Unavailable: roster is not current');
   assert.doesNotMatch(page.textContent, /No instance carries it yet/);
   u.poll(); await tick(); u.rosters[2].resolve({ agents }); await settle();
   assert.match(pageOf(u).textContent, /No instance carries it yet/, 'a good read restores the claim on the open page');
-  pageOf(u).querySelector('.page-back').click(); await settle();
-  assert.equal(cell().textContent, 'Not used', 'and in the table at once, not one poll later');
 });
 
 // souls-capabilities: "Used by" derives from the souls list (each soul's composition), the same read's state.
@@ -268,17 +260,12 @@ const COMPOSED = soulsData(capture('souls')).souls
   .map(s => ({ name: s.name, key: s.key, soulKind: s.kind, ...(s.kind === 'package' ? { package: s.package, version: s.version, qualifiedName: s.qualifiedName } : {}),
     description: s.description || '', kind: 'persistent', work: s.work, capabilities: s.capabilities, agentsRoot: roster.root }));
 const COMPOSING_CLI = { ...CLI, features: [...CLI.features, 'souls-capabilities'] };
-test('souls-derived "Used by" waits for a settled good souls read: "—" with the souls list\'s reason, in the table and on the page', async t => {
+test('souls-derived "Used by" waits for a settled good souls read: "—" with the souls list\'s reason, on the page', async t => {
   const u = await setup(t, { holdRoster: true, holdReads: true, cli: COMPOSING_CLI });
   const souls = COMPOSED.filter(s => s.key !== 'dev'); // acme_z: only dev composes it
   u.rosters[0].resolve({ agents: souls }); await settle(); await u.resolveRead(0, okRead({ capabilities: COMPOSED_CATALOG })); await u.tab('capabilities');
-  const cell = name => u.q(`.catalog-row[data-capability="${name}"] .catalog-used-count`);
-  assert.equal(cell('acme-tool').textContent, '3 souls', 'from the composition: no instance needed');
-  assert.equal(cell('acme_z').textContent, 'Not used', 'a good read: the claim');
   u.poll(); await tick(); u.rosters[1].reject(new Error('down')); await settle();
-  assert.equal(cell('acme_z').textContent, '—'); assert.equal(cell('acme_z').getAttribute('aria-description'), SOULS_STALE_TITLE);
-  assert.equal(cell('acme-tool').textContent, '3 souls', 'the held list\'s souls stay');
-  u.q('.catalog-row[data-capability="acme_z"]').click(); await settle();
+  u.q('.cap-row[data-capability="acme_z"]').click(); await settle();
   assert.equal(pageOf(u).querySelector('.used-unknown').getAttribute('aria-description'), SOULS_STALE_TITLE, 'the page makes no claim either');
   u.poll(); await tick(); u.rosters[2].resolve({ agents: souls }); await settle();
   assert.match(pageOf(u).textContent, /No soul here includes it/, 'a good read restores the claim on the open page');
@@ -288,7 +275,7 @@ test('the page opens a package soul from "Used by" by its key, never the member 
   // The capture's member soul keeper and package soul acme.pkg/keeper both compose acme-tool.
   const u = await setup(t, { cli: COMPOSING_CLI, souls: COMPOSED, catalog: COMPOSED_CATALOG });
   await u.tab('capabilities');
-  u.q('.catalog-row[data-capability="acme-tool"]').click(); await settle();
+  u.q('.cap-row[data-capability="acme-tool"]').click(); await settle();
   const rows = [...pageOf(u).querySelectorAll('.used-row:not(.head)')];
   assert.deepEqual(rows.map(r => [r.querySelector('.used-name').textContent, r.title]), [['dev', 'Open dev'], ['keeper', 'Open keeper'], ['keeper', 'Open acme.pkg/keeper'], ['scribe', 'Open scribe']]);
   rows[2].click(); await settle();
@@ -305,7 +292,7 @@ test('a catalog that failed with nothing held shows the failed treatment on the 
   await u.resolveRead(0, failedRead()); await u.tab('capabilities');
   // Open a page from a soul (the table has nothing to open from).
   u.doc.getElementById('workspace-tab-souls').click(); await settle(); u.q('.soul-card').click(); await settle();
-  u.q('.workspace-soul-page .soul-caps [data-capability="nw-house-style"]').click(); await settle();
+  u.q('.workspace-soul-page .soul-capabilities .cap-row[data-capability="nw-house-style"]').click(); await settle();
   const failed = pageOf(u).querySelector('.page-notice .loading-failed'); assert.ok(failed, 'the failed block under the bar');
   assert.equal(failed.querySelector('.loading-failed-message').textContent, 'The workspace command exceeded its time limit.'); assert.equal(failed.querySelector('.loading-failed-code').textContent, 'E_CLI_TIMEOUT');
   const retry = failed.querySelector('.loading-retry'); retry.focus(); retry.click(); await settle();
@@ -319,7 +306,7 @@ test('the age rule on the page: an old observation is said, muted, without Retry
   const now = Date.now(); t.mock.method(Date, 'now', () => now);
   const u = await setup(t, { holdReads: true });
   await u.resolveRead(0, okRead({ observedAt: new Date(now - 4 * 60_000).toISOString() })); await u.tab('capabilities');
-  u.q('.catalog-row[data-capability="nw-house-style"]').click(); await settle();
+  u.q('.cap-row[data-capability="nw-house-style"]').click(); await settle();
   const line = pageOf(u).querySelector('.page-notice .loading-notice[data-kind=observed]'); assert.ok(line);
   assert.equal(line.querySelector('.loading-notice-text').textContent, 'Observed 4 min ago'); assert.equal(line.querySelector('.loading-retry'), null);
 });

@@ -2,7 +2,7 @@
 // Explicit per-file public APIs keep their full-reprojection defaults.
 import { closeSync, constants, fstatSync, openSync } from "node:fs";
 import { basename } from "node:path";
-import { awBoundaryWitness, awLogLines, awStream } from "./capture-aw.mjs";
+import { awBoundaryWitness, awLogLines, awStream, SEALED_AW_LOG_REASON } from "./capture-aw.mjs";
 import { captureContext } from "./capture-context.mjs";
 import { CAPTURE_POLICY } from "./capture-budget.mjs";
 import { fileVersion, statVersion, sameVersion } from "./derived-state.mjs";
@@ -27,7 +27,8 @@ export function captureAwUnit(store, { owner, path, kind = "comm", selfName, wor
     return { ...result, ignored: true, complete: true };
   }
   const blocked = state.get("set-aside", key);
-  if (blocked && !blocked.retry) return { ...result, setAside: blocked };
+  if (blocked && !blocked.retry) return { ...result, setAside: blocked,
+    ...(blocked.reason === SEALED_AW_LOG_REASON ? { sealed: 1 } : {}) };
   const fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     const observe = () => {
@@ -85,7 +86,7 @@ export function captureAwUnit(store, { owner, path, kind = "comm", selfName, wor
     };
     const project = kind === "comm" ? entry => projectCommLogEntry(entry, { selfName: account }) :
       entry => projectInteractionLogEntry(entry, { selfName, workspace });
-    let bytes = 0, records = 0, scanned = false, oversized = null;
+    let bytes = 0, records = 0, scanned = false, oversized = null, sealed = null;
     const turns = [], iterator = awLogLines(chunks(), { start: unitStart, maxBytes: maxRecordBytes, frontier: job.frontier ?? 0 });
     try {
       while (records < maxRecords && bytes < maxBytes && !stopped()) {
@@ -93,6 +94,11 @@ export function captureAwUnit(store, { owner, path, kind = "comm", selfName, wor
         if (next.done) { scanned = true; break; }
         const record = next.value;
         if (records && bytes + record.bytes > maxBytes) break;
+        if (record.sealed) {
+          result.entries++; result.sealed = 1; sealed = record.start;
+          if (work) work.sourceRecords = (work.sourceRecords ?? 0) + 1;
+          break;
+        }
         records++; bytes += record.bytes; job.bytes = record.end;
         if (work) work.sourceRecords = (work.sourceRecords ?? 0) + 1;
         if (record.skipped) result.skipped++;
@@ -125,6 +131,11 @@ export function captureAwUnit(store, { owner, path, kind = "comm", selfName, wor
     if (blocked && (job.bytes > blocked.offset || atEnd)) state.delete("set-aside", key);
     if (scanned || atEnd) state.delete("aw-unit", key);
     else state.set("aw-unit", key, job);
+    if (sealed !== null) {
+      const row = { owner, source: "aw", path, offset: sealed, reason: SEALED_AW_LOG_REASON, retry: false };
+      state.set("set-aside", key, row);
+      return { ...result, setAside: row };
+    }
     if (oversized !== null) {
       // Not captured past its exact start. Later records wait for an edited
       // source or an ignore of the whole input.

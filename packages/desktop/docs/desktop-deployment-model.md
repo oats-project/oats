@@ -153,7 +153,7 @@ lines is shown as one; a text the filter withholds (control characters, a
 credential's shape) reads "[withheld]" alone, with no speaker in
 front; a text with nothing to show leaves the place saying what it said
 before for a row without one. The places: a roster row's title and
-description and its hover card's Status, the row's context menu (what it
+description, the instance panel's Session note (the runtime error), the row's context menu (what it
 says when it is held, Start's reason, Open in split's reason), the notice of a terminal that
 cannot open, the start dialog's status, the context panel's Start, the
 overview's Go to instance and Start…, the roster's failure notice and the
@@ -195,9 +195,10 @@ Matching deployments into workspace views needs `workspace-identity`; without
 it each deployment keeps a view of its own under its deployment id, the switcher
 lists them as before (not under "Not matched to a workspace"), and the
 deployment list says why.
-`ACCEPT_RANGE` is `>=0.26.0 <0.70.0`: the floor is the first kernel the
+`ACCEPT_RANGE` is the floor, `>=0.26.0`, and the tested bound is this Desktop's own
+minor, read from its manifest (`testedBound`, `packages/client/cli-locator.mjs`). The floor is the first kernel the
 feature gates above let through (a 0.25 kernel is refused by the locator and
-meets the "Compatible `oats` CLI required" card), the ceiling admits 0.27 (the harness rename, gated on feature
+meets the "Compatible `oats` CLI required" card), and the minors tested so far are 0.27 (the harness rename, gated on feature
 `harness`) through 0.30 (team model v2, gated on feature `team-model-2`; the
 0.29 team shapes are still read), 0.31 (Herdr removed; per-instance reads and
 plans routed by `--server`/`--home`, gated on the probe's `remote` entries),
@@ -220,6 +221,24 @@ writes) and 0.44 (launch-prompt answers: the spawn preview's optional
 `launchPromptAnswers`, `E_SPAWN_INCOMPLETE` details' optional `launchPrompts`
 and the `launch-prompt` instance event, all read as optional, no new gate; `launchPromptAnswers` and the event's `consentSource` come from 0.44 to 0.51 kernels only), 0.45 (`capabilities` on `oats souls --json` rows, feature `souls-capabilities`, which gates Capabilities' "Used by") and 0.46 (opt-in `oats inspect --soul --instructions` and `composedInstructions`, feature `soul-composed-instructions`, not read by the Desktop yet; no new gate), 0.47 (Desktop lifecycle interaction improvements with unchanged kernel contracts), 0.48 (conditional team default and `--no-default`, feature `teams-conditional-default`, not read by the Desktop yet; no new gate), 0.49 (the `worktree` hook event, feature `worktree-event`, and each host's kernel features on roster groups, feature `server-probe-features`, read where present; capability warnings and the new trigger fields are read as optional; no new gate on the band), 0.50 (capability trigger sources: a trigger test runs a source only with `--run-source`, feature `trigger-sources`, which gates the informed Test; no new gate on the band), 0.51 (one retire of an instance at a time: a second retire answers `E_LIFECYCLE_BUSY`, which the Desktop already words; `--detach-key` on `session attach`, feature `session-attach-detach-key`, not used by the Desktop; no new gate on the band), 0.52 (a stop holds the claim a retire holds, feature `lifecycle-claim-stop`: under it the Desktop reads who holds the claim, `error.details.holder`, on `E_LIFECYCLE_BUSY`; lifecycle answers carry kernel codes only, feature `lifecycle-kernel-codes`: under it a failed row's `stillRunning: []` says the harness exited; the kernel's own answer to Claude's development-channel prompt is read from the data, each field as optional and listed in the next paragraph, while the feature name `launch-prompt-dev-channel` itself is not read and gates nothing; `warnings` on schedule and trigger run records, feature `schedule-run-warnings`, are not read by the Desktop; no new gate on the band), 0.53 (a retire plan says as a fact whether `work/` is the instance's own tree, `facts.ownWorktree`, feature `retire-plan-own-worktree`: under it the key is required in a retire plan and a boolean, and the Retire dialog reads it for whose tree `work/` is, [Whose tree `work/` is](desktop-lifecycle-confirmations.md#whose-tree-work-is); no new gate on the band), 0.54 through 0.58 (no new gate on the band), 0.59 (`retire` on status and remote roster rows, feature `status-retire-state`, read where present; `size` on `session inspect --json`, feature `session-inspect-size`, not read by the Desktop; no new gate on the band), 0.60 (`running` on status rows means the harness is running: a window left at its fallback shell reads `running: false` with `runtimeState: "shell"`, as the Desktop's own terminal probe already reports a local row, and a server's rows now read the same way; no new feature and no new gate on the band), 0.61 (`oats onboard`'s `next.spawn` names the workspace's setup expert, the same text-or-`null` shape; no new gate on the band), 0.62 (capture runs as an OATS-owned periodic service, which the Desktop does not read; `oats session attach`'s viewers clean up after themselves, with the same arguments and exit codes the Desktop's viewer relies on; no new gate on the band), 0.63 (`running` on `session inspect --json`, feature `session-inspect-running`, not read by the Desktop, whose attach preflight reads `present` alone; `details.fields` on `E_RUNTIME_AUTHORITY_MISMATCH`, not read; a bare-harness start's `launched` event records `launchConfig: null`, which the Desktop already reads as no configuration; no new gate on the band), 0.64 (`spawnOrigin` on spawn results and status rows keeps its `instance`/`operator` shape and now names the caller, which the Desktop passes through without reading it; a fallback shell with an empty or `unset` pane command reads `runtimeState: "shell"`, which the Desktop already shows; no new gate on the band), 0.65 (`oats deployments`, feature `deployments-list` with `deploymentsApi: 1`, which the Desktop reads only behind that feature; `listed` on `oats onboard --json`, which the Desktop's onboard reader does not read; a kernel command run in an unlisted deployment lists it, which changes no answer; no new gate), 0.66 (`oats server connect` requires `--dir`, which the Desktop's Add a machine always passes behind feature `server-connect`; the auto-add of the deployments list skips temporary directories and finds a deployment only by a regular `oats-local.yaml`, the rule the list's `ok` already applied, which changes no answer the Desktop reads; no new gate), 0.67 (`color` on status and remote roster rows, feature `instance-color`, read where present and as a palette name only, and `oats instance color`, which the Desktop runs only behind that feature; `composedSkills` on `oats inspect --soul --composed-skills`, feature `soul-composed-skills`, read only behind it; `spawn --preview --suggest-name` and the preview's `naming`, feature `spawn-suggest-name`, used only behind it and `spawn-name`; the spawn preview's capability skill names follow materialize's precedence, which the Desktop does not read; no new gate), 0.68 (`oats instance upgrade`, feature `instance-upgrade`, which the Desktop does not run; its `modules-upgraded` and `upgrade-refused` instance events, which the Desktop titles (the second with its failed `step`, read where present); the optional `previous` on `instance.json` module rows and the optional `drift` on start and restart results, which the Desktop does not read; a claim an upgrade holds refuses a stop or retire with `E_LIFECYCLE_BUSY` and the same `details.holder` states the Desktop reads; `E_UPGRADE_PARTIAL` on a start reaches it as a kernel error with its message; `oats instance suggest-name`, feature `instance-suggest-name`, and `--suggest-name` on a spawn apply, feature `spawn-apply-suggest-name`, each used only behind its feature ([desktop-spawn-preview.md](desktop-spawn-preview.md)); no new gate), 0.69 (`sessionEnd` on status and remote roster rows, kept only as `lost`, `stopped` or `exited`; `oats session resume --json`, feature `session-resume`, which the Desktop runs only behind that feature, detached, when it opens and when a local row reads `lost`, reading `E_RESUME_BUSY` as another sweep running; since 0.69.2 it shows nothing of the answer, and a failed sweep is one log line with its code; from 0.69.2, `background` and `sameWork` on status and remote roster rows, read only behind features `instance-background` and `instance-same-work`, the `oats instance background` verb run only behind the first, the skipped reason `lifecycle-busy`, which the Desktop does not show, and a claim's `action: "resume"`, which it words as any holder of `E_LIFECYCLE_BUSY`; the `@oats-agent` pane option, which the Desktop's tmux status reader follows to the agent's pane, and `paneId` on `oats session inspect --json`, which its review paste targets; no new gate), and the `packages-no-approval` fence is the real
 gate.
+
+**Above the tested bound** (#1879): a released CLI of a later minor or major,
+with `desktopApi: 1`, is accepted with `aboveTested: true` and `testedThrough`
+(`X.Y`) on the probe and on `/api/cli`. Only the operations
+`packages/client/above-tested.mjs` names as reads or allowed stay on: the reads,
+terminals, the Spawn preview and apply (fenced by `--expect-decision`), Start,
+Restart, the colour and the background. Every other operation, one that does not
+exist yet included, is refused where it enters the backend, before any CLI process
+runs, with code `cli-above-tested` and the notice sentence: each POST handler of
+`server/oats-web.mjs` by (route, action), a POST to a route the table does not
+name before any handler, and in main the deployments-list writes,
+onboard and the launch resume sweep (skipped with one log line naming the code).
+The renderer reads the same table to disable what would be refused, and shows the
+notice in the card's place. On the surfaces that stay on, an answer of a shape the
+Desktop does not know is an outcome not known, never a success. The card's
+"older than the installed CLI" branch is for a newer desktop API only. The
+inventory test (`test/above-tested-inventory.test.mjs`) fails for a POST
+(route, action) or a CLI-executing module the table does not classify.
 
 The launch-prompt readers also follow the contract of 0.52 (feature
 `launch-prompt-dev-channel`: the kernel confirms Claude's development-channel
@@ -493,7 +512,7 @@ answers the view that holds it; no `?ws=` answers the first view.
   stale?, reason?, short?, fix?, note?}`. `machine` is "This Mac" (the Desktop's label for the
   machine it runs on, `thisMachine` of `renderer/desktop-terms.mjs`) or the server's label, else its
   id. `deploymentLabel` (`packages/client/deployment-label.mjs`) shows it as "This
-  Mac · ~/acme" or "altair · ~/northwind": the home directory as
+  Mac · ~/acme" or "devbox · ~/northwind": the home directory as
   `~` (on a remote, a `/Users/<name>` or `/home/<name>` prefix, a display
   guess) and the last two segments of a long path. A deployment is live
   (`reachable`), not reached (with its `reason`), remembered
@@ -515,9 +534,15 @@ answers the view that holds it; no `?ws=` answers the first view.
   case-sensitive) only when the view has two or more, and none for a deployment with no rows;
   with one it has no headings. Rows never repeat the workspace name, and a
   row's identity line keeps its host. The tree (the sidebar, the palette,
-  the TUI) stands in name order: each cluster by its first root, siblings by
-  name, ties by `instanceId` (`instance-tree.mjs` `rosterOrder`, #1262), so a
-  start or a stop moves no row. The panel's own list (`panelInstances`) still
+  the TUI) stands in spawn order, newest first: each cluster by its first
+  root, siblings the same way; a row with no readable `createdAt` after every
+  row with one; equal times by name, then by `instanceId`
+  (`instance-tree.mjs` `rosterOrder`). A spawn time never changes, so a start
+  or a stop moves no row, and a new child never moves its cluster. Pinned rows
+  come first at every level (feature `instance-pin`): a pin, or a pinned
+  descendant, moves its cluster to the top of its deployment's list, and the
+  path down to it among its siblings ([Pinned instances](../../../docs/desktop.md#pinned-instances)).
+  The panel's own list (`panelInstances`) still
   stands running, then unknown (`running` not a boolean), then stopped, by
   name within each: `byRuntimeState`
   (`packages/client/instance-presentation.mjs`).
@@ -547,7 +572,7 @@ at most 32 views). When the tabs overflow, the strip scrolls horizontally and
 the selected or focused tab is revealed, as in the terminal tab strip. The
 header's count line counts the selected tab and sits at the right of the
 header. The tab has no Spawn button (Spec E): `S` on the canvas (which goes
-to the Souls tab), the sidebar's Spawn instance, Quick Open and the soul
+to the Souls tab), the sidebar's New agent, Quick Open and the soul
 cards spawn.
 
 - **All** stacks one section per deployment, headed by `deploymentLabel`
@@ -611,8 +636,8 @@ writes the file when that answer says the memory changed.
 
 - Only a reached group with an identity is a report, and a fresh report
   always wins. A group that reports another workspace moves to that view, and
-  its deployment says so for the session ("altair now reports workspace
-  tsm.").
+  its deployment says so for the session ("devbox now reports workspace
+  web.").
 - An unreachable group with a remembered identity stays in its view, not
   reached, with `identityFrom: "remembered"`.
 - Memory never attaches a local deployment.
@@ -628,8 +653,8 @@ switcher ("ssh needs a prompt", "OATS too old to report its workspace");
 `reason`, the one plain sentence; and `fix`, the plain steps (none when the
 sentence already says what happens next, as for a timeout). The sentences:
 
-- ssh needs a prompt or a host key (`E_SSH`): "altair needs ssh to connect
-  without a prompt; run `ssh altair` once in a terminal."
+- ssh needs a prompt or a host key (`E_SSH`): "devbox needs ssh to connect
+  without a prompt; run `ssh devbox` once in a terminal."
 - Timed out (`E_CLI_TIMEOUT`). The kernel reports an ssh that timed out as
   `E_SSH`, with ssh's own text or, when its own deadline ended the call,
   "timed out: no answer within N s", so a timeout is recognised from that
@@ -819,9 +844,10 @@ held), shown in its workspace's view; its rows carry `server`, `home`, and the k
   machine) decides only when this computer's OATS predates 0.31 and reports no
   `addressable`: a row it spawned stays reachable through its saved route.
 - **Why a row can't open.** `rowReason(row)` in the same module is the one
-  source of a row's reason: a short label on the roster meta line (Herdr no
-  longer supported, gone from `<server>`, not reachable on `<server>`,
-  `<server>` not reached, state unknown), and the full sentence used as the
+  source of a row's reason: a short label (Herdr no longer supported, gone from
+  `<server>`, not reachable on `<server>`, `<server>` not reached, state
+  unknown; on the roster's meta line until slice 1 of the Desktop UI rework made
+  that line `<soul> · <machine>`), and the full sentence used as the
   row's `title`, `aria-description` and the reason its context menu says. When the
   sentence is the row's own `runtimeError` the reason carries its `origin`
   ([Who made a shown text](#who-made-a-shown-text)); a sentence written

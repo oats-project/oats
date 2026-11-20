@@ -1,5 +1,7 @@
-// Spawn-written instruction state, not authority to publish. The harvester
-// independently checks its source's recorded soul opt-out before capture.
+// Spawn-written instruction state, not authority to publish. `oats okf
+// propose` (6.0) refuses an off or unknown home itself, and checks the soul's
+// own opt-out text too. The file keeps its 5.2 name and shape (`harvest`);
+// `oats okf status` also answers the same value as `publish`.
 import { fs, join, safePath, save, fail } from './io.mjs';
 import { soulOptOut } from './legacy-settings.mjs';
 

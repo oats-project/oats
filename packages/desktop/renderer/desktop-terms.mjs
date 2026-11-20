@@ -12,3 +12,10 @@ export const DESKTOP_TERMS = clientTerms({
   update: 'OATS Desktop',     // "Update OATS Desktop."
   thisMachine: 'This Mac',    // a deployment that names no machine; also on Linux, for now
 });
+
+/** The Desktop's noun for what an agent runs as, on its primary surface (the Desktop UI rework, slice 1; D3 decided:
+ * "agent"): every string slice 1 owns reads it from here (the foot's "N need you" name and "New …", the empty roster).
+ * The CLI and the docs keep "instance": this is the one place that maps the two, so another word is a change of this
+ * one line. Not a client term: client-terms.mjs is the shared five-key contract with the Terminal UI, and this word is
+ * the Desktop's own. */
+export const DESKTOP_NOUNS = Object.freeze({ instance: 'agent', instances: 'agents' });

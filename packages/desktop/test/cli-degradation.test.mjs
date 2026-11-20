@@ -83,11 +83,10 @@ test("refreshCli/reprobeCli update shared state and notify subscribers", async (
   off();
 });
 
-test("reprobeCli forwards a chosen binary path in the body", async () => {
+test("reprobeCli posts {} and names no binary, whatever it is given", async () => {
   const state = { get: payload(false), post: payload(true), reprobes: [] };
   await cs.reprobeCli(jsonCtx(state), "/chosen/oats");
-  assert.equal(state.reprobes.length, 1);
-  assert.match(String(state.reprobes[0]), /\/chosen\/oats/);
+  assert.deepEqual(state.reprobes, ["{}"]);
 });
 
 test("cliCard renders the full contract surface: detected, required, Choose, Retry, docs, copyable install", async () => {
@@ -95,9 +94,10 @@ test("cliCard renders the full contract surface: detected, required, Choose, Ret
   const state = { get: payload(false), post: payload(false), reprobes: [] };
   await cs.refreshCli(jsonCtx(state));
   let chosen = 0, opened = null;
+  const order = [];
   const ctx = {
-    ...jsonCtx(state),
-    chooseCliBinary: async () => { chosen++; return { path: "/picked/oats" }; },
+    api: async (pathname, opts) => { if (pathname === "/api/cli/reprobe") order.push(["reprobe", opts?.body]); return jsonCtx(state).api(pathname, opts); },
+    chooseCliBinary: async () => { chosen++; await new Promise((r) => setTimeout(r, 1)); order.push("picked"); return { path: "/picked/oats" }; },
     openExternal: (url) => { opened = url; },
   };
   const { el, dispose } = cs.cliCard(doc, ctx);
@@ -118,11 +118,12 @@ test("cliCard renders the full contract surface: detected, required, Choose, Ret
   // docs link opens externally, never navigates the shell
   el.querySelector(".cli-docs").dispatchEvent(new doc.defaultView.Event("click", { bubbles: true, cancelable: true }));
   assert.equal(opened, cs.DOCS_URL);
-  // choose runs the picker then reprobes with the picked path
+  // choose runs the picker (main writes the choice file) and, once it resolved, reprobes with {}: the path is never sent
   choose.dispatchEvent(new doc.defaultView.Event("click"));
-  await new Promise((r) => setTimeout(r, 10));
+  await new Promise((r) => setTimeout(r, 20));
   assert.equal(chosen, 1);
-  assert.ok(state.reprobes.some((b) => String(b).includes("/picked/oats")), "picked path reprobed");
+  assert.deepEqual(order, ["picked", ["reprobe", "{}"]], "the reprobe follows the picker and names no binary");
+  assert.ok(!state.reprobes.some((b) => String(b).includes("/picked/oats")), "the picked path is never posted");
   dispose();
 });
 
@@ -153,11 +154,12 @@ test("cliCard states the requirement from the payload and never invents one when
   dispose();
 });
 
-/* ── A Desktop older than the CLI it found (#1107) ── */
+/* ── A Desktop older than the CLI it found (#1107): since #1879 only a newer desktop API (desktopApi > 1). A CLI
+   of a later minor is accepted, with the notice instead (above-tested-notice.test.mjs). ── */
 
-const RANGE = ">=0.26.0 <0.70.0", INSTALL = "npm install -g @awebai/oats@0.55.1";
+const RANGE = ">=0.26.0, tested through 0.69", INSTALL = "npm install -g @awebai/oats@0.55.1";
 const refused = (entries, extra = {}) => ({ ok: false, bin: null, version: null, source: null, required: { desktopApi: 1, range: RANGE }, install: INSTALL, probedAt: 1, tried: entries, ...extra });
-const ABOVE = { path: "/new/oats", source: "path", reason: "version 0.70.2 outside >=0.26.0 <0.70.0", version: "0.70.2", above: true };
+const NEWER = { path: "/new/oats", source: "path", reason: "desktopApi 2 (need 1)", version: "0.70.2", newerApi: true };
 const words = (node) => node.textContent.replace(/\s+/g, " ").trim();
 async function card(payloadToShow) {
   const doc = dom();
@@ -171,13 +173,12 @@ async function card(payloadToShow) {
 /** The card's controls in Tab order (no tabindex is set: document order). */
 const tabOrder = (el) => [...el.querySelectorAll("button:not([disabled]), a[href], [tabindex]")].map((n) => n.className);
 
-test("cliCard, the CLI above the band: the Desktop is the older, with no install command and no Copy, and Tab goes from Detected to Choose", async () => {
-  const { el, dispose } = await card(refused([ABOVE]));
+test("cliCard, a CLI of a newer desktop API: the Desktop is the older, with no install command and no Copy, and Tab goes from Detected to Choose", async () => {
+  const { el, dispose } = await card(refused([NEWER]));
   try {
     assert.equal(words(el.querySelector(".cli-head")), "This Desktop is older than the installed oats CLI");
     assert.equal(el.querySelector(".cli-head code").textContent, "oats");
-    assert.equal(words(el.querySelector(".cli-explanation")), `The installed oats CLI is 0.70.2. This Desktop works with ${RANGE}. Install OATS Desktop 0.70.2 to use it; reads and terminals keep working meanwhile.`);
-    assert.equal(el.querySelector(".cli-explanation code:last-of-type").textContent, RANGE);
+    assert.equal(words(el.querySelector(".cli-explanation")), "The installed oats CLI is 0.70.2, which speaks a newer desktop API than this Desktop's (1). Install OATS Desktop 0.70.2 to use it; reads and terminals keep working meanwhile.");
     // Detected and Required as today.
     assert.ok(words(el.querySelector(".cli-kv")).includes("Detected /new/oats (0.70.2)"));
     assert.ok(words(el.querySelector(".cli-kv")).includes(`Required ${RANGE} with desktop API 1`));
@@ -192,15 +193,16 @@ test("cliCard, the CLI above the band: the Desktop is the older, with no install
 test("cliCard: every other state keeps today's heading, explanation, install command and Copy, in today's Tab order", async () => {
   const entry = (version, reason) => ({ path: "/x/oats", source: "path", reason, ...(version === undefined ? {} : { version }) });
   const STATES = [
-    ["below the band", refused([entry("0.25.9", "version 0.25.9 outside >=0.26.0 <0.70.0")])],
+    ["below the floor", refused([entry("0.25.9", `version 0.25.9 outside ${RANGE}`)])],
     ["unparsable", refused([entry("0.56", 'unparsable version "0.56"')])],
-    ["a prerelease above", refused([entry("0.70.0-rc.1", "prerelease version 0.70.0-rc.1 not accepted (need a released >=0.26.0 <0.70.0)")])],
+    ["a prerelease above", refused([entry("0.70.0-rc.1", `prerelease version 0.70.0-rc.1 not accepted (need a released ${RANGE})`)])],
+    ["a desktop API that is missing, not newer", refused([entry("0.70.0", "desktopApi missing (need 1)")])],
     ["not the oats CLI", refused([entry("0.70.0", "not the oats CLI (name: @other/pkg, not @awebai/oats or @oats-project/oats)")])],
     ["no CLI found", refused([])],
     ["a probe that failed", refused([entry(undefined, "probe failed: timeout")])],
-    // A flag the card cannot use alone: no band to state, or a candidate that is not the one shown.
-    ["above, but the payload states no band", refused([ABOVE], { required: {} })],
-    ["above, but an earlier candidate is the one shown", refused([entry("0.21.5", "version 0.21.5 outside >=0.26.0 <0.70.0"), ABOVE])],
+    // The band's old flag (a backend before #1879) is no newer API; nor is a newer API on a candidate not shown.
+    ["the old flag of a CLI above the band", refused([{ ...entry("0.70.2", "version 0.70.2 outside >=0.26.0 <0.70.0"), above: true }])],
+    ["a newer API, but an earlier candidate is the one shown", refused([entry("0.21.5", `version 0.21.5 outside ${RANGE}`), NEWER])],
   ];
   for (const [name, shown] of STATES) {
     const { el, dispose } = await card(shown);
@@ -214,11 +216,11 @@ test("cliCard: every other state keeps today's heading, explanation, install com
   }
 });
 
-test("cliCard, the CLI above the band: the version enters the sentence through the display filter, as text", async () => {
-  const { el, dispose } = await card(refused([{ ...ABOVE, version: "<b>0.70.2</b>\nmore" }]));
+test("cliCard, a CLI of a newer desktop API: the version enters the sentence through the display filter, as text", async () => {
+  const { el, dispose } = await card(refused([{ ...NEWER, version: "<b>0.70.2</b>\nmore" }]));
   try {
     assert.equal(el.querySelector(".cli-explanation b"), null, "markup stays text");
-    assert.ok(words(el.querySelector(".cli-explanation")).startsWith("The installed oats CLI is <b>0.70.2</b> more."), "one display line");
+    assert.ok(words(el.querySelector(".cli-explanation")).startsWith("The installed oats CLI is <b>0.70.2</b> more, which"), "one display line");
   } finally { dispose(); }
 });
 
@@ -422,7 +424,7 @@ test("spawn view: an UNSETTLED probe explains itself (no dead button pointing at
     await new Promise((r) => setTimeout(r, 20));
     const btn2 = el.querySelector(".spawn-act");
     assert.ok(btn2 && !btn2.disabled, "spawn enables once the probe settles ok");
-    assert.match(btn2.textContent, /^Spawn$/, "explicit launch affordance (the soul page's Spawn, human 2026-09-26) remains available");
+    assert.match(btn2.textContent, /^New agent$/, "explicit launch affordance (the soul page's New agent, slice 3a; its Spawn of 2026-09-26) remains available");
     // settled state: the retry stops (no more /api/cli fetches from the tick)
     const settled = state.cliFetches;
     for (const t of ticks) t();

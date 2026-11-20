@@ -24,7 +24,7 @@ test('a start and a restart whose request is aborted while the CLI call is in fl
     let sessions = 0;
     for (const kind of ['start', 'restart']) {
       const abort = new AbortController();
-      const request = fetch(`${s.base}/api/${kind}/${instance}${s.ws}&home=${encodeURIComponent(home)}`,
+      const request = s.request(`/api/${kind}/${instance}${s.ws}&home=${encodeURIComponent(home)}`,
         { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal: abort.signal });
       // The CLI call is in flight: started, and waiting at its gate.
       const call = (await s.started('session', ++sessions)).at(-1);
@@ -36,7 +36,7 @@ test('a start and a restart whose request is aborted while the CLI call is in fl
       abort.abort();
       await assert.rejects(request, { name: 'AbortError' });
       // The server goes on serving after the connection has closed, and the call is still in flight.
-      for (let n = 0; n < 5; n++) assert.equal((await fetch(`${s.base}/api/version`)).ok, true);
+      for (let n = 0; n < 5; n++) assert.equal((await s.request(`/api/version`)).ok, true);
       assert.deepEqual(s.pending('session').map(c => c.id), [call.id], `${kind}: the call is still running after the abort`);
       assert.equal(of(s.calls(), 'status').length, statusBefore, `${kind}: the route has not gone past the call`);
 
@@ -49,6 +49,6 @@ test('a start and a restart whose request is aborted while the CLI call is in fl
       await s.until(async () => { const p = await s.panel(); return p.deployment?.status === 'observed' && !p.refreshing; });
     }
     assert.equal(of(s.calls(), 'session').length, 2, 'one CLI call for each act, none repeated');
-    assert.equal((await fetch(`${s.base}/api/version`)).ok, true, 'answering a closed connection did not hurt the server');
+    assert.equal((await s.request(`/api/version`)).ok, true, 'answering a closed connection did not hurt the server');
   } finally { await s.stop(); }
 });

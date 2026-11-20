@@ -4,17 +4,14 @@
 // is only on the login shell's PATH, probed and then called by a real server.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
-import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { startBackend } from "./helpers/backend-server.mjs";
 import { PATH_BEGIN, PATH_END, LOGIN_PATH_TIMEOUT_MS, loginShell, loginShellArgs, mergePath, parseLoginPath, resolveLoginPath } from "../login-path.mjs";
 
 const SYSTEM_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"; // launchd's PATH for a Finder launch
-const SERVER = fileURLToPath(new URL("../server/oats-web.mjs", import.meta.url));
 const FIXTURES = fileURLToPath(new URL("./fixtures/workspace-v2/desktop-facts/", import.meta.url));
 const marked = (path) => `${PATH_BEGIN}\n${path}\n${PATH_END}\n`;
 
@@ -119,44 +116,33 @@ test("an rc that leaves a background process holding stdout does not stall the a
   assert.ok(Date.now() - started < 4000, `settled on exit, not on the 5 s timeout (${Date.now() - started} ms)`);
 });
 
-async function freePort() {
-  const socket = createServer(); socket.listen(0, "127.0.0.1"); await once(socket, "listening");
-  const port = socket.address().port; await new Promise((resolve) => socket.close(resolve));
-  return port;
-}
-
 /** A real backend server for one temp deployment, run with exactly the PATH main would give it. */
 async function startServer(t, { dir, path, pathSource, pathError, oatsBin }) {
   const deployment = join(dir, `workspace-${pathSource}`);
   mkdirSync(join(deployment, "agents"), { recursive: true });
   writeFileSync(join(deployment, "oats-local.yaml"), "workspace: fixture\n");
-  const port = await freePort();
   // The server asks tmux for the panes it shows, and asks the default server when a home records no
   // socket: here, in a directory of the test, removed once the server has exited, never at tmux's
   // default place, where the host has its own server.
   const tmuxTmpdir = realpathSync(mkdtempSync(join(tmpdir(), "oats-tmux-")));
-  const proc = spawn(process.execPath, [SERVER, "start", "--port", String(port), "--dir", deployment, "--oats-bin", oatsBin,
-    "--path-source", pathSource, ...(pathError ? ["--path-error", pathError] : [])], {
-    detached: true, stdio: ["ignore", "ignore", "pipe"],
+  // The real backend on a private socket with a fresh credential (helpers/backend-server.mjs), in a
+  // process group of its own; the CLI is the operator's --oats-bin, as for a server started by hand.
+  const s = await startBackend({ dirs: [deployment], detached: true,
+    args: ["--oats-bin", oatsBin, "--path-source", pathSource, ...(pathError ? ["--path-error", pathError] : [])],
     env: { ...process.env, PATH: path, SHELL: "/bin/false", FAKE_DEPLOYMENT: deployment, TMUX_TMPDIR: tmuxTmpdir,
-      OATS_DESKTOP_OATS_BIN: undefined, OATS_INSTANCE_HOME: undefined, OATS_INSTANCE: undefined, OATS_DEPLOYMENT: undefined },
-  });
-  let stderr = ""; proc.stderr.on("data", (d) => { stderr += d; });
+      OATS_DESKTOP_OATS_BIN: undefined, OATS_INSTANCE_HOME: undefined, OATS_INSTANCE: undefined, OATS_DEPLOYMENT: undefined } });
   t.after(async () => {
-    const exited = proc.exitCode !== null || proc.signalCode !== null ? Promise.resolve() : once(proc, "exit");
-    try { process.kill(-proc.pid, "SIGTERM"); } catch { /* already stopped */ }
-    await exited;
+    await s.stop();
     rmSync(tmuxTmpdir, { recursive: true, force: true });
   });
-  const base = `http://127.0.0.1:${port}`;
   const until = async (probe, what) => {
     for (let n = 0; n < 600; n++) {
       try { const value = await probe(); if (value) return value; } catch { /* starting */ }
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    throw new Error(`timed out waiting for ${what}: ${stderr}`);
+    throw new Error(`timed out waiting for ${what}: ${s.stderr()}`);
   };
-  return { base, until, cli: () => until(async () => { const c = await (await fetch(`${base}/api/cli`)).json(); return c.probedAt ? c : null; }, "the first probe") };
+  return { until, cli: () => until(async () => { const c = await (await s.request("/api/cli")).json(); return c.probedAt ? c : null; }, "the first probe") };
 }
 
 test("opened from Finder: a #!/usr/bin/env node CLI whose node is only on the login PATH is probed and then called", async (t) => {

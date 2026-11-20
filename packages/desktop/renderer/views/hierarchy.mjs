@@ -56,6 +56,7 @@ import { sameRepo } from "../../../client/repo-moves.mjs";
 import { runtimeState, runtimeCounts } from "../../../client/instance-presentation.mjs";
 import { serverLabel } from "../../../client/remote-address.mjs";
 import { unsupportedLine, speakerParts, keptFailureLine, heldLine, heldStatus } from "../speaker-line.mjs";
+import { noTerminal } from "../provider-row.mjs";
 import { displayLine } from "../../../client/display-text.mjs";
 import { keptFailure } from "../../../client/deployment-facts.mjs";
 import { createInstanceEventsView, instanceEventsCSS } from "../instance-events-view.mjs";
@@ -1071,7 +1072,8 @@ function selectedInstance(s, id) {
 }
 /** What Go to instance may do, from the shared table (packages/client/instance-acts.mjs), as the roster menu
  * decides it: `start` when `instanceActs` lists it enabled (a stopped row: Start…), `open` (the terminal) when
- * `openAct` is enabled, that is when the row runs. A held home (#802), a blocked row and a Herdr-recorded one get none. */
+ * `openAct` is enabled, that is when the row runs. A held home (#802), a blocked row and a Herdr-recorded one get none,
+ * and a row on a session provider never gets `open`: it has no terminal (its title says where it runs). */
 function rowActs(i) {
   const { acts } = instanceActs(i);
   return { start: acts.some(act => act.verb === 'start' && act.enabled), open: openAct(i)?.enabled === true };
@@ -1475,7 +1477,7 @@ function updatePop(s) {
   setText(terminal, i.running === false ? 'Start…' : 'Go to instance');
   terminal.disabled = !allowed || (i.running === false ? !acts.start || !s.ctx.startInstance : !acts.open || !s.ctx.openTerminal);
   // A Herdr row's reason is said with who made it (speaker-line.mjs).
-  terminal.title = unsupportedLine(i) || heldLine(held) || (terminal.disabled ? 'Requires a current, addressed instance with known runtime state and an available route.' : i.running === false ? 'Stopped: no terminal to go to. Opens the Start dialog.' : 'Open this exact instance terminal');
+  terminal.title = unsupportedLine(i) || heldLine(held) || (i.running !== false && noTerminal(i)?.sentence) || (terminal.disabled ? 'Requires a current, addressed instance with known runtime state and an available route.' : i.running === false ? 'Stopped: no terminal to go to. Opens the Start dialog.' : 'Open this exact instance terminal');
   // Go to soul: enabled only for the exact soul (soulTarget); disabled, its title says why.
   const soul = pop.querySelector('.psoul'), target = soulTarget(s, i);
   soul.disabled = !target.ref;

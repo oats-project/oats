@@ -13,17 +13,17 @@ import { startLoadPathServer } from './helpers/load-path-server.mjs';
 const reads = s => s.calls().filter(c => c.verb === 'server');
 /** A remote group as `oats server roster --json` answers it: reached (with one instance) or not. */
 const group = (reached) => ({
-  id: 'nactiva:3f2a00000000', server: 'nactiva', label: 'nactiva', registrationPresent: true,
-  target: { sshHost: 'nactiva-host', workspace: '/srv/regenmas', oatsPath: 'oats' },
-  probe: reached ? { ok: true, features: null } : { ok: false, error: { code: 'E_SSH', message: 'ssh to nactiva-host timed out: no answer within 20 s' } },
-  agentsRoot: '/srv/regenmas/agents', workspace: null, souls: [], retireFailures: [],
-  instances: reached ? [{ server: 'nactiva', instance: 'dev-a', agent: 'dev', home: '/srv/regenmas/agents/dev/instances/dev-a', agentsRoot: '/srv/regenmas/agents',
+  id: 'garnet:3f2a00000000', server: 'garnet', label: 'garnet', registrationPresent: true,
+  target: { sshHost: 'garnet-host', workspace: '/srv/acme', oatsPath: 'oats' },
+  probe: reached ? { ok: true, features: null } : { ok: false, error: { code: 'E_SSH', message: 'ssh to garnet-host timed out: no answer within 20 s' } },
+  agentsRoot: '/srv/acme/agents', workspace: null, souls: [], retireFailures: [],
+  instances: reached ? [{ server: 'garnet', instance: 'dev-a', agent: 'dev', home: '/srv/acme/agents/dev/instances/dev-a', agentsRoot: '/srv/acme/agents',
     harness: 'claude', backend: null, running: true, retirePending: false, rollbackIncomplete: false, savedRoute: false, addressable: true, missingRemotely: false }] : [],
 });
 const roster = (reached) => ({ schemaVersion: 1, ok: true, result: { groups: [group(reached)], bounds: { budgetMs: 45000, perTargetTimeoutMs: 20000, elapsedMs: 1 } } });
-const PANEL = `/api/panel?ws=${encodeURIComponent('remote:nactiva:3f2a00000000')}`;
+const PANEL = `/api/panel?ws=${encodeURIComponent('remote:garnet:3f2a00000000')}`;
 
-/** A server whose first roster read (at start) has answered that nactiva could not be reached. */
+/** A server whose first roster read (at start) has answered that garnet could not be reached. */
 async function unreached(t) {
   const s = await startLoadPathServer({ gated: ['server'] });
   t.after(() => s.stop());

@@ -114,7 +114,7 @@ test('the route re-reads the roster on a change or an unknown outcome only; it i
   assert.equal(rereadsRoster({ status: 'unknown', reason: { code: 'E_CLI_TIMEOUT' } }), true);
   for (const result of [{ status: 'ok', instance: 'dev-1', background: true, changed: false }, { status: 'ok', instance: 'dev-1', check: true },
     { status: 'refused', reason: { code: 'E_SESSION_UNKNOWN' } }, { status: 'not-run', reason: { code: 'E_BUSY' } }, null]) assert.equal(rereadsRoster(result), false, JSON.stringify(result));
-  assert.equal(classifyApiRoute('/api/instance-background?ws=team', 'http://127.0.0.1:4820'), 'instance-background');
+  assert.equal(classifyApiRoute('/api/instance-background?ws=team'), 'instance-background');
 });
 
 test('cliInstanceBackground: argv only, on or off, --home and --dir or --server, --json; refuses bad arguments without running', async () => {

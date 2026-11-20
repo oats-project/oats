@@ -198,7 +198,8 @@ test('the capability page opened from a soul says why, in the soul page\'s words
   const cap = withFacts().capabilities.find(c => c.id === 'oats.aweb');
   const page = why => {
     const { dom, host } = render(renderCapabilityPage, { row: capabilityRow(cap), status: null, instances: [], root: '/w', onBack() {}, from: { label: 'dev', why } });
-    const card = [...host.querySelectorAll('.page-card')].find(c => c.dataset.card === 'As dev resolves it');
+    const card = host.querySelector('details.cap-fold[data-fold="as-soul"]');
+    assert.equal(card.querySelector('summary').textContent, 'As dev resolves it');
     const row = card.querySelector('[data-fact="why"]');
     const out = row ? [row.querySelector('dt').textContent, row.querySelector('.page-why-label').textContent, row.querySelector('.page-why-note').textContent] : null;
     dom.window.close(); return out;

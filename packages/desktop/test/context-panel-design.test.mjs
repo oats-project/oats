@@ -58,7 +58,9 @@ test('Work: one card — the mode tile and one sentence saying what the mode mea
   const u = fixture(t); u.select(instance({ work: 'worktree', repoName: 'northwind', branch: 'feat/checkout' }));
   const sentence = sentenceOf(u), section = sentence.closest('.context-panel-section'), card = u.q('.context-panel-work');
   assert.equal(section.querySelector(':scope > .context-panel-label').textContent, 'Work');
-  assert.equal(section.parentElement.querySelector(':scope > .context-panel-section'), section, 'the first section of the Instance tab');
+  // The first section shown (slice 1): Needs input, hidden unless the instance waits on you, stands above it.
+  assert.equal(section.parentElement.querySelector(':scope > .context-panel-section:not([hidden])'), section, 'the first section of the Instance tab');
+  assert.equal(section.parentElement.querySelector(':scope > .context-panel-section').dataset.contextSection, 'waiting', 'only Needs input, hidden here, before it');
   assert.deepEqual([...section.children].map(c => c.className), ['context-panel-label', 'context-panel-work'], 'one card');
   assert.equal(sentence.closest('.context-panel-work'), card); assert.equal(sentence.tagName, 'P');
   assert.equal(card.querySelector('.context-panel-mode-tile').getAttribute('aria-hidden'), 'true');

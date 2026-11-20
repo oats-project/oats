@@ -4,6 +4,7 @@ import { startRefusalSentence } from '../../client/start-messages.mjs';
 import { kernelLines } from "../../client/kernel-lines.mjs";
 import { DESKTOP_TERMS } from "./desktop-terms.mjs";
 import { postJson, currentWorkspace, workspaceGeneration } from "./views/common.mjs";
+import { cliHeldBack } from "./views/cli-status.mjs";
 
 /** The choice of the bare harness: its entry in the list and the line under the list while it is chosen. */
 const BARE_HARNESS = "No launch configuration (the harness as installed)";
@@ -69,6 +70,9 @@ export function launchConfigFields(el, { ctx, selector, choices, owns = () => tr
     for (const control of el.querySelectorAll("input,select,textarea,button")) control.disabled = disabled || busy;
     field("remove").disabled ||= !removable();
     field("env").disabled ||= field("keep-env").checked;
+    // Above the tested bound (#1879) saving and removing a configuration are held back (packages/client/above-tested.mjs).
+    const held = cliHeldBack("POST /api/launch-configs set");
+    for (const name of ["save", "remove"]) { field(name).disabled ||= !!held; field(name).title = held ?? ""; }
   };
   // This machine's baseline for every new launch of the harness (feature launch-config-default).
   const defaultText = () => { const h = field("runtime").value; field("default-text").textContent = `Default for ${HARNESS_NAMES[h] || h} on this machine`; };
@@ -149,7 +153,7 @@ export function launchConfigFields(el, { ctx, selector, choices, owns = () => tr
   });
   field("new").addEventListener("click", () => { fillEditor(); field("name").focus(); });
   const save = async action => {
-    if (!current() || busy || disabled || !context || (action === "remove" && !removable())) return;
+    if (!current() || busy || disabled || !context || (action === "remove" && !removable()) || cliHeldBack(`POST /api/launch-configs ${action}`)) return;
     const name = field("name").value.trim(); let definition;
     try {
       if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name)) throw Error("Enter a configuration name using letters, numbers, dots, underscores or hyphens.");

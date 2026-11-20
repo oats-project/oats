@@ -61,7 +61,7 @@ test('an accepted kernel without packages-no-approval never reaches the Spawn di
   const s = await startLoadPathServer({ probe: own => { current = own; return lacking(own); } });
   const refusedProbe = lacking(current);
   assert.equal(current.features.includes(GATE), true, 'the helper’s own probe has the word'); assert.equal(refusedProbe.features.includes(GATE), false);
-  assert.equal(acceptProbe(refusedProbe).ok, true, 'inside the accepted band');
+  assert.equal(acceptProbe(refusedProbe, '0.69.17').ok, true, 'inside the accepted band');
   let mounted = null;
   try {
     const reads = () => s.calls().filter(call => !['version', 'server'].includes(call.verb)).map(call => call.verb);
@@ -94,7 +94,7 @@ test('an accepted kernel without packages-no-approval never reaches the Spawn di
     const sentence = mounted.doc.querySelector('.empty').textContent;
     assert.equal(sentence, deploymentUnavailableText(panel.deployment, DESKTOP_TERMS));
     assert.ok(sentence.includes(GATE) && sentence.includes('Update OATS'), 'it names what is missing and asks for an update');
-    assert.equal(mounted.doc.querySelectorAll('.soul-card, .soul-spawn').length, 0, 'no card and no Spawn control');
+    assert.equal(mounted.doc.querySelectorAll('.soul-card').length, 0, 'no card');
     const missed = [];
     mounted.view.preselectSpawn({ name: SOUL, agentsRoot: `${s.deployment}/agents`, onMiss: count => missed.push(count) });
     await tick();
@@ -108,11 +108,10 @@ test('an accepted kernel without packages-no-approval never reaches the Spawn di
     await s.until(async () => (await s.agents()).agents.some(agent => agent.name === SOUL));
     await preview();
     assert.ok(s.calls().some(call => call.verb === 'spawn' && call.argv.includes('--preview') && call.argv.includes(SOUL)), 'the kernel was asked for the preview');
-    mounted = await mountView(s, doc => doc.querySelector('.soul-spawn'));
-    const offered = [...mounted.doc.querySelectorAll('.soul-spawn')].find(button => button.getAttribute('aria-label') === `Spawn ${SOUL}`);
-    assert.ok(offered && !offered.disabled, 'the view offers Spawn for the soul');
-    offered.click(); await tick();
-    assert.ok(mounted.doc.querySelector('.spawn-modal'), 'and its dialog opens');
+    mounted = await mountView(s, doc => [...doc.querySelectorAll('.soul-card')].find(card => card.dataset.agent === SOUL));
+    // A soul's card opens its page; spawning is Quick Open's and New agent's way into the dialog (slice 3a).
+    mounted.view.preselectSpawn({ name: SOUL, agentsRoot: `${s.deployment}/agents` }); await tick();
+    assert.ok(mounted.doc.querySelector('.spawn-modal'), 'the view offers the soul: its dialog opens');
     await mounted.close(); mounted = null;
 
     // Back to the kernel without the word with an observation held: nothing of it is kept.

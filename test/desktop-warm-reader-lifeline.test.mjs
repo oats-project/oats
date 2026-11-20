@@ -10,13 +10,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createServer } from "node:http";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { once } from "node:events";
-import { serverSpawnSpec } from "../packages/desktop/server-host.mjs";
+import { launchServerChild, serverSpawnSpec } from "../packages/desktop/server-host.mjs";
+import { backendRequest } from "../packages/desktop/test/helpers/backend-server.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DESKTOP = join(ROOT, "packages", "desktop");
@@ -24,11 +24,6 @@ const BIN = join(DESKTOP, "server", "oats-web.mjs");
 const FIXTURES = join(DESKTOP, "test", "fixtures", "workspace-v2");
 const FIXTURE_DEPLOYMENT = "/fixture/base/northwind-workspace";
 
-async function freePort() {
-  const s = createServer(); s.listen(0, "127.0.0.1"); await once(s, "listening");
-  const p = s.address().port; await new Promise((ok) => s.close(ok));
-  return p;
-}
 /** A pid that is running: signal 0 reaches it and (on Linux) it is not a zombie awaiting its reaper. */
 function alive(pid) {
   try { process.kill(pid, 0); } catch { return false; }
@@ -86,10 +81,23 @@ function hermetic(dir) {
   return { OATS_DESKTOP_OATS_BIN: "", PATH: "/nonexistent", SHELL: "/bin/false", HOME: dir, OATS_HOME_DIR: join(dir, ".oats"), TMUX_TMPDIR: dir };
 }
 
-function spec(dir, deployment, oatsBin, port, env) {
-  return serverSpawnSpec({ execPath: process.execPath, bin: BIN, dirs: [deployment], port, oatsBin,
-    pathSource: "inherited", pathError: null, remoteIdentityFile: join(dir, "remote-identity.json"), home: dir, env });
+/** The choice file main writes after its file dialog, naming the stub: the only way the server is told a CLI. */
+function cliChoice(dir, oatsBin) {
+  const file = join(dir, "oats-cli-choice.json");
+  writeFileSync(file, JSON.stringify({ bin: oatsBin }));
+  return file;
 }
+/** Start the server as main does (launchServerChild over serverSpawnSpec), its output not read. */
+function launch(dir, deployment, oatsBin, env) {
+  return launchServerChild({ spawn, socketBase: dir, spec: (socketPath) => {
+    const s = serverSpawnSpec({ execPath: process.execPath, bin: BIN, dirs: [deployment], socketPath, cliChoiceFile: cliChoice(dir, oatsBin),
+      pathSource: "inherited", pathError: null, remoteIdentityFile: join(dir, "remote-identity.json"), home: dir, env });
+    return { ...s, options: { ...s.options, stdio: ["pipe", "ignore", "ignore", "pipe"] } };
+  } });
+}
+/** An authorized request to the server on its socket. */
+const ask = (server, path, init = {}) => backendRequest(server.socketPath, { path, ...init,
+  headers: { host: "localhost", ...init.headers, authorization: `Bearer ${server.secret}` } });
 
 /** A deployment, its stub CLI, and the reaping of every pid this test learns. */
 function setup(t) {
@@ -108,9 +116,9 @@ function setup(t) {
 
 /** The reader is up and has answered a background read: a cycle after admission went through it. The
  * window is focused so the cycle comes 5 s after the first. */
-async function readerAnswered(dir, port) {
+async function readerAnswered(dir, server) {
   await until(async () => {
-    try { return (await fetch(`http://127.0.0.1:${port}/api/window-state`, { method: "POST", body: JSON.stringify({ focused: true }),
+    try { return (await ask(server, "/api/window-state", { method: "POST", body: JSON.stringify({ focused: true }),
       headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(500) })).ok; } catch { return false; }
   }, 10000);
   assert.equal(await until(() => existsSync(join(dir, "reader.answered")), 20000), true, "the reader answered a background read");
@@ -121,14 +129,14 @@ async function readerAnswered(dir, port) {
 
 test("the warm reader exits when the REAL server holding its stdin is SIGKILLed", async (t) => {
   const { dir, deployment, oatsBin, pids } = setup(t);
-  const port = await freePort();
-  const s = spec(dir, deployment, oatsBin, port, { ...process.env, ...hermetic(dir) });
-  const server = spawn(s.command, s.args, { ...s.options, stdio: ["pipe", "ignore", "ignore"] });
+  const launched = launch(dir, deployment, oatsBin, { ...process.env, ...hermetic(dir) });
+  const server = launched.child;
+  server.stdin.on("error", () => {});
   pids.add(server.pid);
-  const reader = await readerAnswered(dir, port);
+  const reader = await readerAnswered(dir, launched);
   pids.add(reader);
   // /api/cli carries the reader's state as a diagnostic.
-  const cli = await (await fetch(`http://127.0.0.1:${port}/api/cli`)).json();
+  const cli = await (await ask(launched, "/api/cli")).json();
   assert.deepEqual(cli.reader, { state: "ready", code: null });
   process.kill(server.pid, "SIGKILL");
   await once(server, "exit");
@@ -140,14 +148,14 @@ test("the warm reader exits when the REAL server holding its stdin is SIGKILLed"
 const PARENT = `
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-const [specUrl, bin, dir, deployment, oatsBin, port, desktop] = process.argv.slice(2);
-const { serverSpawnSpec } = await import(specUrl);
-const spec = serverSpawnSpec({ execPath: process.execPath, bin, dirs: [deployment], port: Number(port), oatsBin,
-  pathSource: "inherited", pathError: null, remoteIdentityFile: dir + "/remote-identity.json", home: dir, env: process.env });
-const server = spawn(spec.command, spec.args, spec.options);
+const [specUrl, bin, dir, deployment, cliChoiceFile, desktop] = process.argv.slice(2);
+const { serverSpawnSpec, launchServerChild } = await import(specUrl);
+const launched = launchServerChild({ spawn, socketBase: dir, spec: (socketPath) => serverSpawnSpec({ execPath: process.execPath, bin, dirs: [deployment],
+  socketPath, cliChoiceFile, pathSource: "inherited", pathError: null, remoteIdentityFile: dir + "/remote-identity.json", home: dir, env: process.env }) });
+const server = launched.child;
 server.stdin.on("error", () => {});
 server.stdout.resume(); server.stderr.resume();
-const pids = { parent: process.pid, server: server.pid };
+const pids = { parent: process.pid, server: server.pid, socketPath: launched.socketPath, secret: launched.secret };
 pids.plain = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }).pid;
 try {
   pids.pty = createRequire(desktop + "/package.json")("node-pty").spawn(process.execPath,
@@ -159,10 +167,9 @@ setInterval(() => {}, 1000);
 
 test("…and when the app that started the server is SIGKILLed, with long-lived children of the app (plain and node-pty) alive", async (t) => {
   const { dir, deployment, oatsBin, pids } = setup(t);
-  const port = await freePort();
   const script = join(dir, "parent.mjs");
   writeFileSync(script, PARENT);
-  const parent = spawn(process.execPath, [script, pathToFileURL(join(DESKTOP, "server-host.mjs")).href, BIN, dir, deployment, oatsBin, String(port), DESKTOP],
+  const parent = spawn(process.execPath, [script, pathToFileURL(join(DESKTOP, "server-host.mjs")).href, BIN, dir, deployment, cliChoice(dir, oatsBin), DESKTOP],
     { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, ...hermetic(dir) } });
   pids.add(parent.pid);
   let line = "";
@@ -170,7 +177,7 @@ test("…and when the app that started the server is SIGKILLed, with long-lived 
   const started = JSON.parse(line);
   for (const pid of Object.values(started)) if (Number.isInteger(pid)) pids.add(pid);
   if (started.ptyError) t.diagnostic(`node-pty unavailable, plain child only: ${started.ptyError}`);
-  const reader = await readerAnswered(dir, port);
+  const reader = await readerAnswered(dir, started);
   pids.add(reader);
   process.kill(parent.pid, "SIGKILL");
   await once(parent, "exit");

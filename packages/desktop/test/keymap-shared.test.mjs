@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
-  CHORDS_READ, DEFAULT_KEYMAP, DEFAULT_KEYMAPS, SIDEBAR_KEYS, defaultBinding, defaultKeymap, chordFromKeyId, parseChord,
+  CHORDS_READ, DEFAULT_KEYMAP, DEFAULT_KEYMAPS, SIDEBAR_KEYS, LEADER_CHOICES, defaultBinding, defaultKeymap, chordFromKeyId, parseChord,
   activeChordFamily, setChordFamily, getBinding, onKeymapChange,
 } from "../renderer/keybindings.mjs";
 import {
@@ -36,11 +36,12 @@ test("the leader's table: every row, in order, with its keys and what it does", 
     ["up", "workspace-previous", false],
     ["down", "workspace-next", false],
     ["z", "zoom", true],
+    ["b", "sidebar", false],
     ["w", "close-terminal", true],
     ["left", "tab-previous", true],
     ["right", "tab-next", true],
-    ["|", "split-right", true],
-    ["-", "split-down", true],
+    ["| h", "split-right", true],
+    ["- v", "split-down", true],
     ["tab", "group-next", true],
     ["shift+tab", "group-previous", true],
     ["m", "tab-move", true],
@@ -128,6 +129,7 @@ test("the chords: every one, per platform, and what it does", () => {
     ["group-next", "alt+shift+right", "alt+shift+right", "ctrl+alt+a"],
     ["filter", "cmd+f", "alt+f", "ctrl+alt+f"],
     ["edit-instance", "cmd+alt+r", "alt+r", "ctrl+alt+r"],
+    ["mail", "cmd+alt+m", "alt+m", "ctrl+alt+m"],
   ]);
   assert.ok(Object.isFrozen(CHORDS) && CHORDS.every((entry) => Object.isFrozen(entry)));
   assert.equal(new Set(CHORDS.map((entry) => entry.does)).size, CHORDS.length, "one chord per action");
@@ -296,6 +298,7 @@ test("the Desktop's chords are the module's entries, each read by one action", (
     ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tab-${i + 1}`, `tabs.goto${i + 1}`])),
     zoom: "terminal.focusMode", "close-terminal": "tabs.close", "split-right": "split.vertical", "split-down": "split.horizontal",
     "group-previous": "split.focusPrevGroup", "group-next": "split.focusNextGroup", filter: "sidebar.focusFilter", "edit-instance": "instance.edit",
+    mail: "instance.mail",
   });
   for (const { id, does } of CHORDS_READ) {
     assert.ok(Object.hasOwn(DEFAULT_KEYMAP, id), id);
@@ -314,9 +317,11 @@ const ENGINE = new URL("../renderer/keybindings.mjs", import.meta.url);
 const MODULE = new URL("../../client/keymap.mjs", import.meta.url);
 
 test("the Desktop's leader and sidebar-key defaults are the module's entries", () => {
-  assert.equal(defaultBinding("app.leader", true), chordFromKeyId(LEADER.mac));
-  assert.equal(defaultBinding("app.leader", false), chordFromKeyId(LEADER.other));
-  assert.deepEqual([defaultBinding("app.leader", true), defaultBinding("app.leader", false)], ["Ctrl+X", "Ctrl+X"]);
+  // D18 (decided 2026-11-19): the Desktop's default leader is its own, Ctrl+Space; the shared LEADER (Ctrl+X, the
+  // TUI's) is the other choice the Keyboard shortcuts sheet offers.
+  assert.deepEqual([defaultBinding("app.leader", true), defaultBinding("app.leader", false)], ["Ctrl+Space", "Ctrl+Space"]);
+  assert.deepEqual(LEADER_CHOICES, ["Ctrl+Space", chordFromKeyId(LEADER.other)]);
+  assert.equal(chordFromKeyId(LEADER.mac), "Ctrl+X");
   const sidebar = SIDEBAR_KEYS.map(({ id, does }) => [id, does]);
   assert.equal(new Set(sidebar.map(([, does]) => does)).size, sidebar.length, "one action per key");
   for (const [id, does] of sidebar) {
@@ -349,7 +354,8 @@ test("change the module's entry in a copy: the Desktop's default follows, and ke
   writeFileSync(join(root, "client", "keymap.mjs"), changed);
   writeFileSync(join(root, "desktop", "renderer", "keybindings.mjs"), readFileSync(ENGINE, "utf8"));
   const copy = await import(pathToFileURL(join(root, "desktop", "renderer", "keybindings.mjs")).href);
-  assert.equal(copy.defaultBinding("app.leader", false), "Alt+L");
+  assert.equal(copy.defaultBinding("app.leader", false), "Ctrl+Space", "the Desktop's own default (D18)");
+  assert.equal(copy.LEADER_CHOICES[1], "Alt+L", "the other choice is the module's LEADER, read");
   assert.equal(copy.defaultBinding("sidebar.key.refresh", false), "Shift+F");
   assert.deepEqual([copy.defaultBinding("app.palette", true), copy.defaultBinding("app.palette", false), copy.defaultBinding("app.palette", false, "ctrl+alt")],
     ["Mod+J", "Alt+Shift+J", "Ctrl+Shift+J"]);
@@ -383,8 +389,10 @@ test("change the module's entry in a copy: the Desktop's default follows, and ke
 // arrow for the moves (the product owner's call, 2026-10-23): ⌥←/→ the tabs, ⌥⇧←/→ the groups, ⌥↑/↓ the workspaces, the
 // same chord as Linux/Windows' Alt family, so one string. The font picker (app.fontPicker, the product
 // owner's call, 2026-10-23) is new: the Desktop's own, with no default chord, shared with no TUI row.
+// The Desktop UI rework (Joan, 2026-11-19): the leader is the Desktop's own Ctrl+Space (D18), and new are Delete (a
+// second sidebar key for retire) and Alt+N (New agent: Ctrl+Alt+N in the other families, ⌥⌘N on macOS).
 const DEFAULTS = [
-  ["app.leader",{"mac":"Ctrl+X","other":"Ctrl+X"}],
+  ["app.leader","Ctrl+Space"],
   ["sidebar.key.instances","1"],
   ["sidebar.key.souls","2"],
   ["sidebar.key.capabilities","3"],
@@ -404,6 +412,8 @@ const DEFAULTS = [
   ["sidebar.key.spawn","N"],
   ["sidebar.key.spawnAnother","Shift+N"],
   ["sidebar.key.help","?"],
+  ["sidebar.key.retireDelete","Delete"],
+  ["app.newAgent",{"mac":"Mod+Alt+N","other":"Alt+N"}],
   ["split.focusPrevGroup","Alt+Shift+←"],
   ["split.focusNextGroup","Alt+Shift+→"],
   ["app.palette",{"mac":"Mod+K","other":"Alt+K"}],
@@ -415,8 +425,8 @@ const DEFAULTS = [
   ["workspace.previous","Alt+↑"],
   ["workspace.next","Alt+↓"],
   ["instance.edit",{"mac":"Mod+Alt+R","other":"Alt+R"}],
+  ["instance.mail",{"mac":"Mod+Alt+M","other":"Alt+M"}],
   ["app.chooseSoul",{"mac":"Mod+N","other":"Ctrl+Shift+N"}],
-  ["workspaces.currentOnly",{"mac":"Mod+Alt+Shift+O","other":"Ctrl+Alt+Shift+O"}],
   ["app.shortcuts","Mod+,"],
   ["app.themeToggle",null],
   ["app.themePicker",{"mac":"Mod+Shift+Space","other":"Ctrl+Shift+Space"}],
@@ -478,6 +488,9 @@ const CTRL_ALT_MOVED = {
   "app.workspaces": "Ctrl+Alt+O",
   "terminal.focusMode": "Ctrl+Alt+Z",
   "instance.edit": "Ctrl+Alt+R",
+  // New agent (the Desktop UI rework, 2026-11-19): the Desktop's own chord, not a shared row yet, family by family too.
+  "app.newAgent": "Ctrl+Alt+N",
+  "instance.mail": "Ctrl+Alt+M",
   "tabs.nextPage": "Alt+Shift+→",
   "tabs.prevPage": "Alt+Shift+←",
   ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tabs.goto${i + 1}`, `Ctrl+Alt+${i + 1}`])),
@@ -520,7 +533,8 @@ test("the Desktop's default keymap in each chord family, every action on both pl
   const differ = (a, b) => Object.keys(DEFAULT_KEYMAP).filter((id) => defaultBinding(id, false, a) !== defaultBinding(id, false, b)).sort();
   assert.deepEqual(differ("alt", "ctrl+alt"), Object.keys(CTRL_ALT_MOVED).sort());
   assert.deepEqual(differ("ctrl+alt", "ctrl+shift"), Object.keys(SHIFT_MOVED).sort());
-  assert.deepEqual(differ("alt", "ctrl+alt").filter((id) => !CHORDS_READ.some((each) => each.id === id)), [], "only the shared chords differ");
+  assert.deepEqual(differ("alt", "ctrl+alt").filter((id) => !CHORDS_READ.some((each) => each.id === id)), ["app.newAgent"],
+    "only the shared chords differ, and New agent's Alt+N (the Desktop's own until the TUI takes it)");
   for (const id of Object.keys(DEFAULT_KEYMAP)) for (const family of CHORD_FAMILIES) {
     assert.equal(defaultBinding(id, true, family), defaultBinding(id, true, "alt"), `${id}: macOS has no family`);
   }

@@ -1,6 +1,7 @@
 /** The Desktop's "i": a 28px round icon button that opens an explanation in a modal dialog.
- * Workspace › Capabilities ("About capabilities") and Workspace › Souls ("About souls") are its callers; each
- * builds its button once and keeps it across repaints (like the search field beside it).
+ * Workspace › Capabilities ("About capabilities") is its caller (Workspace › Souls dropped its "About souls" in the
+ * Desktop UI rework, slice 3a: the page's first line says what a soul is); it builds its button once and keeps it
+ * across repaints (like the search field beside it).
  *
  * The dialog is the Stop/Retire/Forget frame (lifecycle-dialog.mjs lifecycleCSS: `palette-overlay
  * lifecycle-overlay` > `section.lifecycle-dialog`), widened by `.about-dialog`, with one Close button.
@@ -54,14 +55,6 @@ export const ABOUT_COPY = Object.freeze({
       // Checked against design-brief §5 and the kernel's one-per-slot rule (design owner, 2026-10-23).
       { p: ['Three capabilities are core: knowledge (what an instance knows and learns), messaging (who it can talk to) and tasks (where its work is tracked). A soul has at most one of each. Every other capability is additional: a soul can have any number.'] },
       { p: [{ strong: 'Workspace defaults' }, ' are capabilities the workspace gives to every soul. They are how an organisation gives its agents one shared way of working: the same tools for knowledge, messaging and tasks. Knowledge matters most: with a knowledge capability, what agents learn and the procedures the organisation writes down are kept and reach later instances, instead of ending with each session. A soul gets the defaults without asking. It can turn a default off and name its own in its place, or leave a core capability (knowledge, messaging or tasks) empty.'] },
-    ]),
-  }),
-  souls: Object.freeze({
-    button: 'About souls',
-    title: 'What a soul is',
-    body: Object.freeze([
-      { p: ['A soul defines a kind of agent: the work it specialises in, and the capabilities it gets to do that work.'] },
-      { p: ['A team organises its specialist agents as souls, and souls can also organise knowledge: what each one is responsible for knowing, and what it reads to get started. Each running agent is an instance of a soul. Every instance gets the workspace’s default capabilities first, then the soul’s own choices: a soul can add capabilities, turn a default off, or leave a core capability (knowledge, messaging or tasks) empty.'] },
     ]),
   }),
 });

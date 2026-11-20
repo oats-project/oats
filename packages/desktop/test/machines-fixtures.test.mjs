@@ -14,7 +14,7 @@ const CLI = { ok: true, bin: '/oats', features: ['workspace-identity', 'servers-
 
 test('connect needs-human at git: every row as sent; the remedy has no backticked command, so no copy button; register not reached', () => {
   const out = connectOutcome(fixture('connect-needs-human-git'));
-  assert.equal(out.ok, true); assert.equal(out.ready, false); assert.equal(out.id, 'altair-deployment');
+  assert.equal(out.ok, true); assert.equal(out.ready, false); assert.equal(out.id, 'devbox-deployment');
   assert.deepEqual(out.steps, fixture('connect-needs-human-git').result.steps);
   assert.deepEqual(stepCommands(out.steps[2].remedy), []);
   assert.equal(registerReached(out.steps), false);
@@ -42,22 +42,22 @@ test('server list and check as the kernel answers them: the keyed row is offered
     cliServerCheck: async (bin, id) => { checked.push(id); rows = rows.map(r => r.id === id ? { ...r, workspaceKey: KEY } : r); return fixture('server-check-backfill'); },
   };
   const machines = createMachines({ adapter, cli: () => CLI });
-  const scope = { key: KEY, deployment: '/Users/j/Agents/deployment', messaging: null };
-  assert.deepEqual((await machines.forScope(scope)).servers.map(s => s.id), ['altair-deployment']);
+  const scope = { key: KEY, deployment: '/Users/alex/Agents/deployment', messaging: null };
+  assert.deepEqual((await machines.forScope(scope)).servers.map(s => s.id), ['devbox-deployment']);
   await machines.backfilled();
   assert.deepEqual(checked, ['legacy']);
   const after = await machines.forScope(scope);
-  assert.deepEqual(after.servers.map(s => [s.id, s.label, s.check]), [['altair-deployment', 'altair', null], ['legacy', 'legacy', { reachable: true, version: '0.38.0', error: null }]]);
+  assert.deepEqual(after.servers.map(s => [s.id, s.label, s.check]), [['devbox-deployment', 'devbox', null], ['legacy', 'legacy', { reachable: true, version: '0.38.0', error: null }]]);
 });
 
 test('a check whose workspace cannot be read is not reachable, with the kernel\'s reason', async () => {
   const unreadable = fixture('server-check-backfill');
   unreadable.result.workspaceReadable = false;
-  unreadable.result.workspaceReadError = { code: 'E_REMOTE_UNREADABLE', message: 'altair cannot read the workspace repository', reason: 'not-found' };
+  unreadable.result.workspaceReadError = { code: 'E_REMOTE_UNREADABLE', message: 'devbox cannot read the workspace repository', reason: 'not-found' };
   const adapter = { cliServers: async () => fixture('server-list'), cliServerCheck: async () => unreadable };
   const machines = createMachines({ adapter, cli: () => CLI, backfill: false });
-  const { check } = await machines.check({ key: KEY, deployment: '/d' }, 'altair-deployment');
-  assert.deepEqual(check, { reachable: false, version: '0.38.0', error: 'altair cannot read the workspace repository' });
+  const { check } = await machines.check({ key: KEY, deployment: '/d' }, 'devbox-deployment');
+  assert.deepEqual(check, { reachable: false, version: '0.38.0', error: 'devbox cannot read the workspace repository' });
 });
 
 test('the dialog over the real answers: the needs-human remedy verbatim, then Check again to ready', async t => {
@@ -65,9 +65,9 @@ test('the dialog over the real answers: the needs-human remedy verbatim, then Ch
   const doc = dom.window.document, added = [];
   const answers = [fixture('connect-needs-human-git'), fixture('connect-ready')];
   const ctx = { api: async () => ({ ok: true, status: 200, json: async () => answers.shift() }) };
-  const ui = openAddMachineDialog(doc, { ctx, ws: 'ws:x', deployment: '/Users/j/Agents/deployment', onAdded: id => added.push(id) });
+  const ui = openAddMachineDialog(doc, { ctx, ws: 'ws:x', deployment: '/Users/alex/Agents/deployment', onAdded: id => added.push(id) });
   t.after(() => { ui.close(); dom.window.close(); });
-  const host = doc.querySelector('.machine-host'); host.value = 'altair'; host.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const host = doc.querySelector('.machine-host'); host.value = 'devbox'; host.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const folder = doc.querySelector('.machine-folder'); folder.value = '~/deployment'; folder.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(r => setImmediate(r)); };
   doc.querySelector('.machine-primary').click(); await settle();
@@ -76,18 +76,18 @@ test('the dialog over the real answers: the needs-human remedy verbatim, then Ch
   assert.equal(git.querySelector('.machine-copy'), null);
   assert.equal(git.querySelector('.machine-step-state').textContent, 'needs you');
   doc.querySelector('.machine-primary').click(); await settle();
-  assert.deepEqual(added, ['altair-deployment']);
+  assert.deepEqual(added, ['devbox-deployment']);
 });
 
 // oats.aweb's own `aweb connect --json` (spec B's fake-host tests).
 test('aweb connect as oats.aweb answers it: ready, needs-human at aw (a backticked command to copy), failed with the step\'s remedy', () => {
   const ready = connectOutcome(fixture('aweb-connect-ready'), AWEB_STEPS);
-  assert.equal(ready.ok, true); assert.equal(ready.ready, true); assert.equal(ready.id, 'altair-aweb');
+  assert.equal(ready.ok, true); assert.equal(ready.ready, true); assert.equal(ready.id, 'devbox-aweb');
   assert.deepEqual(ready.steps, fixture('aweb-connect-ready').result.steps);
   const needs = connectOutcome(fixture('aweb-connect-needs-human-aw'), AWEB_STEPS);
   assert.equal(needs.ok, true); assert.equal(needs.ready, false);
   assert.deepEqual(needs.steps.map(s => s.status), ['needs-human', 'skipped', 'skipped', 'skipped']);
-  assert.deepEqual(stepCommands(needs.steps[0].remedy), ['oats aweb connect altair-aweb --install-aw --soul dev']);
+  assert.deepEqual(stepCommands(needs.steps[0].remedy), ['oats aweb connect devbox-aweb --install-aw --soul dev']);
   const raw = fixture('aweb-connect-failed-not-member'), failed = connectOutcome(raw, AWEB_STEPS);
   assert.deepEqual(failed.error, { code: 'E_TEAM_NOT_MEMBER', message: raw.error.message });
   assert.deepEqual(failed.steps.map(s => [s.step, s.status]), [['aw', 'ok'], ['invite', 'failed']]);
@@ -100,17 +100,17 @@ test('the dialog over both real answers: connect ready, then messaging needing a
   Object.defineProperty(dom.window.navigator, 'clipboard', { value: { writeText: async text => { sent.push(text); } } });
   const answers = [fixture('connect-ready'), fixture('aweb-connect-needs-human-aw'), fixture('connect-ready'), fixture('aweb-connect-ready')];
   const ctx = { api: async () => ({ ok: true, status: 200, json: async () => answers.shift() }) };
-  const ui = openAddMachineDialog(doc, { ctx, ws: 'ws:x', deployment: '/Users/j/Agents/deployment', aweb: true, onAdded: id => added.push(id) });
+  const ui = openAddMachineDialog(doc, { ctx, ws: 'ws:x', deployment: '/Users/alex/Agents/deployment', aweb: true, onAdded: id => added.push(id) });
   t.after(() => { ui.close(); dom.window.close(); });
-  const host = doc.querySelector('.machine-host'); host.value = 'altair'; host.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const host = doc.querySelector('.machine-host'); host.value = 'devbox'; host.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const folder = doc.querySelector('.machine-folder'); folder.value = '~/deployment'; folder.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(r => setImmediate(r)); };
   doc.querySelector('.machine-primary').click(); await settle();
   const aw = doc.querySelector('[data-phase="aweb"] [data-step="aw"]');
   assert.equal(aw.querySelector('.machine-step-state').textContent, 'needs you');
   aw.querySelector('.machine-copy').click(); await settle();
-  assert.deepEqual(sent, ['oats aweb connect altair-aweb --install-aw --soul dev']);
+  assert.deepEqual(sent, ['oats aweb connect devbox-aweb --install-aw --soul dev']);
   assert.deepEqual(added, []);
   doc.querySelector('.machine-primary').click(); await settle();
-  assert.deepEqual(added, ['altair-deployment']);
+  assert.deepEqual(added, ['devbox-deployment']);
 });

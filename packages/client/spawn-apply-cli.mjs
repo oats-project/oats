@@ -6,7 +6,7 @@ import { parseEnvelope, writeTaskFile, execFileInSession } from './cli-adapter.m
 import { absolute, record, previewTarget, choiceArgv } from './spawn-preview-contract.mjs';
 import { spawnDecision } from './spawn-decision.mjs';
 import { spawnApplySupported, spawnApplyChoicesSupported, spawnPrepareInput, spawnReference, spawnApplyReason, spawnApplyDeadline,
-  SPAWN_APPLY_MS, ROLLED_BACK_CODES } from './spawn-apply-contract.mjs';
+  SPAWN_APPLY_MS, ROLLED_BACK_CODES, KERNEL_WORDED_CODES, kernelWordedDetails } from './spawn-apply-contract.mjs';
 const failure = (code, started = false) => ({ started, envelope: { schemaVersion: 1, ok: false, error: spawnApplyReason(code) } });
 const named = v => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/.test(v);
 const worktreeEvent = cli => Array.isArray(cli?.features) && cli.features.includes('worktree-event');
@@ -17,9 +17,11 @@ function refusal(doc, cli) {
   // worktree-event: the three rolled-back codes keep the kernel's own message (it names the
   // capability and its log), and whether its compensation was confirmed.
   const rolledBack = worktreeEvent(cli) && ROLLED_BACK_CODES.includes(doc.error?.code);
-  const error = spawnApplyReason(doc.error?.code, rolledBack ? doc.error?.message : undefined);
+  const worded = KERNEL_WORDED_CODES.includes(doc.error?.code);
+  const error = spawnApplyReason(doc.error?.code, rolledBack || worded ? doc.error?.message : undefined);
   let details;
-  if (rolledBack) {
+  if (worded) details = kernelWordedDetails(doc.error?.details) ?? undefined;
+  else if (rolledBack) {
     if (doc.error?.details?.unconfirmed === true) details = { unconfirmed: true };
   } else if (error.code === 'E_DECISION_STALE') {
     const decision = spawnDecision(doc.error?.details?.decision, { effectiveRequired: true });

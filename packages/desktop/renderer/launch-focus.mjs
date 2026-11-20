@@ -1,7 +1,7 @@
 /** A launch's `--instance <name>` (D3 of awebai/oats#1665): the window of the `--dir` deployment selects that
  * instance's roster row, as "show in roster" does (shell.mjs showInRoster: the row is revealed and takes keyboard
- * focus). It only selects: nothing starts, attaches or is written, and nothing is read beyond the roster reads the
- * window makes anyway.
+ * focus). A row observed running opens its terminal through the shell's existing opener, without terminal input
+ * focus. Other rows only select. Nothing starts or is written; only roster reads and the ordinary viewer attach.
  *
  * Main reads the argument (single-instance.mjs launchInstance) and sends the window `{ deployment, name }`, a name
  * the kernel's instance-name check takes, or `{ invalid: true }`, which never carries the value.
@@ -48,12 +48,14 @@ export function launchFocusMatch(rows, { deployment, name }) {
  * @param watch()  the shell's selection-ownership ticket: true while the person has selected nothing since it was taken
  * @param operator  watchOperator(document): { input(), pointer() }
  * @param select(row)  select the row as "show in roster" does; may be asynchronous
+ * @param open(row, valid)  select and open a running row without input focus; valid guards later launch/operator input
  * @param notify(text)  the window's notice
  * @param setTimer, clearTimer  the bound's clock
  */
-export function createLaunchFocus({ watch, operator = { input: () => 0, pointer: () => 0 }, select, notify,
+export function createLaunchFocus({ watch, operator = { input: () => 0, pointer: () => 0 }, select, open, notify,
   setTimer = setTimeout, clearTimer = clearTimeout }) {
   let pending = null; // { request, owns, input, pointer, timer }
+  let generation = 0; // also supersedes a matched request whose terminal open is still awaiting
   const drop = () => { if (pending) clearTimer(pending.timer); pending = null; };
   // Whether the person has not chosen since the request (since its ticket, once the first roster read took it).
   const quiet = (p) => {
@@ -72,6 +74,7 @@ export function createLaunchFocus({ watch, operator = { input: () => 0, pointer:
       const request = launchFocusRequest(message);
       if (!request) return;
       drop();
+      generation++;
       const p = { request, owns: null, input: operator.input(), pointer: operator.pointer(), timer: null };
       p.timer = setTimer(() => expire(p), LAUNCH_FOCUS_PENDING_MS);
       pending = p;
@@ -87,10 +90,14 @@ export function createLaunchFocus({ watch, operator = { input: () => 0, pointer:
       if (match.none) return;
       drop();
       if (match.many) { notify(manyNotice(p.request.name)); return; }
-      // A select that throws or rejects (the row went meanwhile) leaves nothing more to do.
-      try { Promise.resolve(select(match.row)).catch(() => {}); } catch { /* as a rejection */ }
+      // The first match consumes the request, including a stopped row that starts on a later read.
+      // The shell owns selection/workspace checks across its own selection and the asynchronous open.
+      const mine = generation;
+      const valid = () => mine === generation && operator.input() === p.input && operator.pointer() === p.pointer;
+      try { Promise.resolve(match.row.running === true ? open(match.row, valid) : select(match.row)).catch(() => {}); }
+      catch { /* a vanished row leaves nothing more to do */ }
     },
     pending: () => pending !== null,
-    dispose: drop,
+    dispose() { generation++; drop(); },
   };
 }

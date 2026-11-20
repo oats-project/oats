@@ -1,5 +1,6 @@
 /** The boundary every kernel verb that writes one field of an instance's own record goes through: `oats instance
- * color` (instance-color.mjs, #1421 §2) and `oats instance background` (instance-background.mjs, #1579). The
+ * color` (instance-color.mjs, #1421 §2), `oats instance background` (instance-background.mjs, #1579) and `oats
+ * instance pin` (instance-pin.mjs, feature instance-pin). The
  * kernel is the only writer of that record; this module validates the request against the row the backend holds,
  * gates it on the feature, runs the verb (argv only; cli-adapter.mjs) and decodes its answer. It is the teams
  * boundary's pattern (teams.mjs), but it also routes: a remote row's record is written on its host, with
@@ -29,13 +30,12 @@
 import { isAbsolute } from 'node:path';
 import { hostAdvertises, PROBE_FEATURES_FEATURE } from '../../client/composed-gate.mjs';
 import { canAddressRemote } from '../../client/remote-address.mjs';
-import { madeByKernel } from '../../client/kernel-made.mjs';
+import { recordOutcome } from '../../client/instance-record-outcome.mjs';
 
 const CODE = /^E_[A-Z0-9_]{1,62}$/;
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const FIELD = /^[a-z][A-Za-z]{0,31}$/;
 const record = v => v !== null && typeof v === 'object' && !Array.isArray(v);
-const text = (v, max) => typeof v === 'string' && v.length > 0 && v.length <= max && !/[\x00-\x1f\x7f]/.test(v);
 const advertises = (cli, feature) => !!cli?.ok && Array.isArray(cli.features) && cli.features.includes(feature);
 
 /** A verb's "nothing ran" answers: `sentences` maps each of the boundary's codes (E_BAD_ARGS, E_WORKSPACE_UNKNOWN,
@@ -45,21 +45,9 @@ export function recordNotRun(sentences) {
   return (code, details) => ({ status: 'not-run', reason: { code, message: fixed[code], ...(details ? { details } : {}) } });
 }
 
-/** What the command answered, as a client reads it. Only an error the installed CLI printed is a refusal
- * (kernel-made.mjs); one the adapter wrote (a timeout, no envelope, a nonzero exit) is an unknown outcome, as is a
- * success `answer(result)` does not read as the contract's (it returns the ok answer, or null). */
-export function recordOutcome(envelope, answer) {
-  if (envelope?.ok === true) {
-    let ok = null;
-    try { ok = record(envelope.result) ? answer(envelope.result) : null; } catch { ok = null; }
-    return ok ?? { status: 'unknown', reason: { code: 'E_OUTCOME_UNKNOWN' } };
-  }
-  const error = envelope?.ok === false ? envelope.error : null;
-  if (madeByKernel(error) && typeof error.code === 'string' && CODE.test(error.code)) {
-    return { status: 'refused', reason: { code: error.code, message: text(error.message, 512) ? error.message : '' } };
-  }
-  return { status: 'unknown', reason: { code: typeof error?.code === 'string' && /^E_CLI_[A-Z_]+$/.test(error.code) ? error.code : 'E_OUTCOME_UNKNOWN' } };
-}
+/** What the command answered, as a client reads it: the shared reading (packages/client instance-record-outcome.mjs),
+ * which the TUI's pin key reads too. */
+export { recordOutcome };
 
 /** The route re-reads the roster at once after this answer: a change, or an outcome not known (the record may have
  * changed). A refusal, a check and nothing run leave the roster as it is. */
@@ -75,7 +63,7 @@ function requestOf(verb, r) {
 }
 
 /** The boundary for one verb. `verb`:
- *   field        the request's and the answer's field ('color', 'background')
+ *   field        the request's and the answer's field ('color', 'background', 'pinned')
  *   valid(v)     the field's values
  *   feature      the kernel feature that gates it, here and on a remote row's host
  *   unavailable  the not-run code without it (E_INSTANCE_<VERB>_UNAVAILABLE)

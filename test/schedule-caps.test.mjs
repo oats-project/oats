@@ -4,6 +4,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { selfIdentity } from "../lib/worktree-hooks.mjs";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -150,8 +151,7 @@ test("invalid cap options fail before migration, registration, or either cap cha
 test("migration waits for the registry lock and reads the winner's current values", async (t) => {
   seedRegistry({ maxConcurrent: 1 });
   const lock = join(S.hostScheduleDir(), "registry.lock");
-  mkdirSync(lock);
-  writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid }));
+  writeFileSync(lock, JSON.stringify({ ...selfIdentity(), nonce: "a".repeat(32), at: new Date().toISOString(), what: "a test" }) + "\n");
   const reader = child('process.send("ready"); const reg = S.registerWorkspace(process.argv[1]); if (reg.maxConcurrent !== 7 || reg.triggersMaxConcurrent !== 2) process.exitCode = 1; process.disconnect();', [workspace()]);
   t.after(() => { reader.proc.kill(); rmSync(lock, { recursive: true, force: true }); });
   await reader.ready;

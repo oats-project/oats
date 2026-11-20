@@ -1,0 +1,9 @@
+**
+!Dockerfile
+!package.json
+!package-lock.json
+!entrypoint.sh
+!supervisor.mjs
+!sshd_config
+!liveness.mjs
+!agent-trust.sh

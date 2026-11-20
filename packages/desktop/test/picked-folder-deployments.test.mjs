@@ -12,9 +12,9 @@ const listing = (names, { links = [] } = {}) => (_dir, limit) => {
 };
 
 test('deploymentsInside: the direct children holding a deployment, sorted; links, files and others are not offered', () => {
-  const deployments = new Set(['/h/work/oats', '/h/work/aweb', '/h/work/tsm', '/h/work/linked']);
-  const found = deploymentsInside('/h/work', { list: listing(['tsm', 'notes', 'oats', 'aweb'], { links: ['linked'] }), isDeployment: (p) => deployments.has(p) });
-  assert.deepEqual(found, { paths: ['/h/work/aweb', '/h/work/oats', '/h/work/tsm'], limited: false });
+  const deployments = new Set(['/h/work/oats', '/h/work/aweb', '/h/work/web', '/h/work/linked']);
+  const found = deploymentsInside('/h/work', { list: listing(['web', 'notes', 'oats', 'aweb'], { links: ['linked'] }), isDeployment: (p) => deployments.has(p) });
+  assert.deepEqual(found, { paths: ['/h/work/aweb', '/h/work/oats', '/h/work/web'], limited: false });
 });
 
 test('deploymentsInside: at most PICK_SCAN_LIMIT entries are read; an unreadable or missing folder offers nothing', () => {
@@ -27,6 +27,6 @@ test('deploymentsInside: at most PICK_SCAN_LIMIT entries are read; an unreadable
 });
 
 test('a picked parent folder still offers the deployments inside it, through the same scan', () => {
-  const answer = pickedFolderChoices('/h/work', { list: listing(['tsm', 'oats']), isDeployment: (p) => p !== '/h/work' && p.startsWith('/h/work/') });
-  assert.deepEqual(answer.choices.map((c) => [c.path, c.kind]), [['/h/work/oats', 'inside'], ['/h/work/tsm', 'inside']]);
+  const answer = pickedFolderChoices('/h/work', { list: listing(['web', 'oats']), isDeployment: (p) => p !== '/h/work' && p.startsWith('/h/work/') });
+  assert.deepEqual(answer.choices.map((c) => [c.path, c.kind]), [['/h/work/oats', 'inside'], ['/h/work/web', 'inside']]);
 });

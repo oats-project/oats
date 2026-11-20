@@ -3,9 +3,9 @@
 // catalog's oats.machine, its setup soul is oats.machine/steward, and the steward
 // gets a global, contacts-only aweb address through `oats aweb resident create`'s
 // root route, or a local team identity when that route is not there. The skill's
-// literals are checked here against the catalog and against the oats.aweb
-// provider's own source (mirrors/oats-aweb), so they cannot drift from what the
-// provider prints.
+// guidance is checked against the catalog, documented operator contracts and
+// the remaining provider-source literals in mirrors/oats-aweb. Provider
+// behaviour belongs to the package's executable tests.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { normalizeAwebTeamName } from "../mirrors/oats-aweb/lib/team-roots.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
@@ -35,14 +36,15 @@ const NO_ROOT_ROUTE_YET = "None is released yet: until one is, take the fallback
 const AW_ROOT_ROUTE = "1.36.48";
 const mirrorHasRootRoute = residentSource.includes('route: "root"');
 
-test("the catalog lists oats.machine at v0.1.1, and oats.machine-care resolves to it", () => {
-  assert.deepEqual(catalog.packages["oats.machine"], { url: "https://github.com/awebai/oats-machine.git", ref: "v0.1.1", path: "oats-package" });
+test("the catalog lists the machine publisher, and oats.machine-care resolves to it", () => {
+  const { url, path, ref } = catalog.packages["oats.machine"];
+  assert.deepEqual({ url, path }, { url: "https://github.com/awebai/oats-machine.git", path: "oats-package" });
+  assert.match(ref, /^v\d+\.\d+\.\d+$/);
   assert.equal(catalog.capabilities["oats.machine-care"], "oats.machine");
-  assert.match(read("docs/official-catalog.md"), /^\| `oats\.machine` \| `v0\.1\.1` \| `oats\.machine-care` \| `steward`, `technician` \|$/m);
+  assert.ok(read("docs/official-catalog.md").includes(`| \`oats.machine\` | \`${ref}\` | \`oats.machine-care\` | \`steward\`, \`technician\` |`));
 });
 
 test("on a machine found-list the workspace pins the catalog's oats.machine by bare version", () => {
-  assert.match(skill, /^  oats\.machine: v0\.1\.1\b/m);
   assert.equal(`v${skill.match(/^  oats\.machine: v(\S+)/m)[1]}`, catalog.packages["oats.machine"].ref);
   assert.doesNotMatch(skill, /git:github\.com\/awebai\/oats-machine/, "an official package is pinned by bare version, never by Git");
   assert.match(skill, /`machine\.platform`/, "the step applies only to a machine found-list");
@@ -102,7 +104,9 @@ test("on a machine found-list, step 1 is the machine's round, with a default for
 
 test("after step 1, a machine found-list asks nothing: a step that would ask tells and stops", () => {
   assert.match(skill, /Wherever a later step says to ask the\s+person, on a machine found-list you tell them what happened, as it is, and\s+stop instead/);
-  assert.match(skill, /On a machine found-list, ask nothing: tell the person that the run\s+failed, most likely because `N` is taken, and stop\./);
+  assert.match(skill, /On a machine found-list, ask nothing: tell the person that the run\s+failed, and\s+that `N` may be taken, and stop\./);
+  // A provider that names an unavailable username (awebai/oats-aweb#286): nothing was created, so a new N is asked, not looked for.
+  assert.match(skill, /\*\*`E_SETUP_USERNAME_UNAVAILABLE`:\*\* aw refused `N` \(its message says\s+why: taken, reserved or its format\), and nothing was created\. On a\s+machine found-list, ask nothing: tell the person what it says, and\s+stop\. Otherwise ask the person for another `N`/);
 });
 
 test("the steward's harness is recorded before readiness and harness trust read it", () => {
@@ -132,9 +136,6 @@ test("the steward's harness is recorded before readiness and harness trust read 
 });
 
 test("a root that is not a member of the team stops step 9 before the spawn, with its fix", () => {
-  // The fields the stop reads are the ones `oats aweb setup --check-only` prints.
-  const provider = read("mirrors/oats-aweb/bin/oats-aweb.mjs");
-  assert.match(provider, /console\.log\(JSON\.stringify\(\{ aw, defaultTeam: label \|\| team \? \{ label, team \} : null, member, root: teamRoot \}\)\)/);
   const stop = skill.indexOf("**`\"member\": false` after step 5's sign-in:** stop, spawn nothing");
   assert.ok(stop > skill.indexOf("## 9. Messaging on this machine") && stop < skill.indexOf("## 10. Spawn the setup expert"), "in step 9, before the spawn");
   const fix = skill.slice(stop, skill.indexOf("\n2. ", stop));
@@ -147,10 +148,6 @@ test("a root that is not a member of the team stops step 9 before the spawn, wit
 });
 
 test("the default new workspace signs up without a sign-in, and the team id it writes is checked against setup's answer", () => {
-  const signup = read("mirrors/oats-aweb/lib/setup-team-default.mjs");
-  // The skeleton's team is the provider's own predicted team, and the answer carries team and membershipVerified.
-  assert.ok(signup.includes("predictedTeam = `default:${username}.aweb.ai`"));
-  assert.ok(signup.includes("return { plan: false, label, team, root, steps, observed, membershipVerified: true };"));
   assert.match(skill, /the messaging account's name `N`[^]*?default\s+`<workspace>-oats`/);
   assert.match(skill, /## 5\. Optional: the team on your own aweb account/);
   assert.match(skill, /- \*\*The team\*\* is `default:N\.aweb\.ai`, with `N` from step 1/);
@@ -224,13 +221,10 @@ test("getting-started: an existing workspace names its setup expert after this m
   // sets the default redeems it and maps that team under a label of its own; item 5 tells the two apart read-only,
   // because a per-team root is made only by a redemption.
   assert.ok(flat.includes("one for a team this workspace doesn't name (unless the workspace allows local teams and this machine's own `oats-local.yaml` sets its default team)"));
-  const teamDefault = read("mirrors/oats-aweb/lib/setup-team-default.mjs");
-  assert.ok(teamDefault.includes("throw setupFailure('E_SETUP_POLICY', 'local-teams-closed"), "the provider refuses an unnamed team where local teams are closed");
-  assert.ok(teamDefault.includes("doc.defaultTeam.from !== 'deployment'") && teamDefault.includes("throw setupFailure('E_SETUP_DEFAULT_PRESERVE'"), "the provider refuses an unnamed team where the default is the workspace's");
   assert.ok(flat.includes("In that exception, an invite for a team the workspace doesn't name is redeemed instead"));
   assert.ok(setupInviteSources().includes('join(resolve(base), ".aweb-roots", normalizeAwebTeamName(label))'), "a redemption makes the per-team root item 5 looks for");
-  assert.ok(flat.includes("With `\"root\": null` after item 4's invite-only form, look first, read-only: `ls -d \"D\"/.aweb-roots/*/.aw 2>/dev/null`. Nothing printed: the join refused before redeeming anything"), "a refusal is not read as a root left outside L");
-  assert.ok(flat.includes("A path printed for a label other than `L`: the invite was for that team, and this machine joined it instead"), "a redeemed invite for another team is not read as a refusal");
+  assert.ok(flat.includes("- **No new path:** the join made no root here. It refused before redeeming anything"), "a refusal is not read as a root left outside L");
+  assert.ok(flat.includes("- **A new path under another name:** the invite was for that team, and this machine joined it instead"), "a redeemed invite for another team is not read as a refusal");
   const setupInvite = read("mirrors/oats-aweb/lib/setup-invite.mjs");
   const awFloor = setupInvite.match(/AW_INVITE_INSPECT = '([0-9.]+)'/);
   assert.ok(awFloor && flat.includes(`aw ${awFloor[1]} or later (\`aw.version\` in item 1's check)`), "the skill's aw floor is the provider's");
@@ -242,6 +236,39 @@ test("getting-started: an existing workspace names its setup expert after this m
   const invite = read("mirrors/oats-aweb/lib/invite.mjs");
   const [maj, min, pat] = providerVersion.split(".").map(Number);
   if (maj > 1 || (maj === 1 && (min > 33 || (min === 33 && pat >= 1)))) assert.ok(invite.includes("awebUrl"), "the invite answer carries awebUrl from 1.33.1");
+});
+
+test("getting-started: item 5 reads a failed join from what ran, read-only (#1746)", () => {
+  const flat = read("skills/oats-getting-started/SKILL.md").replace(/\s+/g, " ");
+  const item5 = flat.slice(flat.indexOf("5. **After items 2 to 4, check again**"), flat.indexOf("6. **Codex, or `delivery: session`"));
+  // Gap 1: "outside L" is said only of a root; "root": null after the signup or the labelled form says no root was
+  // made or recorded. A create (BYOT, item 2) that recorded no root is rerun unchanged: each of its steps resumes.
+  assert.ok(item5.includes("- **`\"root\": null` after item 2's signup:** no root was made in `D/.aw`: the signup didn't finish. Tell the person so, with what the check shows, and don't rerun it."));
+  assert.ok(item5.includes("- **`\"root\": null` after a team create in item 2** (a create line, not the signup): the create recorded no root. Run the same create line again, unchanged, then check again."));
+  assert.ok(item5.includes("- **`\"root\": null` after item 4's labelled form:** the join recorded no root: it stopped at a refusal or a failure, which its window shows."));
+  assert.ok(item5.includes("- **With a `root`:** the run left this machine's root outside `L`."), "outside L only where there is a root");
+  assert.equal(item5.split("outside `L`").length - 1, 1, "no other branch says the root is outside L");
+  assert.ok(read("mirrors/oats-aweb/bin/oats-aweb.mjs").includes("a re-run of the same command resumes a partial create"), "the provider resumes a partial create on the same line");
+  // Gap 2: the listing is taken before item 4's window opens and compared after; only a new path is this join's.
+  const item4 = flat.slice(flat.indexOf("4. **Existing workspace: the person joins in their own terminal,**"), flat.indexOf("5. **After items 2 to 4"));
+  const listing = 'ls -d "D"/.aweb-roots/*/.aw 2>/dev/null';
+  assert.ok(item4.indexOf(`Before you open it, list the per-team roots \`D\` already holds, read-only, and keep what it prints (often nothing) for item 5: \`\`\`bash ${listing} \`\`\``) >= 0, "item 4 takes the listing");
+  assert.ok(item4.indexOf(listing) < item4.indexOf("| oats aweb setup --soul S --invite-stdin --name A'"), "before the window opens");
+  assert.ok(item5.includes("run item 4's listing again, read-only, and compare it with what it printed before the window opened: only a path that is new is this join's."));
+  // Gap 3: L is compared as the provider names the folder, normalizeAwebTeamName. The skill's example is the function's.
+  const teamRoots = read("mirrors/oats-aweb/lib/team-roots.mjs");
+  assert.ok(teamRoots.includes('String(label || "").toLowerCase().replace(/[_.]+/g, "-").replace(/^-+|-+$/g, "")'), "the provider's normalization is the one the skill states");
+  assert.ok(item5.includes("The folder before `/.aw` is the team's label as the provider writes a team name: lowercase, each run of `_` or `.` as one `-`, and no `-` at either end (`My_Team.` is `my-team`). Write `L` that way too before you compare."));
+  assert.equal(normalizeAwebTeamName("My_Team."), "my-team", "the skill's example");
+  assert.ok(item5.includes("- **A new path under `L`'s name:** the join began in `L`'s folder and didn't finish."));
+  // Gap 4: aw's own accept can fail after every check, with no code: the join removes the empty root it made.
+  assert.ok(read("mirrors/oats-aweb/bin/oats-aweb.mjs").includes("if (createdRoot) { try { rmdirSync(teamRoot); }"), "a failed accept removes the empty per-team root");
+  assert.ok(item5.includes("or aw's own accept failed and the join removed the empty folder it had made. Ask the person for the `E_SETUP_` code their window shows, if any (a code, no secret); with no code, ask what the window's last line says (no secret)."));
+  assert.ok(!item5.includes("ask the person for the `E_SETUP_` code their window shows (a code, no secret), tell them"), "a code is not assumed");
+  // The read-only rule: the agent never sees the join's output, never reruns the signup or the join, and asks for no secret.
+  assert.ok(item5.includes("Don't rerun the signup or the join (you can't see the join's output)."));
+  assert.ok(!/rerun the join|run the (?:signup|join) again|open the window again/i.test(item5.replace("Don't rerun the signup or the join", "")), "no branch reruns the signup or the join");
+  assert.ok(!/token|password|key\b/i.test(item5), "item 5 asks for no secret");
 });
 
 test("the Desktop's background download is installed only once its checksum and attestation passed", () => {
@@ -344,9 +371,8 @@ test("a new workspace with aweb defaults to aweb tasks, and to `tasks: none` onl
   assert.ok(flat.includes("step 7 writes `tasks: none`"));
   assert.ok(flat.includes("Ask only when unsure, as the final-values message's one open line, prefilled with the answer you'd pick: ticket keys the person didn't name"));
   assert.doesNotMatch(flat, /no `tasks:` default/);
-  // Onboarding neither edits the team's instructions nor installs the wake broker: the first task opts the
-  // team in, and /oats-host-delivery installs the broker where a home needs it.
-  assert.doesNotMatch(skill, /AWEB_TASKS_LINE|aw instructions set|oats aweb wake install/);
+  // Onboarding does not edit the team's instructions: the first task opts the team in.
+  assert.doesNotMatch(skill, /AWEB_TASKS_LINE|aw instructions set/);
   // Beside a tracker, the hand-off keeps aweb's list empty.
   assert.ok(flat.includes("Leave aweb's task list empty: one task there opts your whole group in to it. To use aweb's task list instead, ask the setup assistant."));
   // Every path reaches item 6, the hand-over records the choice, and the found-list and no-messaging skeletons carry no tasks line.
@@ -370,6 +396,8 @@ test("pi's aweb extension is installed without its bundled skills", () => {
   assert.ok(skill.includes('process.env.PI_CODING_AGENT_DIR||path.join(os.homedir(),".pi","agent")'));
   assert.ok(skill.includes("skills:[]}:e)"));
   assert.ok(flat.includes("pi's aweb extension, without its skills (pi only)"));
+  assert.ok(flat.includes("from 0.5.0 it bundles none, and the setting is harmless, so set it whatever the version"));
+  assert.ok(flat.includes("Never install `@awebai/claude-skills` in that pi folder"));
 });
 
 // The onboarding VM campaign's second round of newcomer runs on fresh VMs (#1665).
@@ -430,6 +458,20 @@ test("getting-started: a monorepo host's two setup files are on the one yes, and
   assert.ok(flat.includes("When others can push to the repository (`gh api repos/<owner>/<repo>/collaborators --jq length` prints more than 1, or fails), its default branch `<branch>` is protected (`gh api repos/<owner>/<repo>/branches/<branch> --jq .protected` prints `true`, `gh api repos/<owner>/<repo>/rules/branches/<branch> --jq length` prints more than 0, or either fails), or the push is refused: push a branch instead, open a pull request, tell them, and stop until it is merged."));
   assert.ok(flat.includes("skeleton committed (pushed | merged from <url>)"));
   assert.ok(!flat.includes("in pull request <url>"), "the spawn never waits on an open pull request");
+});
+
+test("getting-started: a free plan's upgrade 403 on the rules read counts as no rules, as oats-workspace-config's check does", () => {
+  const flat = skill.replace(/\s+/g, " ");
+  // A private repository on a free plan answers the rules read with 403 "Upgrade to GitHub Pro": the plan has no rulesets, so nothing guards the branch.
+  assert.ok(flat.includes("A 403 from the rules read saying the feature needs an upgrade (\"Upgrade to GitHub Pro or make this repository public\") is not a failure: the repository's plan has no rulesets, so it counts as 0."));
+  const config = readFileSync(new URL("../oats-package/capabilities/oats-setup/skills/oats-workspace-config/SKILL.md", import.meta.url), "utf8").replace(/\s+/g, " ");
+  assert.ok(config.includes("A 403 there saying the feature needs an upgrade means the plan has no rulesets, which counts as `0`."), "the two skills keep one rule for the plan's 403");
+});
+
+test("getting-started: a new workspace's default name is the repository's, the folder's only without one", () => {
+  const flat = skill.replace(/\s+/g, " ");
+  assert.ok(flat.includes("Default: their project's name: its repository's name when it has one, else its folder's (the repository's wins when they differ)"));
+  assert.ok(!flat.includes("(its repository's, or its folder's)"), "no default that leaves the choice open");
 });
 
 test("getting-started: the hand-off is in plain words; what the person may want later goes to the hand-over file", () => {
@@ -506,6 +548,25 @@ test("a soul whose declared harness differs from this machine's '*' gets its own
     assert.match(text, /differs from [^.]*and is installed and logged in on this machine/, `${name} keeps a declared harness only when it is installed here`);
     assert.ok(text.includes("A declared harness that isn't installed here stays under `'*'`, so the soul can run; tell the person."), `${name} leaves a missing harness under '*'`);
   }
+  // '*' replaces the model too: a reviewer on the developers' harness with another model keeps it, and its preview proves it.
+  for (const [name, text] of [["oats-tailor-workspace", tailor], ["oats-package-pins", pins], ["oats-getting-started", skill.replace(/\s+/g, " ")]]) {
+    assert.match(text, /Check (a|the|a new) reviewer soul by its model too, since `'\*'` replaces the model as well as the harness/, `${name} checks the reviewer's model`);
+    assert.match(text, /where it declares (the same harness as `'\*'`|`<harness>`) but another model, give it its own entry the same way, with `--harness <its harness> --model <its model>`/, `${name} gives a same-harness reviewer its own entry with its model`);
+    assert.ok(text.includes("must show a `launch.effective` model from a family other than the developers'"), `${name} checks the reviewer's preview`);
+    assert.ok(text.includes("Where its declared model can't run here, set one that can, from another family;"), `${name} falls back to a runnable model from another family`);
+    assert.match(text, /with none, (tell the person|name it in the hand-over \("For the person, later"\):) its reviews share the developers' model\./, `${name} tells the person when no other family can run`);
+  }
+});
+
+// Only OATS 0.69.13 and later ship the catalog's "Coordination templates", and oats.framework admits older kernels: the skills name the template.
+test("onboarding names the engineering template's repository, not only the installed kernel's catalog", () => {
+  const adapt = read("oats-package/capabilities/oats-coordination-setup/skills/adapt-to-the-organisation/SKILL.md").replace(/\s+/g, " ");
+  const tailor = read("oats-package/capabilities/oats-onboarding/skills/oats-tailor-workspace/SKILL.md").replace(/\s+/g, " ");
+  for (const [name, text] of [["adapt-to-the-organisation", adapt], ["oats-tailor-workspace", tailor]]) {
+    assert.ok(text.includes("the engineering template, `oats-project/oats-engineering-coordination`"), `${name} names the template's repository`);
+    assert.ok(text.includes("latest `template-v*` tag"), `${name} copies the latest template release`);
+    assert.ok(text.includes("from OATS 0.69.13, the installed kernel's `docs/official-catalog.md`") || text.includes("From OATS 0.69.13, the installed kernel's `docs/official-catalog.md`"), `${name} dates the catalog's list`);
+  }
 });
 
 test("getting-started: a person with no GitHub account is helped to make one, and gh is installed for them", () => {
@@ -529,4 +590,20 @@ test("getting-started: a join never runs aw team ensure (it would make a second 
     assert.ok(m.index > step5 && m.index < step6, "an `aw team ensure` command outside step 5");
   }
   assert.ok(flat.includes("**Only for a new workspace with aweb whose person chose, in step 1, the team on their own aweb account now.**"));
+});
+
+test("getting-started: a setup expert the wake broker delivers to is spawned only once the broker runs", () => {
+  const flat = read("skills/oats-getting-started/SKILL.md").replace(/\s+/g, " ");
+  const item = flat.slice(flat.indexOf("6. **Codex, or `delivery: session`: the wake broker runs before the spawn.**"), flat.indexOf("## 10. Spawn the setup expert"));
+  assert.ok(item.length > 0, "step 9 carries the item, before step 10");
+  // Claude and pi have their own channel; everything else is refused by oats.aweb with no broker.
+  assert.ok(item.includes("Skip this item when the setup expert's harness is Claude or pi and the effective `oats.aweb` settings (the soul's or this host's) don't set `delivery: session`"));
+  assert.ok(item.includes("oats.aweb refuses to spawn or start it while no broker runs (`wake-daemon-not-running`)"));
+  // The person starts their own user service; the agent only checks.
+  assert.ok(item.includes('cd "D" && oats aweb wake install'));
+  assert.ok(item.includes("the line is `aw wake run`, kept running as a supervised process"));
+  assert.ok(item.includes('cd "D" && oats aweb wake status --json'));
+  assert.ok(item.includes('Go on to step 10 only when it reports `"daemon": { "running": true }`. Otherwise stop, spawn nothing'));
+  // Step 4 no longer leaves Codex's wake to the setup expert.
+  assert.doesNotMatch(flat, /the setup expert sets up its wake/);
 });

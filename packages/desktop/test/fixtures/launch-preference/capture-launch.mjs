@@ -69,7 +69,7 @@ try {
   unlinkSync(join(stubs, "codex"));
   run("souls-unavailable", ["souls", ...d]);
   run("preview-dev-unavailable", [...spawn([]), "--preview", "--json"], { expect: null });
-  // The reverse drift (Antares, #292): a home spawned from a LOCAL preference, which is then removed:
+  // The reverse drift (#292): a home spawned from a LOCAL preference, which is then removed:
   // the current launch is the host default (`from: "host"`, `at: null`). After the uninstall; claude stays.
   setLocalLaunch({ reviewer: { harness: "pi" }, dev: { harness: "codex" }, plain: { harness: "claude" } });
   const spawnPlain = extra => ["spawn", "plain", "--dir", fx.dep, "--agents-root", fx.root, "--purpose", "q", ...extra];

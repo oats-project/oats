@@ -1,3 +1,4 @@
+import {registryEnv} from './registry-setting.mjs';
 import {mkdtempSync, chmodSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -36,7 +37,7 @@ export async function runProbe(argv, {env = process.env, signal, now, wall, chil
     temporary = mkdtempSync(join(tmpdir(), 'oats-aweb-probe-'));
     chmodSync(temporary, 0o700);
     const cleanEnv = probeEnvironment(env);
-    const execute = (cmd, args, capMs) => child(cmd, args, {budget, cwd: temporary, env: cleanEnv, capMs});
+    const execute = (cmd, args, capMs) => child(cmd, args, {budget, cwd: temporary, env: cmd===process.execPath ? cleanEnv : {...cleanEnv,...registryEnv(target.settings,args)}, capMs});
     const kernel = async (args, capMs = 5000) => parseProbeJson(await execute(process.execPath, [env.OATS_CLI_BIN, ...args], capMs));
     try {
       const manifest = readProbeRecord(fileURLToPath(new URL('../oats.json', import.meta.url)));
@@ -56,6 +57,7 @@ export async function runProbe(argv, {env = process.env, signal, now, wall, chil
     const qualified = await support({execute, target, budget, path: cleanEnv.PATH});
     budget.check();
     if (!qualified || qualified.cli !== true || qualified.server !== true || !canonicalArgument(qualified.awBinary)) refuse('probe-cli-and-server-support-unqualified');
+    if (typeof qualified.newConversationFlag !== 'boolean') refuse('probe-cli-fresh-send-unqualified');
     const aw = async (identityHome, args, capMs = 10000) => {
       qualified.revalidate?.();
       // --team is command-scoped in aw, not a persistent root flag.
@@ -83,7 +85,7 @@ export async function runProbe(argv, {env = process.env, signal, now, wall, chil
     try {
       // The released primitive skips ALL auto-thread discovery. Never fall back
       // to legacy send, and never retry any uncertain send outcome.
-      sent = await aw(target.rootHome, ['mail', 'send', '--new-conversation', '--to', target.alias, '--subject', subject, '--body-file', bodyFile]);
+      sent = await aw(target.rootHome, ['mail', 'send', ...(qualified.newConversationFlag ? ['--new-conversation'] : []), '--to', target.alias, '--subject', subject, '--body-file', bodyFile]);
       if (!probeId(sent?.message_id) || !probeId(sent?.conversation_id)) refuse('invalid-send-response');
     } catch { refuse('send-outcome-unknown'); }
     finally { sendEnd = budget.now(); result.request.sendCompletedAt = budget.wall(); result.timing.sendMs = Math.max(0, sendEnd - sendStart); }

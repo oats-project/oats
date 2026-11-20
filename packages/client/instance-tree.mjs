@@ -6,7 +6,7 @@ import { waitingClaim } from './waiting-on-you.mjs';
 import { byRuntimeState } from './instance-presentation.mjs';
 import { retireData } from './retire-state.mjs';
 import { displayLine } from './display-text.mjs';
-import { drawingFirst } from './same-work.mjs';
+import { drawingFirst, drawsSiblingLink } from './related-work.mjs';
 
 export function collapseKey(workspace, instance) {
   return `${workspace || ""}\u0000${instance}`;
@@ -66,14 +66,43 @@ export function resolveLinkId(fromInstance, name, byName) {
   return sameRoot.length === 1 ? instanceId(sameRoot[0]) : null;
 }
 
-/** The roster's order, a comparator for `sort`: by instance name, ties broken by `instanceId`, so it is total and
- * deterministic. It ranks roots, siblings under one parent, and so clusters (by their first root). A start or a
- * stop moves no row; only adding or removing one does (Pepe's decision on #1262, comment 6196531154, which
- * replaces #1083's running-first order for the roster). The one place the roster's order is decided. */
-function rosterOrder(a, b) {
+/** When a row was spawned, in ms: its `createdAt` (the kernel's ISO time from instance.json), or null when it has
+ * none or the reader can't parse it. */
+function spawnTime(instance) {
+  const time = typeof instance.createdAt === "string" ? Date.parse(instance.createdAt) : NaN;
+  return Number.isFinite(time) ? time : null;
+}
+
+/** The roster's order, a comparator for `sort`: by spawn time, newest first (Pepe, 2026-11-13: "by spawn time not
+ * alphabetically, i.e. new to old"); a row with no readable spawn time after every row with one; then by instance
+ * name, ties broken by `instanceId`, so it is total and deterministic. It ranks roots, siblings under one parent,
+ * and so clusters (by their first root: a bundle sits where its newest root sits, so a new child never moves it).
+ * A spawn time never changes, so a start or a stop moves no row; only adding or removing one does (#1262's
+ * recognition rule, whose name order this replaces; #1083's running-first order stays out of the roster). The one
+ * place the roster's order is decided; a pin ranks before it at every level (`pinnedFirst`, `clusterInstances`,
+ * `instanceSiblings`), and pinning or unpinning is the one act besides adding or removing a row that moves one. */
+export function rosterOrder(a, b) {
+  const ta = spawnTime(a), tb = spawnTime(b);
+  if (ta !== tb) return ta === null ? 1 : tb === null ? -1 : tb - ta;
   const ia = instanceId(a), ib = instanceId(b);
   return String(a.instance).localeCompare(String(b.instance)) || (ia < ib ? -1 : ia > ib ? 1 : 0);
 }
+
+/** The kernel feature that reports a row's `pinned` (oats instance pin; docs/desktop-cli-api.md "Pinned instances"). */
+export const PIN_FEATURE = "instance-pin";
+
+/** Whether a row is pinned: its own `pinned` is exactly `true`, read only where this computer's CLI lists
+ * `PIN_FEATURE` (`pins`). A remote row carries `pinned` only when its host's own feature list names it too
+ * (remote-roster.mjs remotePanel drops it otherwise). Any other value, and every value without the feature, is no
+ * pin: a stray field from an older host is ignored, as `backgroundPlacement` reads `background`. */
+export function rowPinned(instance, pins) {
+  return pins === true && instance?.pinned === true;
+}
+
+/** Pinned first (Pepe, 2026-11-19), a comparator for one level of the roster: a node that `lifted(node)` says holds
+ * a pin (itself, or a descendant in its tree) before one that does not; 0 between two of the same kind, for the
+ * roster's order (`rosterOrder`) to decide. So several pinned nodes keep that order among themselves. */
+const pinnedFirst = (lifted) => (a, b) => (lifted(b) ? 1 : 0) - (lifted(a) ? 1 : 0);
 
 /** Each instance's siblings by EXPLICIT link (#1312): Y is X's sibling when X's sibling link
  * (`siblingLinksOf`) resolves to Y (`resolveLinkId` over `instances`), or Y's resolves to X. So both
@@ -83,8 +112,9 @@ function rosterOrder(a, b) {
  * <parent>"), and `relation`/`relativeTo` are not read: they record how an instance was spawned, not a
  * current relation. Pass one deployment's FULL roster, never a filtered list: dropping rows can turn an
  * ambiguous name into a false unique one. Returns Map<instanceId, instance[]>; an instance with no
- * sibling is absent from the map. */
-export function instanceSiblings(instances) {
+ * sibling is absent from the map. `pins`: the CLI lists `PIN_FEATURE`; then a pinned sibling comes first, by its
+ * own `pinned` (`rowPinned`: siblings are no subtree). */
+export function instanceSiblings(instances, { pins = false } = {}) {
   const byId = new Map(instances.map((i) => [instanceId(i), i]));
   const byName = new Map();
   for (const i of instances) {
@@ -105,7 +135,37 @@ export function instanceSiblings(instances) {
       add(other, id);
     }
   }
-  return new Map([...ids].map(([id, set]) => [id, [...set].map((s) => byId.get(s)).sort(rosterOrder)]));
+  const order = (a, b) => pinnedFirst((i) => rowPinned(i, pins))(a, b) || rosterOrder(a, b);
+  return new Map([...ids].map(([id, set]) => [id, [...set].map((s) => byId.get(s)).sort(order)]));
+}
+
+/** Each instance's siblings by a RELATED explicit link: Y is X's when X's sibling link resolves to Y and X draws it
+ * (related-work.mjs `drawsSiblingLink`: its host reports `relatedWork` on a top-level row), or the same from Y to
+ * X, so both ends of a related link name each other. The links are `instanceSiblings`' (direct links only, resolved
+ * by identity over `instances`, self excluded), kept where related. Pass one deployment's FULL roster, as there.
+ * Returns Map<instanceId, Set<instanceId>>; an instance with no related sibling is absent from the map. */
+export function relatedSiblings(instances) {
+  const byName = new Map();
+  for (const i of instances) {
+    if (!byName.has(i.instance)) byName.set(i.instance, []);
+    byName.get(i.instance).push(i);
+  }
+  const out = new Map();
+  const add = (a, b) => {
+    if (!out.has(a)) out.set(a, new Set());
+    out.get(a).add(b);
+  };
+  for (const i of instances) {
+    if (!drawsSiblingLink(i)) continue;
+    const id = instanceId(i);
+    for (const name of siblingLinksOf(i)) {
+      const other = resolveLinkId(i, name, byName);
+      if (!other || other === id) continue;
+      add(id, other);
+      add(other, id);
+    }
+  }
+  return out;
 }
 
 /** Group instances into agent CLUSTERS — connected components of the
@@ -115,18 +175,24 @@ export function instanceSiblings(instances) {
  * cluster members related only by sibling links sit at depth 0.
  * Nodes are keyed by instanceId (composite identity), never bare name —
  * duplicate names across repos render as distinct nodes.
- * Under one parent, the children that draw their parent line come first (same-work.mjs `drawingFirst`: on a
- * host that declares instance-same-work, the flagged ones), each part in the roster's order (#1577). The product
- * owner's contract (awebai/oats#1577, comment 6441606665) refines the name order (the Desktop expert's decision
- * roster-name-order-preserves-recognition) inside one parent's children only: roots, clusters and groups keep it.
+ * Under one parent, the children that draw their parent line come first (related-work.mjs `drawingFirst`: the
+ * ones their host reports related to their parent), each part in the roster's order (#1577). A related sibling
+ * link changes no order (the lead's choice B, 2026-11-20). The product
+ * owner's contract (awebai/oats#1577, comment 6441606665) refines the roster's order inside one parent's children only: roots, clusters and groups keep it.
  * Returns [{ key, instances: [{...instance, depth}] }] with clusters ranked by
- * their first ROOT in the roster's order (`rosterOrder`), never by another member (#1262): a bundle sits where
+ * their first ROOT in the roster's order (`rosterOrder`; pinned clusters first, `pins` below), never by another member (#1262): a bundle sits where
  * its root sits, and gaining or losing a child, or a start or a stop, moves nothing. A cluster without a root
  * (a malformed cycle) ranks by its first member in that order.
  * `roster` (optional): the full roster `instances` is a part of (#1579: one section of it). Names resolve over it,
  * so a part never turns an ambiguous name into a false unique one, and a link that resolves to a row outside the
- * part is no edge: such a row is a root of its part, as a row whose parent is gone. Without it, `instances`. */
-export function clusterInstances(instances, { links = instanceLinks, roster = instances } = {}) {
+ * part is no edge: such a row is a root of its part, as a row whose parent is gone. Without it, `instances`.
+ * `pins` (the CLI lists `PIN_FEATURE`; Pepe, 2026-11-19): pinned first at every level, ahead of the roster's order.
+ * A node ranks pinned when it or a descendant in its cluster's tree is pinned (`rowPinned`), so a pinned child
+ * lifts its group to the top and the path down to it rises among its siblings; a cluster ranks pinned when any
+ * member is pinned (its head's subtree, and the members a sibling link puts in the group). Under one parent,
+ * `drawingFirst` stays first (structural), then the pin, then the roster's order. Pinned nodes at one level keep
+ * the roster's order among themselves. Without it (an older CLI), `pinned` is ignored. */
+export function clusterInstances(instances, { links = instanceLinks, roster = instances, pins = false } = {}) {
   const byId = new Map(instances.map((i) => [instanceId(i), i]));
   const byName = new Map();
   for (const i of roster) {
@@ -166,31 +232,46 @@ export function clusterInstances(instances, { links = instanceLinks, roster = in
     // parent-first tree order INSIDE the component (cycle-safe: the walk
     // visits each member once; leftovers append at depth 0)
     const memberIds = new Set(members.map(instanceId));
+    // The members whose subtree holds a pin: each pinned member and its ancestors in this cluster, walked up the
+    // resolved parent relation once (cycle-safe: a member already lifted ends the walk).
+    const lifted = new Set();
+    for (const i of members) {
+      if (!rowPinned(i, pins)) continue;
+      for (let id = instanceId(i); id && memberIds.has(id) && !lifted.has(id); id = parentIdOf.get(id)) lifted.add(id);
+    }
+    const first = pinnedFirst((i) => lifted.has(instanceId(i)));
+    const order = (a, b) => first(a, b) || rank(a, b);
     const kids = (p) => members.filter((i) => parentIdOf.get(instanceId(i)) === instanceId(p));
     const roots = members.filter((i) => {
       const pid = parentIdOf.get(instanceId(i));
       return !pid || !memberIds.has(pid);
     });
-    roots.sort(rank);
+    // The cluster's rank among the others is its head's as it was without pins: its first root by the roster's
+    // order (with no root, its first member). A pin decides only whether the cluster leads (`pinned`); among
+    // clusters that do, and among those that don't, the existing rule stands (done-when 2), whichever root is pinned.
+    const head = [...(roots.length ? roots : members)].sort(rank)[0];
+    roots.sort(order);
     const ordered = [];
     const placed = new Set();
     const walk = (i, depth) => {
       if (placed.has(instanceId(i))) return;
       placed.add(instanceId(i));
       ordered.push({ ...i, depth });
-      kids(i).sort((a, b) => drawingFirst(a, b) || rank(a, b)).forEach((k) => walk(k, depth + 1));
+      kids(i).sort((a, b) => drawingFirst(a, b) || order(a, b)).forEach((k) => walk(k, depth + 1));
     };
     roots.forEach((r) => walk(r, 0));
-    for (const i of [...members].sort(rank)) walk(i, 0); // malformed cycles must not hide members
+    for (const i of [...members].sort(order)) walk(i, 0); // malformed cycles must not hide members
     // Deterministic cluster label: the lexically-smallest ROOT name —
     // independent of liveness, so the visible cluster name does not flip
     // when a different member starts/stops running (review f921f7d nit).
-    // `rank` (rosterOrder: by name) governs display ORDER within the cluster.
+    // `order` (pinned first, then rosterOrder: by spawn time, newest first) governs display ORDER within the cluster.
     const rootNames = (roots.length ? roots : members).map((i) => i.instance).sort();
-    clusters.push({ key: rootNames[0], instances: ordered, head: roots[0] ?? [...members].sort(rank)[0] });
+    clusters.push({ key: rootNames[0], instances: ordered, head, pinned: lifted.size > 0 });
   }
-  // Stable: clusters whose heads rank equal keep the order they were found in (the roster's order of members).
-  return clusters.sort((a, b) => rank(a.head, b.head)).map(({ head: _head, ...c }) => c);
+  // Pinned clusters first, then by head (its rank without pins). Stable: clusters whose heads rank equal keep the
+  // order they were found in.
+  const clusterFirst = pinnedFirst((c) => c.pinned);
+  return clusters.sort((a, b) => clusterFirst(a, b) || rank(a.head, b.head)).map(({ head: _head, pinned: _pinned, ...c }) => c);
 }
 
 /** `clusterInstances` output ordered by last focus (#1383; the command palette's order, never the sidebar's).
@@ -200,7 +281,7 @@ export function clusterInstances(instances, { links = instanceLinks, roster = in
  * each parent. Nodes without a key follow every node with one, in their input order (a stable sort), so an
  * empty record returns the input order. A child stays under its parent: each cluster is walked again in
  * pre-order, every depth unchanged. A parent's children keep the roster's split (#1577): those that draw their
- * parent line first (same-work.mjs `drawingFirst`), recency deciding within each part; roots are not split. Parentage is read from the pre-order and the depths alone (a node's
+ * parent line first (related-work.mjs `drawingFirst`), recency deciding within each part; roots are not split. Parentage is read from the pre-order and the depths alone (a node's
  * children are the following rows one level deeper, until a row at its depth or above), never from names: the
  * tree was built by identity, and a malformed cycle's depth-0 leftovers are roots like any other. Returns new
  * cluster objects over the same rows; the input is not mutated. */
@@ -489,9 +570,9 @@ export function filterInstanceTree(instances, query, matches = null) {
  * re-linking nodes while the user types (merged-state review @3e76616).
  * Cluster order and member depths come from the full-roster computation;
  * clusters with no visible member disappear. */
-export function visibleClusters(allInstances, visibleInstances, { links = instanceLinks } = {}) {
+export function visibleClusters(allInstances, visibleInstances, { links = instanceLinks, pins = false } = {}) {
   const visibleIds = new Set(visibleInstances.map((i) => instanceId(i)));
-  return clusterInstances(allInstances, { links })
+  return clusterInstances(allInstances, { links, pins })
     .map((c) => ({ ...c, instances: c.instances.filter((i) => visibleIds.has(instanceId(i))) }))
     .filter((c) => c.instances.length);
 }
@@ -510,12 +591,14 @@ export function visibleClusters(allInstances, visibleInstances, { links = instan
  * ordered by last focus (`recencyOrder`) before the groups form by the same rule, so a run is the consecutive
  * single clusters of that order, keyed by its first member there. What is visible still decides only which rows
  * are listed, never the order. Without it, the roster's own order (the sidebar's and the TUI's).
- * `roster` (optional): the full roster `allInstances` is a part of, as for `clusterInstances`. */
-export function rosterGroups(allInstances, visibleInstances, { links = instanceLinks, lastFocus, roster = allInstances } = {}) {
+ * `roster` (optional): the full roster `allInstances` is a part of, as for `clusterInstances`.
+ * `pins` (optional): the CLI lists `PIN_FEATURE`, as for `clusterInstances`. Pinned single clusters rank first, so
+ * they form the leading run, keyed by its first member as any run is. */
+export function rosterGroups(allInstances, visibleInstances, { links = instanceLinks, lastFocus, roster = allInstances, pins = false } = {}) {
   const visibleIds = new Set(visibleInstances.map((i) => instanceId(i)));
   const groups = [];
   let place = 0, run = null;
-  const clusters = clusterInstances(allInstances, { links, roster });
+  const clusters = clusterInstances(allInstances, { links, roster, pins });
   for (const c of lastFocus instanceof Map ? recencyOrder(clusters, lastFocus) : clusters) {
     const shown = { ...c, instances: c.instances.filter((i) => visibleIds.has(instanceId(i))) };
     if (c.instances.length > 1) {

@@ -45,6 +45,7 @@ const DASHED = Object.freeze({
   E_PLACEMENT_TAKEN: ['review-again', 'check the new name and press Spawn again.'],
   E_CLI_TIMEOUT: ['check-result', 'use Check result before spawning again.'],
   E_CLONE_MISSING: ['details', 'Details shows how.'],
+  E_SANDBOX_PLACEMENT: ['details', 'Details says what to do instead.'],
 });
 const joined = (fact, words, dashed = false) => !words ? fact : dashed ? `${fact.replace(/\.$/, '')} — ${words}` : `${fact} ${words}`;
 

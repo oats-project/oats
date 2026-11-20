@@ -41,10 +41,10 @@ test("the sentences that name the Desktop are the Desktop's strings, byte for by
   // capability-show-contract.mjs
   assert.equal(capabilityShowUnreadable(T), "This Desktop can't read what this OATS version reports about the capability. Update OATS Desktop.");
   // workspace-views.mjs: the ssh step, the unreadable report, and this machine's label where none is given
-  assert.deepEqual(deploymentReasonParts({ local: false, machine: 'altair', sshHost: 'altair.lan', probe: { ok: false, error: { code: 'E_SSH', message: 'Host key verification failed.' } } }, T), {
-    short: 'ssh needs a prompt', detail: 'altair needs ssh to connect without a prompt; run `ssh altair.lan` once in a terminal.',
-    fix: ['Run `ssh altair.lan` once in a terminal and answer its prompt (a host key or a password).', 'Desktop tries again on its next read.'] });
-  assert.equal(deploymentReason({ local: false, machine: 'altair', probe: { ok: true }, identityStatus: 'invalid' }, T), "altair reported a workspace this Desktop can't read.");
+  assert.deepEqual(deploymentReasonParts({ local: false, machine: 'devbox', sshHost: 'devbox.lan', probe: { ok: false, error: { code: 'E_SSH', message: 'Host key verification failed.' } } }, T), {
+    short: 'ssh needs a prompt', detail: 'devbox needs ssh to connect without a prompt; run `ssh devbox.lan` once in a terminal.',
+    fix: ['Run `ssh devbox.lan` once in a terminal and answer its prompt (a host key or a password).', 'Desktop tries again on its next read.'] });
+  assert.equal(deploymentReason({ local: false, machine: 'devbox', probe: { ok: true }, identityStatus: 'invalid' }, T), "devbox reported a workspace this Desktop can't read.");
   assert.equal(deploymentReason({ local: true, identityStatus: 'invalid' }, T), "This Mac reported a workspace this Desktop can't read.");
   assert.equal(deploymentReason({ local: false, probe: { ok: true }, identityStatus: 'old' }, T), "This Mac's OATS is too old to report its workspace; update OATS there.");
   assert.deepEqual(deploymentReasonParts({ local: false, probe: { ok: true }, identityStatus: 'old' }, T).fix, ['Update OATS on This Mac.']);
@@ -52,10 +52,10 @@ test("the sentences that name the Desktop are the Desktop's strings, byte for by
   assert.deepEqual(deploymentLabelParts({ label: '~/Agents/oats' }, T), { machine: 'This Mac', path: '~/Agents/oats' });
   assert.equal(deploymentLabel({ label: '~/Agents/oats' }, T), 'This Mac · ~/Agents/oats');
   assert.equal(deploymentLabel(undefined, T), 'This Mac');
-  const two = [{ id: 'a', path: '/a/oats' }, { id: 'b', path: '/b/oats-v2' }, { id: 'c', machine: 'altair', path: '/c/tsm' }];
-  assert.deepEqual([...machineLabels(two, T)], [['a', 'This Mac · oats'], ['b', 'This Mac · oats-v2'], ['c', 'altair']]);
-  assert.deepEqual([...machineLabelParts(two.slice(1), T)], [['b', { machine: 'This Mac', tail: '' }], ['c', { machine: 'altair', tail: '' }]]);
-  const rows = [{ instance: 'dev-1', agent: 'dev', home: '/b/oats-v2/agents/dev/instances/dev-1', deployment: { id: 'b' } }];
+  const two = [{ id: 'a', path: '/a/oats' }, { id: 'b', path: '/b/oats-qa' }, { id: 'c', machine: 'devbox', path: '/c/web' }];
+  assert.deepEqual([...machineLabels(two, T)], [['a', 'This Mac · oats'], ['b', 'This Mac · oats-qa'], ['c', 'devbox']]);
+  assert.deepEqual([...machineLabelParts(two.slice(1), T)], [['b', { machine: 'This Mac', tail: '' }], ['c', { machine: 'devbox', tail: '' }]]);
+  const rows = [{ instance: 'dev-1', agent: 'dev', home: '/b/oats-qa/agents/dev/instances/dev-1', deployment: { id: 'b' } }];
   assert.deepEqual(rosterSections(rows, rows, two.slice(1), T).map(s => [s.label, s.machine, s.tail]), [['This Mac', 'This Mac', '']]);
   // deployment-facts.mjs: a deployment whose kernel lacks a feature this client needs (#855, 1d)
   assert.equal(deploymentUnavailableText({ status: 'unavailable', reason: { code: 'E_DEPLOYMENT_FEATURE', feature: 'served-identity' } }, T),

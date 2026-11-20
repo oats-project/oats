@@ -33,7 +33,7 @@ function desktop({ saved, served, validate, ready = true, failWrite = false }) {
   return { add: path => execute({ id: path, path }, () => true), sets: () => sets, writes, servers };
 }
 
-test('Juan-style: saved [A, B] with B missing, add C: persisted [A, B, C], served [A, C]', async () => {
+test('a saved list with a missing entry: saved [A, B] with B missing, add C: persisted [A, B, C], served [A, C]', async () => {
   const d = disk(A, C); // B's volume is not mounted
   const raw = JSON.stringify([A, B]);
   // Startup: B is not served, and stays saved (nothing is written: the launch opened nothing new).
@@ -112,7 +112,7 @@ test('a kept saved entry that is not a deployment stays inert: never served, nev
   // The proxy's not-served refusal (and so Re-add) needs a deployment that validates: a read of the kept
   // entry is proxied like any unknown id, never answered as "not served".
   const known = new Set([A, parent, C]);
-  const refusal = createUnservedRefusal({ base: () => 'http://127.0.0.1:4820', body: workspaceNotServed,
+  const refusal = createUnservedRefusal({ body: workspaceNotServed,
     state: () => ({ allowedWs: new Set([A, C]), known: path => known.has(path) && !!d.validate(path) }) });
   assert.equal(refusal(`/api/panel?ws=${encodeURIComponent(parent)}`), null);
   d.unmount(C); assert.equal(refusal(`/api/panel?ws=${encodeURIComponent(C)}`), null, 'a missing one is inert the same way');

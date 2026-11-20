@@ -201,7 +201,10 @@ home its deployment's kernel reported for it, canonicalizing to
 home check (`E_HOME_UNVERIFIED`), then the CLI call (`cliStart`, with its wait),
 and says whether the CLI ran. A failed start is `refused`, nothing was
 started: every refusal of the gate and the home check, the kernel's
-`E_SESSION_START_BUSY` and `E_SESSION_RUNNING` (`STARTED_NOTHING_CODES`), and
+`E_SESSION_START_BUSY`, `E_SESSION_START_LOCK_STUCK` (an earlier OATS's start
+lock in the home, which a person removes: its sentence says so, and the
+kernel's message under it names the path) and `E_SESSION_RUNNING`
+(`STARTED_NOTHING_CODES`), and
 its `E_LIFECYCLE_BUSY` and `E_INSTANCE_RETIRING` when the answering kernel
 lists `lifecycle-claim-start` (`CLAIM_STARTED_NOTHING_CODES`: a stop, an upgrade
 or a retire holds the home, or a retirement or a failed spawn left cleanup to

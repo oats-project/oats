@@ -19,7 +19,7 @@ import { pageCardCSS, pageBar, pageCard, pageFacts, pageSection } from '../capab
 import { iconElement } from '../shell-icons.mjs';
 import { harnessName } from '../identity-marks.mjs';
 import { postJson, ensureTheme, wsQuery, currentWorkspace, onWorkspaceChange } from './common.mjs';
-import { cliStatus, cliCard, cliKnownUnavailable, onCliChange } from './cli-status.mjs';
+import { cliStatus, cliCard, cliKnownUnavailable, onCliChange, cliAboveTested, aboveTestedCard, cliHeldBack } from './cli-status.mjs';
 
 export const automationsCSS = `
 .automations { display:flex; flex-direction:column; height:100%; min-height:0; min-width:0; background:var(--bg); color:var(--fg); container-type:inline-size; }
@@ -1064,14 +1064,22 @@ export function mountAutomationsPage(el, ctx, kind, extend = () => ({}), { cli: 
     const cli = readCli(), ok = automationsSupported(cli), ws = currentWorkspace(), describes = automationDescriptionsSupported(cli);
     // Capability trigger sources (feature trigger-sources): a trigger page's gate, and nothing of a schedule's.
     const sources = kind === 'trigger' && ok && triggerSourcesSupported(cli);
-    const key = JSON.stringify([ok, describes, sources, ws, cliKnownUnavailable()]);
+    // Above the tested bound (#1879) every switch, run, test and description is held back
+    // (packages/client/above-tested.mjs): the page lists, its notice says why, and no act is offered.
+    const heldBack = verb => cliHeldBack(`POST /api/automations ${kind}:${verb}`, cli) !== null;
+    const notice = !!cliAboveTested(cli);
+    const key = JSON.stringify([ok, describes, sources, ws, cliKnownUnavailable(), notice]);
     if (key === shown) return; // CLI polls re-emit; rebuild only when the gate changes
     shown = key; view?.dispose(); view = null; card?.dispose?.(); card = null;
     if (cliKnownUnavailable()) { const body = gate(`${title} need the OATS CLI`); card = cliCard(doc, ctx); body.append(card.el); return; }
     if (!cli) { gate('Checking the OATS CLI…'); return; }
-    if (!ok) { gate(`${title} need OATS 0.29 or later`, `Update OATS to see the workspace's ${title.toLowerCase()} and this computer's own, and where each one runs.`); return; }
-    if (!ws) { gate('Choose a workspace', `${title} are read for one local workspace.`); return; }
+    // The notice says what a newer CLI holds back on every page it reaches, a gated one too: above the tested bound
+    // a CLI with no automations API of a known shape is still accepted, and its gate alone would say nothing of why.
+    const mountNotice = () => { if (notice) { card = aboveTestedCard(doc, ctx); root.prepend(card.el); } };
+    if (!ok) { gate(`${title} need OATS 0.29 or later`, `Update OATS to see the workspace's ${title.toLowerCase()} and this computer's own, and where each one runs.`); mountNotice(); return; }
+    if (!ws) { gate('Choose a workspace', `${title} are read for one local workspace.`); mountNotice(); return; }
     root.replaceChildren();
+    mountNotice();
     // A source's "Open capability" resolves against this workspace's catalog (the held `oats capabilities` table,
     // read once per build): exactly one row of that name, or the source stays text.
     const catalog = new Map(), built = ++builds;
@@ -1081,7 +1089,7 @@ export function mountAutomationsPage(el, ctx, kind, extend = () => ({}), { cli: 
       view?.repaint(); // the open page gains its Open capability
     }).catch(() => { /* the source stays text */ });
     view = createAutomationsView(root, {
-      kind, now: () => Date.now(), verbs: AUTOMATION_VERBS[kind], sources,
+      kind, now: () => Date.now(), verbs: AUTOMATION_VERBS[kind].filter(verb => !heldBack(verb)), sources,
       canOpenCapability: name => catalog.get(name) === 1, openCapability: sources && typeof ctx.openCapability === 'function' ? name => ctx.openCapability(name) : null,
       heading: frame ? frame.heading(doc) : null, onCount: frame ? n => frame.onCount(kind, n) : null,
       read: () => call({ kind, action: 'list' }),
@@ -1094,7 +1102,7 @@ export function mountAutomationsPage(el, ctx, kind, extend = () => ({}), { cli: 
         return call({ kind, action: verb, key: row.key, ...(runSource === true ? { runSource: true } : {}) });
       },
       status: kind === 'trigger' ? row => call({ kind, action: 'status', key: row.key }) : null,
-      describe: describes ? (row, description) => call({ kind, action: 'describe', key: row.key, description }) : null,
+      describe: describes && !heldBack('describe') ? (row, description) => call({ kind, action: 'describe', key: row.key, description }) : null,
       // Read-only through the contained /api/file; a member without a clone opens its web page.
       openFile: row => { if (row.origin.localPath) ctx.openFile?.(row.origin.localPath); else if (row.origin.url) ctx.openExternal?.(row.origin.url); },
       ...extend(call),

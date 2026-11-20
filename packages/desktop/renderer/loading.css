@@ -35,21 +35,16 @@
 .skeleton-roster-row .skeleton-name { width: 55%; height: 12px; }
 .skeleton-roster-row .skeleton-meta { width: 38%; height: 9px; }
 
-/* Soul card: wears the real card classes (views/spawn.mjs sizes .soul-card, .sbody, .sname .glyph, .schip, .sfoot);
+/* Soul card: wears the real card classes (views/spawn.mjs sizes .soul-card, .stitle, .sdesc, .sfoot);
    only the bones' own sizes live here. A description bone box is one real line (1.45em): two make the clamp. */
+.skeleton-soul-card { display: grid; min-width: 0; }
 .skeleton-soul-card .soul-card { pointer-events: none; cursor: default; }
 .skeleton-soul-card .soul-card:hover { border-color: var(--border); }
-.skeleton-soul-card .glyph.skeleton { border-radius: 8px; }
-.skeleton-soul-card .sidentity { gap: 5px; }
-.skeleton-soul-card .skeleton-name { height: 13px; width: 45%; }
-.skeleton-soul-card .skeleton-context { height: 10px; width: 60%; }
+.skeleton-soul-card .skeleton-name { display: block; height: 13px; width: 45%; }
 .skeleton-soul-card .sdesc.skeleton-desc { display: flex; flex-direction: column; justify-content: center; height: calc(2 * 1.45em); gap: 0.65em; }
 .skeleton-soul-card .skeleton-text { display: block; height: 0.8em; width: 90%; }
 .skeleton-soul-card .skeleton-text.short { width: 60%; }
-.skeleton-soul-card .schip.skeleton { width: 6.5em; padding: 0; background: color-mix(in srgb, var(--fg) 10%, transparent); } /* .soul-card .schip's tag fill would win */
-.skeleton-soul-card .schip.skeleton.short { width: 4.5em; }
-.skeleton-soul-card .skeleton-activity { height: 11px; width: 36%; }
-.skeleton-soul-card .skeleton-button { margin-left: auto; width: 64px; height: 24px; border-radius: 7px; }
+.skeleton-soul-card .skeleton-activity { display: block; height: 11px; width: 36%; }
 /* The context panel's Messaging card while its inspection runs: compact team rows wearing the card's classes
    (teams-panel.mjs sizes .team-row / .team-glyph); only the bones' own sizes live here. */
 .instance-teams-skeleton { pointer-events: none; }

@@ -37,6 +37,9 @@ module.exports = {
     "spawn-apply-proxy.mjs",
     "server-compat.mjs",
     "server-host.mjs",
+    "backend-client.mjs",
+    "backend-socket.mjs",
+    "retired-settings.mjs",
     "tmux-target.mjs",
     "local-tmux-io.mjs",
     "remote-target.mjs",
@@ -51,9 +54,8 @@ module.exports = {
     "session-resume-launch.mjs",
     "server/**/*",
     "renderer/**/*",
-    // Only the sidebar mark ships as a file; the platform icons are wired
-    // below and the 1254px source artwork stays out of the package.
-    "assets/brand/generated/sidebar-48.png",
+    // No brand image ships as a file: the platform icons are wired below
+    // and the 1254px source artwork stays out of the package.
     "package.json",
     "!renderer/harness.html",
     "!renderer/harness-server.mjs",

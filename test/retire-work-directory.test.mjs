@@ -44,10 +44,10 @@ function deployment(t, { checkout = false } = {}) {
   if (checkout) { execFileSync("git", ["init", "-q", fx.dep], { env: fx.env }); git(fx.dep, "commit", "--allow-empty", "-qm", "the deployment is a checkout"); }
   const envelope = (r) => { try { return r.json(); } catch { assert.fail(`no envelope: ${r.stdout}${r.stderr}`); } };
   /** The plan of one instance: its JSON result, its text, and the text's `defaults:` line. */
-  const plan = (instance) => {
-    const json = envelope(fx.cli(["retire", instance, "--plan", "--json"]));
+  const plan = (instance, flags = []) => {
+    const json = envelope(fx.cli(["retire", instance, "--plan", "--json", ...flags]));
     assert.equal(json.ok, true, JSON.stringify(json.error));
-    const text = fx.cli(["retire", instance, "--plan"]);
+    const text = fx.cli(["retire", instance, "--plan", ...flags]);
     assert.equal(text.status, 0, text.stdout + text.stderr);
     const lines = text.stdout.split("\n").filter((l) => l.startsWith("  defaults: "));
     assert.equal(lines.length, 1, text.stdout);
@@ -248,7 +248,7 @@ for (const receipt of [true, false]) {
     d.record(inst.home, receipt ? withoutWork : stub);
     if (!receipt) rmSync(d.baselines(inst.home), { recursive: true });
     const repo = realpathSync(d.fx.member);
-    const seen = d.plan(inst.instance);
+    const seen = d.plan(inst.instance, receipt ? [] : ["--force"]);
     assert.deepEqual(seen.defaults, { retainWorktree: true, deleteBranch: false, stopChildren: true, retainChildren: true });
     assert.equal(seen.line, OWN_TREE_LINE);
     assert.equal(seen.facts.workMode, null);
@@ -257,7 +257,14 @@ for (const receipt of [true, false]) {
     assert.equal(seen.facts.work.untracked, 1);
     assert.ok(seen.notes.includes(`the record names no repository for the work tree: the retire uses the one Git names for it, ${repo}, and does not write it into the record`), JSON.stringify(seen.notes));
     assert.ok(seen.notes.includes("0 changed and 1 untracked file(s) would be retained with the worktree"), JSON.stringify(seen.notes));
-    const result = d.retired(inst.instance);
+    // A stub does not say which retire hooks to run: the retire refuses it, and --force is the way
+    // through (test/retire-after-interrupted-spawn.test.mjs). What it does with the tree is the same.
+    if (!receipt) {
+      const error = d.refused(inst.instance, [], "E_UNIDENTIFIED_INSTANCE_HOME");
+      assert.equal(error.details.reached.phase, "before-effects");
+      assert.equal(readFileSync(join(work, FILE), "utf8"), BYTES);
+    }
+    const result = d.retired(inst.instance, receipt ? [] : ["--force"]);
     assert.equal(result.removedDir, true);
     assert.equal(result.retention.worktree, "retained");
     assert.equal(result.retention.branch, branch);

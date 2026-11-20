@@ -25,3 +25,6 @@ packages/desktop/dist/
 
 # Runnerless release lane outputs (scripts/release-lane.mjs): tarballs, assets, logs, MANIFEST.json
 /stage/
+
+# Disposable mirror fetch/staging scratch; deployment packages/capabilities remain visible.
+/.agents/mirror-*/

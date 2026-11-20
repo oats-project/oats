@@ -2,9 +2,12 @@ import { harnessOf } from "./harness-names.mjs";
 import { unsupportedSession, unsupportedSessionOrigin, hasRuntimeError } from "./instance-presentation.mjs";
 import { madeByKernel } from "./kernel-made.mjs";
 import { waitingOnYouData } from "./waiting-on-you.mjs";
+import { attributedHumanData } from "./attributed-human.mjs";
 import { retireData } from "./retire-state.mjs";
 import { readIdentity } from "./workspace-views.mjs";
 import { sameRepo } from "./repo-moves.mjs";
+import { hostAdvertises } from "./composed-gate.mjs";
+import { PIN_FEATURE } from "./instance-tree.mjs";
 /** Projection of the installed CLI's remote roster. Never reads remote paths locally. */
 export function remoteWorkspace(group) {
   return {
@@ -46,7 +49,7 @@ export function remotePanel(group, at) {
   const described = name => { const soul = (group.souls || []).find((a) => a?.name === name); return typeof soul?.description === "string" ? soul.description : null; };
   // A Herdr-recorded row is unsupported whatever the host's probe said: it cannot open or start.
   const instances = (group.instances || []).map(({ runtime: _released, runtimeErrorOrigin: _sent, retire: sentRetire, sameWork: sentSameWork,
-    sameWorkKnown: _gate, ...i }) => {
+    relatedWork: sentRelatedWork, relatedWorkKnown: _gate, pinned: sentPinned, ...i }) => {
     const unsupported = unsupportedSession(i);
     const origin = unsupported ? unsupportedSessionOrigin(i) : group.probe.ok || (group.probe.error?.message && madeByKernel(group.probe.error)) ? "kernel" : "roster-read";
     const row = {
@@ -61,11 +64,20 @@ export function remotePanel(group, at) {
       tmux: i.tmux || null, git: i.git || null, task: i.task || "", next: i.next || "",
       // Needs input: only a remote kernel with the feature reports it — validated, never synthesized when absent.
       ...(Object.hasOwn(i, "waitingOnYou") ? { waitingOnYou: waitingOnYouData(i.waitingOnYou) } : {}),
+      // The owning human (feature spawn-attribution): the host's label validated again here (attributed-human.mjs),
+      // a malformed one null; a host that does not report it leaves it absent.
+      ...(Object.hasOwn(i, "attributedHuman") ? { attributedHuman: attributedHumanData(i.attributedHuman) } : {}),
       // #1247: the host's retire state, relayed unchanged when it is in the contract (retire-state.mjs), else absent.
       ...(retireData(sentRetire) ? { retire: retireData(sentRetire) } : {}),
-      // #1577: the host's same-work flag, true only (anything else reads unflagged). `sameWorkKnown` is this
-      // client's own field (same-work.mjs), never a host's: whatever a host sent under it is dropped.
+      // The host's related-work flags, each true only (anything else reads unflagged). `relatedWorkKnown` is this
+      // client's own field (related-work.mjs), never a host's: whatever a host sent under it is dropped.
+      ...(sentRelatedWork === true ? { relatedWork: true } : {}),
       ...(sentSameWork === true ? { sameWork: true } : {}),
+      // Feature instance-pin: the host's pin, true only (anything else reads unpinned; instance-tree.mjs rowPinned),
+      // and only from a host whose own feature list names it (composed-gate.mjs hostAdvertises: the group's
+      // probe.features, which a CLI with server-probe-features relays). The kernel relays a row's pinned whatever
+      // its host lists, so a stray field from an older host, or an unknown list, never pins a row here.
+      ...(sentPinned === true && hostAdvertises(group, PIN_FEATURE) ? { pinned: true } : {}),
       ...(unsupported ? { running: null, runtimeState: "unsupported", runtimeError: unsupported } : {}),
     };
     return hasRuntimeError(row) && origin ? { ...row, runtimeErrorOrigin: origin } : row;

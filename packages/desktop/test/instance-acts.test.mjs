@@ -206,8 +206,9 @@ test("no sentence it returns names the Desktop, its window or its menus", () => 
   }
 });
 
-/* ── openAct: whether a row's terminal can be opened, and why not. It is read from instanceActs' answer
- *    and from nothing else of the row, and it is not one of that answer's acts. ── */
+/* ── openAct: whether a row's terminal can be opened, and why not. It is read from instanceActs' answer,
+ *    and of the row only from whether it runs on a session provider (the last tests); it is not one of that
+ *    answer's acts. ── */
 const NO_TERMINAL = "No live terminal is reported.";
 const closed = (reason) => ({ verb: "open", enabled: false, reason });
 
@@ -277,7 +278,7 @@ test("openAct's answer, on every row the menu's parity test draws: one act's sha
   assert.deepEqual([...codes].sort(), [null, "not-running", "state-unknown", "unsupported-session"].sort(), "the table draws every answer");
 });
 
-test("openAct reads the row only through instanceActs: it touches no key of the row that instanceActs does not", () => {
+test("openAct reads a row that runs in tmux only through instanceActs: it touches no key of the row that instanceActs does not", () => {
   const read = (fn, row) => {
     const keys = new Set(), note = (key) => { if (typeof key === "string") keys.add(key); };
     fn(new Proxy(row, {
@@ -291,4 +292,77 @@ test("openAct reads the row only through instanceActs: it touches no key of the 
   for (const [name, row] of Object.entries(ROWS)) assert.deepEqual(read(openAct, row), read(instanceActs, row), name);
   // Not vacuous: the reading sees what a row is asked.
   assert.ok(read(instanceActs, ROWS.running).includes("running"));
+});
+
+/* ── Session providers (spec C1): a row whose `backend` is a provider's name ("bb") runs in no terminal. Its
+ *    acts follow the running table; Open is never enabled, says where the agent runs, and carries the link
+ *    the provider offers. ── */
+const BB = { ...LOCAL, backend: "bb", tmux: null, session: { provider: "oats.bb", threadId: "thr_x" } };
+const BB_LINK = { label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_x" };
+const BB_SENTENCE = "Runs in a bb thread; open it in bb.";
+
+test("A2: a provider row's acts follow the running table; Open is not enabled (no-terminal) and its reason carries the row's link", () => {
+  assert.deepEqual(verbsOf({ backend: "bb", running: true }), ["inspect", "restart", "stop", "retire"]);
+  const open = openAct({ backend: "bb", running: true });
+  assert.equal(open.enabled, false);
+  assert.equal(open.reason.code, "no-terminal");
+  assert.deepEqual(openAct({ backend: "bb", running: true, open: { label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_x" } }).reason.link,
+    { label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_x" });
+  assert.deepEqual(verbsOf({ backend: "bb", running: null }), ["inspect", "stop", "retire"]);
+});
+
+test("a provider row, state by state: the acts of a tmux row in that state, each enabled; Open the same answer in every state", () => {
+  for (const running of [true, false, null, undefined]) {
+    assert.deepEqual(instanceActs({ ...BB, running }), instanceActs({ ...LOCAL, running }), String(running));
+    assert.deepEqual(openAct({ ...BB, running }), { verb: "open", enabled: false, reason: { code: "no-terminal", sentence: BB_SENTENCE } }, String(running));
+    assert.deepEqual(openAct({ ...BB, running, open: BB_LINK }), { verb: "open", enabled: false, reason: { code: "no-terminal", sentence: BB_SENTENCE, link: BB_LINK } }, String(running));
+  }
+  // The sentence is this home's own (no origin), names the provider, and no client surface.
+  assert.equal(openAct({ ...BB, backend: "my-provider-2", running: true }).reason.sentence, "Runs in a my-provider-2 thread; open it in my-provider-2.");
+  assert.ok(!Object.hasOwn(openAct({ ...BB, running: true }).reason, "origin"));
+});
+
+test("a provider row's link: only an http(s) url with no credentials and a label, only on a row of this machine; anything else is the sentence alone", () => {
+  const linkOf = (row) => openAct({ ...BB, running: true, ...row }).reason.link;
+  assert.deepEqual(linkOf({ open: { label: "Open in bb", url: "https://bb.example/t/1", extra: 1 } }), { label: "Open in bb", url: "https://bb.example/t/1" });
+  for (const open of [null, undefined, "http://127.0.0.1/", [], {}, { label: "Open", url: "file:///etc/passwd" }, { label: "Open", url: "javascript:alert(1)" },
+    { label: "Open", url: "not a url" }, { label: "", url: "http://127.0.0.1/" }, { label: 7, url: "http://127.0.0.1/" }, { label: "Open" },
+    { label: "Open", url: "http://user:pw@127.0.0.1/" }, { label: "Open", url: "http://user@127.0.0.1/" },
+    { label: "x".repeat(201), url: "http://127.0.0.1/" }, { label: "Open", url: `http://127.0.0.1/${"x".repeat(1800)}` }]) {
+    assert.equal(linkOf({ open }), undefined, JSON.stringify(open)?.slice(0, 80));
+    assert.deepEqual(openAct({ ...BB, running: true, open }).reason, { code: "no-terminal", sentence: BB_SENTENCE });
+  }
+  // Another machine's row: the url is that host's own loopback, so no link; the reason stands.
+  assert.deepEqual(openAct({ ...REMOTE, backend: "bb", running: true, open: BB_LINK }), { verb: "open", enabled: false, reason: { code: "no-terminal", sentence: BB_SENTENCE } });
+  assert.deepEqual(verbsOf({ ...REMOTE, backend: "bb", running: true }), ["inspect", "restart", "stop", "retire"]);
+});
+
+test("which rows are a provider's: no backend, \"tmux\" and a value that is no text open as before; any other text is a provider's, named in the sentence only when it is a name; a held or unaddressable provider row says its own reason", () => {
+  for (const backend of [undefined, null, "tmux", "", 7]) {
+    assert.deepEqual(openAct({ ...LOCAL, backend, running: true, open: BB_LINK }), { verb: "open", enabled: true, reason: null }, String(backend));
+    assert.deepEqual(openAct({ ...LOCAL, backend, running: false }), closed({ code: "not-running", sentence: NO_TERMINAL }), String(backend));
+  }
+  // Present and not tmux, but no name the contract allows: no terminal, the acts of its state, and none of its text in the sentence.
+  for (const backend of ["Not A Name", "bb!", "-bb", "session-provider", "x".repeat(41), "<img src=x>", "bb\nrm -rf"]) {
+    assert.deepEqual(openAct({ ...LOCAL, backend, running: true }), closed({ code: "no-terminal", sentence: "Runs outside tmux; it has no terminal to open." }), backend);
+    assert.deepEqual(openAct({ ...LOCAL, backend, running: true, open: BB_LINK }).reason.link, BB_LINK, backend);
+    assert.deepEqual(verbsOf({ ...LOCAL, backend, running: true }), ["inspect", "restart", "stop", "retire"], backend);
+  }
+  assert.equal(openAct({ ...BB, running: false, spawnInProgress: true }), null);
+  assert.equal(openAct({ ...BB, running: true, rollbackIncomplete: true }), null);
+  assert.equal(openAct({ ...REMOTE, backend: "bb", addressable: false, running: true }), null);
+});
+
+test("A3: a Herdr-recorded row answers as it did before session providers, whatever else it carries", () => {
+  const stem = "E_HERDR_REMOVED: Herdr is no longer supported by OATS (removed in 0.31.0); tmux is the only session backend.";
+  const start = { verb: "start", enabled: false, reason: { code: "unsupported-session", sentence: stem } };
+  for (const row of [{ ...LOCAL, running: true, sessionTarget: "herdr:pane-1" }, { ...REMOTE, running: true, backend: "herdr" }, { ...LOCAL, running: false, backend: "herdr" },
+    { ...LOCAL, running: true, backend: "bb", sessionTarget: { backend: "herdr" }, open: BB_LINK }, { ...LOCAL, running: true, backend: "herdr", open: BB_LINK },
+    { ...LOCAL, running: null, backend: "bb", runtimeState: "unsupported", open: BB_LINK }]) {
+    assert.deepEqual(instanceActs(row), offered([on("inspect"), start, on("stop"), on("retire")]), JSON.stringify(row));
+    assert.deepEqual(openAct(row), closed(start.reason), JSON.stringify(row));
+  }
+  // The kernel's own text, when it sent one, as before.
+  const own = { ...LOCAL, running: null, backend: "bb", runtimeState: "unsupported", runtimeError: HERDR, open: BB_LINK };
+  assert.deepEqual(openAct(own), closed({ code: "unsupported-session", sentence: HERDR, origin: "unattributed" }));
 });

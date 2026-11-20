@@ -27,7 +27,10 @@ function wiring() {
     error: (line) => calls.push(["error", line]),
   });
   assert.equal(trigger, made, "the wiring returns what the maker made");
-  assert.equal(options.cli, cli, "the CLI is passed as given");
+  // The trigger's probe is gated (above the tested bound the sweep is held back: above-tested-gate.test.mjs);
+  // within the bound it is the probe as given, and nothing is logged.
+  assert.equal(options.cli(), CLI, "within the tested bound the CLI's probe is passed as given");
+  assert.deepEqual(calls, [], "and nothing is logged");
   assert.deepEqual(Object.keys(options).sort(), ["cli", "onReading"], "run and read are the trigger's defaults");
   return { calls, onReading: options.onReading };
 }
@@ -114,11 +117,11 @@ function apiHandler() {
   assert.ok(start >= 0 && end > start, "main.mjs has its api handler");
   return { start, end, source: main.slice(start, end) };
 }
-const ACCEPTED = "if (epoch === serverEpoch && !serverHost.inTransition() && r.ok && route === 'panel') {";
+const ACCEPTED = "if (epoch === serverEpoch && !serverHost.inTransition() && held() && r.ok && route === 'panel') {";
 /** The accepted-panel-reply block of the api handler, from its source. */
 function acceptedBlock() {
   const api = apiHandler(), start = api.source.indexOf(ACCEPTED);
-  assert.ok(start >= 0, "the api handler accepts a panel reply under the epoch, transition, ok and route checks");
+  assert.ok(start >= 0, "the api handler accepts a panel reply under the epoch, transition, generation, ok and route checks");
   const end = api.source.indexOf("\n  }\n", start);
   assert.ok(end > start);
   return { start: api.start + start, end: api.start + end, source: api.source.slice(start, end + 4) };
@@ -199,12 +202,13 @@ test("main observes once, in the api handler, inside the accepted-panel-reply co
 test("main's shipped accepted-panel block observes only accepted panel replies, with their local deployments, and updates workspaces as before", () => {
   const { source } = acceptedBlock();
   const instances = [{ home: "/h/a" }], workspaces = [{ id: "w" }];
-  const deployments = [{ id: "/d", local: true }, { id: "remote:altair:a1", local: false }, { id: "/e", local: true }];
-  const run = ({ epoch = 7, serverEpoch = 7, transition = false, ok = true, route = "panel", json = { instances, workspaces, deployments } } = {}) => {
+  const deployments = [{ id: "/d", local: true }, { id: "remote:devbox:a1", local: false }, { id: "/e", local: true }];
+  const run = ({ epoch = 7, serverEpoch = 7, transition = false, generation = true, ok = true, route = "panel", json = { instances, workspaces, deployments } } = {}) => {
     const seen = { observed: [], options: [], served: [] };
     const context = {
       epoch, serverEpoch, r: { ok }, route, json, allowedWs: "before",
       serverHost: { inTransition: () => transition },
+      held: () => generation, // the handler's own check of the generation it read under (serverHost.held())
       servedSelectors: (list) => `selectors of ${list.length}`,
       noteServed: (list) => seen.served.push(list),
       resumeTrigger: { observed: (rows, options) => { seen.observed.push(rows); seen.options.push(options); return Promise.resolve(); } },
@@ -229,7 +233,8 @@ test("main's shipped accepted-panel block observes only accepted panel replies, 
     assert.deepEqual(r.observed, [], JSON.stringify(odd));
   }
   for (const [what, refused] of [["a non-panel reply", { route: "roster" }], ["another route", { route: "instance-events" }], ["no route", { route: null }],
-    ["a non-ok reply", { ok: false }], ["a stale epoch", { epoch: 6 }], ["a request sent during a transition", { epoch: null }], ["in transition", { transition: true }]]) {
+    ["a non-ok reply", { ok: false }], ["a stale epoch", { epoch: 6 }], ["a request sent during a transition", { epoch: null }], ["in transition", { transition: true }],
+    ["a reply of a generation that ended meanwhile", { generation: false }]]) {
     const r = run(refused);
     assert.deepEqual(r.observed, [], what);
     assert.deepEqual(r.served, [], what);

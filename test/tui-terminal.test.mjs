@@ -64,6 +64,7 @@ const withPath = async (path, fn) => { const saved = process.env.PATH; process.e
 
 /** A fixture deployment (test/helpers/v2-deployment.mjs) with three instances that never ran:
  *  `alpha` and its child `beta` of the soul `dev`, and `gamma` of the soul `reviewer`, alone.
+ *  `gamma` is spawned first: the list is newest first (docs/tui.md), so alpha's cluster is on top.
  *  `souls` and `capabilities` are the fixture's (v2Deployment's options): a test that needs a
  *  capability makes a world of its own with one.
  *  `enter` is a script that sets the fixture's environment and then becomes its arguments: a
@@ -88,9 +89,9 @@ async function deployment(t, { souls = { dev: {}, reviewer: {} }, capabilities =
   const fx = v2Deployment({ souls, capabilities, t });
   const world = { fx, dep: fx.dep, enter: join(fx.base, "enter.sh"), holdFile: join(fx.base, "hold"), heldFile: join(fx.base, "held"), seenFile: join(fx.base, "collector-tmux.env") };
   world.spawn = (soul, options) => withPath(fx.env.PATH, () => fx.spawn(soul, { harness: "claude", ...options }));
+  await world.spawn("reviewer", { name: "gamma" });
   world.home = (await world.spawn("dev", { name: "alpha" })).home;
   await world.spawn("dev", { name: "beta", relativeTo: "alpha", relation: "child" });
-  await world.spawn("reviewer", { name: "gamma" });
   const front = world.front = join(fx.base, "front");
   mkdirSync(front);
   writeFileSync(join(front, "tmux"), `#!/bin/sh

@@ -47,22 +47,25 @@ export const TEXT_PAIRS = Object.freeze([
 ].map(pair => Object.freeze(pair)));
 
 /** [graphic, surface] pairs held to GRAPHIC_CONTRAST: graph connectors (the
- * Active overview's edges, Setup's tree lines) and the sidebar's dotted sibling
- * link are meaningful graphics, and a
+ * Active overview's edges, Setup's tree lines), the sidebar's dotted sibling
+ * link and its solid related-work lines are meaningful graphics, and a
  * terminal's selection fill is the one sign of what a copy will take (issue 672). */
 export const GRAPHIC_PAIRS = Object.freeze([
   ...["bg", "surface", "surface-2"].map(bg => Object.freeze(["graph-edge", bg])),
   // The sidebar's dotted sibling link (shell.css .ctx-guide.link-*), the sibling cue alone on its column (issue 1312),
   // on every row fill: plain, hovered and selected.
   ...["surface", "surface-2", "sel"].map(bg => Object.freeze(["tree-link", bg])),
+  // The roster's solid lines (shell.css .ctx-guide line, elbow, down): drawn for related work only, so the line is the
+  // sign of it (the related-work lines), on every row fill it crosses: plain, hovered and selected.
+  ...["surface", "surface-2", "sel"].map(bg => Object.freeze(["tree-stroke", bg])),
   // A native select's chevron (theme.css select.field): --muted, on the field and on a disabled field.
   ...["surface", "surface-2"].map(bg => Object.freeze(["muted", bg])),
   Object.freeze(["term-sel", "term-bg"]),
   // A running lifecycle confirmation's spinner arc (lifecycle-dialog.mjs .spinner) on the dialog's --surface.
   Object.freeze(["accent", "surface"]),
-  // A problem dot, in --danger since yellow means needs input only (2026-10-26): the keybinding clash dot on the
-  // settings cog and its menu item, and the Workspace page's Setup and Teams attention dot, on a focused or lit --sel
-  // (--surface and --surface-2 are text pairs already).
+  // A problem dot, in --danger since yellow means needs input only (2026-10-26): the keybinding clash dot on the foot's
+  // ?, the pinned Automations row's failure mark (slice 1), and the Workspace page's Setup and Teams attention dot, on a
+  // focused or lit --sel (--surface and --surface-2 are text pairs already).
   Object.freeze(["danger", "sel"]),
   // An instance's colour (issue 1421; instance-dot.mjs): its dot, filled or a ring, on every fill it is drawn on: the
   // roster's rows (plain, hovered, selected), the tab strip and its active and focused tab, the palette's rows, the

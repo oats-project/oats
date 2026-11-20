@@ -176,13 +176,15 @@ while a terminal is open); under 80 columns it has the whole width.
   kernel reported that were withheld (a home outside its soul's directory,
   or one reported twice), `2 withheld`, when there are any.
 - **The list** is the roster the Desktop draws: the same groups in the same
-  order, from the same code. It is in name order, by each group's top
-  instance, so starting or stopping an instance moves nothing. An instance
+  order, from the same code. It is in spawn order, newest first, by each
+  group's top instance, so starting or stopping an instance moves nothing. An instance
   that others were spawned from has them indented under it, and keeps its
   place when it gains or loses one. Under one parent, the instances that do
-  its work (the kernel's `sameWork`, from an OATS with `instance-same-work`)
-  come first, then the others, each part in name order, as the Desktop lists
-  them. An empty row stands between each run
+  its work (the kernel's `relatedWork`, from an OATS with `instance-related-work`)
+  come first, then the others, each part newest first, as the Desktop lists
+  them. Pinned instances come before all of these, at every level, and an
+  instance with a pinned one below it counts as pinned
+  ([Pinning](#pinning)). An empty row stands between each run
   of instances related to no other and the group before or after it. The
   indent alone says which instance is under which: no mark is drawn for
   it. A row whose instances are folded away (`h`) says how many after its
@@ -265,6 +267,25 @@ while a terminal is open); under 80 columns it has the whole width.
 - **Opening an agent.** `Enter` on an instance that runs opens its terminal
   beside the sidebar, where the detail was, as a tab: see
   [Open an agent's terminal](#open-an-agents-terminal) and [Tabs](#tabs).
+- **An agent that runs on a session provider** (a capability's session
+  backend, such as bb) has no terminal. The list shows it in the state OATS
+  reports (the detail says `running` or `stopped` when OATS says which, else
+  the provider's own word), and `S`, `R`, `X` and `D` act on it as on any agent. `Enter` opens
+  nothing: the line says where it runs ("Runs in a bb thread; open it in
+  bb.") and, when the provider offers a link, prints it under that
+  (`"Open in bb: http://…"`) for you to open. The palette does not
+  list it among the agents to open, the agent steps pass over it, and a
+  workspace's remembered tabs never open it. Its `!` mark shows whenever
+  OATS reports that it waits on you and it is not stopped
+  ([how the clients read `backend`](desktop-cli-api.md#row-backend-clients)).
+  Start the TUI outside an agent's home: OATS refuses to retire a home while
+  a process works in it, the TUI's own included, and names that process.
+  A known limit: when another machine's agent moves to a session provider
+  while the TUI is opening it, a check of its terminal that fails says
+  OATS's failure ("The session is no longer running on …") and not where
+  it runs, and an agent OATS holds by then (a retire that began) may have a
+  viewer started for it, which OATS refuses (`E_SESSION_NO_TERMINAL`).
+  Neither reaches another agent.
 
 **A view of more than one deployment** (this machine and another, or two
 deployments on one machine) is one list, grouped as the Desktop groups it:
@@ -702,7 +723,8 @@ Each terminal open in the panel is a tab, and the panel holds up to four.
     as the workspace was left. The shown tab is the most recent for
     [the palette](#the-palette).
   - A tab whose instance is gone or cannot be opened now (retired,
-    stopped) is dropped, and nothing is said of it. A group the drops
+    stopped, or now running on a session provider, which has no terminal)
+    is dropped, and nothing is said of it. A group the drops
     leave with no tab goes, as when its last tab is closed; a group that
     was empty when the workspace was left is empty again. A shown tab
     dropped gives its place to the next, else the one before.
@@ -744,9 +766,14 @@ The panel can be split in two **groups**, side by side or one above the
 other. Each group is a panel of [tabs](#tabs) of its own: a tab bar, a shown
 tab and the marks of its hidden ones.
 
-- **Splitting.** The leader then `|` splits the panel side by side, and the
-  leader then `-` one above the other; in the Instances view `|` and `-`
-  do the same without the leader. The tabs open stay in the first group
+- **The list out of the way.** The leader then `b` gives the shown terminal the
+  whole screen with the focus, and again gives the list back with the focus (the
+  Desktop's `b` hides its sidebar; the list is the TUI's). With no terminal shown
+  it does nothing.
+- **Splitting.** The leader then `|` (or `h`) splits the panel side by side, and the
+  leader then `-` (or `v`) one above the other; in the Instances view `|` and `-`
+  do the same without the leader. (`h` and `v` are Herdr's letters, shared with the
+  Desktop since its UI rework.) The tabs open stay in the first group
   (left, or top). The second group starts empty and is the focused group.
   - A split needs a tab open, and none starting.
   - **There are at most two groups.** With two, the split keys do nothing,
@@ -974,7 +1001,7 @@ selected.
 ```
   acme-platform                       │   dev
   acme-billing ●                      │   soul     dev
-  lfx                                 │   state    running
+  lab                                 │   state    running
   garnet                              │   harness  claude, claude-opus-5-5 (so…
   +2                                  │   work     worktree, agents/dev
                                       │   team     eng
@@ -983,7 +1010,7 @@ selected.
 
 The sidebar's first rows list the workspaces this run can show, one row a
 workspace, whatever machines it is on, in [the switcher](#the-switcher)'s
-order: `lfx` is one row however many machines hold it, and a machine the
+order: `lab` is one row however many machines hold it, and a machine the
 rules shared with the Desktop matched to no workspace is a row by its own
 name, in the same flat list. A row is one line: the name. With one
 workspace the list is its row.
@@ -1028,7 +1055,7 @@ workspace the list is its row.
   that list fills the sidebar, which then has no such row, does the line
   take a row, the list giving up its last. With the list's focus (`w`) the
   focus stays there, the cursor where it was. A workspace with a deployment of this
-  machine not opened yet (lfx, with `~/Work/lfx` on this computer's list)
+  machine not opened yet (lab, with `~/Work/lab` on this computer's list)
   opens it first, as the switcher's `Enter` does. What the workspace left
   had open is kept for it, as for a switch from the
   switcher ([Tabs](#tabs)), and from a terminal's focus the focus is kept
@@ -1068,9 +1095,9 @@ switcher covers the whole screen.
  workspaces                                     │ > * acme-platform
                                                 │       This machine
  Instances                                    1 │       garnet
- Souls                                        2 │     lfx
+ Souls                                        2 │     lab
  Capabilities                                 3 │       This machine · not opened
-────────────────────────────────────────────────│       athenea (lfx)
+────────────────────────────────────────────────│       builder (lab)
  Ctrl+X   commands                              │   Not matched to a workspace
  Ctrl+K   palette                               │     basalt                ssh needs a prompt
  Enter    open                                  │   On this machine, not opened
@@ -1296,10 +1323,42 @@ The exit status never depends on it.
 - An `oats tui` started again knows nothing of the acts an earlier one
   sent: `Check again` there answers that the plan expired, the list shows
   what the kernel reports, and against an earlier one's start still running
-  the kernel's start lock is the only guard.
+  the home's lifecycle claim is the only guard.
 - An agent on a machine whose OATS is older than 0.52.0: a stop interrupted
   there can leave `.oats-stop-pending.json` in the agent's home, and then
   the agent can be started but not stopped while that file exists.
+
+## Pinning
+
+`p` pins the selected instance to the top of its machine's list, or unpins a
+pinned one. It runs `oats instance pin <name> on|off` at once, with no
+confirmation: a pin changes only the order, and `p` again undoes it. The line
+under the sidebar's title says `Pinning <name>…`, then the result, and the
+list is read again, so the row moves.
+
+- **The order** is the Desktop's, from the same code. Pinned instances come
+  first at every level: the groups of a machine's list, the instances of a
+  group, and the children of one parent. An instance counts as pinned when
+  it or any instance below it is, so pinning a child lifts its whole group,
+  and the path down to it rises among its siblings. Among pinned instances,
+  and among the others, the order is spawn time, newest first. Under one
+  parent, the instances that do its work still come first. A pinned
+  background instance leads the Background section. A filter never
+  reorders the list. The palette lists the instances you opened most
+  recently first, as before, and the others in this order.
+- **Shared.** The pin is kept in the instance's home, so everyone who views
+  that machine sees it, in the TUI, the Desktop and another machine's view.
+  There is no pin of your own.
+- **When `p` does nothing**, the line says why: this OATS doesn't list the
+  `instance-pin` feature (then `oats instance pin <name> on|off` needs a
+  newer OATS too), the instance is held by a spawn or a retire, or its pin
+  is still changing. For an instance on another machine whose OATS doesn't
+  list the feature, the kernel refuses before it sends anything, and the
+  line gives its words.
+- **The key.** `p` is a default key from this version on. A `tui.json` that
+  gives `p` to another action is refused at the start, with a line that
+  names the key and both actions: move that action to another key, or give
+  `pin` another key (or none) in `tui.json`.
 
 ## Resuming lost sessions
 
@@ -1472,6 +1531,7 @@ that kind.
 | close the empty group | – | – | – | – | – | `x` |
 | stop, restart, start, retire | `X`, `R`, `S`, `D` | – | – | – | – | `X`, `R`, `S`, `D` |
 | spawn another of the soul | `N` | – | – | – | – | `N` |
+| pin or unpin (`oats tui` only; the Desktop's is in the row's menu) | `p` | – | – | – | – | – |
 | the Instances, Souls, Capabilities views | `1`, `2`, `3` | – | – | – | – | `1`, `2`, `3` |
 | the help | `?` | – | – | – | – | `?` |
 | the list | `Esc` | – | – | – | – | `Esc` |
@@ -1855,8 +1915,9 @@ open, `Alt+Shift+Up` and `Alt+Shift+Down` move between its groups instead
 ([The palette](#the-palette)).
 
 `CHORDS` also holds the Desktop's `edit-instance` (`Alt+R`, its name and
-colour dialog). The TUI has no such action, so it binds no key for it and
-`Alt+R` stays the agent's.
+colour dialog) and `mail` (`Alt+M`, its read-only mail sheet). The TUI has no
+such actions, so it binds no keys for them and `Alt+R` and `Alt+M` stay the
+agent's.
 
 There are three families, one choice per user for both clients
 ([Switch family](#switch-family)):

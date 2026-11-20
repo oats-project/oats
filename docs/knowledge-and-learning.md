@@ -37,7 +37,7 @@ A lesson is kept when both answers are yes:
 ## How learning flows
 
 1. **Instances work and capture evidence.** Each one keeps notes on what it decided and discovered.
-2. **An independent harvester judges what is worth keeping,** at set moments such as a pull request handed over or a task finished.
+2. **Each instance proposes what is worth keeping,** at set moments such as a pull request handed over or a task finished, judging its own notes against the knowledge base's bar.
 3. **The proposal is validated and delivered** through the knowledge base's acceptance process. For a Git-backed knowledge base that is a pull request, reviewed by a knowledge maintainer agent or a person.
 4. **Future instances consult the accepted result.**
 
@@ -68,5 +68,5 @@ A knowledge capability can organise knowledge per soul, per topic or per project
 
 ## Learn more
 
-- [Knowledge, instances and evolving expertise](knowledge-theory.md): the full model, including long-running instances, harvesting, maintenance, hand-offs and cloning.
+- [Knowledge, instances and evolving expertise](knowledge-theory.md): the full model, including long-running instances, proposing knowledge, maintenance, hand-offs and cloning.
 - [Knowledge operations](knowledge.md): how the knowledge capability is set up and run.

@@ -47,6 +47,8 @@ export function projectActivePanel(panel) {
     if (color) instance.color = color;
     // #1579: the row's own background flag, exactly true, for the sidebar's Background section; in the signature, so a change redraws.
     if (raw.background === true) instance.background = true;
+    // Feature instance-pin: the row's own pin, exactly true, for the roster's order and the pin mark; in the signature, so a change redraws.
+    if (raw.pinned === true) instance.pinned = true;
     // The exact soul the instance records (Go to soul): its soul key (string, or null when none is recorded) and
     // its soul source's repoKey, each kept only as a well-formed string, never guessed from the agent name.
     if (raw.soulKey === null || soulText(raw.soulKey)) instance.soulKey = raw.soulKey;

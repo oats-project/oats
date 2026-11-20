@@ -12,28 +12,28 @@ const local = (path) => ({ id: path, machine: 'This Mac', path, local: true, rea
 const far = (server, path) => ({ id: `remote:${server}:aaaaaaaaaaaa`, machine: server, path, local: false, reachable: true });
 
 test('machine labels: the machine alone, its path tail only when one machine holds two, never an id', () => {
-  assert.equal(pathTail('/Users/juan/awebai/oats-v2'), 'oats-v2');
+  assert.equal(pathTail('/Users/alex/example/oats-qa'), 'oats-qa');
   assert.equal(pathTail('/a/b/c', 2), 'b/c');
-  const labels = machineLabels([local('/Users/juan/Agents/oats'), local('/Users/juan/awebai/oats-v2'), far('altair', '/Users/juan/Agents/tsm')], DESKTOP_TERMS);
-  assert.deepEqual([...labels.values()], ['This Mac · oats', 'This Mac · oats-v2', 'altair']);
+  const labels = machineLabels([local('/Users/alex/Agents/oats'), local('/Users/alex/example/oats-qa'), far('devbox', '/Users/alex/Agents/web')], DESKTOP_TERMS);
+  assert.deepEqual([...labels.values()], ['This Mac · oats', 'This Mac · oats-qa', 'devbox']);
   const same = machineLabels([local('/a/x/oats'), local('/b/y/oats')], DESKTOP_TERMS);
   assert.deepEqual([...same.values()], ['This Mac · x/oats', 'This Mac · y/oats'], 'colliding tails take two segments');
-  assert.deepEqual([...machineLabels([far('vega', '')], DESKTOP_TERMS).values()], ['vega']);
+  assert.deepEqual([...machineLabels([far('laptop', '')], DESKTOP_TERMS).values()], ['laptop']);
   for (const label of [...labels.values(), ...same.values()]) assert.doesNotMatch(label, /remote:|aaaaaaaaaaaa/);
 });
 
 test('tabs: All then each deployment in served order; one deployment has only its own tab', () => {
-  const two = [local('/Users/juan/Agents/oats'), far('altair', '/srv/tsm')];
-  assert.deepEqual(deploymentTabs(two).map(t => [t.id, t.label]), [[ALL_TAB, 'All'], ['/Users/juan/Agents/oats', 'This Mac'], ['remote:altair:aaaaaaaaaaaa', 'altair']]);
-  assert.deepEqual(deploymentTabs([two[1]]).map(t => t.label), ['altair'], 'a single deployment: its tab, no All');
+  const two = [local('/Users/alex/Agents/oats'), far('devbox', '/srv/web')];
+  assert.deepEqual(deploymentTabs(two).map(t => [t.id, t.label]), [[ALL_TAB, 'All'], ['/Users/alex/Agents/oats', 'This Mac'], ['remote:devbox:aaaaaaaaaaaa', 'devbox']]);
+  assert.deepEqual(deploymentTabs([two[1]]).map(t => t.label), ['devbox'], 'a single deployment: its tab, no All');
   assert.deepEqual(deploymentTabs([]), []);
 });
 
 test('the selected tab is remembered per view, falls back to the first, and storage failures change nothing', () => {
-  const store = memory(), two = [local('/d1'), far('altair', '/srv')];
+  const store = memory(), two = [local('/d1'), far('devbox', '/srv')];
   assert.equal(selectedDeploymentTab('ws:v', two, store), ALL_TAB);
-  rememberDeploymentTab('ws:v', 'remote:altair:aaaaaaaaaaaa', store);
-  assert.equal(selectedDeploymentTab('ws:v', two, store), 'remote:altair:aaaaaaaaaaaa');
+  rememberDeploymentTab('ws:v', 'remote:devbox:aaaaaaaaaaaa', store);
+  assert.equal(selectedDeploymentTab('ws:v', two, store), 'remote:devbox:aaaaaaaaaaaa');
   assert.equal(selectedDeploymentTab('ws:v', [two[0]], store), '/d1', 'a remembered tab the view no longer has falls back');
   assert.equal(selectedDeploymentTab('ws:other', two, store), ALL_TAB, 'per view');
   for (let i = 0; i < DEPLOYMENT_TAB_VIEWS_MAX + 5; i++) rememberDeploymentTab(`ws:${i}`, '/d1', store);
@@ -48,11 +48,11 @@ test('the selected tab is remembered per view, falls back to the first, and stor
 test('a tab request is remembered and announced; a bad id is ignored', () => {
   const store = memory(), seen = [];
   const off = onDeploymentTabRequest(e => seen.push(e));
-  requestDeploymentTab('/rigel-view', '/rigel-view', store);
+  requestDeploymentTab('/build-view', '/build-view', store);
   requestDeploymentTab('', '/x', store);
   requestDeploymentTab('ws:v', 'bad\nid', store);
   off();
   requestDeploymentTab('ws:v', '/d1', store);
-  assert.deepEqual(seen, [{ view: '/rigel-view', tab: '/rigel-view' }]);
-  assert.equal(rememberedDeploymentTab('/rigel-view', store), '/rigel-view');
+  assert.deepEqual(seen, [{ view: '/build-view', tab: '/build-view' }]);
+  assert.equal(rememberedDeploymentTab('/build-view', store), '/build-view');
 });

@@ -173,18 +173,41 @@ const errors = {
   E_INTERRUPTED: 'The spawn was interrupted while its worktree hooks ran.',
   E_REQUIRED_HOOK_FAILED: 'A required worktree hook failed.',
   E_HOOK_ENVIRONMENT_CONTRACT: 'A worktree hook broke the hook environment contract.',
+  // Feature sandboxes (D-S1-4): a spawn into a sandbox is bound and keyed by the kernel itself, never by a
+  // confirmed apply. Shown only when the kernel's own message cannot travel.
+  E_SANDBOX_PLACEMENT: 'This soul runs in a sandbox, which a confirmed spawn cannot reach. Spawn it with `oats spawn <soul>` (OATS binds it to the sandbox itself) or from a schedule.',
 };
+/** Refusals whose kernel message and `details: {reason, remedy}` travel: the kernel says why and what a
+ *  person does next (feature sandboxes, E_SANDBOX_PLACEMENT). Nothing else of their details is kept. */
+export const KERNEL_WORDED_CODES = ['E_SANDBOX_PLACEMENT'];
+const MESSAGE_MAX = 2048, REMEDY_MAX = 1024;
+const REASON = /^[a-z][a-z0-9-]{0,63}$/;
+// As previewFailure bounds a kernel message: at most `max` characters, no control character but a
+// newline, no credential-shaped text.
+const boundedText = (v, max) => typeof v === 'string' && !!v.trim() && v.length <= max && !v.includes('\0')
+  && !/[\x00-\x09\x0b-\x1f\x7f]|https?:\/\/[^/\s]*@|(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{16,}/.test(v);
+/** A kernel-worded refusal's details as they travel: `reason` (a slug) and `remedy` (bounded text), each
+ *  only when valid; null when neither is. */
+export function kernelWordedDetails(details) {
+  if (!record(details)) return null;
+  const out = {
+    ...(typeof details.reason === 'string' && REASON.test(details.reason) ? { reason: details.reason } : {}),
+    ...(boundedText(details.remedy, REMEDY_MAX) ? { remedy: details.remedy } : {}),
+  };
+  return Object.keys(out).length ? out : null;
+}
 /** Feature worktree-event: a dispatched spawn failure with one of these codes and no
  * `details.unconfirmed: true` was rolled back by the kernel (confirmed compensation): nothing
  * was created. With the marker its cleanup is owed. Only these three; every other code keeps
  * the unknown-unless-proven rule. */
 export const ROLLED_BACK_CODES = ['E_INTERRUPTED', 'E_REQUIRED_HOOK_FAILED', 'E_HOOK_ENVIRONMENT_CONTRACT'];
-/** The kernel's message travels only for ROLLED_BACK_CODES (it names the capability and its log);
- * bounded here, and shown through displayLine. */
+/** The kernel's message travels for ROLLED_BACK_CODES (it names the capability and its log) and
+ * KERNEL_WORDED_CODES; bounded here, and shown through displayLine. */
 const kernelText = v => typeof v === 'string' && !!v.trim() && v.length <= 4096 && !v.includes('\0');
 export function spawnApplyReason(code, kernelMessage) {
   if (typeof code !== 'string') code = 'E_CLI_FAILED';
   if (ROLLED_BACK_CODES.includes(code)) return { code, message: kernelText(kernelMessage) ? kernelMessage : errors[code] };
+  if (KERNEL_WORDED_CODES.includes(code)) return { code, message: boundedText(kernelMessage, MESSAGE_MAX) ? kernelMessage : errors[code] };
   if (Object.hasOwn(errors, code)) return { code, message: errors[code] };
   const reason = previewFailure(code).reason;
   return reason.code === code && code !== 'E_CLI_FAILED' ? reason : { code: 'E_CLI_FAILED', message: errors.E_CLI_FAILED };

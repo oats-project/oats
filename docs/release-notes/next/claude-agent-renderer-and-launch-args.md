@@ -1,12 +1,12 @@
 ## Upgrade
 
-- **What users must do: move to Node.js 22 or later.** OATS now stops before
-  every command on older Node, including `version`, the reader and capability
-  commands. If you run OATS on Node 20 today, upgrade Node before continuing.
+- **What users must do: move to Node.js 22.5 or later.** OATS now stops before
+  every command on Node below 22, including `version`, the reader and
+  capability commands. If you run OATS on Node 20 today, upgrade Node before continuing.
   Node 18 and 20 receive `E_NODE_UNSUPPORTED` with exit 1, as one failure
   envelope on stdout with `--json`, or a message on stderr without it. Remote
   probes and Desktop discovery retain the host's refusal message. The npm
-  package also declares the Node 22 floor so installation warns about it.
+  package retains its Node 22.5.0 floor so installation warns about it.
 
 ## Added
 
@@ -19,7 +19,7 @@
 ## Fixed
 
 - **Claude agent panes skip the fullscreen-renderer offer.** At spawn and
-  every launch, oats.core 2.13.0 adds `"tui": "default"` to a Claude home's
+  every launch, oats.core 2.16.0 adds `"tui": "default"` to a Claude home's
   `.claude/settings.json` if no `tui` key is present. Any existing value is
   kept. Agent panes use Claude's classic renderer even where Claude now
   defaults to fullscreen, and even over a user-level `"tui": "fullscreen"`;

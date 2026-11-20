@@ -141,3 +141,29 @@ test("memory snapshots do not alias callers and never resurrect closed/foreign t
   assert.deepEqual(empty.split.groups.map(g => g.tabs), [[], []]);
   assert.equal(memory.recall("B", entries).split, null);
 });
+
+// Session providers (spec C1): a row whose `backend` is a provider's name has no terminal.
+test("A4: a remembered terminal tab whose row is now a provider's is not restored, in its group or as the active tab, and nothing errors", () => {
+  const memory = createWorkspaceTabMemory();
+  const row = (instance, extra = {}) => ({ instance, home: `/A/agents/dev/instances/${instance}`, running: true, tmux: { session: "oats", window: instance }, ...extra });
+  const bb = row("a", { backend: "bb", tmux: null });
+  // One group: 'a' was the active tab.
+  memory.remember("A", { split: null, activeTab: 1, sidebarMode: "instances", tabLayerVisible: true });
+  const entries = () => new Map([[1, { kind: "terminal", workspace: "A", instanceRef: bb }], [2, { kind: "terminal", workspace: "A", instanceRef: row("b") }]]);
+  assert.equal(memory.recall("A", entries()).activeTab, 2, "the other terminal is shown, never the provider row's");
+  assert.equal(memory.recall("A", new Map([[1, { kind: "terminal", workspace: "A", instanceRef: bb }]])).activeTab, null);
+  assert.equal(memory.recall("A", new Map([[1, { kind: "terminal", workspace: "A", instanceRef: bb }]])).tabLayerVisible, false);
+  // A split: 'a' leaves its group, which stays, and is never the active tab.
+  memory.remember("A", { split: filled("row", 1, 2), activeTab: 1, sidebarMode: "instances", tabLayerVisible: true });
+  const state = memory.recall("A", entries());
+  assert.deepEqual(state.split.groups.map(g => g.tabs), [[], [2]]);
+  assert.notEqual(state.activeTab, 1);
+  // The same tabs on tmux rows (named or not) come back as they were.
+  for (const backend of [undefined, "tmux"]) {
+    const tmux = new Map([[1, { kind: "terminal", workspace: "A", instanceRef: row("a", { backend }) }], [2, { kind: "terminal", workspace: "A", instanceRef: row("b") }]]);
+    const kept = memory.recall("A", tmux);
+    assert.deepEqual([kept.split.groups.map(g => g.tabs), kept.activeTab], [[[1], [2]], 1], String(backend));
+  }
+  // A tab that recorded no row (a file, a brain, an older terminal) is judged as before.
+  assert.equal(memory.recall("A", new Map([[1, { kind: "terminal", workspace: "A" }], [2, { kind: "terminal", workspace: "A" }]])).activeTab, 1);
+});

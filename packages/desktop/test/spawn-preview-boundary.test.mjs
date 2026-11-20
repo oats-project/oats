@@ -7,7 +7,7 @@ import { previewChoices, previewData } from '../../client/spawn-preview-contract
 import { cli, target, selector, anchor, context, request, data, envelope, deferred, tick, kernel, DEPLOYMENT, ROOT } from './helpers/spawn-preview-fixture.mjs';
 test('locator forwards exactly API2; old advertised API1 stays unavailable', async () => {
   for (const spawnPreviewApi of [undefined, 1, '2', true, 3, 2]) {
-    const found = await discover({ persisted: () => cli.bin, env: {}, isExecutableFile: () => true }, async () => ({ stdout: JSON.stringify({ schemaVersion: 1, name: '@awebai/oats', version: '0.26.0', desktopApi: 1, features: ['spawn-preview-2'], spawnPreviewApi }) }));
+    const found = await discover({ testedVersion: '0.69.17', persisted: () => cli.bin, env: {}, isExecutableFile: () => true }, async () => ({ stdout: JSON.stringify({ schemaVersion: 1, name: '@awebai/oats', version: '0.26.0', desktopApi: 1, features: ['spawn-preview-2'], spawnPreviewApi }) }));
     assert.equal(found.spawnPreviewApi, spawnPreviewApi === 2 ? 2 : undefined);
   }
 });

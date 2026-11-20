@@ -133,7 +133,9 @@ test('the shipped menu handler handles every action the menu can invoke and refu
     tabOpenIntents: { begin: () => () => true }, loadView: async () => ({ preselectHome: () => {} }), showStage: async () => opened.push('inspect'),
     api: (...args) => requests.push(args), postJson: (...args) => requests.push(args), instanceApiPath: (...args) => requests.push(args),
     // #1579: Move to background / out of it run through the background menu (instance-background-menu.mjs), its own handler.
-    backgroundMenu: { handles: action => action === 'background-on' || action === 'background-off', run: async action => { opened.push(action); } } };
+    backgroundMenu: { handles: action => action === 'background-on' || action === 'background-off', run: async action => { opened.push(action); } },
+    // Pin to top / Unpin run through the pin menu (instance-pin-menu.mjs), its own handler, as the background's do.
+    pinMenu: { handles: action => action === 'pin-on' || action === 'pin-off', run: async action => { opened.push(action); } } };
   const invoke = runInNewContext(`(${handler.replace('import("./views/spawn.mjs")', 'loadView("./views/spawn.mjs")')})`, c);
   // Every action a row's menu passes to invoke, in each launch state, with the shell's extra items.
   const invoked = new Set();
@@ -141,14 +143,15 @@ test('the shipped menu handler handles every action the menu can invoke and refu
     const dom = menuDom(), doc = dom.window.document, instance = { instance: 'dev', home: '/home/dev', running };
     const control = menuFor(doc, instance, { scope: 'A',
       extra: [{ action: 'open-split', label: 'Open in split' }, { action: 'open-pr', label: 'Open pull request…' },
-        { action: running ? 'background-on' : 'background-off', label: running ? 'Move to background' : 'Move out of background' }],
+        { action: running ? 'background-on' : 'background-off', label: running ? 'Move to background' : 'Move out of background' },
+        { action: running ? 'pin-on' : 'pin-off', label: running ? 'Pin to top' : 'Unpin' }],
       invoke: (action, row) => { invoked.add(action); return invoke(action, row); },
       openLifecycle: () => {}, report: (headline, { detail }) => assert.fail(`${headline} ${detail}`) });
     attach(doc.body, control);
     for (const item of control.querySelectorAll('[data-action]')) await choose(control, item.dataset.action);
     dom.window.close();
   }
-  assert.deepEqual([...invoked].sort(), ['background-off', 'background-on', 'inspect', 'open-pr', 'open-split', 'restart', 'start']);
+  assert.deepEqual([...invoked].sort(), ['background-off', 'background-on', 'inspect', 'open-pr', 'open-split', 'pin-off', 'pin-on', 'restart', 'start']);
   assert.deepEqual([...new Set(opened)].sort(), [...invoked].sort(), 'each invoked action reached its own handler');
   // Anything else is refused: no path is built from the action's name.
   for (const action of ['harvest', 'chat', 'retire', 'stop', '../panel']) {
@@ -185,8 +188,7 @@ for (const reject of [false, true]) test(`frame10 owner revokes menu late ${reje
 test('shipped frame10 action registration is menu-focus scoped, mouse/key equivalent and live rebind-aware without default Ctrl chords', async () => {
   const dom = menuDom(), doc = dom.window.document, source = readFileSync(new URL('../renderer/shell.mjs', import.meta.url), 'utf8'), off = [], calls = [];
   const c = { document: doc, activeInstanceMenu: null, tabLayerVisible: false, stage: null, setActiveContexts, getBinding, formatChord,
-    baseTitles: new WeakMap(), isMac: true, registerAction: spec => off.push(registerAction(spec)),
-    settingsMenu: { refresh() {} } }; // applyChordTitles refreshes the settings cog's chords (sidebar-settings.test.mjs)
+    baseTitles: new WeakMap(), isMac: true, registerAction: spec => off.push(registerAction(spec)) };
   const functions = ['updateActiveContexts', 'menuState', 'applyChordTitles'].map(name => source.match(new RegExp(`function ${name}\\([^]*?\\n\\}`))[0]).join('\n');
   const start = source.indexOf('for (const [id, action, label] of'), end = source.indexOf('registerAction({ id: "app.palette"', start);
   const s = runInNewContext(`${functions}\n${source.slice(start, end)}\n({ menuState, updateActiveContexts, applyChordTitles })`, c);

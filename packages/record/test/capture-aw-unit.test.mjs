@@ -8,6 +8,9 @@ import { RecordStore } from "../lib/store.mjs";
 import { DerivedState } from "../lib/derived-state.mjs";
 import { withCaptureGroup } from "../lib/capture-context.mjs";
 import { captureAwUnit } from "../lib/capture-aw-unit.mjs";
+import { captureAwLogs, captureCommLog, captureInteractionLog } from '../lib/capture-aw.mjs';
+import { captureHealth } from '../lib/capture-health.mjs';
+import { writeCurrentHook } from './fixtures/capture-hook-settings.mjs';
 import { resetSourceCursors, retrySetAside } from "../lib/capture-state.mjs";
 const stamp="2026-01-01T00:00:00Z",stream="fixture~aw";
 const entry=(n,ts=stamp)=>JSON.stringify({...(ts?{ts}:{}),dir:'recv',ch:'mail',msg_id:String(n),from:'alice',to:'fixture',body:String(n)})+'\n';
@@ -170,4 +173,39 @@ test('interaction units use their explicit projection context and reproject when
   const noop=f.step({kind:'interaction',selfName:'jack',workspace:'team'});assert.equal(noop.work.sourceBytes??0,0);
   f.finish({kind:'interaction',selfName:'jane',workspace:'team'});turns=f.store.readStream(stream);
   assert.deepEqual(turns.map(t=>t.from),['jack','jane']);
+});
+
+test('sealed AW records keep the cursor before ciphertext in public capture and command units', t => {
+  // aw omits tag on comm logs; it is optional on the sealed envelope.
+  for (const tag of [undefined, 'mail']) {
+  const sealed = JSON.stringify({ v: 1, key_id: 'key', tag, enc: 'aes256gcm', ct: 'ciphertext' }) + '\n';
+  const readable = (n, ts = stamp) => JSON.stringify({ ...JSON.parse(entry(n, ts)), kind: 'mail_in', text: String(n) }) + '\n';
+  const prefix = readable(0) + readable('refused', null) + ' \n';
+  for (const kind of ['comm', 'interaction']) {
+    const f = fixture(t, prefix + sealed + readable(1));
+    for (let retry = 0; retry < 2; retry++) {
+      const { result, cursor } = f.step({ kind, selfName: 'fixture', maxRecords: 10 });
+      assert.equal(result.sealed, 1);
+      assert.equal(result.failed, retry ? 0 : 1, 'readable projection errors still consume the line');
+      assert.equal(result.complete, false);
+      assert.equal(result.setAside.reason, 'sealed, not readable by this recorder');
+      assert.equal(cursor.bytes, Buffer.byteLength(prefix));
+      writeCurrentHook(join(f.root, '..'));
+      const health = captureHealth(f.root, { home: join(f.root, '..') });
+      const issue = health.rows.find(row => row.code === 'capture-input-set-aside');
+      assert.match(issue.message, /supply a readable source/);
+      assert.match(issue.message, /retry cannot decrypt ciphertext/);
+    }
+  }
+  for (const capture of [captureAwLogs, captureCommLog, captureInteractionLog]) {
+    const f = fixture(t, prefix + sealed + readable(1));
+    const options = { owner: 'fixture', selfName: 'fixture', path: f.path, commLogDir: join(f.path, '..') };
+    for (let retry = 0; retry < 2; retry++) {
+      const answer = capture(f.store, options), result = Array.isArray(answer) ? answer[0] : answer;
+      assert.equal(result.sealed, 1);
+      assert.equal(result.failed, capture === captureAwLogs && retry ? 0 : 1);
+      if (capture === captureAwLogs) assert.equal(f.state(s => s.get('aw', f.key)).bytes, Buffer.byteLength(prefix));
+    }
+  }
+  }
 });

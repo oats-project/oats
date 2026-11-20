@@ -35,6 +35,16 @@ oats aweb leave --labels <label>[,<label>]  # leave joined wider-team labels
   provider creates joined homes with `aw id team accept-invite` under
   `--identity-home`, verifies the root auto-connected, and does not run
   `aw init` inside the per-team home.
+- A join records its intent before the accept, so a join killed after aw
+  accepted the invite is not lost. A start then warns `unfinished join of
+  team <label>`. Run `oats aweb join --labels <label>` to finish it (no second
+  invite), or `oats aweb leave --labels <label>` to release it. Retire
+  releases it too. Never delete the `.aweb-identity-<label>` home by hand: it
+  holds the member key the release needs. If they refuse with `hosted accept
+  interrupted`, aw's accept was cut short and the server may hold the
+  membership: report it. A person reruns the same `aw id team accept-invite`
+  with the original invite, or the team's controller removes the member and
+  the `pending-hosted-accept` marker is deleted; then `oats aweb leave`.
 - Since oats.aweb 1.15 a joined team receives **live** (`receive: native`) when
   the host wake broker holds its identity: always on session-delivery homes,
   and on Claude/Pi channel homes through aw's mixed mode (the channel keeps the

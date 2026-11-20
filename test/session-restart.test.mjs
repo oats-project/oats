@@ -8,6 +8,8 @@ import { dirname, join, resolve } from "node:path";
 import { restartInstanceSession, startInstanceSession, inspectInstanceSession } from "../lib/core.mjs";
 import { readStartExited } from "../lib/session-end.mjs";
 import { readInstanceBackground, writeInstanceBackground } from "../lib/instance-background.mjs";
+import { readInstancePin, writeInstancePin } from "../lib/instance-pin.mjs";
+import { askBoardQuestion, readBoardRow, setBoardFact } from "../lib/instance-board.mjs";
 import { soulFiles, v2Deployment } from "./helpers/v2-deployment.mjs";
 import { packageRepo } from "./helpers/package-repo.mjs";
 import { isolateSessionEnvironment, oatsSocket, waitUntil } from "./helpers/host-fixture.mjs";
@@ -120,6 +122,12 @@ test("restart: every preflight before the stop; a polite harness ends on SIGTERM
   tmux("new-session", "-d", "-s", session, "-n", "hq", "-c", home);
   // Feature instance-background: the home's record outlives every start and restart below, which rewrite instance.json.
   writeInstanceBackground(home, true);
+  // Feature instance-pin: the pin outlives them too.
+  writeInstancePin(home, true);
+  // Feature instance-board: the board's facts outlive them too; its question belongs to the session it was
+  // asked in, which the first start's boundary ends.
+  setBoardFact(home, { key: "pr", label: "Pull request", value: "#1" });
+  askBoardQuestion(home, { question: "Squash?", options: ["yes", "no"] });
   const first = startInstanceSession(home, { env: env() });
   assert.equal(first.reused, "new");
   assert.ok(await waitFor(() => runningPid(home) !== null), "the first harness is up");
@@ -157,6 +165,9 @@ test("restart: every preflight before the stop; a polite harness ends on SIGTERM
   assert.equal(Object.fromEntries(readFileSync(join(home, "env.txt"), "utf8").split("\n").filter((l) => l.includes("=")).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)])).KEY, "again");
   assert.equal(readJson(join(home, "instance.json")).launch.model, "claude-sonnet-5", "the recipe follows the model-only start");
   assert.equal(readInstanceBackground(home), true, "a start, a restart and a start after exit keep the background record");
+  assert.equal(readInstancePin(home), true, "a start, a restart and a start after exit keep the pin");
+  assert.deepEqual(readBoardRow(home).facts.map((f) => [f.key, f.value]), [["pr", "#1"]], "a start, a restart and a start after exit keep the board's facts");
+  assert.deepEqual(readBoardRow(home).questions, [], "the question asked before the first start is not live after it");
 });
 
 test("restart: a harness that ignores SIGTERM is reported still running after the bounded wait; nothing is escalated or launched; a neighbour window is untouched", async () => {
@@ -518,12 +529,16 @@ test("package module drift appears on start and restart in JSON and text without
     let run = deployment.cli(["session", "restart", "--home", homes[0].home, "--json"], { env: { PATH: process.env.PATH } });
     assert.equal(run.status, 0, run.stdout + run.stderr);
     assert.deepEqual(JSON.parse(run.stdout).result.drift, [{ ...expected[0], locked: { version: "1.0.0", commit: next } }]);
-    // A removed package is kept, rather than being offered as an upgrade.
+    // A removed package is kept, rather than being offered as an upgrade: no drift, and one warning
+    // naming the respawn (an upgrade cannot move it), in the answer and as the text's WARNING line.
     delete locked.packages["acme.pkg"];
     write(lockPath, JSON.stringify(locked));
+    const respawn = "1 package module(s) cannot move in place (acme-tool: package acme.pkg is no longer locked); an upgrade keeps them as they are, so respawn this instance to move it onto the lock";
     run = deployment.cli(["session", "restart", "--home", homes[0].home], { env: { PATH: process.env.PATH } });
     assert.equal(run.status, 0, run.stdout + run.stderr);
     assert.equal(Object.hasOwn(JSON.parse(run.stdout), "drift"), false, "no drift preserves the existing start answer shape");
+    assert.deepEqual(JSON.parse(run.stdout).warnings.filter((w) => /cannot move in place/.test(w)), [respawn]);
+    assert.match(run.stderr, new RegExp(`^ {2}WARNING: ${respawn.replace(/[()]/g, "\\$&")}$`, "m"));
     assert.doesNotMatch(run.stderr, /package module\(s\) behind/);
   } finally {
     for (const f of homes) { try { tmux("kill-window", "-t", `=${session}:=${f.name}`); } catch { /* absent */ } }
@@ -640,6 +655,7 @@ test("K3 stop: plan reports real session/work facts and recorded children deepes
   const mk = (name, extraMeta = {}) => makeHome(name, { command: renderFor(join(root, "dev", "instances", name), name, join(binDir, "polite")), launch: recipeFor(join(root, "dev", "instances", name), name, { executable: join(binDir, "polite") }), ...extraMeta });
   const parent = await mk("k3-parent"), child = await mk("k3-child"), grandchild = await mk("k3-grandchild");
   writeInstanceBackground(parent.home, true);
+  writeInstancePin(parent.home, true);
   for (const [h, p] of [[child.home, "k3-parent"], [grandchild.home, "k3-child"]]) { const m = readJson(join(h, "instance.json")); m.parentInstance = p; write(join(h, "instance.json"), JSON.stringify(m, null, 2)); }
   for (const h of [parent.home, child.home, grandchild.home]) { startInstanceSession(h, { env: env() }); assert.ok(await waitFor(() => runningPid(h) !== null)); }
   const kids = descendantsOf(root, "k3-parent");
@@ -686,6 +702,7 @@ test("K3 stop: plan reports real session/work facts and recorded children deepes
   const again = startInstanceSession(parent.home, { env: env() }); assert.ok(again.reused); assert.ok(await waitFor(() => runningPid(parent.home) !== null));
   const one = stopInstanceSession(parent.home, { graceMs: 5000 }); assert.equal(one.stopped, true);
   assert.equal(readInstanceBackground(parent.home), true, "stop and start keep the background record");
+  assert.equal(readInstancePin(parent.home), true, "stop and start keep the pin");
   assert.deepEqual(stopInstanceSession(parent.home), { home: parent.home, backend: "tmux", stopped: false, alreadyIdle: true, state: stopInstanceSession(parent.home).state, receipt: null }, "stopping an idle instance is a no-op that says so");
 });
 
@@ -1111,16 +1128,16 @@ test("#691 a completed start's receipt is never recorded again: no write, no hoo
   process.kill(runningPid(home), "SIGKILL"); // test cleanup only
 });
 
-import { readSameWork, sameWorkOf, writeSameWork } from "../lib/instance-same-work.mjs";
-test("#1577 the same-work flag lasts as long as the home: through a start, a restart, a stop and a start, and a resume of a lost session, which rewrite instance.json only", async () => {
-  const name = "dev-same-work";
+import { readRelatedWork, relatedWorkOf, writeRelatedWork } from "../lib/instance-related-work.mjs";
+test("#1577 the related-work flag lasts as long as the home: through a start, a restart, a stop and a start, and a resume of a lost session, which rewrite instance.json only", async () => {
+  const name = "dev-related-work";
   const { home } = await makeHome(name, { command: renderFor(homeOf(name), name, join(binDir, "polite")), launch: recipeFor(homeOf(name), name, { executable: join(binDir, "polite") }) });
   const metaFile = join(home, "instance.json");
   write(metaFile, JSON.stringify({ ...readJson(metaFile), parentInstance: "dev-lead" }, null, 2) + "\n");
-  writeSameWork(home, "dev-lead");
+  writeRelatedWork(home, { parent: "dev-lead" });
   const flagged = (step) => {
-    assert.equal(readSameWork(home), "dev-lead", `${step}: the record is kept`);
-    assert.equal(sameWorkOf(home, readJson(metaFile).parentInstance), true, `${step}: still bound to the recorded parent`);
+    assert.deepEqual(readRelatedWork(home), { parent: "dev-lead" }, `${step}: the record is kept`);
+    assert.equal(relatedWorkOf(home, readJson(metaFile)), true, `${step}: still bound to the recorded parent`);
   };
   startInstanceSession(home, { env: env() });
   assert.ok(await waitFor(() => runningPid(home) !== null), "the harness is up");

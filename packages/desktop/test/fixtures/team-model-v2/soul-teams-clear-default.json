@@ -7,13 +7,13 @@
     "key": "release-manager",
     "defaultTeam": {
       "label": "mine",
-      "team": "mine:juan.aweb.ai",
+      "team": "mine:alex.aweb.ai",
       "from": "deployment"
     },
     "teams": [
       {
         "label": "mine",
-        "team": "mine:juan.aweb.ai",
+        "team": "mine:alex.aweb.ai",
         "default": true,
         "from": "local",
         "via": [

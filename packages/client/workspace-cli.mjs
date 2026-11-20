@@ -1,7 +1,7 @@
 /** Workspace model v2 verbs the Desktop drives: fixed argv, bounded output,
  * scrubbed instance environment. Only the kernel's JSON crosses back; a
  * refusal is its bounded error envelope (code + message, plus onboarding's
- * rolledBack flag), never stderr, argv, stacks or details objects.
+ * rolledBack flag and sync's `why` slug), never stderr, argv, stacks or details objects.
  *   capabilities → `oats capabilities --dir D [--max-age S] --json`  (capabilitiesApi 1)
  *   souls        → `oats souls --dir D [--max-age S] --json`         (soulsApi 1, the spawn catalog)
  *   capability-show → `oats capabilities show NAME (--member KEY | --package ID) [--file PATH]
@@ -10,7 +10,8 @@
  *   sync         → `oats sync --dir D --json`                (syncApi 1)
  *   onboard      → `oats onboard DIR --workspace REF --json` (onboardApi 2)
  * There is no package approval (packages-no-approval): declaring a package
- * is the trust decision, so every success exits 0. `--max-age` (feature
+ * is the trust decision, so every success exits 0, but one: a sync whose
+ * sandbox failed exits 1 with its report (sandboxFailureReport). `--max-age` (feature
  * observe-max-age) belongs to the three reads only and reaches argv only when
  * the probe declares the feature; cliWorkspace drops it otherwise. */
 import { execFile } from 'node:child_process';
@@ -27,6 +28,8 @@ export const WORKSPACE_MAX_BUFFER = 4 * 1024 * 1024;
 export const WORKSPACE_ACTIONS = Object.freeze(['capabilities', 'souls', 'sync', 'onboard', 'capability-show']);
 /** The read-only verbs: the ones `--max-age` may reach. */
 const READS = ['capabilities', 'souls', 'capability-show'];
+/** A refusal's `details.why`, as a client may carry it: a short lower-case slug. */
+const WHY_RE = /^[a-z][a-z0-9-]{0,31}$/;
 /** The kernel line this Desktop drives: workspace model v2 without package approval. */
 export const WORKSPACE_FEATURES = Object.freeze(['workspace-v2', 'packages-no-approval']);
 const absolute = path => typeof path === 'string' && !path.includes('\0') && isAbsolute(path) && resolve(path) === path;
@@ -95,6 +98,13 @@ export function workspaceArgv(options) {
   return { argv: ['sync', '--dir', options.context, '--json'], cwd: options.context, timeout: WORKSPACE_WRITE_TIMEOUT };
 }
 
+/** Whether a sync's exit is its one non-zero success: exit 1 exactly, an `ok: true` answer, and a
+ *  `result.sandboxes` entry whose `problems` is not empty (a failed sandbox; the lock is written). */
+function sandboxFailureReport(options, error, document) {
+  if (options.action !== 'sync' || error?.code !== 1 || error.killed || error.signal) return false;
+  const sandboxes = document?.result?.sandboxes;
+  return Array.isArray(sandboxes) && sandboxes.some(entry => record(entry) && Array.isArray(entry.problems) && entry.problems.length > 0);
+}
 /** `io.exec` is a client's own `execFile` (the rule is at cli-adapter.mjs `runJson`). */
 export function cliWorkspace(cli, options, terms, io = {}) {
   requireTerms(terms, 'cliWorkspace');
@@ -132,9 +142,14 @@ export function cliWorkspace(cli, options, terms, io = {}) {
           if (!error) return fail('E_CLI_PROTOCOL');
           const out = { code: reason.code, message: reason.message };
           if (options.action === 'onboard' && reason.details?.rolledBack === true) out.rolledBack = true;
+          // Which case of a shared code (E_PACKAGE_INTEGRITY's branch, package-id, …): data a client words, never prose.
+          if (options.action === 'sync' && typeof reason.details?.why === 'string' && WHY_RE.test(reason.details.why)) out.why = reason.details.why;
           return done({ ok: false, reason: out });
         }
-        if (error) return fail('E_CLI_FAILED'); // success is exit 0 only
+        // Success is exit 0, with one exception: a sync whose sandbox failed (feature sandboxes) wrote the lock
+        // and answers its report with `ok: true` and exit 1, the failure in a sandbox entry's `problems`
+        // (docs/desktop-cli-api.md, `oats sync`). That one answer is a report; any other exit is a failure.
+        if (error && !sandboxFailureReport(options, error, document)) return fail('E_CLI_FAILED');
         done({ ok: true, document });
       });
     } catch { fail('E_CLI_FAILED'); }

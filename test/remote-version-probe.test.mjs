@@ -127,7 +127,7 @@ test("only a parsed old version rebuilds both-pin partial cache; modern Git keep
     assert.equal(after.files["probe-evidence"], undefined);
     assert.deepEqual(Object.values(after.pins), [f.one]);
     assert.notDeepEqual(after.files, before.files);
-    assert.deepEqual(session.notices, [olderGitNotice(f.bare, "2.44.9")]);
+    assert.deepEqual(session.notices, [olderGitNotice("2.44.9")]);
     assert.equal((await readRemoteFile(f.bare, f.two, "small", { cacheDir: f.cacheDir, exec })).bytes.toString(), "two\n");
     assert.equal(probes, 1);
     assert.equal((await readRemoteFile(f.bare, f.one, "small", { cacheDir: f.cacheDir })).bytes.toString(), "one\n");

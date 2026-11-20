@@ -24,7 +24,7 @@ function deployment(t, { workspace = {}, localTeams } = {}) {
 }
 
 test("local teams closed: the kernel reports local-teams-closed, and accepts remove (the migration's last step)", async (t) => {
-  const d = deployment(t, { localTeams: { mine: { team: "mine:juan.aweb.ai" } } });
+  const d = deployment(t, { localTeams: { mine: { team: "mine:alex.aweb.ai" } } });
   const listed = await d.teams({ action: "list" });
   assert.equal(listed.ok, true, JSON.stringify(listed.error));
   assert.equal(listed.result.teamsApi, 2);
@@ -43,7 +43,7 @@ test("local teams closed: the kernel reports local-teams-closed, and accepts rem
 test("local teams closed: add and default are refused before anything is written", async (t) => {
   const d = deployment(t);
   const before = readFileSync(d.file, "utf8");
-  for (const request of [{ action: "add", label: "mine", team: "mine:juan.aweb.ai" }, { action: "default", label: "global" }]) {
+  for (const request of [{ action: "add", label: "mine", team: "mine:alex.aweb.ai" }, { action: "default", label: "global" }]) {
     const refused = await d.teams(request);
     assert.equal(refused.ok, false, request.action);
     assert.equal(refused.error.code, "E_WORKSPACE_SCHEMA", request.action);
@@ -54,13 +54,13 @@ test("local teams closed: add and default are refused before anything is written
 
 test("local teams allowed: add, default and remove are the deployment's own", async (t) => {
   const d = deployment(t, { workspace: { localTeams: true } });
-  assert.equal((await d.teams({ action: "add", label: "mine", team: "mine:juan.aweb.ai" })).ok, true);
+  assert.equal((await d.teams({ action: "add", label: "mine", team: "mine:alex.aweb.ai" })).ok, true);
   assert.equal((await d.teams({ action: "default", label: "mine" })).ok, true);
   const inUse = await d.teams({ action: "remove", label: "mine" });
   assert.equal(inUse.error?.code, "E_TEAM_IN_USE");
   const listed = await d.teams({ action: "list" });
   assert.equal(listed.result.localTeams, true);
-  assert.deepEqual(listed.result.defaultTeam, { label: "mine", team: "mine:juan.aweb.ai", from: "deployment" });
+  assert.deepEqual(listed.result.defaultTeam, { label: "mine", team: "mine:alex.aweb.ai", from: "deployment" });
 });
 
 test("oats soul teams is read only: a show answers soulTeamsApi 2; the removed edit flags are refused by name", async (t) => {

@@ -7,13 +7,11 @@ import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import vm from 'node:vm';
 import { createWorkspaceSwitcher, openInNewWindowHint, OPEN_IN_NEW_WINDOW } from '../renderer/workspace-switcher.mjs';
-import { createPalette } from '../renderer/palette.mjs';
-import { takePickerFocusReturn } from '../renderer/overlay-picker.mjs';
 
 const html = readFileSync(new URL('../renderer/index.html', import.meta.url), 'utf8');
 const A = { id: 'ws:aaaaaaaaaaaaaaaaaaaa', name: 'oats' };
-const B = { id: 'ws:bbbbbbbbbbbbbbbbbbbb', name: 'tsm' };
-const LOOSE = { id: 'remote:rigel:/x', name: 'rigel', unattached: true, deployments: ['remote:rigel:/x'] };
+const B = { id: 'ws:bbbbbbbbbbbbbbbbbbbb', name: 'web' };
+const LOOSE = { id: 'remote:build:/x', name: 'build', unattached: true, deployments: ['remote:build:/x'] };
 
 function setup({ mac = true, openInNewWindow = true } = {}) {
   const dom = new JSDOM(html, { url: 'file:///renderer/index.html' });
@@ -45,7 +43,7 @@ const menu = (document) => document.querySelector('.ws-row-menu');
 test('no per-row button: a row is its circle and its name', () => {
   const { document } = setup();
   assert.equal(document.querySelector('.ws-open-window'), null);
-  for (const [choice, label] of [[A, 'oats'], [B, 'tsm'], [LOOSE, 'rigel']]) {
+  for (const [choice, label] of [[A, 'oats'], [B, 'web'], [LOOSE, 'build']]) {
     const row = option(document, choice.id);
     assert.deepEqual([...row.children].map((child) => child.className), [choice === A ? 'ctx-dot on' : 'ctx-dot off', 'ws-option-name'], choice.id);
     assert.equal(row.textContent, label);
@@ -97,7 +95,7 @@ test('the row\'s context menu: the native one is prevented, the page\'s opens wi
     option(document, B.id).focus();
     assert.equal(contextmenu(option(document, B.id)), true, 'default prevented: no native Copy/Paste menu for a row');
     assert.deepEqual(popovers, [['show', rowMenu]]);
-    assert.equal(rowMenu.getAttribute('aria-label'), 'tsm', 'labelled with the row\'s name');
+    assert.equal(rowMenu.getAttribute('aria-label'), 'web', 'labelled with the row\'s name');
     const items = [...rowMenu.querySelectorAll('[role="menuitem"]')];
     assert.equal(items.length, 1);
     assert.equal(items[0].dataset.action, 'open-in-new-window');
@@ -106,7 +104,7 @@ test('the row\'s context menu: the native one is prevented, the page\'s opens wi
     assert.equal(items[0].querySelector('kbd').textContent, chord);
     assert.equal(document.activeElement, items[0], 'focus on its item');
     contextmenu(option(document, LOOSE.id));
-    assert.equal(rowMenu.getAttribute('aria-label'), 'rigel', 'another row\'s menu is for that row');
+    assert.equal(rowMenu.getAttribute('aria-label'), 'build', 'another row\'s menu is for that row');
   }
 });
 
@@ -148,8 +146,8 @@ test('a row another window shows behaves like any row: same line, a pick takes i
   const { document, controller, selected, opened, contextmenu, key } = setup();
   controller.begin()(A, [A, { ...B, shown: true }, LOOSE]);
   const row = option(document, B.id);
-  assert.equal(row.textContent, 'tsm', 'no "In another window"');
-  assert.equal(row.title, 'tsm');
+  assert.equal(row.textContent, 'web', 'no "In another window"');
+  assert.equal(row.title, 'web');
   assert.equal(row.hasAttribute('aria-disabled'), false);
   contextmenu(row); document.activeElement.click();
   assert.deepEqual(opened, [B.id], 'main focuses the window that has it');
@@ -225,54 +223,21 @@ test('a window with no workspace and nothing served: the stage opens the Add dia
 });
 
 
-// Show only the current workspace turned on (its chord) while another row's context menu has focus: the row goes,
-// its menu closes, and focus lands on the current row, never <body> (review of PR 8).
-test('a row whose menu holds focus, hidden by Show only the current workspace: the menu closes, focus on the current row', () => {
+// A row whose context menu has focus goes from the list (a new answer no longer lists it): its menu closes, and focus
+// lands on the current row, never <body> (review of PR 8, kept when slice 1 dropped Show only the current workspace).
+test('a row whose menu holds focus goes from the list: the menu closes, focus on the current row', () => {
   const { document, controller, contextmenu, popovers } = setup();
   const rowMenu = menu(document);
   option(document, B.id).focus(); contextmenu(option(document, B.id));
   assert.equal(document.activeElement, rowMenu.querySelector('[role="menuitem"]'), 'focus in B\'s menu');
-  controller.toggleCurrentOnly();
-  assert.equal(controller.currentOnly, true);
-  assert.equal(option(document, B.id).hidden, true, 'B is hidden');
+  controller.begin()(A, [A, LOOSE]);
+  assert.equal(option(document, B.id), null, 'B is gone');
   assert.deepEqual(popovers.at(-1), ['hide', rowMenu], 'its menu closed');
   assert.equal(document.activeElement, option(document, A.id), 'focus on the current row');
-  // Focus elsewhere is left where it is: off and on again with focus outside the list and its menu.
-  controller.toggleCurrentOnly();
+  // Focus elsewhere is left where it is.
   document.getElementById('ws-add-open').focus();
-  controller.toggleCurrentOnly();
+  controller.begin()(A, [A]);
   assert.equal(document.activeElement, document.getElementById('ws-add-open'), 'focus outside the list stays put');
-});
-
-// The palette's Show only the current workspace, as shipped (shell.mjs), activated through the real palette: the
-// palette hands focus to its command, which puts it back where the palette was opened before the toggle runs, so
-// a hidden row's focus goes on to the current row and a control elsewhere keeps it (review of PR 8).
-const shellSource = readFileSync(new URL('../renderer/shell.mjs', import.meta.url), 'utf8');
-const paletteEntry = shellSource.match(/^ {4}\{ label: "Workspaces: show only the current workspace \(on \/ off\)"[^]*?\} \},$/m)?.[0];
-async function viaPalette(s, opener) {
-  const entry = vm.runInNewContext(`[${paletteEntry}][0]`, { chordDetail: () => () => '', takePickerFocusReturn, document: s.document,
-    runAction: (id) => { assert.equal(id, 'workspaces.currentOnly'); s.controller.toggleCurrentOnly(); } });
-  const picker = createPalette({ loadInstances: async () => [], openTerminal() {}, commands: [entry], doc: s.document });
-  opener.focus();
-  await picker.open();
-  const input = s.document.querySelector('.palette-input');
-  input.value = '>show only'; input.dispatchEvent(new s.dom.window.Event('input', { bubbles: true }));
-  input.dispatchEvent(new s.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  return picker;
-}
-test('the palette\'s entry, from a row it hides: focus goes to the current row; from another control: it stays there', async () => {
-  assert.ok(paletteEntry, 'the shipped entry');
-  const s = setup();
-  await viaPalette(s, option(s.document, B.id));
-  assert.equal(s.controller.currentOnly, true); assert.equal(option(s.document, B.id).hidden, true);
-  assert.equal(s.document.querySelector('.palette-input'), null, 'the palette closed');
-  assert.equal(s.document.activeElement, option(s.document, A.id), 'the current row, never <body>');
-  // Off again from a control outside the list (a terminal's stand-in): focus back on it.
-  const outside = s.document.createElement('textarea'); outside.className = 'xterm-helper-textarea'; s.document.getElementById('main').append(outside);
-  await viaPalette(s, outside);
-  assert.equal(s.controller.currentOnly, false);
-  assert.equal(s.document.activeElement, outside, 'where the palette was opened');
 });
 
 // Linux and macOS fire a right-click's contextmenu on the press, with the right button down: opened then, the menu
@@ -291,7 +256,7 @@ test('a right-click held down opens the row\'s menu once released, and a cancell
   assert.deepEqual(popovers, [], 'nothing opens while the button is down');
   end('pointerup'); assert.deepEqual(popovers, [], 'not in the release itself (its light dismiss runs there)');
   await task();
-  assert.deepEqual(popovers, [['show', menu(document)]]); assert.equal(menu(document).getAttribute('aria-label'), 'tsm');
+  assert.deepEqual(popovers, [['show', menu(document)]]); assert.equal(menu(document).getAttribute('aria-label'), 'web');
   assert.equal(document.activeElement, menu(document).querySelector('[role="menuitem"]'));
   popovers.length = 0;
   press(option(document, LOOSE.id)); end('pointercancel'); end('pointerup'); await task();

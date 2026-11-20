@@ -1,3 +1,4 @@
+import { parseProviderSettings } from './provider-settings.mjs';
 // Public-kernel team configuration for hosted username setup. No private kernel
 // imports or file edits: each mutation is followed by an authoritative read.
 import { execFileSync } from 'node:child_process';
@@ -5,6 +6,8 @@ import { isAbsolute, resolve, join } from 'node:path';
 import { realpathSync, existsSync, statSync, mkdirSync } from 'node:fs';
 import { selectedDeployment } from './team-roots.mjs';
 import { kernelQueryEnvironment } from './session-readiness.mjs';
+import { sameAwebTeamId, teamKeyIn } from "./aweb-team-id.mjs";
+import { usernameUnavailable, usernameUnavailableCause } from './aw-failure-cause.mjs';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 export function setupFailure(code, message, details = {}) {
@@ -90,7 +93,7 @@ export function teamConfigurationPlan(doc, label, team, deployment, { preserveDe
   // a team the workspace itself commits, already mapped and already the default, needs none.
   const closed = doc.localTeams === false || doc.problems.some(p => p?.condition === 'local-teams-closed');
   const existing = doc.teams.find(row => row.label === label);
-  if (existing && existing.team !== team) {
+  if (existing && !sameAwebTeamId(existing.team, team)) {
     throw setupFailure('E_SETUP_TEAM_CONFLICT', 'selected label is already declared for a different or unmapped team; choose another label or have its owner reconcile the declaration; no overwrite', { commands });
   }
   // An unconfigured/unmapped default is what this act repairs. Unrelated
@@ -99,7 +102,7 @@ export function teamConfigurationPlan(doc, label, team, deployment, { preserveDe
     throw setupFailure('E_SETUP_CONFIGURATION', 'selected kernel reports unresolved team configuration problems; no configuration write attempted at this step', { commands });
   }
   const mapped = !!existing;
-  const isDefault = doc.defaultTeam?.label === label && doc.defaultTeam?.team === team;
+  const isDefault = doc.defaultTeam?.label === label && sameAwebTeamId(doc.defaultTeam?.team, team);
   // A join that preserves an existing default never sets it (applyTeamConfiguration).
   const keepsDefault = preserveDefault && !!doc.defaultTeam;
   const needed = [...(mapped ? [] : [commands[0]]), ...(isDefault || keepsDefault ? [] : [commands[1]])];
@@ -130,17 +133,17 @@ export function applyTeamConfiguration({ kernel, label, team, deployment, observ
     catch (error) { failure = error; steps.push({ step: 'mapping', status: 'unconfirmed' }); }
     try { current = observe(); } catch (error) { throw setupFailure('E_SETUP_READBACK', 'mapping readback failed; root retained, applied configuration is unverified', { cause: failure?.code || error.code }); }
     if (failure) throw failure;
-    if (current.teams.find(row => row.label === label)?.team !== team) throw setupFailure('E_SETUP_READBACK', 'mapping command did not produce the requested canonical mapping; root retained');
+    if (!sameAwebTeamId(current.teams.find(row => row.label === label)?.team, team)) throw setupFailure('E_SETUP_READBACK', 'mapping command did not produce the requested canonical mapping; root retained');
   } else steps.push({ step: 'mapping', status: 'reused' });
   // Query immediately before deciding whether another write is appropriate.
   // Public verbs do not provide a cross-command compare-and-set transaction.
   if (preserveDefault) current = observe();
   if (preserveDefault && current.defaultTeam) {
     steps.push({ step: 'default', status: 'preserved' });
-    if (current.teams.find(row => row.label === label)?.team !== team) throw setupFailure('E_SETUP_READBACK', 'joined mapping changed; root retained');
+    if (!sameAwebTeamId(current.teams.find(row => row.label === label)?.team, team)) throw setupFailure('E_SETUP_READBACK', 'joined mapping changed; root retained');
     return current;
   }
-  if (current.defaultTeam?.label !== label || current.defaultTeam?.team !== team) {
+  if (current.defaultTeam?.label !== label || !sameAwebTeamId(current.defaultTeam?.team, team)) {
     // Revalidate after add, including policy changes and shared-label races.
     teamConfigurationPlan(current, label, team, deployment, { preserveDefault });
     let failure;
@@ -149,7 +152,7 @@ export function applyTeamConfiguration({ kernel, label, team, deployment, observ
     try { current = observe(); } catch (error) { throw setupFailure('E_SETUP_READBACK', 'default readback failed; root retained, applied configuration is unverified', { cause: failure?.code || error.code }); }
     if (failure) throw failure;
   } else steps.push({ step: 'default', status: 'observed', via: currentPlan.mapping === 'add' ? 'mapping-readback' : 'existing' });
-  if (current.teams.find(row => row.label === label)?.team !== team || current.defaultTeam?.label !== label || current.defaultTeam?.team !== team) {
+  if (!sameAwebTeamId(current.teams.find(row => row.label === label)?.team, team) || current.defaultTeam?.label !== label || !sameAwebTeamId(current.defaultTeam?.team, team)) {
     throw setupFailure('E_SETUP_READBACK', 'configuration readback does not match requested mapping and default; root retained');
   }
   return current;
@@ -179,13 +182,11 @@ export async function setupUsernameDefault(options, { normalize, validTeam, ensu
     try { deployment = selectedDeployment(env, dir); } catch {
       throw setupFailure('E_SETUP_DEPLOYMENT', 'selected deployment is missing, unreadable or inconsistent');
     }
-    let settings;
-    try { settings = JSON.parse(env.OATS_SETTINGS || '{}'); } catch {
-      throw setupFailure('E_SETUP_ROOT', 'selected provider settings are malformed');
-    }
+    const settings = parseProviderSettings(env);
     if (!object(settings) || (Object.hasOwn(settings, 'identity') && !object(settings.identity)) || (Object.hasOwn(settings, 'roots') && !object(settings.roots))) throw setupFailure('E_SETUP_ROOT', 'selected provider root settings are invalid');
     if (settings.identity?.mode && settings.identity.mode !== 'local') throw setupFailure('E_SETUP_ARGUMENT', 'username account setup requires LOCAL identity mode');
-    const raw = object(settings.roots) && Object.hasOwn(settings.roots, predictedTeam) ? settings.roots[predictedTeam] : Object.hasOwn(settings, 'root') ? settings.root : deployment;
+    const rootsKey = teamKeyIn(settings.roots, predictedTeam);
+    const raw = rootsKey !== undefined ? settings.roots[rootsKey] : Object.hasOwn(settings, 'root') ? settings.root : deployment;
     if (typeof raw !== 'string' || !isAbsolute(raw)) throw setupFailure('E_SETUP_ROOT', 'selected account root must be absolute; invalid explicit root cannot fall back');
     root = resolve(raw);
     if (existsSync(root) && !statSync(root).isDirectory()) throw setupFailure('E_SETUP_ROOT', 'selected account root is not a directory');
@@ -200,12 +201,12 @@ export async function setupUsernameDefault(options, { normalize, validTeam, ensu
         throw setupFailure('E_SETUP_MEMBERSHIP', 'selected root has no readable identity directory; root retained, no repeated signup');
       }
       let doc;
-      try { doc = JSON.parse(run(['aw', 'team', 'list', '--json'], root, 45000, { secretSafe: true, unsetEnv: ['AWEB_API_KEY', 'AWEB_TEAM_ID', 'AWEB_WORKSPACE_ID'] })); } catch {
+      try { doc = JSON.parse(run(['aw', 'team', 'list', '--json'], root, 45000, { secretSafe: true, unsetEnv: ['AWEB_TEAM_ID', 'AWEB_WORKSPACE_ID'] })); } catch {
         throw setupFailure('E_SETUP_MEMBERSHIP', 'selected root membership is unavailable or malformed; root retained, no repeated signup');
       }
       if (!Array.isArray(doc?.memberships) || doc.memberships.length !== 1) throw setupFailure('E_SETUP_MEMBERSHIP', 'expected exactly one LOCAL root membership; root retained, no repeated signup');
       const member = doc.memberships[0];
-      if (!object(member) || member.team_id !== predictedTeam || !validTeam(member.team_id) || member.alias !== name || member.identity_scope !== 'local') {
+      if (!object(member) || !sameAwebTeamId(member.team_id, predictedTeam) || !validTeam(member.team_id) || member.alias !== name || member.identity_scope !== 'local') {
         throw setupFailure('E_SETUP_MEMBERSHIP', 'root account, alias or LOCAL scope does not match requested inputs; root retained, no repeated signup');
       }
       return member.team_id;
@@ -220,9 +221,18 @@ export async function setupUsernameDefault(options, { normalize, validTeam, ensu
       mkdirSync(root, { recursive: true });
       try {
         run(['aw', 'init', '--new-account', '--username', username, '--name', name, '--do-not-touch-agents-md'], root, 120000, {
-          secretSafe: true, secrets: [username], unsetEnv: ['AWEB_API_KEY', 'AWEB_TEAM_ID', 'AWEB_WORKSPACE_ID'],
+          secretSafe: true, secrets: [username], env: {AWEB_URL: env.AWEB_URL}, unsetEnv: ['AWEB_TEAM_ID', 'AWEB_WORKSPACE_ID'],
+          classify: raw => usernameUnavailable(raw, username),
         });
       } catch (error) {
+        // aw refuses an unavailable username before it creates anything (it checks
+        // availability first, and a signup conflict creates no account), so this
+        // one cause is named, and the rest of aw's output stays withheld.
+        const reason = error.classified;
+        if (reason) {
+          steps.push({ step: 'bootstrap', status: 'refused', reason });
+          throw setupFailure('E_SETUP_USERNAME_UNAVAILABLE', `${usernameUnavailableCause(reason)}; nothing was created: re-run setup with another --username`);
+        }
         steps.push({ step: 'bootstrap', status: 'unconfirmed' });
         throw setupFailure('E_SETUP_NATIVE', `aw init failed${Number.isInteger(error.status) ? ` (exit ${error.status})` : ''}; output withheld because it handles credentials; root retained`);
       }

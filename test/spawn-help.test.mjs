@@ -1,33 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { COMMAND_FLAGS } from "../lib/command-flags.mjs";
 
 const cli = fileURLToPath(new URL("../bin/oats.mjs", import.meta.url));
 
+/** The flags spawn's argument check accepts: the spawn row of lib/command-flags.mjs, but `--herdr-socket`,
+ *  which spawn reads only to refuse (E_HERDR_REMOVED); help switches exit before dispatch. */
 function parserFlags() {
-  const source = readFileSync(cli, "utf8");
-  const flags = new Set();
-  // Read the actual allow-lists; refuse a changed declaration rather than
-  // letting an empty or partial extraction make an omission pass.
-  for (const name of ["SPAWN_VALUE_FLAGS", "SPAWN_SWITCHES"]) {
-    const match = new RegExp(`const ${name}\\s*=\\s*new Set\\(\\[([^\\]]*)\\]\\)`).exec(source);
-    assert.ok(match, `cannot extract ${name} from bin/oats.mjs`);
-    let names;
-    try { names = JSON.parse(`[${match[1]}]`); }
-    catch { assert.fail(`cannot read ${name} as an array of flag names`); }
-    assert.ok(names.length > 0, `${name} must not extract an empty inventory`);
-    for (const flag of names) {
-      assert.match(flag, /^[a-z][a-z-]*$/, `${name} contains an unreadable flag name`);
-      flags.add(`--${flag}`);
-    }
-  }
-  // --provider consumes two words in spawnArgvProblem; --server is stripped
-  // by the route before that scanner. Help switches exit before dispatch.
-  for (const flag of ["--provider", "--server", "--help", "-h"]) flags.add(flag);
+  const spawn = COMMAND_FLAGS.find((c) => c.command === "spawn");
+  assert.ok(spawn, "lib/command-flags.mjs declares spawn");
+  const names = [...spawn.values, ...spawn.switches];
+  assert.ok(names.length > 0, "the spawn row must not be an empty inventory");
+  for (const flag of names) assert.match(flag, /^--[a-z][a-z-]*$/, `the spawn row holds an unreadable flag name: ${flag}`);
+  const flags = new Set(names.filter((flag) => flag !== "--herdr-socket"));
+  for (const flag of ["--help", "-h"]) flags.add(flag);
   return flags;
 }
 

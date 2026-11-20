@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { finishTurn } from "../lib/canonical.mjs";
+import { processStartToken, thisBoot } from "../lib/process-identity.mjs";
 import { parseJournal, RecordStore, StoreError } from "../lib/store.mjs";
 
 function tempStore(t, owner = "alice") {
@@ -273,6 +274,81 @@ test("stream lock: a late contender never acquires against a live holder", (t) =
       assert.ok(holderOut.includes("released"), "holder ran to completion");
       assert.equal(existsSync(join(store.streamsDir(), "alice~notes", ".lock")), false);
     });
+});
+
+/** The lock of `stream`, held by the holder `token` names, as a stream lock is written. → its path. */
+function plantStreamLock(store, stream, token) {
+  const dir = join(store.streamsDir(), stream);
+  mkdirSync(dir, { recursive: true });
+  const lockPath = join(dir, ".lock");
+  writeFileSync(lockPath, JSON.stringify({ host: hostname(), nonce: "deadbeefdeadbeefdeadbeef", acquiredAt: new Date().toISOString(), ...token }) + "\n");
+  return lockPath;
+}
+/** This test process, as a stream lock names a holder that runs. */
+const runningHolder = () => ({ pid: process.pid, bootId: thisBoot(), processStart: processStartToken(process.pid) });
+const OTHER_HOST = `not-${hostname()}`;
+
+test("stream lock: the token names its holder by pid, host, boot and start", (t) => {
+  const store = tempStore(t, "alice");
+  const token = store.withStreamLock("alice~notes", () => JSON.parse(readFileSync(join(store.streamsDir(), "alice~notes", ".lock"), "utf8")));
+  assert.deepEqual(Object.keys(token).sort(), ["acquiredAt", "bootId", "host", "nonce", "pid", "processStart"]);
+  assert.deepEqual([token.pid, token.host, token.bootId, token.processStart], [process.pid, hostname(), thisBoot(), processStartToken(process.pid)]);
+  assert.equal(typeof token.processStart, "string", "this host reads a process's start");
+});
+
+test("stream lock: a lock whose pid runs with another start (a reused pid), or taken in another boot, is reclaimed at once", (t) => {
+  const store = tempStore(t, "alice");
+  store.lockTimeoutMs = 2000;
+  store.lockStaleMs = 60_000; // age alone would never reclaim these locks
+  plantStreamLock(store, "alice~notes", { ...runningHolder(), processStart: "proc:1" });
+  store.append("alice~notes", finishTurn(noteCore("alice", "after a reused pid")));
+  plantStreamLock(store, "alice~notes", { ...runningHolder(), bootId: `another-boot-than-${thisBoot()}` });
+  store.append("alice~notes", finishTurn(noteCore("alice", "after another boot")));
+  assert.equal(store.readStream("alice~notes").length, 2);
+});
+
+test("stream lock: another host's name does not keep the lock of a holder that is gone", (t) => {
+  const store = tempStore(t, "alice");
+  store.lockTimeoutMs = 2000;
+  store.lockStaleMs = 60_000; // age alone would never reclaim this lock
+  plantStreamLock(store, "alice~notes", { pid: 999999999, host: OTHER_HOST, bootId: thisBoot(), processStart: "proc:1" });
+  store.append("alice~notes", finishTurn(noteCore("alice", "after the other host")));
+  assert.equal(store.readStream("alice~notes").length, 1);
+});
+
+test("stream lock: a live holder of this boot with the recorded start is never stolen from, whatever host it names and however old the lock", (t) => {
+  const store = tempStore(t, "alice");
+  store.lockTimeoutMs = 200;
+  store.lockStaleMs = 500;
+  for (const host of [hostname(), OTHER_HOST]) {
+    const lockPath = plantStreamLock(store, "alice~notes", { ...runningHolder(), host });
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(lockPath, old, old);
+    const before = readFileSync(lockPath, "utf8");
+    assert.throws(() => store.append("alice~notes", finishTurn(noteCore("alice", "stolen"))), new RegExp(`timed out waiting for lock .*held by pid ${process.pid} on `), host);
+    assert.equal(readFileSync(lockPath, "utf8"), before, `${host}: the live holder's lock is untouched`);
+    rmSync(lockPath);
+  }
+  assert.deepEqual(store.readStream("alice~notes"), []);
+});
+
+test("stream lock: a token that names no boot or start is judged by its pid on this host, and by the lock's age on another", (t) => {
+  const store = tempStore(t, "alice");
+  store.lockTimeoutMs = 200;
+  store.lockStaleMs = 30_000;
+  const turn = finishTurn(noteCore("alice", "locked"));
+  // This host, a pid that runs: held, however old the lock.
+  let lockPath = plantStreamLock(store, "alice~notes", { pid: process.pid });
+  const old = new Date(Date.now() - 60_000);
+  utimesSync(lockPath, old, old);
+  assert.throws(() => store.append("alice~notes", turn), /timed out waiting for lock/);
+  rmSync(lockPath);
+  // Another host: its pid says nothing here, so the lock is held while fresh and reclaimed once aged.
+  lockPath = plantStreamLock(store, "alice~notes", { pid: 999999999, host: OTHER_HOST });
+  assert.throws(() => store.append("alice~notes", turn), /timed out waiting for lock/);
+  utimesSync(lockPath, old, old);
+  store.append("alice~notes", turn);
+  assert.equal(store.readStream("alice~notes").length, 1);
 });
 
 test("stream lock: an unreadable lock fails fast and actionably, it does not spin", (t) => {

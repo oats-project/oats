@@ -37,15 +37,18 @@ function keyInit(keyId) {
   const upper = keyId.toUpperCase();
   return { key: keyId, code: `Key${upper}`, keyCode: upper.charCodeAt(0), shiftKey: keyId === upper };
 }
-// The leader, Ctrl+X on every platform; Alt+O and Ctrl+\, the leaders before 0.67, for a rebind.
+// Ctrl+X, the TUI's leader and the Desktop's other choice (D18: the Desktop's default is Ctrl+Space; these tests run on
+// the Ctrl+X choice unless they say so, and the Ctrl+Space ones are at the end); Alt+O and Ctrl+\, the leaders before 0.67.
 const CTRL_X = { key: "x", code: "KeyX", keyCode: 88, ctrlKey: true };
+const CTRL_SPACE = { key: " ", code: "Space", keyCode: 32, ctrlKey: true };
 const ALT_O = { key: "o", code: "KeyO", keyCode: 79, altKey: true };
 const CTRL_BACKSLASH = { key: "\\", code: "Backslash", keyCode: 220, ctrlKey: true };
 
 /** A window with a terminal (the installed xterm, the shell's interception), a button and a field,
  * the engine's window listener, the leader registered as the shell registers it, and the engine. */
-function rig(t, { isMac = false } = {}) {
+function rig(t, { isMac = false, leaderChord = "Ctrl+X" } = {}) {
   resetAllBindings();
+  if (leaderChord) setBinding("app.leader", leaderChord); // the Ctrl+X choice (null: the default, Ctrl+Space)
   const virtualConsole = new VirtualConsole();
   const dom = new JSDOM(`<div id="host"></div><button id="button">b</button><input id="field"><div id="modal-host"></div>`,
     { runScripts: "outside-only", pretendToBeVisual: true, virtualConsole });
@@ -400,4 +403,31 @@ test("the hint: role=status; the wait is announced once and draws nothing; never
   assert.equal(el.textContent, "");
   assert.equal(hint.isShown(), false);
   assert.ok(el.isConnected, "the region stays in the document");
+});
+
+
+// ---------------------------------------------------------------- D18: Ctrl+Space, the Desktop's default leader
+
+for (const isMac of [false, true]) test(`slice4 key table bound: Ctrl+Space is the default leader (${isMac ? "macOS" : "Linux/Windows"}), from a terminal and a text field, and twice sends NUL`, t => {
+  const r = rig(t, { isMac, leaderChord: null });
+  r.textarea.focus();
+  r.press(r.textarea, CTRL_SPACE);
+  assert.ok(r.leader.isWaiting(), "Ctrl+Space opens the wait in a terminal");
+  assert.equal(r.data(), "", "the first press sends nothing");
+  r.press(r.textarea, CTRL_SPACE);
+  assert.equal(r.data(), "\x00", "the second press is the program's: NUL, once");
+  assert.equal(r.leader.isWaiting(), false);
+  // A text field: Ctrl+Space types nothing there, so the leader opens (Ctrl+X there would be Cut on Linux/Windows).
+  r.field.focus();
+  r.press(r.field, CTRL_SPACE);
+  assert.ok(r.leader.isWaiting(), "from a text field too");
+  r.press(r.field, keyInit("h"));
+  assert.deepEqual(r.log.at(-1), ["settle", "split-right", "field"], "h is split right");
+  r.press(r.field, CTRL_SPACE); r.press(r.field, keyInit("v"));
+  assert.deepEqual(r.log.at(-1), ["settle", "split-down", "field"], "v is split down");
+  // Ctrl+X is no binding now: in a terminal the program gets 0x18.
+  r.textarea.focus();
+  r.press(r.textarea, CTRL_X);
+  assert.equal(r.leader.isWaiting(), false);
+  assert.equal(r.data(), "\x18");
 });

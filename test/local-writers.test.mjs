@@ -14,13 +14,14 @@ import { spawn, spawnSync } from "node:child_process";
 import fs, { chmodSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import YAML from "yaml";
 import { CLI, v2Deployment } from "./helpers/v2-deployment.mjs";
 import { startGated } from "./helpers/fs-gate-preload.mjs";
 import { parseConfigData } from "../lib/config-data.mjs";
 import { editLocal, localLock } from "../lib/local-edit.mjs";
+import { selfIdentity } from "../lib/worktree-hooks.mjs";
 import { setDisabledHere } from "../lib/automations.mjs";
 import { teamsAdd } from "../lib/teams-verbs.mjs";
 
@@ -35,12 +36,14 @@ function fileOf(t, text, head = HEAD) {
     // The kernel reader's value (as plain objects: it builds them without a prototype).
     value: () => JSON.parse(JSON.stringify(parseConfigData(readFileSync(localPath, "utf8"), { origin: { kind: "local", path: localPath } }).value)) };
 }
-/** A lock another process holds: the directory and its owner record, as lib/dir-lock.mjs writes them. */
+/** A lock another process holds: the record of a holder that runs (this process), as lib/dir-lock.mjs
+ *  writes it. → the lock's path, and the bytes at it. */
 function holdLock(deployment) {
   const lock = localLock(deployment);
-  mkdirSync(lock, { recursive: true });
-  writeFileSync(join(lock, "owner.json"), `${JSON.stringify({ pid: process.pid, at: new Date().toISOString(), what: "a test" })}\n`);
-  return lock;
+  mkdirSync(dirname(lock), { recursive: true });
+  const record = `${JSON.stringify({ ...selfIdentity(), nonce: "a".repeat(32), at: new Date().toISOString(), what: "a test" })}\n`;
+  writeFileSync(lock, record);
+  return { lock, record };
 }
 
 /* ───────────────────────────── editLocal: an edit that returns its text ── */
@@ -277,7 +280,7 @@ const answered = (done) => ({ status: done.code, stdout: done.stdout, stderr: do
  *  before. `between()` runs (the other writers, each to its end), then `first` goes on.
  *  → what `first` answered. */
 async function startedBefore(fx, first, between) {
-  const run = startGated([CLI, ...first, "--json"], { cwd: fx.dep, env: fx.env, gateDir: fx.gateDir(), gates: [{ name: "lock", fn: "mkdirSync", path: fx.lock }] });
+  const run = startGated([CLI, ...first, "--json"], { cwd: fx.dep, env: fx.env, gateDir: fx.gateDir(), gates: [{ name: "lock", fn: "linkSync", arg: 1, path: fx.lock }] });
   try {
     await run.waitGate("lock");
     assert.equal(existsSync(fx.lock), false, "held before the lock is taken");
@@ -290,16 +293,16 @@ async function startedBefore(fx, first, between) {
 }
 /** `first` is held at the rename of the file it rewrote: it holds the lock, it has read the file and
  *  made its edit. `second` is then started, and held at the return of its first try at the lock, which
- *  `first` holds (the lock's owner record says so). Both go on. → [first's answer, second's]. */
+ *  `first` holds (the lock's record names it). Both go on. → [first's answer, second's]. */
 async function overlapped(fx, first, second) {
   const a = startGated([CLI, ...first, "--json"], { cwd: fx.dep, env: fx.env, gateDir: fx.gateDir(), gates: [{ name: "rename", fn: "renameSync", arg: 1, path: fx.local }] });
   let b = null;
   try {
     await a.waitGate("rename");
     const before = fx.text();
-    b = startGated([CLI, ...second, "--json"], { cwd: fx.dep, env: fx.env, gateDir: fx.gateDir(), gates: [{ name: "lock", fn: "mkdirSync", path: fx.lock, when: "after" }] });
+    b = startGated([CLI, ...second, "--json"], { cwd: fx.dep, env: fx.env, gateDir: fx.gateDir(), gates: [{ name: "lock", fn: "linkSync", arg: 1, path: fx.lock, when: "after" }] });
     await b.waitGate("lock");
-    assert.equal(JSON.parse(readFileSync(join(fx.lock, "owner.json"), "utf8")).pid, a.child.pid, `${second.join(" ")} found the lock held by ${first.join(" ")}`);
+    assert.equal(JSON.parse(readFileSync(fx.lock, "utf8")).pid, a.child.pid, `${second.join(" ")} found the lock held by ${first.join(" ")}`);
     assert.equal(fx.text(), before, "and has written nothing");
     b.release("lock");
     a.release("rename");
@@ -395,7 +398,7 @@ test("schedule|trigger enable|disable and teams add, each started before the oth
 
 test("a lock held elsewhere: each writer answers E_LOCAL_BUSY as `oats teams` does and writes nothing; what needs only the arguments is refused without waiting", async (t) => {
   const fx = deployment(t);
-  const lock = holdLock(fx.dep), before = fx.text();
+  const { lock, record } = holdLock(fx.dep), before = fx.text();
   const waiting = {
     "teams add": fx.start(["teams", "add", "mine", "--team", "mine:me.example", "--json"]),
     "launch-config set": fx.start(["launch-config", "set", "slow", "--file", fx.def(PI), "--json"]),
@@ -420,7 +423,8 @@ test("a lock held elsewhere: each writer answers E_LOCAL_BUSY as `oats teams` do
   assert.match(errors["teams add"].message, /if no oats command that edits this file is running, remove .*local\.lock and retry; nothing was written$/);
   assert.doesNotMatch(errors["teams add"].message, /oats teams|oats soul launch/, "the message names no command: a list of them is wrong the day one is added");
   assert.equal(fx.text(), before, "nothing was written");
-  assert.deepEqual(readdirSync(lock), ["owner.json"], "the holder's lock is not touched");
+  assert.equal(readFileSync(lock, "utf8"), record, "the holder's lock is not touched");
+  assert.deepEqual(readdirSync(dirname(lock)), ["local.lock"], "and nothing is left beside it");
 });
 
 test("a file that keeps changing: each writer answers E_LOCAL_CHANGED and writes nothing of its own", (t) => {

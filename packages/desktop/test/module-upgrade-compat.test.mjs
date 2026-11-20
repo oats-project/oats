@@ -4,7 +4,7 @@ import { deploymentStatusData } from '../../client/deployment-data.mjs';
 import { EVENT_TITLES, eventsData } from '../renderer/instance-events-data.mjs';
 import { target, event, data } from './helpers/instance-events-fixture.mjs';
 
-test('lane:lfx Desktop reader tolerates modules.<cap>.previous in recorded maps and drift rows', () => {
+test('lane:lab Desktop reader tolerates modules.<cap>.previous in recorded maps and drift rows', () => {
   const module = { from: { kind: 'package', package: 'acme.tools', version: '2.0.0', commit: 'b'.repeat(40) },
     commit: 'b'.repeat(40), digest: 'sha256-new', materializedAt: '2026-10-22T10:00:00.000Z' };
   const previous = { from: { kind: 'package', package: 'acme.tools', version: '1.0.0', commit: 'a'.repeat(40) },

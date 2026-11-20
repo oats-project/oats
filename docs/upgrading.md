@@ -6,11 +6,12 @@ host that comes from it.
 
 ## Upgrading to the latest version
 
-The latest version is **OATS 0.69.12** ([release notes](release-notes/v0.69.12.md)).
-The 0.69.12 Desktop accepts OATS CLIs `>=0.26.0 <0.70.0`.
+The latest version is **OATS 0.69.23** ([release notes](release-notes/v0.69.23.md)).
+The 0.69.23 Desktop accepts OATS CLIs `>=0.26.0`, tested through 0.69: the
+Desktop and the CLI can be upgraded [in either order](#either-order-works).
 
 **First, read the `## Upgrade` section of every release after yours, up to
-0.69.12,** in the [release notes](release-notes/): it says what to do before
+0.69.23,** in the [release notes](release-notes/): it says what to do before
 the CLI changes, and what else must change with it (the Desktop, another
 tool, a package pin). [Coming from an older version](#coming-from-an-older-version)
 names the releases that ask for more than the steps below. `oats version`
@@ -19,14 +20,14 @@ prints the version you have.
 Then, on each host:
 
 ```sh
-                                     # 0. where the Desktop is installed: Desktop 0.69.12 first
-npm install -g @awebai/oats@0.69.12  # 1. the CLI
+                                     # 0. where the Desktop is installed: Desktop 0.69.23, in either order
+npm install -g @awebai/oats@0.69.23  # 1. the CLI
 oats update                          # 2. in each deployment: the plan, then it asks before it runs
 oats doctor                          # 3. in the same deployment
 ```
 
 The Desktop's installers are the assets of the
-[GitHub Release](https://github.com/awebai/oats/releases) of that version
+[GitHub Release](https://github.com/oats-project/oats/releases) of that version
 ([OATS Desktop](desktop.md#install)). Then restart the pi sessions that were
 running: a session keeps the bridge it loaded when it started.
 [The steps](#the-steps) says what each step does and why they come in this
@@ -40,9 +41,12 @@ the version you are upgrading from.
 ## The steps
 
 Upgrading OATS means three things, in this order, on each host, and one
-before them where the Desktop is installed:
+more where the Desktop is installed:
 
-0. **The Desktop**, where it is installed: the new version's, before the CLI.
+0. **The Desktop**, where it is installed: the new version's. Install it
+   before the CLI where the Desktop is 0.69.17 or older
+   ([which goes first](#either-order-works)); with a newer one, either order
+   works.
 1. **The CLI** (`@awebai/oats`, the kernel).
 2. **The pi bridge** (`@awebai/oats-pi`), in every pi folder the host's
    deployments launch pi with: `oats update`, in each deployment.
@@ -62,12 +66,21 @@ instances. A pi started outside any instance looks for a global install, an
 **A release's own steps are in its notes**, in its `## Upgrade` section.
 This page is the part that is the same for every release.
 
-**Why the Desktop goes first.** A Desktop accepts a CLI up to its own minor
-version and refuses a newer one: with the CLI moved first, the Desktop that
-is still running lists no instance until it is replaced. The new Desktop
-accepts the older CLI in the meantime. The CLI can move by two commands, the
-`npm install` and an `oats update` whose plan installs it: step 0 comes
-before either.
+<a id="either-order-works"></a>**Either order works**, with a Desktop newer than 0.69.17. Such a Desktop was
+tested with the CLIs of its own minor version, and accepts a newer minor or
+major one: reads, terminals, Spawn, Start, Restart, the colour and the
+background keep working with it, and every other change is held back until
+the Desktop of that version is installed. It says so in one line, in the
+place of the CLI card:
+`This Desktop was tested with oats CLIs up to <X.Y>; the installed CLI is <version>. Stop, Remove, schedules, triggers and every other change except Spawn, Start, Restart, colour and background are off until you install OATS Desktop <version>.`
+A Desktop accepts an older CLI too, down to its floor, so installing it first
+holds nothing back.
+
+**A Desktop of 0.69.17 or older still refuses a CLI newer than its own minor
+version:** with the CLI moved first, it lists no instance until it is
+replaced. Where one is installed, step 0 comes first. The CLI can move by two
+commands, the `npm install` and an `oats update` whose plan installs it:
+step 0 comes before either.
 
 **Package versions are a different thing.** `oats update` moves the CLI and
 the bridge, never a package. A deployment's capabilities come from the
@@ -84,12 +97,12 @@ Without a terminal (a script, an agent's shell) it runs only with `--yes`.
 
 `oats update` also does step 1: when npm lists a newer `@awebai/oats`, its
 plan starts with that install, and the bridges move to that same version in
-the same run. So where the Desktop is installed, step 0 comes before such an
-`oats update` too: `oats update --check` shows whether the plan holds that
-install, and runs nothing. When that install is of another minor or major
+the same run. So where a Desktop of 0.69.17 or older is installed, step 0
+comes before such an `oats update` too: `oats update --check` shows whether
+the plan holds that install, and runs nothing. When that install is of another minor or major
 version, the plan says so in one line under its steps, whether or not a
-Desktop is installed: `OATS Desktop refuses a CLI newer than its own minor
-version: if you use it, install OATS Desktop <version> first.`
+Desktop is installed: `An OATS Desktop older than <X.Y> holds actions back with this CLI. Stop, Remove, schedules, triggers and every other change except Spawn, Start, Restart, colour and background are off until you install OATS Desktop <version>. (An OATS Desktop of 0.69.17 or older refuses this CLI until then.)`
+Its second sentence is the Desktop's own notice, word for word.
 
 **`oats update` only moves forward.** It never installs an older CLI or an
 older bridge than the one in place:
@@ -122,6 +135,8 @@ oats session start --home <absolute-home>
 Read the plan before applying it. It lists every moving package module,
 skill/inject/hook changes and provider adoption decisions, modules kept
 because their package is no longer locked, and member drift for information.
+A kept package module moves only by a respawn; `oats session start` and
+`restart` say so in one warning that names each one.
 One provider refusal refuses the whole move. A running or unreadable session
 refuses with `E_SESSION_RUNNING`; stop it first. A stale plan returns
 `E_PLAN_STALE` and a fresh plan to review.
@@ -202,6 +217,68 @@ of the Desktop and the CLI, and an optional package pin. A change a script
 must follow is in its release's Upgrade section whether or not it is listed
 here.
 
+- **[0.69.23](release-notes/v0.69.23.md#upgrade):** the catalog pins
+  oats.framework 1.27.0, oats.aweb 1.46.0 and oats.okf 6.3.0. Respawn
+  instances, or move stopped ones with `oats instance upgrade`, to take the
+  board teaching and the mail read. `--same-work` and `oats instance
+  same-work` are deprecated aliases of `--related-work` and `oats instance
+  related-work`. A team image that ran the experimental
+  bb image is rebuilt, with the bb image from oats-project/oats-bb.
+- **[0.69.22](release-notes/v0.69.22.md#upgrade):** the catalog pins
+  oats.aweb 1.45.0; `setup --install-aw` installs the tested aw by default.
+  The Desktop's leader is Ctrl+Space (Ctrl+X a click away; a leader you set is
+  kept). A `tui.json` that binds `p` to another action moves it. Respawn
+  instances to take the new module.
+- **[0.69.21](release-notes/v0.69.21.md#upgrade):** the catalog pins
+  oats.aweb 1.43.0. A deployment on a non-public aw registry runs
+  `oats aweb setup --registry <origin>`, reruns `oats aweb resident create`,
+  reinstalls the wake service and restarts its homes; exported aw selectors no
+  longer reach aw. Respawn grant seats whose resident or default team changed.
+  Respawn instances to take the new module.
+- **[0.69.20](release-notes/v0.69.20.md#upgrade):** the catalog pins
+  oats.okf 6.2.0 and oats.framework 1.26.0. Retiring an old home whose
+  recorded cleanup hooks cannot run is refused; clean up its external state,
+  then run `oats retire --force`. Team-container deployments
+  recreate their agent containers, and those with a local registry service set
+  `team.registryRoute: local`. Respawn instances to take the new texts.
+- **[0.69.19](release-notes/v0.69.19.md#upgrade):** the catalog pins
+  oats.aweb 1.42.1 and oats.framework 1.25.2. A retained seat that relied on
+  `OATS_AWEB_URL` records its server with `aw workspace connect` and unsets the
+  variable; a non-boolean `identity.e2ee` or `identity.takeOver` is set to
+  `true` or `false`. Respawn instances to take the shorter aweb text and the
+  workspace and directory modes' extra trees.
+- **[0.69.18](release-notes/v0.69.18.md#upgrade):** from this Desktop on,
+  the Desktop and the CLI go in either order (a Desktop of 0.69.17 or older
+  still goes first); the catalog pins oats.aweb 1.41.0, oats.okf 6.0.3 and
+  oats.framework 1.25.0. Start the host's wake broker before a Codex or
+  `delivery: session` home's next start: oats.aweb 1.40.0 and later refuse
+  such a home while none runs. Respawn instances to take the new naming and model
+  floor texts.
+- **[0.69.17](release-notes/v0.69.17.md#upgrade):** the catalog pins
+  oats.okf 6.0.2 and oats.framework 1.24.1; respawn each running
+  `oats-engineering-expert` and `oats-product-expert` once after `oats sync`,
+  on a knowledge base with the subject layout.
+- **[0.69.16](release-notes/v0.69.16.md#upgrade):** the catalog pins
+  oats.okf 6.0.1, oats.aweb 1.39.0 and oats.framework 1.24.0. A deployment
+  that takes oats.okf 6 removes the harvester's launch preference and spawn
+  flags, adds the `proposal-review` trigger beside `harvest-review`, protects
+  each Git base's accepted branch and gives proposing hosts branch-create
+  access, and retires its harvesters; aw 1.36.56 is the tested aw; pi homes keep
+  @awebai/claude-skills out of their pi folder; the team agent image is
+  rebuilt.
+- **[0.69.15](release-notes/v0.69.15.md#upgrade):** Node 22.5.0 or later
+  before the CLI; on a shared host, `chmod -R go-rwx` each turn-record root;
+  a record root is written from one machine at a time; release a schedule
+  slot an earlier OATS left without its record (`oats doctor` lists it).
+- **[0.69.14](release-notes/v0.69.14.md#upgrade):** 0.69.13 was tagged but
+  never published, so its steps (below) are this release's; the remaining
+  state-changing commands refuse a flag they do not define.
+- **[0.69.13](release-notes/v0.69.13.md#upgrade):** the catalog pins
+  oats.framework 1.23.0. Remove a sweep lock (`~/.oats/session-resume/lock`)
+  or a home's start lock (`<home>/.oats-start.lock`) an earlier OATS left;
+  check each `git:` package pin names its own id; a deployment of OATS's
+  own workspace takes the four hand steps for the reviewer soul's new name,
+  then respawns its homes onto the new souls and starts a dispatcher.
 - **[0.69.12](release-notes/v0.69.12.md#upgrade):** the catalog pins
   oats.okf 5.8.0, oats.aweb 1.37.0 and oats.framework 1.22.1. Where
   `oats.aweb-tasks` is composed, readiness warns until the host wake daemon
@@ -279,7 +356,8 @@ here.
 - **[0.57.0](release-notes/v0.57.0.md#upgrade):** a retire plan taken before
   the upgrade is refused once (`E_PLAN_STALE`); `oats worktree remove` may
   refuse with `E_CHILDREN_RUNNING`; with oats.okf 5.2.0, new spawns carry the
-  harvest duty unless the soul opts out.
+  harvest duty unless the soul opts out (oats.okf 6 makes it the duty to
+  propose: [knowledge.md](knowledge.md#pin-and-select-the-package)).
 - **[0.56.0](release-notes/v0.56.0.md#upgrade):** new refusal codes for
   scripts; `open-workspace` in `tui.json` is `open`; a launch gets only its
   capabilities' declared environment.
@@ -551,6 +629,22 @@ It also warns about a folder it could not look at (one that does not
 resolve, or a bridge that cannot be read). A folder that does not exist or
 holds no bridge is not a skew, and it says nothing about it. The warnings are
 in the text output only; `oats doctor --json` does not carry them.
+
+`oats doctor` also reports this machine's session resume lock when it needs a
+person, as a `resume-lock-stuck` problem with the path and what to do: after
+an upgrade that is a lock directory left by the earlier OATS
+(`~/.oats/session-resume/lock/`), which `oats session resume` refuses with
+`E_RESUME_LOCK_STUCK` and never removes. Remove the directory once no earlier
+`oats` is running on the machine
+([The sweep](execution-targets.md#the-sweep)).
+
+`oats doctor` reports a schedule slot whose record cannot be read as a
+`schedule-slot-unreadable` problem, naming the deployment, the job and the
+remedy. After an upgrade that is a slot directory an earlier OATS left
+without its `owner.json`. The tick reports that job invalid and runs the
+deployment's other jobs. Check `oats schedule show <id>`; once its last run
+is not running, `oats schedule reconcile <id> --clear` releases the slot
+([Schedules](schedules.md#files)).
 
 ## After a change of Node version
 

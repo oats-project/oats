@@ -15,7 +15,7 @@ import { cliSpawnApply } from './spawn-apply-cli.mjs';
 import { admitSpawnSelection, PREVIEW_MAX_AGE_S } from './spawn-preview.mjs';
 import { record } from './spawn-preview-contract.mjs';
 import { spawnApplySupported, spawnApplyChoicesSupported, spawnPrepareInput, spawnRefInput, spawnPreparedData, spawnReference,
-  spawnCreationReceipt, spawnApplyFailure, spawnApplyDeadlineMs, ROLLED_BACK_CODES, WAKE_OUTCOME_UNKNOWN } from './spawn-apply-contract.mjs';
+  spawnCreationReceipt, spawnApplyFailure, spawnApplyDeadlineMs, ROLLED_BACK_CODES, KERNEL_WORDED_CODES, WAKE_OUTCOME_UNKNOWN } from './spawn-apply-contract.mjs';
 /** The apply request answers within this; the proxy's own 65 s timeout then never fires on a healthy spawn. */
 export const ANSWER_WITHIN_MS = 50000;
 export const MAX_APPLIES = 4;
@@ -145,6 +145,10 @@ export function createSpawnApplyBoundary({ read, invoke = cliSpawnApply, exec, a
       if (envelope.error.details?.unconfirmed === true) { entry.final = true; return denied(code, entry, 'unknown', message); }
       return denied(code, entry, 'refused', message);
     }
+    // Feature sandboxes (D-S1-4): a spawn into a sandbox is refused before anything is minted, kept or
+    // created (docs/desktop-cli-api.md, Sandbox refusals): refused, in the kernel's words, which end with
+    // what a person does next.
+    if (KERNEL_WORDED_CODES.includes(code)) return denied(code, entry, 'refused', envelope.error.message);
     // A taken explicit name (spawn-name) refuses before any home is kept: the
     // confirmation is consumed and a fresh preview reports the taken name.
     if (['E_DECISION_STALE', 'E_IDEMPOTENCY_CONFLICT', 'E_PLACEMENT_TAKEN', 'E_INSTANCE_NAME_TAKEN'].includes(code)) return denied(code, entry, 'stale');

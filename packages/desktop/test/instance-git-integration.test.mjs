@@ -16,6 +16,8 @@ import { createInstanceSoulSection } from '../renderer/instance-soul.mjs';
 import { createSelectionOwnership } from '../renderer/selection-ownership.mjs';
 import { getBinding, formatChord } from '../renderer/keybindings.mjs';
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
+import { handlerAuth, authorized, HANDLER_SECRET } from './helpers/handler-auth.mjs';
+import { INSTANCE_DIFF_LIMIT } from '../../client/instance-git-contract.mjs';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
@@ -38,12 +40,12 @@ function http({ exec = (_b, _a, _o, done) => done(null, JSON.stringify(envelope(
   const deps = { createServer: fn => fn, instanceGitRequest: read, cliState: cli, ctxs: ['/Users/me/work'],
     ...deploymentDoubles(() => { lookups++; return [{ id: '/A', scope: '/server-scope' }, { id: '/B', scope: '/other-scope' }]; }),
     snapshot: { byWs: snapshots ?? new Map([['/A', { instances: [instance()] }], ['/B', { instances: [instance('dev-1', '/B/agents')] }]]) },
-    panelData: assert.fail, snapshotPanel: assert.fail, collectNow: assert.fail,
+    panelData: assert.fail, snapshotPanel: assert.fail, collectNow: assert.fail, ...handlerAuth,
   };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   return { seen, counts: () => ({ executions, lookups }), async request({ url = '/api/instance-git?ws=%2FA', method = 'POST', body = JSON.stringify({ action: 'git', selector: selector(instance()) }), chunks,
     headers = { host: '127.0.0.1:4820', origin: 'http://localhost:4820' } } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: authorized(headers) }); let result;
     const res = { writeHead(status, headers) { result = { status, headers }; }, end(raw) { result.body = JSON.parse(raw); } };
     const waiting = handler(req, res); for (const chunk of chunks || [Buffer.from(body)]) req.emit('data', chunk); req.emit('end'); await waiting;
     assert.ok(result); return result;
@@ -92,6 +94,19 @@ test('UTF8 split chunks preserve literal root identity; only a server roster mat
   assert.equal(response.body.status, 'available'); assert.equal(h.seen[0].argv[6], i.home);
 });
 
+test('a Git diff whose patch carries the server\'s credential is refused with no content; an ordinary diff is served', async () => {
+  const diff = (patch) => envelope({ instanceGitApi: 1, observation: observation(instance()), file: state().files[0], against: 'a'.repeat(40), binary: false,
+    bytes: Buffer.byteLength(patch), truncated: false, limit: INSTANCE_DIFF_LIMIT, patch, readOnly: { helpers: 'disabled', optionalLocks: 'off', objectsWritten: 0 } });
+  const body = JSON.stringify({ action: 'diff', selector: selector(instance()), fileId: 'c'.repeat(24), revision: 'a'.repeat(40), indexRevision: 'b'.repeat(40) });
+  const ordinary = await http({ exec: (_b, _a, _o, done) => done(null, JSON.stringify(diff('+an ordinary line\n'))) }).request({ body });
+  assert.equal(ordinary.status, 200); assert.equal(ordinary.body.data?.patch, '+an ordinary line\n', JSON.stringify(ordinary.body));
+  // A token file (or a hard link or copy of it) inside an instance's worktree, read into a diff by the CLI.
+  const leaking = await http({ exec: (_b, _a, _o, done) => done(null, JSON.stringify(diff(`+${HANDLER_SECRET}\n`))) }).request({ body });
+  assert.equal(leaking.status, 403);
+  assert.equal(leaking.body.code, 'E_FORBIDDEN');
+  assert.equal(JSON.stringify(leaking).includes(HANDLER_SECRET), false, 'no part of the reply carries the credential');
+});
+
 test('HTTP concurrent reads share only their in-flight request; stale diagnostics remain sanitized', async () => {
   let done; const h = http({ exec: (_b, _a, _o, callback) => { done = callback; } });
   const body = JSON.stringify({ action: 'diff', selector: selector(instance()), fileId: 'c'.repeat(24), revision: 'a'.repeat(40), indexRevision: 'b'.repeat(40) });
@@ -105,10 +120,10 @@ test('HTTP concurrent reads share only their in-flight request; stale diagnostic
 });
 
 test('privileged proxy pins the new instance-addressed route and never admits foreign origin/workspace', () => {
-  const base = 'http://127.0.0.1:4820', allowed = new Set(['/A', '/B']);
-  for (const query of ['', '?ws=/foreign']) assert.equal(apiUrl(`/api/instance-git${query}`, base, '/A', allowed).searchParams.get('ws'), '/A');
-  assert.equal(apiUrl('/api/instance-git?ws=/B', base, '/A', allowed).searchParams.get('ws'), '/B');
-  for (const path of ['//evil.invalid/api/instance-git', '/\\evil.invalid/api/instance-git']) assert.throws(() => apiUrl(path, base, '/A', allowed), /off-origin/);
+  const allowed = new Set(['/A', '/B']);
+  for (const query of ['', '?ws=/foreign']) assert.equal(apiUrl(`/api/instance-git${query}`, '/A', allowed).searchParams.get('ws'), '/A');
+  assert.equal(apiUrl('/api/instance-git?ws=/B', '/A', allowed).searchParams.get('ws'), '/B');
+  for (const path of ['//evil.invalid/api/instance-git', '/\\evil.invalid/api/instance-git']) assert.throws(() => apiUrl(path, '/A', allowed), /off-origin/);
 });
 
 function shell(t) {

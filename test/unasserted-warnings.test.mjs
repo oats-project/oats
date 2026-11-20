@@ -106,3 +106,21 @@ test("the reporter reads lines, whole: one split over two events is one, and an 
     { file: "/repo/test/b.test.mjs", stream: "stdout", line: `${WARNING_MARK} with no newline` },
   ]);
 });
+
+test("a skipped real-aw path fails the root run and names the missing coverage", t => {
+  for (const [name, source] of [
+    ["real aw runtime skip", `${HEAD}test("real aw runtime skip", t => { t.skip("native binary absent"); });\n`],
+    ["real aw custody status", `${HEAD}test("real aw custody status", { skip: "native fixture absent" }, () => {});\n`],
+    ["real aw native suite", `${HEAD}import { describe } from "node:test"; describe("real aw native suite", { skip: "native fixture absent" }, () => { test("custody status", () => {}); });\n`],
+  ]) {
+    const r = rootRun(t, "native-aw.test.mjs", source);
+    assert.notEqual(r.status, 0, says(r));
+    assert.match(r.stderr, /SKIPPED REAL-AW TESTS: 1/);
+    assert.ok(r.stderr.includes("native-aw.test.mjs"));
+    assert.ok(r.stderr.includes(name));
+  }
+});
+
+test("a platform skip outside the real-aw path keeps its ordinary test-runner meaning", t => {
+  passes(rootRun(t, "platform.test.mjs", `${HEAD}test("another platform", { skip: "not this platform" }, () => {});\n`));
+});

@@ -298,6 +298,26 @@ async function thrown(answer, options = {}) {
   assert.fail("the preflight was expected to fail");
 }
 
+// Session providers (spec C1): the home moved to one while its preflight ran.
+test("the preflight ends for a row the roster now shows on a session provider: no viewer is started; Enter's line says where it runs, a restore says nothing; a row still in tmux starts as before", () => {
+  const state = on(both(), FAR_A), id = instanceId(rowOf(state));
+  const asking = press(state, ["enter"]).state;
+  const moved = farRow(FAR_A, { backend: "bb", tmux: null, runtimeState: "unknown", session: { provider: "oats.bb" }, open: { label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_x" } });
+  const later = heard(asking, [group({ instances: [moved] })], "2026-10-11T10:00:25.000Z");
+  assert.deepEqual(later.opening, asking.opening, "the preflight is still under way when the roster brings the row");
+  const refused = reduce(later, { prepared: { id } });
+  assert.deepEqual([refused.effect, refused.state.opening, refused.state.terminal, refused.state.tabs], [null, null, null, []], "no viewer, no tab");
+  // Another machine's row carries no link: the sentence alone, as Enter on that row says it.
+  assert.deepEqual(refused.state.outcome, { said: [], under: ["Runs in a bb thread; open it in bb."] });
+  // A restore's preflight: dropped quietly, as any tab a restore cannot open.
+  const restoring = Object.freeze({ ...later, opening: Object.freeze({ ...later.opening, restore: true }) });
+  const quiet = reduce(restoring, { prepared: { id } });
+  assert.deepEqual([quiet.effect, quiet.state.opening, quiet.state.tabs, quiet.state.outcome ?? null], [null, null, [], null]);
+  // The same sequence with the row still in tmux: started, as before.
+  const same = heard(asking, [group()], "2026-10-11T10:00:25.000Z");
+  assert.deepEqual(reduce(same, { prepared: { id } }).effect, { panel: id });
+});
+
 test("a preflight that failed: the shared table's sentence and, when the kernel said something, its lines under it; a withheld text is the TUI's [withheld]; the person's own giving up says nothing", async () => {
   const state = on(both(), FAR_A), asking = press(state, ["enter"]).state, id = asking.opening.id;
   const after = (error) => reduce(asking, { prepared: { id, error } });

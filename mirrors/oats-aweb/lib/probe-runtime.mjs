@@ -1,3 +1,4 @@
+import {awChildEnv} from './aw-child-env.mjs';
 // Probe I/O is bounded by one monotonic deadline. This module never sends mail.
 import {spawn} from 'node:child_process';
 import {performance} from 'node:perf_hooks';
@@ -46,8 +47,7 @@ export function probeEnvironment(inherited) {
   for (const key of Object.keys(env)) {
     if (/^(AW_|AWEB_|OATS_|OAS_|PI_AGENT_)/.test(key) || key === 'PI_AGENTS_ROOT' || key === 'NODE_OPTIONS' || key === 'NODE_PATH') delete env[key];
   }
-  env.AW_NO_UPDATE_CHECK = '1';
-  return env;
+  return awChildEnv(env);
 }
 export class ProbeBudget {
   constructor(seconds, {now = () => performance.now(), wall = () => new Date().toISOString(), signal} = {}) {

@@ -2,9 +2,12 @@
  * focus and scroll it keeps across a rebuild, the roster's count line and loading state, and each row's name. The tree
  * itself (identity, relations, groups, order, visibility) is the shared packages/client/instance-tree.mjs. */
 import { createDataState, statusLine, skeleton, skeletonBlock, ROSTER_STALE_TITLE } from './loading.mjs';
-import { instanceId, resolveLinkId, findRosterInstance } from '../../client/instance-tree.mjs';
+import { instanceId, resolveLinkId, findRosterInstance, siblingLinksOf } from '../../client/instance-tree.mjs';
 import { instanceDisplayName } from '../../client/instance-display-name.mjs';
-import { drawsParentLine } from '../../client/same-work.mjs';
+import { drawsParentLine, drawsSiblingLink } from '../../client/related-work.mjs';
+import { iconElement } from './shell-icons.mjs';
+import { sessionProvider } from '../../client/instance-presentation.mjs';
+import { noTerminal } from './provider-row.mjs';
 
 /** An instance row's name (0.68.1, the product owner): the words shown (instanceDisplayName: "Oats expert maintainer
  * lanes"), the real name kept where it identifies the instance. The words are hidden from assistive tech and a visually
@@ -24,6 +27,34 @@ export function rosterName(doc, instanceName) {
   return name;
 }
 
+/** A roster row's state in words for assistive technology (slice 1: the hover card said it, and the dot says it by
+ * shape and colour alone): ", running", ", stopped" or ", status unknown", visually hidden after its second line. */
+export function stateSpan(doc, state) {
+  const span = doc.createElement("span"); span.className = "sr-only ctx-state";
+  span.textContent = `, ${state === "running" ? "running" : state === "stopped" ? "stopped" : "status unknown"}`;
+  return span;
+}
+
+/** A roster row's relations in words for assistive technology (the roster's lines, drawn for related work only,
+ * are aria-hidden), ", under p, related work, sibling of s", visually hidden after its lines; null when it has none.
+ * The words are the command palette's ("under …", siblingText's "sibling of …"). */
+export function relationSpan(doc, words) {
+  if (!words) return null;
+  const span = doc.createElement("span"); span.className = "sr-only ctx-relation"; span.textContent = `, ${words}`;
+  return span;
+}
+
+/** A pinned row's mark on its name line (feature instance-pin): the pin icon, in the muted text colour, as an image
+ * named "Pinned", so the pin is seen and heard, never inferred from the row's place, and has no colour-only meaning. */
+export function pinnedMark(doc) {
+  const mark = doc.createElement("span");
+  mark.className = "ctx-pin";
+  mark.setAttribute("role", "img");
+  mark.setAttribute("aria-label", "Pinned");
+  mark.append(iconElement(doc, "pin", { size: 12 }));
+  return mark;
+}
+
 /** Agent-group boundary for the instances sidebar (Workspace v4): no title,
  * a 6px gap (2026-10-23; was 14px), with the cluster's indent and its root,
  * and the boundary is still exposed to assistive technology (role=separator with the group's name and
@@ -40,18 +71,16 @@ export function clusterSeparator(doc, { label, count } = {}) {
   return gap;
 }
 
-/** Design connectors for one visible row, drawn from the dots (Redesign v3):
- * solid parent→child elbows (rounded into the child dot), solid pass-through
- * lines for open ancestor branches and beside a non-last child's elbow, and a DOTTED dot-to-dot link joining the
- * depth-0 members of one agent group (sibling relations). The dotted link
- * sits on the dot column and the solid lineage just right of it (shell.css
- * --tree-branch-offset), so a row between two roots draws its own
+/** Design connectors for one visible row, drawn from the dots (Redesign v3), for related work only (no flag, no
+ * line: packages/client/related-work.mjs): solid parent→child elbows (rounded into the child dot), solid
+ * pass-through lines for open ancestor branches and beside a non-last child's elbow, and a DOTTED dot-to-dot link
+ * between top-level rows a related sibling link joins. The dotted link sits on the dot column and the solid lineage
+ * just right of it (shell.css --tree-branch-offset), so a row between two joined roots draws its own
  * `link-through` and never lets a solid line stand in for it (#1312).
- * The solid lineage joins only a child that draws its parent line (#1577, packages/client/same-work.mjs
- * `drawsParentLine`; the gate is stamped on each row by the panel): a child that does not keeps its indent and
- * gets no elbow, and its parent's stem and vertical do not reach it. The dotted links are siblinghood, not
- * parentage, and are drawn as before. Nothing else marks the flag: the line is its only sign, aria-hidden.
- * `items` is the rendered group order. */
+ * The solid lineage joins only a child that draws its parent line (#1577, `drawsParentLine`; the gate is stamped
+ * on each row by the panel): a child that does not keeps its indent and gets no elbow, and its parent's stem and
+ * vertical do not reach it. The dotted link is `siblingLinkSpans`'. The lines are aria-hidden; the row's words say
+ * the same (`relationSpan`). `items` is the rendered group order. */
 export function treeConnectors(items, item, allInstances = items) {
   const at = items.indexOf(item), depth = item.depth || 0;
   const segments = treeGuideSegments(items, item, allInstances);
@@ -67,13 +96,46 @@ export function treeConnectors(items, item, allInstances = items) {
   // first child's elbow (the child is the very next rendered item), when that child draws its line.
   const next = at >= 0 ? items[at + 1] : null;
   if (next && (next.depth || 0) === depth + 1 && drawsParentLine(next)) out.push({ kind: "down", level: depth });
-  const rootBefore = at > 0 && items.slice(0, at).some((i) => !(i.depth || 0));
-  const rootAfter = at >= 0 && items.slice(at + 1).some((i) => !(i.depth || 0));
+  if (at < 0) return out;
+  const { spans, joined } = siblingLinkSpans(items, allInstances);
+  // A top-level row no related link joins is a gap in the line, and so are the rows of its block (its descendants,
+  // which follow it): none carries a dotted segment, so nothing touches its dot. The line above ends at the bottom
+  // edge of the row before, and starts again at the top edge of the row after (the lead's choice B, 2026-11-20:
+  // the roster's order stays as it is).
+  let block = at;
+  while (block > 0 && (items[block].depth || 0)) block--;
+  if ((items[block].depth || 0) || !joined.has(block)) return out;
   if (!depth) {
-    if (rootBefore) out.push({ kind: "link-in", level: 0 });
-    if (rootAfter) out.push({ kind: "link-out", level: 0 });
-  } else if (rootAfter) out.push({ kind: "link-through", level: 0 });
+    if (spans.some(([from, to]) => from < at && at <= to)) out.push({ kind: "link-in", level: 0 });
+    if (spans.some(([from, to]) => from <= at && at < to)) out.push({ kind: "link-out", level: 0 });
+  } else if (spans.some(([from, to]) => from < at && at < to)) out.push({ kind: "link-through", level: 0 });
   return out;
+}
+
+/** The dotted links of one rendered group: `spans`, one `[from, to]` pair of `items` indexes per related sibling
+ * link (from < to), and `joined`, the set of indexes a span ends at. A link is a top-level row that draws it
+ * (related-work.mjs `drawsSiblingLink`) whose `siblingInstance` resolves (over `allInstances`, by identity, as the
+ * tree does) to another top-level row shown in `items`. The links are edges, not a star: S may link to R and T to S.
+ * A link to a row that is hidden, filtered out, or not top-level draws nothing. */
+export function siblingLinkSpans(items, allInstances = items) {
+  const byName = new Map();
+  for (const candidate of allInstances) {
+    if (!byName.has(candidate.instance)) byName.set(candidate.instance, []);
+    byName.get(candidate.instance).push(candidate);
+  }
+  const roots = new Map();
+  items.forEach((candidate, index) => { if (!(candidate.depth || 0)) roots.set(instanceId(candidate), index); });
+  const spans = [], joined = new Set();
+  items.forEach((candidate, index) => {
+    if ((candidate.depth || 0) || !drawsSiblingLink(candidate)) return;
+    for (const name of siblingLinksOf(candidate)) {
+      const other = roots.get(resolveLinkId(candidate, name, byName));
+      if (other === undefined || other === index) continue;
+      spans.push([Math.min(index, other), Math.max(index, other)]);
+      joined.add(index).add(other);
+    }
+  });
+  return { spans, joined };
 }
 
 /** The one DOM builder for a row's connectors (`treeConnectors`' answer), shared by the sidebar's rows (a
@@ -107,7 +169,8 @@ export function terminalKey(workspace, ref) {
  * instance, never the caller's ref shape, so a bare-name open and a sidebar
  * object open of the same identity share one tab, and a stale bare-name
  * tab can never be activated once the name has become ambiguous (resolution
- * refuses first). Returns { inst, key } or { error: "ambiguous"|"unknown" }.
+ * refuses first). Returns { inst, key } or { error: "ambiguous"|"unknown" }, or, for a row that runs on a
+ * session provider, { error: "no-terminal", sentence }: it has no terminal, whoever asks.
  * Importable so the ordering regression exercises this exact layer. */
 export function resolveTerminalOpen(instances, ref, workspace) {
   const name = typeof ref === "string" ? ref : ref.instance;
@@ -116,6 +179,11 @@ export function resolveTerminalOpen(instances, ref, workspace) {
     const dup = instances.filter((i) => i.instance === name).length > 1;
     return { error: dup ? "ambiguous" : "unknown", name };
   }
+  // A row on a session provider (provider-row.mjs) has no terminal: refused here, before any key or tab is
+  // decided, so no path opens, splits, reuses or restores one for it. `sentence` says where the agent runs (the
+  // shared home's), or that the row has none when the kernel holds it; `row` is the row that was resolved, for a
+  // caller that must know it is the one it was asked for before it speaks of it.
+  if (sessionProvider(inst)) return { error: "no-terminal", name, row: inst, sentence: noTerminal(inst)?.sentence ?? `${name} has no terminal to open.` };
   return { inst, key: terminalKey(workspace, inst), name };
 }
 
@@ -123,7 +191,7 @@ export function resolveTerminalOpen(instances, ref, workspace) {
  * `continue` is an ancestor/sibling vertical; `branch` has a later sibling and
  * an elbow; `end` is the final sibling, stopping at its elbow; `none` suppresses
  * an exhausted ancestor line through deeper descendants, and the row's own segment when it does not draw
- * its parent line (#1577, `drawsParentLine`). A vertical counts only later siblings that draw theirs: under
+ * its parent line (#1577, `drawsParentLine`: related work only). A vertical counts only later siblings that draw theirs: under
  * one parent those come first (instance-tree.mjs `clusterInstances`), so it ends at the last one.
  * Pass the full roster as allInstances when items is a cluster/filtered subset:
  * resolve parent names there first, using the same identity rules as clustering.
@@ -243,17 +311,9 @@ export function renderRosterCount(el, instances, { pending = false, stale = fals
 }
 
 /* ── the roster's loading state (desktop/loading-states) ─────────────────── */
-/** Why Start… is disabled, and the row's context menu held, while the roster is stale: the reason a
- * disabled control carries for the pointer (title) and for assistive tech (aria-description),
- * since a greyed look alone says nothing. */
+/** Why a stopped row's Start, and the row's context menu, are held while the roster is stale: the reason the row
+ * carries for the pointer (title) and for assistive tech (aria-description), since a greyed look alone says nothing. */
 export { ROSTER_STALE_TITLE };
-export function markStaleControl(control) {
-  // aria-disabled, never `disabled`: Chromium blurs a focused control that becomes disabled, and the roster
-  // repaints under focus. Every handler on a stale-marked control checks `staleBlocked()` first.
-  control.setAttribute("aria-disabled", "true"); control.title = ROSTER_STALE_TITLE; control.setAttribute("aria-description", ROSTER_STALE_TITLE);
-}
-/** True when `markStaleControl` marked this control: its activation must do nothing. */
-export const staleBlocked = control => control?.getAttribute?.("aria-disabled") === "true";
 /** The pending skeleton: five roster rows, the height of the real ones. */
 export const ROSTER_SKELETON_ROWS = 5;
 

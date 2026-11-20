@@ -9,9 +9,10 @@ const version = await gitVersion();
 export const GIT_VERSION_TEXT = version?.text ?? null;
 /** True when the kernel keeps partial caches with this git. */
 export const PARTIAL_GIT = keepsPartialCache(version);
-/** The notice the kernel gives once per repository when this git (or `text`) cannot keep a partial cache. */
-export const olderGitNotice = (url, text = GIT_VERSION_TEXT ?? "(unknown version)") =>
-  `git ${text} cannot keep a partial cache (it needs ${PARTIAL_FETCH_GIT.join(".")}); OATS fetches whole trees from ${url}`;
+/** The notice the kernel gives once per session (once per command, or per reader call), however many caches it
+ *  starts, when this git (or `text`) cannot keep a partial cache. It names no repository. */
+export const olderGitNotice = (text = GIT_VERSION_TEXT ?? "(unknown version)") =>
+  `git ${text} cannot keep a partial cache (it needs ${PARTIAL_FETCH_GIT.join(".")}), so OATS fetches whole trees instead; a git of ${PARTIAL_FETCH_GIT.join(".")} or later removes this notice`;
 /** The `skip` option for a test of partial-cache mechanics: false (run it) with a git that keeps a partial cache
  *  or under CI; otherwise the reason it cannot run here. */
 export const skipPartialMechanics = PARTIAL_GIT || process.env.CI

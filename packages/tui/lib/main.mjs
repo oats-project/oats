@@ -12,7 +12,7 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { bindings } from "./actions.mjs";
-import { TERMS, capabilityCatalogKey, cliDeploymentList, deploymentsListSupported, createCapabilityCatalog, createLifecycleBoundary, createLifecycleConfirmation, createRetiresInFlight, createSoulCatalog, createSpawnApplyBoundary, createSpawnPreview, createSpawnTransaction, createResumeTrigger, displayLine, heldHome, pendingEntry, prepareRemoteTerm, runResumeSweep, sessionAttachArgv, soulCatalogKey, startInstance } from "./client.mjs";
+import { TERMS, capabilityCatalogKey, cliDeploymentList, deploymentsListSupported, createCapabilityCatalog, createLifecycleBoundary, createLifecycleConfirmation, createRetiresInFlight, createSoulCatalog, createSpawnApplyBoundary, createSpawnPreview, createSpawnTransaction, createResumeTrigger, displayLine, heldHome, pendingEntry, prepareRemoteTerm, runResumeSweep, sessionAttachArgv, soulCatalogKey, startInstance, pinInstance } from "./client.mjs";
 import { loadConfig, loadKeys } from "./config.mjs";
 import { ACT_WORDS, LIST_WORDS, actContext, actCwd, listRowsOf, localDeployments, model, outcomeOf, reachedMachines, resumeObservation, roster, spawnContext } from "./model.mjs";
 import { createPanel, sweep } from "./panel.mjs";
@@ -100,7 +100,7 @@ function errorLines(error) {
  *  chord family (lib/config.mjs), replaceable so no test reads a user's file. `createResumeTrigger`
  *  is the shared trigger of the kernel's machine sweep (packages/client session-resume-trigger.mjs). */
 const EFFECTS = Object.freeze({ loadConfig, loadKeys, findDeployment, probeKernel, createReader, createIdentityReads, deploymentList: cliDeploymentList, startExec, admitDeployment, prepareRemoteTerm, createPanel, sweep,
-  runDir: CHANGE_FILES.dir, removeDir: CHANGE_FILES.remove, realpath, tellable, startInstance, createLifecycleConfirmation, createLifecycleBoundary, createSoulCatalog,
+  runDir: CHANGE_FILES.dir, removeDir: CHANGE_FILES.remove, realpath, tellable, startInstance, pinInstance, createLifecycleConfirmation, createLifecycleBoundary, createSoulCatalog,
   createCapabilityCatalog, createSpawnPreview, createSpawnApplyBoundary, createSpawnTransaction, createResumeTrigger });
 
 /** The timers a run lends the shared spawn: the apply's deadline and its grace (the boundary's
@@ -487,6 +487,7 @@ export async function main({ argv, stdin, stdout, stderr, env, proc = process, n
     if (effect.act) openConfirmation(effect.act);
     if (effect.call) callConfirmation(effect.call);
     if (effect.start) startAct(effect.start);
+    if (effect.pin) pinAct(effect.pin);
     if (effect.refresh) refresh(effect.refresh);
     if (effect.souls === "settle" && state.open !== null) settleSouls(state.open);
     if (effect.souls === "reread" && state.open !== null) rereadSouls(state.open);
@@ -600,6 +601,19 @@ export async function main({ argv, stdin, stdout, stderr, env, proc = process, n
     Promise.resolve()
       .then(() => effects.startInstance(probe.cli, row, {}, { restart: verb === "restart", deployments: localDeployments(state, clock()), realpath: effects.realpath, localCwd: actCwd(state), exec, terms: TERMS, group: contextOf(row?.deployment?.id).workspace?.group }))
       .then((answer) => heard({ acted: { n, answer } }), () => heard({ acted: { n, answer: null } }));
+  }
+  /** Pin or unpin the row the store decided on (feature instance-pin; lib/model.mjs pinDecision): the kernel's verb,
+   *  through the shared pinInstance, on this machine with `--dir` its deployment, on another routed with `--server`,
+   *  as a stop is. It is a change (reader.changeExec): never ended by the TUI, and named on the way out while it
+   *  runs. Its answer goes to the store as `{ pinned }`, which reads the rows again. */
+  function pinAct({ id, row, pinned }) {
+    const name = row.instance, workspace = contextOf(row.deployment?.id).workspace;
+    const remote = !!(workspace?.remote || workspace?.server);
+    const args = { instance: name, home: row.home, pinned, ...(remote ? { server: workspace?.server } : { context: workspace?.scope }) };
+    const exec = (bin, argv, options, callback) => reader.changeExec(bin, argv, { ...options, label: { verb: "pin", name } }, callback);
+    Promise.resolve()
+      .then(() => effects.pinInstance(probe.cli.bin, args, { exec, ...(remote ? { cwd: actCwd(state) } : {}) }))
+      .then((answer) => heard({ pinned: { id, name, pinned, answer } }), () => heard({ pinned: { id, name, pinned, answer: null } }));
   }
 
   /** Open the agent the store decided on (lib/model.mjs openDecision). On this machine the viewer

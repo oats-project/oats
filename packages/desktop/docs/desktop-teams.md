@@ -24,17 +24,26 @@ join, and its default, in the workspace's `souls:`. So:
 ## The Teams board
 
 `renderer/computer-teams.mjs`. One centred column, at most 1120px wide: the page head (the title, its
-one line, and **Add a local team** where local teams are allowed), then three sections 40px apart, each
-with a sentence-case heading and one muted line:
+one line, and **Add a team on this computer** where local teams are allowed), then three sections 40px
+apart, each with a sentence-case heading and one muted line (`TEAMS_COPY`):
 
-- **Shared teams**: "Declared in oats-workspace.yaml and shared through Git, so every computer that runs
-  the workspace has them."
-- **Local teams**: "Only on this computer, in its oats-local.yaml. Not shared." Where local teams are
-  closed and none is left, the section holds one dashed paragraph, not a card: "No local teams:
-  oats-workspace.yaml does not allow local teams (localTeams: true)." Where they are allowed and there
-  is none, an empty card offers **Add a local team**. The add form opens in this section.
+- **Workspace teams**: "Declared by this workspace in oats-workspace.yaml and shared through Git:
+  everyone who opens the workspace sees them."
+- **This computer's teams**: "Declared only on this computer, in its oats-local.yaml: not shared with
+  the workspace." Where local teams are closed and none is left, the section holds one dashed paragraph,
+  not a card: "No teams of this computer: oats-workspace.yaml does not allow local teams (localTeams:
+  true)." Where they are allowed and there is none, an empty card offers **Add a team on this
+  computer**. The add form opens in this section.
 - **Which teams each soul may join** (team model 3, not in the standalone view): "And its default:
   souls: in oats-workspace.yaml (a PR to the workspace file)."
+
+The section names (the Desktop UI rework, slice 3b; D22) follow what the kernel's teams are. A kernel
+**local** team is declared in this deployment's `oats-local.yaml` (`teams.<label>`, "a team only this
+deployment uses", docs/configuration.md), allowed only where the workspace says `localTeams: true`.
+It is not a team of another workspace this computer joined, so the guide's "External teams" would
+misdescribe it: the section is **This computer's teams**. The kernel's words (`oats-workspace.yaml`,
+`oats-local.yaml`, `localTeams`) stay in the sentences. Counts and lists say **your agents**
+(`DESKTOP_NOUNS`; team-instance-lists-state-their-observation-scope).
 
 The page's own problems (those no card holds) come before the sections, failures first. Each section
 puts the default team's card first, then keeps the document's order. A local team's card has a dashed
@@ -57,16 +66,16 @@ frame, a shared one a solid frame.
 5. **Why Remove is off** (`teamInUse`), a muted line.
 6. **The confirmation** of Make default, or the row's error: a refusal, one sentence and then the
    kernel's code under Details.
-7. **The summary foot**: your instances on the team, and "Open team ›" on the right. The cue is
+7. **The summary foot**: your agents on the team, and "Open team ›" on the right. The cue is
    `aria-hidden`: the label's button carries the action.
 
 **The audience** (team model 3) is two labelled rows, each shown only when it has entries:
 
-- **Default for**: whose default the team is, e.g. "all souls of **lfx-ai-engineering**",
+- **Default for**: whose default the team is, e.g. "all souls of **lab-ai-engineering**",
   "**writer** (acme-agents)", or, for the document's `defaultTeam`, "every soul without its own
   default" (with "(this deployment's choice)" when it is the deployment's).
 - **May join**: who else may join it without it being their default, e.g. "souls of
-  **lfx-agents** · **ai-reviewer** (lfx-ai-engineering)", or "every soul (local team)" for a local
+  **lab-agents** · **ai-reviewer** (lab-ai-engineering)", or "every soul (this computer's team)" for a local
   team where local teams are allowed.
 
 A card with neither says "No soul may join it yet". Repo and soul names are bold, each titled with
@@ -75,8 +84,8 @@ the `souls:` key it comes from.
 `teamAudience(document, label)` computes both from the committed `souls:` map alone, with the
 kernel's resolution (`lib/teams.mjs`): a soul's teams come from its most specific key outright, its
 default from the most specific key that sets one, and `any` is every shared team. So an entry a
-broader key already implies is never repeated (`lfx-ai-engineering/ai-reviewer` defaulting to the
-same team as `lfx-ai-engineering/*`). A pattern lists as `except` the more specific keys under it that
+broader key already implies is never repeated (`lab-ai-engineering/ai-reviewer` defaulting to the
+same team as `lab-ai-engineering/*`). A pattern lists as `except` the more specific keys under it that
 fall outside, as in "all souls of p except x". Where `"*"` sets a default, no soul falls back to the
 `defaultTeam`, and its row says so quietly. Before team model 3 the function answers null, and the
 card keeps the team model 2 **Address** and **Who may join** rows, from `whoMayJoin`.
@@ -86,13 +95,13 @@ This is a second reading of the kernel's resolution in the renderer. `test/deskt
 keep that test green, or change `teamAudience` with it.
 
 **The foot's words** (`memberSummaryParts`, joined into one string by `memberSummary`): "N of your
-instances", then ", M on other machines" when some run on another machine, then ", <machine>[,
+agents", then ", M on other machines" when some run on another machine, then ", <machine>[,
 <machine>] not reached" in the warn colour for the team's machine groups whose last read failed (each
-machine once). With no members it reads "None of your instances". The foot is empty until the members are
+machine once). With no members it reads "None of your agents". The foot is empty until the members are
 known, and for a team with no provider id; a board without `onOpenTeam` leaves an empty foot out.
 
 **How a card opens.** With `onOpenTeam`, the label is a `button.ct-open` inside the card's `h4`, named by
-the label and described as "Opens the team's page with your instances on it". Its `::after` covers the
+the label and described as "Opens the team's page with your agents on it". Its `::after` covers the
 card (the card is `position: relative`), so a click on the card opens the page. The card's other
 controls (the actions, the confirmation, the row error, links) sit above it, and so do its problem boxes
 (blocking and warnings), so their text, a fix to copy, can be selected, and a click on them opens nothing.
@@ -135,20 +144,20 @@ The page, top to bottom:
   on this computer could not be read.", or the kernel's refusal) shows in the card after its
   confirmation, as the board says it, so the page never shows stale facts silently; the add form's
   errors stay on the board.
-- **Your instances on this team**, a section headed as the board's are, with the line "On this computer
-  and the machines you added to this workspace. Instances other people run on <label> are not listed
+- **Your agents on this team**, a section headed as the board's are, with the line "On this computer
+  and the machines you added to this workspace. Agents other people run on <label> are not listed
   here." That is what `/api/team-members` answers: the view's deployments only ([Team
   members](#team-members)).
-  - **The counts**: N instances, R running, then S stopped and A need(s) attention (in the warn colour)
+  - **The counts**: N agents, R running, then S stopped and A need(s) attention (in the warn colour)
     when they are not zero, and "on M machine(s)" on the right. R counts the members that are running and
     can be opened, A those whose state is `warn` (`stateKind`), S the rest; this computer is one machine,
-    each server another. For the default team a muted note follows: "Every instance joins its default
-    team, so all of your instances are here."
+    each server another. For the default team a muted note follows: "Every agent joins its default
+    team, so all of your agents are here."
   - **One card per machine group** (`memberGroups`, this computer's first): a `role="group"` named by its
     machine (with its short path where two groups share a machine), under a head band with the machine,
-    the deployment's short path (the full path as its title) and "N instances, R running". A group not
+    the deployment's short path (the full path as its title) and "N agents, R running". A group not
     reached reads "not reached" in the warn colour, with the error as the head's title.
-  - **A table per card** (`role="table"`, named "Your instances on <label> on <machine>"). The cards sit
+  - **A table per card** (`role="table"`, named "Your agents on <label> on <machine>"). The cards sit
     in one grid (`.ct-mcards`, the only place the columns are set); each card, its table and its rows
     are subgrids of it, so every name on the page sizes the same columns and they line up from machine
     to machine. The columns: **Instance** (the soul's
@@ -164,8 +173,8 @@ The page, top to bottom:
     in its title. Created hides under a 1000px container and
     Soul under 900px to make room. Under 760px Instance, State and Terminal remain, and a name too long
     for its cell is cut with an ellipsis, whole in its title.
-- **The empty states**, each a dashed paragraph: "This team has no provider id yet, so no instance can be
-  on it.", or "None of your instances is on <label>." Until the members are known, the section shows its
+- **The empty states**, each a dashed paragraph: "This team has no provider id yet, so no agent can be
+  on it.", or "None of your agents is on <label>." Until the members are known, the section shows its
   heading and nothing else.
 
 **Repaint.** The page follows the pages' rule, not the board's redraw barrier. At each render and each
@@ -191,7 +200,7 @@ The teams configuration is one deployment's: a view id is read as the view's pri
 two or more deployments the configuration says which under its heading ("On This Mac ·
 ~/acme"). A remote primary is `unsupported-remote-operation`: teams are edited on the
 computer that runs the deployment.
-They sit behind the server-wide Host and Origin guards (loopback only; a foreign, `null` or
+They sit behind the server-wide credential check and Host and Origin guards (loopback only; a foreign, `null` or
 malformed `Origin` is 403 before any process), so a cross-origin page cannot rewrite the file.
 The renderer reaches them through the generic guarded proxy (sender-frame guard, `ws` pinned to
 the connected server's view and deployment ids, 20 s deadline; the verbs run with a 15 s timeout).
@@ -250,7 +259,7 @@ The shape is the lead's (0.30 D2 review):
   never another workspace's groups. Any view is answered, a view with no local deployment
   included.
 - **Held observations only.** It runs no command and adds no ssh: remote groups are read as the
-  remote roster loop's one `oats server roster` read left them. The server-wide Host guard applies,
+  remote roster loop's one `oats server roster` read left them. The server-wide credential check and Host guard apply,
   and the proxy pins `ws` to an advertised view or deployment id.
 - A missing or repeated `ws` is `E_BAD_ARGS`; one that names no view is `E_WORKSPACE_UNKNOWN`.
 

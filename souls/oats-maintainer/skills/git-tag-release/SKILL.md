@@ -1,11 +1,11 @@
 ---
 name: git-tag-release
-description: "OATS's release lane: the release workflow and scripts, how a tag becomes the kernel, adapter and Desktop releases, the runnerless lane, Desktop signing and acceptance, and OATS's artifacts and bump PR. Load it with /ship-release whenever you prepare, ship or verify an OATS release, or diagnose a partial tag-driven or runnerless release."
+description: "OATS's release lane: the release workflow and scripts, how a tag becomes the kernel, adapter and Desktop releases, the runnerless lane, Desktop signing and acceptance, and OATS's artifacts and bump PR. Load it with /plan-and-ship-release whenever you prepare, ship or verify an OATS release, or diagnose a partial tag-driven or runnerless release."
 ---
 
 # OATS's release lane
 
-`/ship-release` (from `oats.maintainer`) is the method: authority, exact source, gates,
+`/plan-and-ship-release` (from `oats.maintainer`) is the method: authority, exact source, gates,
 tagging, the verify-release checklist and partial-publication rules. This skill is what
 OATS's lane adds.
 

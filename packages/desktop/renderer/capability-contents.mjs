@@ -16,14 +16,23 @@
  * Capability warnings (OATS 0.49.0, capability-warnings.mjs) sit above the card, full width: every one is
  * about this capability, so no name and no Open capability. They never change the section's ready state.
  *
+ * Skills (the Desktop UI rework, slice 3b; guide tour steps 35 and 36): the same answer lists the capability's skills,
+ * shown by the page as rows of their own (`skills`, a long-lived element the page places under "What it does"): each
+ * skill's name and the first sentence of its description. Enter on one opens the whole skill in the pane (`skillView`,
+ * a second long-lived element the page places beside its body): its SKILL.md, the front matter as facts then the body,
+ * read-only, with the skill's other files a press away. Esc (or its Back) returns to the capability, focus on the
+ * skill's row. Before the answer the rows are the catalog's skill names (`row.skills`), not openable; a gate (an older
+ * CLI, a remote workspace, an external capability) leaves those names. The skill's read carries its own ticket.
+ *
  * Trigger sources (feature `trigger-sources`) come in the same answer but belong to the page's Provides card:
  * the controller owns that row too (`triggerSources`, a second long-lived element the page appends into its
  * card on every rebuild) and tells the host when it appears or disappears (`onProvidesChange`). Neither the
  * declaration nor the kernel's problems with it change the section's state, its problems or its warnings. */
-import { capabilityShowSupported, capabilitySelector, capabilityShowData, capabilityFileData, listedFiles, skillFilePath, triggerSourcesView, capabilityShowUnreadable } from '../../client/capability-show-contract.mjs';
+import { capabilityShowSupported, capabilitySelector, capabilityShowData, capabilityFileData, listedFiles, skillFilePath, skillRelativePath, triggerSourcesView, capabilityShowUnreadable } from '../../client/capability-show-contract.mjs';
 import { DESKTOP_TERMS } from './desktop-terms.mjs';
 import { fillTriggerSourcesRow } from './capability-page.mjs';
 import { contentsCardCSS, sizeText, firstSentence, createContentsTree, createContentsReader, skillTreeItem, isSkillMd, SKILL_COPY } from './contents-reader.mjs';
+import { iconElement } from './shell-icons.mjs';
 import { createDataState, skeleton, captureFocusState } from './loading.mjs';
 import { createWarningsList, capabilityWarningsCSS, WARNINGS_COPY } from './capability-warnings.mjs';
 
@@ -45,11 +54,44 @@ export const CONTENTS_COPY = Object.freeze({
   tooLarge: size => `Too large to show${size ? ` (${size})` : ''}.`,
   notAvailable: 'Not available.',
   empty: 'Nothing to show: this capability injects no instructions and ships no skills.',
+  skills: 'Skills',
+  skillsNone: 'Ships no skills.',
+  skillOpen: name => `${name}: open the whole skill`,
+  skillBack: name => `Back to ${name}`,
+  skillHint: 'Esc returns to the capability.',
+  skillFiles: 'Its files',
   moved: 'The capability changed while it was read. Its contents are read again when the list is refreshed.',
 });
 
 /** The Contents card's grammar (contents-reader.mjs), shared with the soul page's Instructions, and the warnings above it. */
 export const capabilityContentsCSS = `${contentsCardCSS}${capabilityWarningsCSS}
+/* Skills (slice 3b): a row per skill, its name and one line; Enter opens the whole skill. */
+/* The skills: the capability list's rows (slice 3c, the prototype's look): no box, a hairline under each row. */
+.cap-skills-list { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; }
+.cap-skills-list > li { display:flex; min-width:0; border-bottom:1px solid var(--border); }
+.oats-view button.cap-skill-row, .cap-skill-row { appearance:none; -webkit-appearance:none; display:flex; flex-direction:column; justify-content:center; gap:2px; flex:1; width:100%; min-width:0; height:auto; min-height:var(--row-h); margin:2px 0; padding:5px var(--space-3); border:0; border-radius:var(--radius-control); background:transparent; color:var(--fg); font:inherit; font-family:var(--ui-font,system-ui); text-align:left; box-sizing:border-box; }
+.oats-view button.cap-skill-row { cursor:pointer; }
+.oats-view button.cap-skill-row:hover { background:var(--surface-2); }
+.oats-view button.cap-skill-row:focus-visible { background:var(--sel); }
+.cap-skill-name { font-weight:var(--name-weight); font-size:var(--text-name); line-height:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cap-skill-desc { color:var(--muted); font-size:var(--text-meta); line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cap-skills-note { margin:0; color:var(--muted); font-size:var(--text-meta); }
+.cap-skills-skeleton { display:flex; flex-direction:column; gap:10px; padding:10px 14px; }
+.cap-skills-skeleton .skeleton-line { height:11px; width:60%; }
+/* The whole skill, in the pane in place of the capability's body. */
+.skill-view[hidden] { display:none !important; }
+.skill-view { display:flex; flex-direction:column; gap:12px; max-width:860px; padding:18px 28px 28px; box-sizing:border-box; }
+.skill-view-head { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; }
+.oats-view .skill-view-head button.skill-back { display:inline-flex; align-items:center; gap:6px; height:28px; min-height:28px; padding:0 10px 0 8px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--fg); font-weight:600; font-size:12.5px; line-height:normal; font-family:var(--ui-font,system-ui); cursor:pointer; }
+.oats-view .skill-view-head button.skill-back:hover { background:var(--surface-2); }
+.skill-view-title { margin:0; font-size:18px; font-weight:700; overflow-wrap:anywhere; }
+.skill-view-hint { color:var(--muted); font-size:12px; }
+.skill-view-files { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 10px; margin:0; color:var(--muted); font-size:12px; }
+.oats-view .skill-view-files button { height:auto; min-height:0; padding:1px 0; border:0; background:transparent; color:var(--accent); font-weight:500; font-size:12px; line-height:normal; font-family:var(--mono,monospace); cursor:pointer; }
+.oats-view .skill-view-files button[aria-current=true] { color:var(--fg); font-weight:650; }
+.oats-view .skill-view-files button:focus-visible { background:var(--sel); border-radius:4px; }
+.skill-view-reader { position:relative; min-width:0; border:1px solid var(--border); border-radius:10px; background:var(--bg); color:var(--fg); overflow:auto; max-height:none; }
+.skill-view-reader:focus-visible { outline:1px solid var(--accent); outline-offset:-1px; }
 .cap-contents-warnings { display:flex; flex-direction:column; gap:8px; min-width:0; }
 /* A part of Contents, not a section of its own: the card's group-label grammar, not the section title's. */
 .cap-contents-warnings-title { margin:0; color:var(--muted); font-size:10.5px; font-weight:650; letter-spacing:.05em; text-transform:uppercase; }
@@ -109,6 +151,20 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
   element.append(heading, gate, warnings, card);
   // Not in `element`: the page's Provides card holds it (capability-page.mjs `fillTriggerSourcesRow`); empty until an answer declares sources.
   const triggerSources = node('div'); fillTriggerSourcesRow(triggerSources, null);
+  // Skills (slice 3b): the page's rows under "What it does", and the whole skill in the pane. Not in `element` either.
+  const skills = node('section', 'page-section cap-skills-section'); skills.dataset.section = 'Skills';
+  const skillsHead = node('h3', 'page-section-title'); skillsHead.append(node('span', null, CONTENTS_COPY.skills));
+  const skillsBody = node('div', 'cap-skills-body'); skills.append(skillsHead, skillsBody); skills.hidden = true;
+  const skillView = node('section', 'skill-view'); skillView.hidden = true; skillView.dataset.view = 'skill';
+  const svHead = node('div', 'skill-view-head'), svBack = node('button', 'skill-back'); svBack.type = 'button';
+  const svTitle = node('h2', 'skill-view-title'); svTitle.id = `skill-view-title-${++instances}`; skillView.setAttribute('aria-labelledby', svTitle.id);
+  svHead.append(svBack, svTitle, node('span', 'skill-view-hint', CONTENTS_COPY.skillHint));
+  const svFiles = node('p', 'skill-view-files'); svFiles.hidden = true;
+  const svReader = node('div', 'skill-view-reader'); svReader.setAttribute('role', 'region'); svReader.tabIndex = 0; svReader.setAttribute('aria-labelledby', svTitle.id);
+  const svReaderHead = node('div', 'cap-reader-head'); svReaderHead.hidden = true;
+  const svReaderBody = node('div', 'cap-reader-body');
+  svReader.append(svReaderHead, svReaderBody); skillView.append(svHead, svFiles, svReader);
+  let fallbackSkills, capName = '', skillsDrawn = null, openSkillRef = null, skillFile = null, skillTicket = 0;
 
   let alive = true, subjectKey = null, identityKey = null, selector = null, rowCommit = null, show = null, files = new Map();
   let selected = null, readerPath = null, expanded = new Set(), showTicket = 0, fileTicket = 0, rendered = null, renderedWarnings = null;
@@ -131,17 +187,22 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
       if (parent?.kind === 'skill' && !expanded.has(parent.skill.path)) keys.setExpanded([...nav.querySelectorAll('[role=treeitem][data-skill]')].find(i => i.dataset.skill === parent.skill.path), true);
       open(path);
     } });
+  const skillReader = createContentsReader(doc, { reader: svReader, head: svReaderHead, body: svReaderBody, alive: () => alive, openExternal,
+    isLocal: path => !!openSkillRef?.files?.some(f => f.path === path), openLocal: path => showSkillFile(path) });
 
   function showGate(text) {
+    closeSkill({ focus: false });
     subjectKey = identityKey = null; selector = show = null; files = new Map(); showTicket++; fileTicket++;
     navState.reset(); fileState.reset(); clearWarnings(); clearTriggerSources();
     gate.textContent = text; gate.hidden = false; card.hidden = true; lead.hidden = true;
   }
 
   /** The page's subject now. Unchanged → nothing (a background repaint never touches what is open). */
-  function update(page) { if (!alive) return; setSubject(page); syncProvides(); }
+  function update(page) { if (!alive) return; setSubject(page); paintSkills(); syncProvides(); }
   function setSubject({ row, cli, remote = false, catalogPending = false, deployment = null }) {
     const subject = contentsSubject({ row, cli, remote, catalogPending });
+    // The catalog's skill names: a list, null (not listable: a spawn of it would refuse) or undefined (not reported).
+    fallbackSkills = Array.isArray(row?.skills) ? row.skills.filter(name => typeof name === 'string' && name) : row?.skills === null ? null : undefined; capName = row?.name || '';
     if (subject.gate) { if (gate.textContent !== subject.gate || gate.hidden) showGate(subject.gate); return; }
     gate.hidden = true; card.hidden = false;
     reader.setAttribute('aria-label', `File of ${row?.name || 'this capability'}`);
@@ -154,7 +215,7 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
     const key = JSON.stringify([identity, typeof row?.commit === 'string' ? row.commit : null]);
     if (key === subjectKey) return;
     // Another capability (or deployment) starts afresh; the same one at a moved commit keeps the open path when it is still listed.
-    if (identity !== identityKey) { selected = null; expanded = new Set(); show = null; files = new Map(); rendered = null; navState.reset(); navBody.replaceChildren(); clearReader(); clearWarnings(); clearTriggerSources(); lead.hidden = true; }
+    if (identity !== identityKey) { closeSkill({ focus: false }); selected = null; expanded = new Set(); show = null; files = new Map(); rendered = null; navState.reset(); navBody.replaceChildren(); clearReader(); clearWarnings(); clearTriggerSources(); lead.hidden = true; }
     subjectKey = key; identityKey = identity; selector = subject.selector; rowCommit = typeof row?.commit === 'string' ? row.commit : null;
     readShow();
   }
@@ -176,6 +237,7 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
       // With an answer on screen it stays, stale (the line with Retry above the tree); without one, the failed
       // block with the CLI's message (a repeated failure updates it in place: its Retry may hold focus).
       navState.fail(error);
+      paintSkills(); // the catalog's names stand in for the rows the answer would have given
       if (STALE_CODES.has(error?.code)) onCatalogStale?.();
       return;
     }
@@ -201,8 +263,145 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
     if (sourced !== renderedSources) { renderedSources = sourced; fillTriggerSourcesRow(triggerSources, sources); }
     const moved = !!previous && previous.commit !== data.commit;
     if (!previous || moved || readerPath !== selected) open(selected, { force: moved });
+    // The open skill follows the answer: still listed, its file is read again at a moved commit; gone, it closes.
+    let returnTo = null; // a skill closed under focus: its row (or Back), once the rows are repainted
+    if (openSkillRef) {
+      const still = (data.skills || []).find(skill => skill.path === openSkillRef.path && skill.files?.length);
+      if (!still) returnTo = closeSkill({ focus: false, defer: true });
+      else {
+        // The same skill at a moved commit, or with another file list: its file buttons follow the answer, and the open
+        // file stays open only while it is still listed (else its SKILL.md).
+        const relisted = JSON.stringify(still.files) !== JSON.stringify(openSkillRef.files);
+        openSkillRef = still;
+        if (relisted) paintSkillFiles(still);
+        const next = listedSkillFile(still, skillFile);
+        if (moved || next !== skillFile) showSkillFile(next, { force: true });
+      }
+    }
+    paintSkills();
+    if (returnTo) focusSkillRow(returnTo);
     syncProvides();
   }
+
+  /* ── skills (the page's rows) and the whole skill ────────────────────── */
+  /** The rows: the answer's skills; before it the catalog's names, not openable (a skeleton while it is first read). */
+  function paintSkills() {
+    const pending = !show && navState.state === 'pending' && !fallbackSkills?.length;
+    const listed = show ? show.skills : null;
+    const signature = JSON.stringify([show ? 'show' : 'catalog', listed && listed.map(s => [s.name, s.path, s.description, s.files && s.files.map(f => f.path)]), show ? null : fallbackSkills === undefined ? 'unreported' : fallbackSkills, pending, capName]);
+    if (signature === skillsDrawn) return;
+    skillsDrawn = signature;
+    const restore = captureFocusState(skillsBody, { scroller: null });
+    skillsBody.replaceChildren();
+    if (show) {
+      if (listed === null) skillsBody.append(node('p', 'cap-skills-note', CONTENTS_COPY.skillsUnlistable));
+      else if (!listed.length) skillsBody.append(node('p', 'cap-skills-note', CONTENTS_COPY.skillsNone));
+      else skillsBody.append(skillRows(listed.map(skill => ({ skill, name: skill.name, description: skill.description }))));
+    } else if (pending) {
+      const block = node('div', 'cap-skills-skeleton'); block.setAttribute('aria-hidden', 'true'); for (let i = 0; i < 3; i++) block.append(skeleton(doc, 'line')); skillsBody.append(block);
+    } else if (fallbackSkills?.length) skillsBody.append(skillRows(fallbackSkills.map(name => ({ skill: null, name, description: null }))));
+    else if (Array.isArray(fallbackSkills)) skillsBody.append(node('p', 'cap-skills-note', CONTENTS_COPY.skillsNone));
+    else if (fallbackSkills === null) skillsBody.append(node('p', 'cap-skills-note', CONTENTS_COPY.skillsUnlistable));
+    skills.hidden = !skillsBody.childElementCount;
+    restore();
+  }
+  function skillRows(entries) {
+    const rows = node('ul', 'cap-skills-list'); rows.setAttribute('aria-label', `Skills of ${capName}`);
+    for (const { skill, name, description } of entries) {
+      const opens = !!skill?.files?.length;
+      const row = node(opens ? 'button' : 'div', 'cap-skill-row');
+      row.append(node('span', 'cap-skill-name', name));
+      const line = skill && skill.files === null ? SKILL_COPY.unlisted : firstSentence(description);
+      if (line) { const desc = node('span', 'cap-skill-desc', line); if (description) desc.title = description; row.append(desc); }
+      if (opens) {
+        row.type = 'button'; row.dataset.skill = skill.path; row.dataset.focusKey = `skill-row:${skill.path}`;
+        row.setAttribute('aria-label', CONTENTS_COPY.skillOpen(name));
+        // The skill as the answer lists it when pressed (a re-read may have moved its files since the row was drawn).
+        row.addEventListener('click', () => openSkill((show?.skills || []).find(s => s.path === skill.path) || skill));
+      }
+      const item = node('li'); item.append(row); rows.append(item);
+    }
+    return rows;
+  }
+  /** The capability page's body beside the skill view (the page places both): hidden while a skill is open. */
+  const pageBody = () => skillView.parentElement?.querySelector(':scope > .page-body') ?? null;
+  /** The file a skill opens on, or `wanted` while it is still the skill's. */
+  const listedSkillFile = (skill, wanted = null) => (skill.files.some(f => f.path === wanted) ? wanted : (skill.files.find(f => isSkillMd(skill, f)) || skill.files[0]).path);
+  function openSkill(skill) {
+    if (!alive || !skill?.files?.length) return;
+    openSkillRef = skill;
+    svBack.replaceChildren(iconElement(doc, 'chevronLeft', { size: 15 }), node('span', null, CONTENTS_COPY.skillBack(capName)));
+    svTitle.textContent = skill.name;
+    paintSkillFiles(skill);
+    skillView.hidden = false; pageBody()?.setAttribute('hidden', '');
+    showSkillFile(listedSkillFile(skill), { force: true });
+    svReader.focus({ preventScroll: true });
+  }
+  /** The open skill's file buttons (SKILL.md first), when it has more than one; the shown file is marked current. */
+  function paintSkillFiles(skill) {
+    const focused = svFiles.contains(doc.activeElement) ? doc.activeElement.dataset.path : null;
+    svFiles.replaceChildren(); svFiles.hidden = skill.files.length < 2;
+    if (skill.files.length < 2) { if (focused) svReader.focus({ preventScroll: true }); return; }
+    svFiles.append(node('span', null, `${CONTENTS_COPY.skillFiles}:`));
+    for (const f of [...skill.files].sort((a, b) => isSkillMd(skill, b) - isSkillMd(skill, a))) {
+      const b = node('button', null, skillRelativePath(skill, f)); b.type = 'button'; b.dataset.path = f.path; b.addEventListener('click', () => showSkillFile(f.path));
+      if (f.path === skillFile) b.setAttribute('aria-current', 'true');
+      svFiles.append(b);
+    }
+    // A repaint keeps focus on the same file's button, else on the reader (never on <body>).
+    if (focused) ([...svFiles.querySelectorAll('button')].find(b => b.dataset.path === focused) || svReader).focus({ preventScroll: true });
+  }
+  /** Read one of the open skill's files into the skill view (its own ticket: a read for a file or skill left since is dropped). */
+  function showSkillFile(path, { force = false } = {}) {
+    if (!alive || !openSkillRef || !path) return;
+    if (path === skillFile && !force) return;
+    skillFile = path; const ticket = ++skillTicket, skill = openSkillRef, asked = selector;
+    for (const b of svFiles.querySelectorAll('button')) { if (b.dataset.path === path) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); }
+    const listed = skill.files.find(f => f.path === path);
+    skillReader.paintHead(path, { bytes: listed?.bytes ?? null });
+    svReaderBody.replaceChildren(); svReader.scrollTop = 0;
+    const wait = node('div', 'cap-reader-skeleton'); wait.setAttribute('aria-hidden', 'true'); for (let i = 0; i < 7; i++) wait.append(skeleton(doc, 'line')); svReaderBody.append(wait);
+    request({ action: 'file', capability: asked, path }).then(result => {
+      if (!alive || ticket !== skillTicket) return;
+      const data = capabilityFileData(result, { selector: asked, path });
+      if (!data) throw Object.assign(new Error(capabilityShowUnreadable(DESKTOP_TERMS)), { code: 'E_CLI_PROTOCOL' });
+      if (show && data.commit !== show.commit) throw Object.assign(new Error(CONTENTS_COPY.moved), { code: 'E_CAPABILITY_MOVED' });
+      skillReader.paintHead(path, { bytes: data.file.bytes ?? listed?.bytes ?? null, flag: data.file.truncated ? CONTENTS_COPY.truncated : null });
+      skillReader.paintFile(data.file, { missing: CONTENTS_COPY.notAvailable, binary: CONTENTS_COPY.binary });
+    }).catch(error => {
+      if (!alive || ticket !== skillTicket) return;
+      if (error?.code === 'E_CAPABILITY_FILE_UNKNOWN') { svReaderBody.replaceChildren(skillReader.line(CONTENTS_COPY.notAvailable)); return; }
+      if (error?.code === 'E_REMOTE_FILE_OVERSIZE') { svReaderBody.replaceChildren(skillReader.line(CONTENTS_COPY.tooLarge(sizeText(listed?.bytes)))); return; }
+      const failed = skillReader.line(typeof error?.message === 'string' && error.message ? error.message : CONTENTS_COPY.notAvailable); failed.setAttribute('role', 'alert');
+      const retry = node('button', 'act', 'Retry'); retry.type = 'button'; retry.addEventListener('click', () => { showSkillFile(path, { force: true }); svReader.focus({ preventScroll: true }); });
+      svReaderBody.replaceChildren(failed, retry);
+      if (STALE_CODES.has(error?.code)) onCatalogStale?.();
+    });
+  }
+  /** Back to the capability: its body again, focus on the skill's row (`focus`, or when focus was in the skill view).
+   * `defer`: focus nothing now and answer the closed skill's path when focus was in the view (the caller repaints the
+   * rows first, then calls focusSkillRow), else null. */
+  function closeSkill({ focus = true, defer = false } = {}) {
+    const was = openSkillRef; skillTicket++; openSkillRef = null; skillFile = null;
+    if (skillView.hidden) return null;
+    const hadFocus = skillView.contains(doc.activeElement);
+    skillView.hidden = true; pageBody()?.removeAttribute('hidden'); skillReader.clear();
+    if (!was || !(focus || hadFocus)) return null;
+    if (defer) return was.path;
+    focusSkillRow(was.path);
+    return null;
+  }
+  /** Focus the skill's row when it is still an openable row, else the page's Back (never <body>). */
+  function focusSkillRow(path) {
+    const row = [...skills.querySelectorAll('button.cap-skill-row')].find(b => b.dataset.skill === path);
+    (row || pageBody()?.closest('.capability-page')?.querySelector('.page-back') || skills.querySelector('button'))?.focus({ preventScroll: false });
+  }
+  svBack.addEventListener('click', () => closeSkill({ focus: true }));
+  skillView.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.target.isContentEditable) return;
+    event.preventDefault(); closeSkill({ focus: true });
+  });
 
   /* ── trigger sources (the Provides card's row) ───────────────────────── */
   function clearTriggerSources() { renderedSources = null; triggerSources.replaceChildren(); }
@@ -318,20 +517,27 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
     element, update,
     /** The Provides card's "Trigger sources" row: empty (no children) while the answer declares none. */
     triggerSources,
+    /** The Skills rows (hidden while there is nothing to say) and the whole-skill view (hidden until a skill opens):
+     * the page places both on every rebuild; the page's body is hidden while the skill view is shown. */
+    skills, skillView,
+    /** The open skill's path, or null. */
+    get openSkill() { return openSkillRef?.path ?? null; },
+    closeSkill,
     /** Re-read the show answer (the page's catalog was refreshed by the user). */
     refresh() { if (selector) readShow({ user: true }); },
     /** Before the host moves `element` (a page rebuild re-appends it): detaching drops focus and the panes'
      * scroll offsets, so take them now and put them back once it is in the document again. */
     hold() {
-      const active = element.contains(doc.activeElement) ? doc.activeElement : null, navTop = nav.scrollTop, readerTop = reader.scrollTop;
+      const active = [element, skills, skillView].some(part => part.contains(doc.activeElement)) ? doc.activeElement : null;
+      const navTop = nav.scrollTop, readerTop = reader.scrollTop, skillTop = svReader.scrollTop;
       return () => {
-        if (!alive || !element.isConnected) return;
-        nav.scrollTop = navTop; reader.scrollTop = readerTop;
+        if (!alive || !(element.isConnected || skillView.isConnected)) return;
+        nav.scrollTop = navTop; reader.scrollTop = readerTop; svReader.scrollTop = skillTop;
         if (active?.isConnected && doc.activeElement !== active) active.focus({ preventScroll: true });
       };
     },
     get selected() { return selected; },
-    dispose() { alive = false; showTicket++; fileTicket++; fileReader.dispose(); navState.dispose(); fileState.dispose(); },
+    dispose() { alive = false; showTicket++; fileTicket++; skillTicket++; fileReader.dispose(); skillReader.dispose(); navState.dispose(); fileState.dispose(); },
   };
 }
 /** Codes after which the catalog row is re-read: the kernel no longer knows the capability, or it moved. */

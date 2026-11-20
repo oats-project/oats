@@ -24,7 +24,7 @@
 
    Nothing fails silently: every "nothing runs" says why in one line (`say`). */
 
-import { instanceActs } from "../../client/instance-acts.mjs";
+import { desktopActs } from "./desktop-acts.mjs";
 import { reasonLine } from "./speaker-line.mjs";
 
 export const NO_TARGET = "No instance is focused or selected.";
@@ -46,7 +46,7 @@ const ACT_WORDS = Object.freeze({ stop: "stopped", restart: "restarted", start: 
  * one line. `menuReason`: the menu is held (a stale roster, an act pending), and why. */
 export function actAvailability(instance, verb, menuReason = null) {
   const name = instance?.instance || "This instance";
-  const offer = instanceActs(instance);
+  const offer = desktopActs(instance);
   if (offer.blocked) return { reason: reasonLine(offer.blocked) || `${name} can't be ${ACT_WORDS[verb]} from here.` };
   if (menuReason) return { reason: menuReason };
   const act = offer.acts.find((each) => each.verb === verb);
@@ -72,7 +72,7 @@ export function actAvailability(instance, verb, menuReason = null) {
  *   openAct(verb, instance)          the menu's dialog for the act (Stop…/Retire… plans, Start…/Restart…)
  *   spawnSoul(instance)              the spawn dialog for the instance's soul, as Quick Open opens it
  *   palette, instances, souls, capabilities, zoom, closeTab, tabPrevious, tabNext, splitRight,
- *   splitDown, nextGroup, previousGroup, closeSplit, quickOpen, filter, workspaces, help, list, refresh
+ *   splitDown, nextGroup, previousGroup, closeSplit, quickOpen, filter, workspaces, help, list, refresh, sidebar
  */
 export function createLeaderDispatch(d) {
   const lifecycle = (verb) => (origin) => {
@@ -125,6 +125,8 @@ export function createLeaderDispatch(d) {
     help: () => d.help(),
     list: () => d.list(),
     refresh: () => d.refresh(),
+    // The shared table's `b` (Herdr's; the Desktop UI rework, decided 2026-11-19): the sidebar hidden or shown.
+    sidebar: () => d.sidebar(),
   });
   return {
     /** Run `does` for the leader's or a sidebar key's origin. False when the Desktop has no such operation. */

@@ -39,7 +39,8 @@ function refusal(error) {
  * signal it: the sweep outlives the client that started it (the TUI passes its `changeExec`). No `timeout` is
  * given. `io.env` replaces process.env as the environment cleaned.
  * Never rejects. Resolves the parsed `{ schemaVersion: 1, ok: true, result }` (exit 0 only); the kernel's refusal
- * `{ schemaVersion: 1, ok: false, error: { code, message } }` whatever the exit (E_RESUME_BUSY exits 1); or
+ * `{ schemaVersion: 1, ok: false, error: { code, message } }` whatever the exit (E_RESUME_BUSY and
+ * E_RESUME_LOCK_STUCK exit 1); or
  * `{ schemaVersion: 1, ok: false, error: { code } }`: E_CLI_UNAVAILABLE, E_RESUME_FEATURE (nothing ran),
  * E_CLI_OUTPUT_LIMIT (over SESSION_RESUME_MAX_BUFFER), E_CLI_PROTOCOL (no envelope, or a refusal without a valid
  * code), E_CLI_FAILED (a nonzero exit with no refusal, or an exec that threw).

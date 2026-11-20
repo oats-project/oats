@@ -1,3 +1,4 @@
+import {awChildEnv} from './aw-child-env.mjs';
 // The floors that keep a home's aweb task claims present. aweb takes over a
 // claim whose presence heartbeat has gone stale, and what heartbeats depends on
 // how the home receives:
@@ -43,7 +44,9 @@ const canon = (p) => { try { return realpathSync(p); } catch { return resolve(p)
 const OPEN_FLAGS = constants.O_RDONLY | (constants.O_NONBLOCK ?? 0) | (constants.O_NOFOLLOW ?? 0);
 
 /** JSON from `file`, read only when it resolves to a regular file inside
- *  `base` (no link out of it) of at most 1 MiB; undefined otherwise. */
+ *  `base` (no link out of it) of at most 1 MiB; undefined otherwise.
+ *  oats.aweb's lib/pi-extension.mjs carries a copy, held equal by
+ *  test/pi-extension-skills.test.mjs. */
 export function readJsonInside(base, file) {
   let fd;
   try {
@@ -154,7 +157,9 @@ export function awebChannelVersion(configDir) {
  *  package in <agentDir>/npm/node_modules/<name> (pi 1.3.0
  *  getManagedNpmInstallPath), and its package.json holds the version. pi's
  *  older global-npm location and a project-scope install are not read.
- *  undefined when unreadable. */
+ *  undefined when unreadable. oats.aweb's lib/pi-extension.mjs carries a copy
+ *  (it gates pi-extension-skills-loaded), held equal by
+ *  test/pi-extension-skills.test.mjs. */
 export function piExtensionVersion(agentDir) {
   if (!agentDir) return undefined;
   const base = join(agentDir, 'npm', 'node_modules');
@@ -179,11 +184,11 @@ export function piExtensionWarning(version, home) {
 }
 
 /** The environment of the aw call: this check's own OATS_* removed (as for its
- *  kernel calls), and no inherited AWEB_IDENTITY_HOME, the caller's identity.
+ *  kernel calls), then the shared aw selector list removed.
  *  aw resolves the host daemon the same way from any identity. */
 function awEnv(env) {
-  const out = Object.fromEntries(Object.entries(env).filter(([k]) => !k.startsWith('OATS_') && k !== 'AWEB_IDENTITY_HOME'));
-  return { ...out, AW_NO_UPDATE_CHECK: '1' };
+  const out = Object.fromEntries(Object.entries(env).filter(([k]) => !k.startsWith('OATS_')));
+  return awChildEnv(out);
 }
 
 /** `aw wake status --json` run in `cwd`, bounded by `timeout` ms: the parsed

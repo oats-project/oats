@@ -1,4 +1,4 @@
-// Real oats.okf 5.0 in a workspace-model (v2) fixture. Public CLI only;
+// Real oats.okf 6 in a workspace-model (v2) fixture. Public CLI only;
 // no inherited identity, host configuration, model sessions or GitHub calls.
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -26,7 +26,7 @@ function okfPackage(base) {
   return { repo, tag, catalog };
 }
 
-/** Bind the verified 5.0 payload, provision a base, optionally spawn a source.
+/** Bind the verified payload, provision a base, optionally spawn a source.
  * No registration, cursor, durable input or worker-completion fixture exists. */
 export function fixture(t, { git = false, settings = {}, spawnSource = true } = {}) {
   const fx = v2Deployment({
@@ -112,7 +112,14 @@ export function fixture(t, { git = false, settings = {}, spawnSource = true } = 
     write(file, `# Proposal\n\nSource: instance ${source.instance}, home ${source.home}, soul source\n\n## What and why\n${text}\n\n## Backing notes\n${notes.map(n => '- ' + n).join('\n')}\n`);
     return file;
   };
-  f.propose = ({ source = f.source, file = f.proposal({ source }), extra = [] } = {}) => cli(['spawn', 'oats.okf/knowledge-harvester', '--task-file', file, '--relation', 'unrelated', '--no-launch', ...extra, '--json'], f.as(source));
+  // oats.okf 6.0 removed the harvester: its stub soul's required spawn hook
+  // refuses every spawn. The raw answer, for tests of that refusal.
+  f.spawnHarvester = ({ source = f.source, file = f.proposal({ source }), relation = ['--relation', 'unrelated'], extra = [] } = {}) => raw(['spawn', 'oats.okf/knowledge-harvester', '--task-file', file, ...relation, '--no-launch', ...extra, '--json'], f.as(source));
+  // `oats okf propose` dispatched by the kernel from the source's home.
+  f.okfPropose = (args, { source = f.source } = {}) => {
+    const r = raw(['okf', 'propose', ...args, '--json'], f.as(source));
+    return { status: r.status, out: JSON.parse(r.stdout), stderr: r.stderr };
+  };
   f.retire = instance => cli(['retire', instance, '--json']);
   return f;
 }

@@ -76,12 +76,17 @@ async function soulInspector(t, { layout = 'page', opens = true, answer = () => 
 }
 const withWarnings = (list, fields = {}) => () => ({ ...structuredClone(f7), warnings: list, ...fields });
 
-test('soul page: Warnings below the problems; the kernel\'s words as text; Open capability for a capability this soul has', async t => {
+// Slice 3a: the page's problems are its top block's Ready row (the first in one sentence, every one behind Details);
+// the warnings follow that block, before the capabilities.
+test('soul page: Warnings below the top block and its problems; the kernel\'s words as text; Open capability for a capability this soul has', async t => {
   const u = await soulInspector(t, { answer: withWarnings([AWEB, UNKNOWN], { problems: [{ code: 'E_X', message: 'A problem the kernel reported.' }] }) });
   const section = u.el.querySelector('.inspector-warnings');
   assert.ok(section, 'a section of its own');
   assert.equal(section.querySelector('h3').textContent, 'Warnings');
-  assert.equal(section.previousElementSibling.className, 'inspector-problem', 'right below the problems');
+  assert.equal(section.previousElementSibling.className, 'soul-top', 'right below the top block');
+  assert.equal(u.el.querySelector('.soul-ready-line').textContent, 'A problem the kernel reported.', 'the problem: Ready\'s sentence');
+  assert.ok(u.el.querySelector('.soul-ready-problems .inspector-problem'), 'and in full behind Details');
+  assert.equal(section.nextElementSibling.classList.contains('soul-capabilities'), true, 'before the capabilities');
   const items = [...section.querySelectorAll('.cap-warning')];
   assert.equal(items.length, 2);
   assert.equal(text(items[0].querySelector('.cap-warning-label')), 'Warning');

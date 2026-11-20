@@ -81,7 +81,10 @@ defaultTeam: mine
   file: an unknown label, or a `default` / `defaultTeam` that is not one, is
   `E_WORKSPACE_SCHEMA` when the file is read. A `souls:` key that is neither a
   pattern nor a discovered soul's qualified name is `team-soul-unknown` (a
-  warning, in readiness and `oats teams --json` problems).
+  warning, in readiness and `oats teams --json` problems). From OATS 0.69.13,
+  so is a `<prefix>/*` pattern whose prefix matches no soul the workspace
+  offers: a typo, or a member or package that was renamed or dropped. `"*"`
+  never warns.
 - **Local teams** are allowed only when the workspace says `localTeams: true`.
   A local team always has `team`. A label in both files is
   `team-label-collision` (a warning): the shared one wins; rename the local

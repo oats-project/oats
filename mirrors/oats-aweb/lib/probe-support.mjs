@@ -29,6 +29,21 @@ export function projectProbeSupport({awebUrl, cliVersion, metadata, observedUrl,
   const supported = !!(metadataUrl && policy && Array.isArray(policy.origins) && policy.origins.includes(origin) && observedUrl === metadataUrl && versionAtLeast(cliVersion, policy.cliFloor) && versionAtLeast(metadata?.build?.aweb_version, policy.serverFloor));
   return {supported, origin, metadataUrl, reason: supported ? null : `fresh-conversation support unknown/unsupported on ${origin ?? 'unknown origin'}`};
 }
+// aw 1.36.33 (877bbee9), cmd/aw/mail.go:436, reuses a thread by default;
+// it needs --new-conversation. Commit 91ea73fee07f39e44f1be8c8d06fee8496b94719
+// first shipped in aw 1.36.53, removed that flag, and made recipient+subject
+// start a new thread. Detect the
+// published help contract, never infer freshness from accepting a legacy send.
+// Delete this legacy branch when AW_MIN contains that commit.
+export function freshMailSendFlag(help) {
+  const text = String(help);
+  const required = ['to', 'subject', 'body-file'];
+  if (!text.includes('\n  aw mail send [flags]') || required.some(flag => !new RegExp('^\\s+--' + flag + ' string\\s', 'm').test(text))) refuse('probe-cli-fresh-send-unsupported');
+  if (/^\s+--new-conversation\s{2,}/m.test(text)) return true;
+  if (/send starts a new thread\s+titled by --subject/.test(text)) return false;
+  refuse('probe-cli-fresh-send-unsupported');
+}
+
 export function resolveProbeAw(pathValue) {
   // Resolve once, then run version and every identity/mail command via this path.
   for (const dir of String(pathValue ?? '').split(delimiter)) {
@@ -109,5 +124,10 @@ export async function qualifyProbeSupport({execute, target, budget, path, observ
   catch { budget.check(); refuse(reason); }
   budget.check(); revalidate();
   if (!projectProbeSupport({awebUrl: root.awebUrl, cliVersion: awVersion, metadata, observedUrl: metadataUrl}).supported) refuse(reason);
-  return {cli: true, server: true, awBinary, awVersion, revalidate};
+  let help;
+  try { help = await execute(awBinary, ['mail', 'send', '--help'], 3000); }
+  catch { budget.check(); refuse('probe-cli-fresh-send-unavailable'); }
+  budget.check(); revalidate();
+  const newConversationFlag = freshMailSendFlag(help);
+  return {cli: true, server: true, awBinary, awVersion, newConversationFlag, revalidate};
 }

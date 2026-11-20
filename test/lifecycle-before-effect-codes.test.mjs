@@ -91,6 +91,10 @@ test("both verbs list at least the ten codes a client already read as a refusal 
   }
 });
 
+test("both verbs list E_USAGE: a missing instance, refused before anything is read and before a --server route is taken", () => {
+  for (const verb of VERBS) assert.equal(BEFORE_EFFECT_CODES[verb].includes("E_USAGE"), true, `oats ${verb}`);
+});
+
 test("the Desktop's own set of refusals lies inside the kernel's list, for a stop and for a retire: it exports it as BEFORE_EFFECT_CODES, and every code in it is one the kernel answers only before any effect", async () => {
   // The module loads under plain Node, without the Desktop's own dependencies, as the other root
   // tests that import from packages/desktop/server do (test/desktop-trigger-sources-kernel.test.mjs): it needs no

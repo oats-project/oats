@@ -33,6 +33,8 @@ import { MACHINE_ID, machineFieldProblem } from './machine-contract.mjs';
 import { kernelMade } from './kernel-made.mjs';
 import { SOUL_COLORS } from './soul-colors.mjs';
 import { NAMING_TIMEOUT_MS } from './spawn-preview-contract.mjs';
+import { listedBackends } from './session-backends.mjs';
+import { sessionProviderName } from './instance-presentation.mjs';
 
 const ENVELOPE_TIMEOUT_MS = 60_000;
 
@@ -64,7 +66,10 @@ const SPAWN_ARG_RULES = {
   name:    { flag: "--name",    re: /^[a-z0-9][a-z0-9-]*$/ },
   repo:    { flag: "--repo",    re: /^[^-][^\0]*$/ },                       // path — anything not option-shaped
   work:    { flag: "--work",    re: /^(worktree|checkout|attached|workspace|directory)$/ },
-  backend: { flag: "--backend", re: /^tmux$/ },
+  // A session backend's name: the kernel's own ("tmux") or a session provider's (instance-presentation.mjs
+  // `sessionProviderName`: 1 to 40 lowercase letters, digits and dashes, never option-shaped, never a reserved
+  // word), and only one the kernel lists (`backendsListed`, below).
+  backend: { flag: "--backend", re: { test: (value) => value === "tmux" || sessionProviderName(value) } },
   // The flag is the kernel's (harness-names.mjs harnessFlag): the caller names it, never guessed.
   harness: { flag: null, re: /^(pi|claude|codex)$/ },
   // A configuration's name, or the word that selects none (launch-contract.mjs LAUNCH_CONFIG_NONE), which this rule admits.
@@ -81,6 +86,12 @@ const SPAWN_ARG_RULES = {
   // the pair when it spawns related — path-shaped, never option-shaped.
   relativeRoot: { flag: "--relative-root", re: /^[^-][^\0]*$/ },
 };
+/** The session backends a spawn may name: the caller's `backends`, the names the kernel lists (`oats version
+ * --json` `sessionBackends`, the kernel's own, and `oats inspect --json` `sessionProviders`, the ones a soul's
+ * capabilities supply). With no list, "tmux" alone, as before session providers. Never "herdr": OATS removed it. */
+const backendsListed = (backends) => (Array.isArray(backends) ? listedBackends(backends) : ["tmux"]);
+
+/** `opts.backends` is not an argument: it is the list `opts.backend` is held to (`backendsListed`). */
 export function spawnArgv(agent, workspaceDir, taskFile, opts = {}) {
   const agentName = String(agent);
   if (agentName.startsWith("-")) { const e = new Error(`invalid agent name "${agentName}"`); e.code = "E_BAD_ARGS"; throw e; }
@@ -117,7 +128,7 @@ export function spawnArgv(agent, workspaceDir, taskFile, opts = {}) {
     const v = opts[key];
     if (v === undefined || v === null || v === "") continue;
     const s = String(v);
-    if (!rule.re.test(s)) { const e = new Error(`invalid ${key} value`); e.code = "E_BAD_ARGS"; throw e; }
+    if (!rule.re.test(s) || (key === "backend" && !backendsListed(opts.backends).includes(s))) { const e = new Error(`invalid ${key} value`); e.code = "E_BAD_ARGS"; throw e; }
     argv.push(key === "harness" ? flagFor(opts.harnessFlag) : rule.flag, s);
   }
   if (opts.yolo !== undefined) {
@@ -655,7 +666,7 @@ export function operationArgs(args) {
 }
 /** A verb that writes one field of an instance's own record: `oats instance <verb> <instance> <values…> --home <home>
  * (--dir <context> | --server <server>) --json`, addressed as `oats instance stop` is (lifecycle-cli.mjs: a routed
- * command never carries --dir). Shared by `instance color` and `instance background` (server/instance-record.mjs);
+ * command never carries --dir). Shared by `instance color`, `instance background` and `instance pin` (server/instance-record.mjs);
  * each checks its own value first. Anything out of shape is refused here and nothing runs. A read's deadline:
  * 30 s, 45 s routed. The envelope comes back as the kernel printed it; the caller decodes it. */
 function runInstanceRecord(bin, { instance, home, context, server }, verb, values, io) {
@@ -685,6 +696,14 @@ export async function cliInstanceBackground(bin, args, io = {}) {
   const { background } = args;
   if (typeof background !== "boolean") return instanceRecordRefused();
   return runInstanceRecord(bin, args, "background", [background ? "on" : "off"], io);
+}
+/** Whether an instance is pinned (feature instance-pin): `oats instance pin <instance> (on | off) …`
+ * (runInstanceRecord). `pinned` is a boolean; anything else is refused here and nothing runs. Over `--server`, a
+ * host without the feature refuses it (E_REMOTE_INCOMPATIBLE). */
+export async function cliInstancePin(bin, args, io = {}) {
+  const { pinned } = args;
+  if (typeof pinned !== "boolean") return instanceRecordRefused();
+  return runInstanceRecord(bin, args, "pin", [pinned ? "on" : "off"], io);
 }
 
 /** `maxAge` (feature observe-max-age) is inspect's alone; `features` is the probe's list and

@@ -15,7 +15,7 @@ actually run.
 2. **Activate deliberately.** Select only the additive authoring capability,
    with knowledge/messaging/tasks explicitly disabled. Discover the packaged
    expert and scaffold without a runtime launch. It gets the authoring skill
-   and complete local references, but no OKF bundle, capture flow or harvester.
+   and complete local references, but no OKF bundle, capture flow or proposal duty.
 3. **Remove source crutches.** Copy the distribution to a clean source fixture,
    acquire it, delete that source copy, and scaffold the expert. Follow every
    local skill/reference link from the installed/materialized artifact. No
@@ -66,8 +66,8 @@ only the assigned trusted instructions govern execution.
 - Same leaf names in different bases or repositories remain distinct owners.
 - Missing binding, base or access fails visibly, without an empty substitute.
   A read never scaffolds a node. A feature-branch change never selects custody.
-- Migration preserves old knowledge and pending inputs until verified cutover;
-  a changed alias cannot redirect a frozen job to another base.
+- Migration preserves old knowledge and open proposals until verified cutover;
+  a changed alias cannot redirect a planned proposal to another base.
 
 ## Real custody and failure
 
@@ -75,34 +75,36 @@ For every applicable row inspect native outputs and receipts, not only exit 0:
 
 | Case | Required observable result |
 |---|---|
-| Embedded Git bundle and dedicated Git repository | Independent accepted-baseline work; validated knowledge-only PR to correct target |
+| Embedded Git bundle and dedicated Git repository | Accepted-baseline work apart from the source's branch; validated knowledge-only PR to correct target |
 | PR opened, rejected or failed | Report actual proposal/failure state; no claim of accepted visibility or direct-write fallback |
 | PR merged | Fresh reader after refresh can retrieve accepted knowledge; not merely PR text |
 | Directory outside Git | Real durable native update without `.git`, GitHub, branch or PR dependencies |
-| Concurrent destination writers | Baseline conflict/coordination prevents silent loss; receipts identify outcomes |
-| Failure before publication | Preserved input and retryable staged work, no successful applied receipt |
-| Crash after partial/publication write | Recovery establishes actual state; no duplicated claims or lost input |
-| Retry the same input | Idempotent processing or explicit reconciliation; not duplicate knowledge |
-| All candidates dropped | Durable completed-no-change judgment, not an endless pending input |
-| Truncated, skipped or held capture/window | Incomplete/pending, never a completed watermark |
+| Concurrent proposals on one destination | Baseline conflict/coordination prevents silent loss; receipts identify outcomes |
+| Failure before publication | Proposal and its outgoing change retained and reported; no successful receipt |
+| Crash after partial/publication write | Recovery establishes actual state; no duplicated claims or lost proposal |
+| Deliver the same proposal twice | Refused or explicitly reconciled; not duplicate knowledge |
+| All candidates dropped | Checkpoint recorded with its reason; no empty proposal |
+| Truncated or unreadable evidence | Reported; no proposed claim rests on it |
 | Multiple destinations, one failed | Per-destination truthful results, no fabricated cross-store atomicity |
 
-## Source-independent learning gate
+## Learning gate
 
 1. Let source instance A encounter a genuinely new, verified, behavior-changing
    fact or decision absent from the accepted base. Capture notes and/or records.
-2. Preserve bounded evidence and frozen destinations outside A's home/worktree.
-   Remove A through safe retirement before the independent harvest finishes.
-3. Reuse A's display name for a distinct incarnation. Verify A's pending evidence
-   stays attributed to A, not consumed by the new incarnation's job.
-4. Run the independent harvest and inspect its semantic judgment and native
-   delivery result. For Git, merge through the authorized review process; for
-   non-Git, verify durable application and consistency/freshness semantics.
+2. Let A run its final checkpoint, judge the claim and propose it, then retire
+   A safely before the proposal is reviewed.
+3. Reuse A's display name for a distinct incarnation. Verify the proposal's
+   provenance stays attributed to A, and that the new incarnation's checkpoint
+   does not propose A's claim again.
+4. Let the reviewer judge the proposal from what it carries, with no access to
+   A's home. Inspect A's semantic judgment, the review and the native delivery
+   result. For Git, merge through the authorized review process; for non-Git,
+   verify durable application and consistency/freshness semantics.
 5. Launch fresh reader B in the selected real runtime with no A home, transcript
    or hidden conversation context. Ask a task whose answer needs the new fact.
    Require an answer traceable to accepted knowledge through native retrieval.
 6. Record the evidence, failures and limits. A scaffold-only expert probe or an
-   agent reading the captured input directly does not satisfy this gate.
+   agent reading A's notes directly does not satisfy this gate.
 
 Live agent trials require separate authorization and an isolated test deployment.
 This curriculum's package tests deliberately never launch a runtime or install

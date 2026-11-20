@@ -19,8 +19,8 @@ export const ICONS = Object.freeze({
   folder: "folder", link: "link", layers: "layers", copy: "copy", circle: "circle",
   // Setup's "For developers" drawing: the host lists a member, the member names the workspace back.
   arrowRight: "arrow-right", arrowLeft: "arrow-left",
-  // The list of workspaces' "Show only the current workspace" toggle.
-  collapse: "chevrons-down-up",
+  // Pinned instances: a pinned row's mark on its name line, and the row menu's Pin to top / Unpin.
+  pin: "pin", unpin: "pin-off",
 });
 /** Marks drawn here, not Lucide's, on the same 24-unit grid. `attention`, the needs-input mark (2026-10-23): a full
  * disc with a rounded bar and a separate dot, the "!" of Lucide's circle-alert made bold enough to read as one at

@@ -14,7 +14,7 @@ trial invocation establishes support: older `retire` ignores unknown `--plan`
 and retires. Missing/malformed advertisement means unavailable, zero invocation.
 
 **POST `/api/instance-lifecycle?ws=<id>`** is the only Desktop K3 route. It uses
-loopback Host / POST Origin guards, exactly one advertised workspace and no
+the server-wide credential check, loopback Host / POST Origin guards, exactly one advertised workspace and no
 extra query arguments. The privileged proxy pins the entire body-addressed
 instance family. Bodies are strict JSON objects up to64 KiB:
 
@@ -365,15 +365,35 @@ from whether the plan observed `work/` (`facts.work.observed`):
 - `E_UNIDENTIFIED_INSTANCE_HOME` (a home the kernel cannot work from: its
   record is there and cannot be read
   ([desktop-cli-api.md](../../../docs/desktop-cli-api.md#unreadable-record)),
-  its rollback marker cannot drive a retry, or it has neither a record nor a
-  cleanup descriptor) is a **refusal** with its own fixed sentence: "OATS
-  couldn't find or read what it needs in this instance's home folder, so
-  nothing was done." The kernel answers it only before any effect, so it is in
+  its rollback marker cannot drive a retry, it has neither a record nor a
+  cleanup descriptor, its `capabilityRuntime` is missing or malformed, it
+  names no repository for recorded retire hooks, or it is a captured home
+  whose record does not prove that no capability's spawn hook ran) is a
+  **refusal**. Remove's sentence, selected by its explicit `retire` operation,
+  is "OATS can't tell what this home's capabilities created, or can't run
+  their cleanup, so nothing was removed. Details says what may be left and
+  how to finish." The error code has no structured field that distinguishes
+  these causes, so the headline is the same for every Remove refusal under
+  this code, local or routed. The client never parses the kernel's message
+  to choose a remedy or adds a force command to the headline.
+  Stop keeps "OATS couldn't find or read what it needs in this instance's home folder,
+  so nothing was done." The boundary and confirmation view both use the
+  operation they own; no new envelope field is read. The kernel answers the
+  code only before any effect, so it is in
   `BEFORE_EFFECT_CODES`: a plan read and an apply answered with it both read
   as refused, never as an unknown outcome. The kernel's message (it names the
   file or the folder, and the remedy where there is one) is in Details, for a
-  local answer and a routed one. Where that message offers `--force`, it is
-  the kernel's own word: Desktop offers none and adds nothing about it.
+  local answer and a routed one. Details governs the remedy: an unreadable
+  record must be restored before OATS can remove the home, and `--force`
+  cannot bypass that refusal. Where the kernel offers `--force`, manual
+  cleanup comes first; force removes the home without revoking state whose
+  retire hooks cannot run. Desktop offers no force control.
+- `E_USAGE` (a stop or a retire missing its argument, which the kernel
+  answers only before any effect, a routed one before it is sent) is a
+  **refusal** with the sentence of `E_BAD_ARGS`, "Invalid lifecycle
+  request.", and the kernel's usage line in Details. It is in
+  `BEFORE_EFFECT_CODES`: an apply answered with it reads as refused, never as
+  an unknown outcome.
 - Malformed receipts and timeouts are closed local messages.
   An error envelope's `message` renders only through the display filter
   (`packages/client/display-text.mjs`; see
@@ -450,8 +470,8 @@ The roster says what a home is when it is not an ordinary instance, in text
   **Retire failed**, muted "Retire it again to finish". The kernel's recorded
   message (with its code), or its code alone when it recorded no message, is
   said after "OATS says:" through the display
-  filter (the row's description, the hover card's status, the instance panel's
-  action note, the overview's popover).
+  filter (the row's description, the instance panel's action note, the
+  overview's popover).
 - `retire` state `interrupted` (a scheduled completion is gone with no
   outcome): **Retire didn't finish**, muted "Retire it again to complete".
 
@@ -481,7 +501,7 @@ target `workspace`) is one the read observed live (`deploymentState`), so a
 read of another workspace, or one whose deployment of the row is stale, not
 reached or not observed, releases nothing. A failed read, or one served while a
 newer observation is still running (`refreshing`), releases nothing either. Every surface draws rows through
-`shownRows`, so the roster, the instance panel, the hover card and the overview
+`shownRows`, so the roster, the instance panel and the overview
 (through `ctx.retiringRows` and `ctx.subscribeRetires`) agree, and a change of
 the held set repaints them without a read. An open terminal tab is left alone.
 
@@ -494,9 +514,21 @@ is deleted.": that retire finishes the spawn's compensation, and the result's
 branches (the kernel deletes the branch only when the worktree is removed).
 Every other retire plan keeps "Branches and pull requests are not changed."
 
+## Stop, Start and Restart stay dialogs
+
+The Desktop UI rework (slice 4) built a y/n question on the status line for Stop, Start and Restart, and then took
+it out of the slice (the lead, 2026-11-19, after five review rounds): a line that takes every key while it waits
+decides when a keystroke stops an agent, and each round found another way a keystroke meant for something else could
+answer it. Stop, Start and Restart keep their dialogs; the status line carries keys and messages only, and may ask in a
+later slice with a design of its own.
+
 ## UI and ownership
 
-The 420px confirmation surface follows the supplied layout, semantic theme
+The Stop and Retire dialog is a centred sheet over the
+dim scrim with a 150 ms ease, none with reduced motion (`renderer/sheet.mjs`; D10). After Enter its row reads
+Retiring… (#1247), and once the roster no longer lists it, a dim "✕ name · retired" row stands in its place for
+10 s (`renderer/retire-ghosts.mjs`): this window's memory of its own retire, never a control. The plan has no
+fact for the agent's messaging address, so the sheet does not list it (a contract change would add it). The 420px confirmation surface follows the supplied layout, semantic theme
 colors and keyboard focus language. Stop/Retire are separate from existing
 Start/Restart/Inspect; the roster row's context menu says **Retire instance…**, the
 context panel's footer **Stop…** and **Retire…**. Stop always requires explicit

@@ -1,0 +1,204 @@
+#!/usr/bin/python3 -I
+"""oats-login-receive: forced-command receiver for harness credentials (oats-project/oats#1786, OATS 9b1ed301).
+
+Installed root-owned 0755 at /usr/local/sbin/oats-login-receive and reached ONLY through a dedicated key in root's
+authorized_keys:  restrict,command="/usr/local/sbin/oats-login-receive" <key>
+SSH_ORIGINAL_COMMAND is "install|remove|status <harness> <name>"; for install the credential comes on stdin.
+Answers one JSON line {ok, harness, name, fingerprint, replacedAt} (plus "error" when ok is false).
+Never prints, logs or echoes the credential; the fingerprint is a sha256 prefix.
+
+The destination comes from the root-owned config (/etc/oats-login/receiver.json), never from the caller:
+  {"teams": {"<name>": {"group": "<group that may read>", "harnesses": ["claude", ...],
+                        "path": "/srv/oats-team/{name}/login/{harness}-token"}}}   (path optional; that is the default)
+The file is root:<group> 0440, written atomically; its parent directories are created root-owned (0750 for the login dir).
+"""
+import datetime, grp, hashlib, json, os, re, stat, sys, syslog
+
+CONFIG = "/etc/oats-login/receiver.json"
+DEFAULT_PATH = "/srv/oats-team/{name}/login/{harness}-token"
+HARNESSES = {"claude", "codex", "pi", "opencode"}
+NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+MAX_BYTES = 65536
+
+
+class Refused(Exception):
+    pass
+
+
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def fingerprint(data):
+    return "sha256:" + hashlib.sha256(data).hexdigest()[:16]
+
+
+def root_owned_not_writable(path, want_dir):
+    st = os.lstat(path)
+    if stat.S_ISLNK(st.st_mode):
+        raise Refused(f"{path} is a symlink")
+    if want_dir and not stat.S_ISDIR(st.st_mode) or not want_dir and not stat.S_ISREG(st.st_mode):
+        raise Refused(f"{path} has the wrong type")
+    if st.st_uid != 0 or st.st_mode & 0o022:
+        raise Refused(f"{path} is not root-owned or is group/other-writable")
+
+
+def load_config(path=CONFIG):
+    try:
+        root_owned_not_writable(path, want_dir=False)
+        root_owned_not_writable(os.path.dirname(path), want_dir=True)
+        with open(path) as f:
+            cfg = json.load(f)
+    except FileNotFoundError:
+        raise Refused("receiver config absent")
+    except (ValueError, OSError) as e:
+        raise Refused(f"receiver config unreadable: {type(e).__name__}")
+    if not isinstance(cfg.get("teams"), dict):
+        raise Refused("receiver config has no teams")
+    return cfg
+
+
+def parse_command(raw):
+    parts = (raw or "").split()
+    if len(parts) != 3:
+        raise Refused("usage: install|remove|status <harness> <name>")
+    action, harness, name = parts
+    if action not in ("install", "remove", "status"):
+        raise Refused("unknown action")
+    if harness not in HARNESSES:
+        raise Refused("unknown harness")
+    if not NAME_RE.match(name):
+        raise Refused("bad name")
+    return action, harness, name
+
+
+def destination(cfg, harness, name):
+    team = cfg["teams"].get(name)
+    if not isinstance(team, dict):
+        raise Refused("name not configured on this host")
+    hs = team.get("harnesses")
+    if not isinstance(hs, list) or harness not in hs:
+        raise Refused("harness not enabled for this name")
+    try:
+        gid = grp.getgrnam(team["group"]).gr_gid
+    except (KeyError, TypeError):
+        raise Refused("configured group absent")
+    path = (team.get("path") or DEFAULT_PATH).format(name=name, harness=harness)
+    if not os.path.isabs(path) or ".." in path.split("/"):
+        raise Refused("configured path is not absolute and normalized")
+    return path, gid
+
+
+def ensure_parents(path, gid):
+    """Create missing parents root-owned; the login dir itself root:<group> 0750. Existing ones must be root-owned, not writable by others, no symlinks."""
+    login_dir = os.path.dirname(path)
+    parts = login_dir.strip("/").split("/")
+    cur = "/"
+    for i, p in enumerate(parts):
+        cur = os.path.join(cur, p)
+        last = i == len(parts) - 1
+        if not os.path.lexists(cur):
+            os.mkdir(cur, 0o750 if last else 0o755)
+            os.chown(cur, 0, gid if last else 0)
+            os.chmod(cur, 0o750 if last else 0o755)
+        root_owned_not_writable(cur, want_dir=True)
+    return login_dir
+
+
+def read_credential(stream):
+    data = stream.read(MAX_BYTES + 1)
+    if len(data) > MAX_BYTES:
+        raise Refused("credential too large")
+    data = data.strip()
+    if not data:
+        raise Refused("empty credential")
+    if b"\0" in data:
+        raise Refused("credential contains NUL")
+    return data
+
+
+def check_shape(harness, data):
+    # Shape only, never the value. Claude setup-token tokens are one line with the sk-ant-oat prefix.
+    if harness == "claude" and (not data.startswith(b"sk-ant-oat") or b"\n" in data or len(data) > 512):
+        raise Refused("not a claude setup-token")
+
+
+def install(path, gid, data):
+    login_dir = ensure_parents(path, gid)
+    if os.path.lexists(path):
+        root_owned_not_writable(path, want_dir=False)
+    tmp = os.path.join(login_dir, f".{os.path.basename(path)}.{os.getpid()}.new")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+    try:
+        try:
+            os.fchown(fd, 0, gid)
+            os.fchmod(fd, 0o440)
+            os.write(fd, data + b"\n")
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.rename(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    dfd = os.open(login_dir, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
+
+
+def run(raw_command, stdin, config_path=CONFIG):
+    out = {"ok": False, "harness": None, "name": None, "fingerprint": None, "replacedAt": None}
+    try:
+        action, harness, name = parse_command(raw_command)
+        out.update(harness=harness, name=name)
+        path, gid = destination(load_config(config_path), harness, name)
+        if action == "install":
+            data = read_credential(stdin)
+            check_shape(harness, data)
+            install(path, gid, data)
+            out.update(ok=True, fingerprint=fingerprint(data), replacedAt=now())
+        elif action == "remove":
+            if os.path.lexists(path):
+                root_owned_not_writable(path, want_dir=False)
+                os.unlink(path)
+            out.update(ok=True, replacedAt=now())
+        else:  # status
+            if not os.path.lexists(path):
+                raise Refused("no credential installed")
+            root_owned_not_writable(path, want_dir=False)
+            with open(path, "rb") as f:
+                data = f.read().strip()
+            st = os.lstat(path)
+            out.update(ok=True, fingerprint=fingerprint(data),
+                       replacedAt=datetime.datetime.fromtimestamp(st.st_mtime, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    except Refused as e:
+        out["error"] = str(e)
+    except OSError as e:
+        out["error"] = f"io error: {type(e).__name__}"
+    except Exception as e:  # never leave the caller without a JSON line and a syslog record
+        out["error"] = f"internal error: {type(e).__name__}"
+    return out
+
+
+def main():
+    os.umask(0o077)
+    out = run(os.environ.get("SSH_ORIGINAL_COMMAND", ""), sys.stdin.buffer)
+    syslog.openlog("oats-login-receive", 0, syslog.LOG_AUTH)
+    # Log only the VALIDATED action (never the raw first token: a client that puts the credential in the command
+    # line must not write it into the auth log).
+    first = (os.environ.get("SSH_ORIGINAL_COMMAND", "").split() or ["-"])[0]
+    action = first if first in ("install", "remove", "status") else "-"
+    syslog.syslog(syslog.LOG_NOTICE, "ok=%s action=%s harness=%s name=%s fingerprint=%s client=%s" % (
+        out["ok"], action, out["harness"], out["name"],
+        out["fingerprint"], (os.environ.get("SSH_CLIENT", "-").split() or ["-"])[0]))
+    print(json.dumps(out))
+    return 0 if out["ok"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

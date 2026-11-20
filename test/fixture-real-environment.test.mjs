@@ -213,7 +213,7 @@ test("no test file and no test helper assigns to process.env", () => {
   const scripts = (dir) => (existsSync(new URL(dir, root)) ? readdirSync(new URL(dir, root), { withFileTypes: true }) : []).flatMap((e) => (
     e.isDirectory() ? (e.name === "node_modules" ? [] : scripts(`${dir}${e.name}/`)) : /\.[cm]?js$/.test(e.name) ? [`${dir}${e.name}`] : []));
   const files = ["test/", "tests/", ...packages].flatMap(scripts);
-  for (const expected of ["test/helpers/v2-deployment.mjs", "test/capabilities.test.mjs", "tests/tmux-config.test.mjs", "packages/pi/test/opening-task.test.mjs"]) assert.ok(files.includes(expected), `the search reads ${expected}`);
+  for (const expected of ["test/helpers/v2-deployment.mjs", "test/capabilities.test.mjs", "tests/desktop-views.integration.mjs", "packages/pi/test/opening-task.test.mjs"]) assert.ok(files.includes(expected), `the search reads ${expected}`);
   const assigned = [];
   for (const file of files) {
     const lines = readFileSync(new URL(file, root), "utf8").split("\n");

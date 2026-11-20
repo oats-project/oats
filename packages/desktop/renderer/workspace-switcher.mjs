@@ -1,4 +1,5 @@
 import { iconElement } from "./shell-icons.mjs";
+import { cliHeldBack, onCliChange } from "./views/cli-status.mjs";
 import { revealInScrollport } from "./reveal-in-scrollport.mjs";
 import { workspaceStep } from "../../client/workspace-step.mjs";
 import { requestDeploymentTab } from "./deployment-tabs.mjs";
@@ -27,10 +28,6 @@ import { isLocalPath, workspaceChoiceRows } from "../../client/workspace-choices
 
 /** Below the list while rows are cut off below its bounded height (a sighted cue: every row is in the list). */
 export const moreBelowText = (count) => `${count} more below`;
-/** "Show only the current workspace" (2026-10-23, the product owner: "for people that prefer working like we used to
- * work"): the toggle's name and the key it is remembered under. Nothing stands for the rows it hides. */
-export const CURRENT_ONLY_LABEL = "Show only the current workspace";
-export const CURRENT_ONLY_KEY = "oats-desktop-workspaces-current-only";
 /** A workspace with an instance that needs input: the mark's words, in the row's name and as its tooltip. */
 export const WAITING_NAME = ", needs input";
 export const WAITING_TITLE = "An instance here needs input";
@@ -61,7 +58,7 @@ const candidateName = (candidate) => candidate?.name
   || "Workspace";
 
 /** Each row's name, in order: the workspace's name, else a local folder's last segment, else "Workspace". Two
- * of one name are told apart by what names the workspace, its team and its key ("tsm — github.com/a/tsm"),
+ * of one name are told apart by what names the workspace, its team and its key ("web — github.com/a/web"),
  * never by where it is: no folder, no machine (the shared workspaceChoiceLabels falls back to those, for the
  * TUI's switcher). Twins with nothing of the kind keep the same name. */
 export function rowNames(choices) {
@@ -83,14 +80,15 @@ export function openInNewWindowHint(mac) {
   return `Press ${mac ? "⌘Enter" : "Ctrl+Enter"} to open this workspace in a new window.`;
 }
 
+/** The switcher's controls whose operation main holds back above the tested bound: selector → operation. */
+const HELD_WRITES = Object.freeze({ ".ws-remove-listed": "main deployments remove", ".ws-pick-setup": "main workspace onboard" });
+
 export function createWorkspaceSwitcher({
   document, selectWorkspace, discoverSuggestions, addWorkspace, pickWorkspace, onboardWorkspace = null, onboarded = null,
   // Remove a row of this computer's deployments list that can't be opened (#1390). Absent, no Remove.
   removeListed = null,
   // One window per workspace (#481): opens (or focuses) a workspace's own window. Absent, no action.
   openInNewWindow = null, mac = false,
-  // Where "Show only the current workspace" is remembered (a Storage: localStorage), else not at all.
-  storage = null,
   // The shell's guard for a focus it restores (selection-ownership.mjs applyFocus): a repaint keeping the focus on
   // the row that had it is no new intent of the operator's.
   applyFocus = (fn) => fn(),
@@ -103,15 +101,8 @@ export function createWorkspaceSwitcher({
   options.after(empty);
   const more = document.createElement('p'); more.className = 'ws-more'; more.setAttribute('aria-hidden', 'true'); more.hidden = true;
   options.after(more);
-  // Show only the current workspace: a toggle at the heading, before Add (index.html #ws-current-only). Its state is
-  // aria-pressed; the rows it hides leave the list and its keys, and no line stands for them.
-  const currentOnlyButton = q("ws-current-only");
-  let currentOnly = (() => { try { return storage?.getItem(CURRENT_ONLY_KEY) === "1"; } catch { return false; } })();
-  if (currentOnlyButton) {
-    currentOnlyButton.replaceChildren(iconElement(document, "collapse", { size: 14 }));
-    currentOnlyButton.setAttribute("aria-label", CURRENT_ONLY_LABEL); currentOnlyButton.title = CURRENT_ONLY_LABEL;
-    currentOnlyButton.setAttribute("aria-pressed", String(currentOnly));
-  }
+  // The list always shows every workspace (slice 1 of the Desktop UI rework dropped Show only the current workspace:
+  // one workspace is shown at a time by construction; a preference stored for it is no longer read).
   // The rows' description: how to reach Open in new window from the keyboard (one hidden element).
   const hint = document.createElement('p'); hint.id = 'ws-open-window-hint'; hint.hidden = true; hint.textContent = openInNewWindowHint(mac);
   if (openInNewWindow) empty.after(hint);
@@ -236,8 +227,6 @@ export function createWorkspaceSwitcher({
       };
       button.addEventListener("click", () => { if (button.isConnected && options.contains(button)) choose(); });
       const item = document.createElement("li"); item.className = "ws-option-row";
-      // Only the current workspace: the others are hidden (never with no current row: then every row shows).
-      if (currentOnly && workspace.id !== activeId && workspaces.some((w) => w.id === activeId)) { button.hidden = true; item.hidden = true; }
       item.append(button);
       list.append(item);
       drawn.push({ key: workspace.id, openable: true, open: choose });
@@ -251,7 +240,7 @@ export function createWorkspaceSwitcher({
     if (stop?.classList?.contains("ws-option")) stop.tabIndex = 0;
     if (focused) applyFocus(() => (focusedKey ? rowOf(focusedKey) || focusTarget() : focusTarget()).focus());
     // A context menu whose row is gone closes; focus that was in it goes to the list's stop (the current row), never
-    // <body> (review: Show only the current workspace's chord from another row's menu).
+    // <body>.
     if (menuFor && !rowOf(menuFor)) { closeRowMenu(false); if (menuFocusKey) focusTarget().focus(); }
     revealInScrollport(options, rowOf(activeId));
     noteMore();
@@ -301,6 +290,16 @@ export function createWorkspaceSwitcher({
   // One tab stop among them all (the one last focused, else the first); Up/Down move between them.
   const matches = (query) => (candidate) => !query
     || `${candidateName(candidate)} ${candidateId(candidate)} ${candidate.team?.name || ""} ${candidate.reason || ""}`.toLocaleLowerCase().includes(query);
+  // Above the tested bound (#1879) the writes main would refuse are held back here too, with the notice as their
+  // title (packages/client/above-tested.mjs): removing a row of this computer's deployments list, and setting up a
+  // new deployment. Applied after every paint and busy change, and again when the CLI changes.
+  const applyHolds = () => {
+    for (const [selector, operation] of Object.entries(HELD_WRITES)) {
+      const held = cliHeldBack(operation);
+      for (const button of [suggestionsEl, pickEl].flatMap((el) => [...el.querySelectorAll(selector)])) { button.disabled = adding || !!held; button.title = held ?? button.dataset.title ?? ""; }
+    }
+  };
+  const offCli = onCliChange(applyHolds);
   const renderSuggestions = (focusId = "") => {
     const query = modalSearch.value.trim().toLocaleLowerCase();
     suggestionsEl.replaceChildren();
@@ -368,8 +367,9 @@ export function createWorkspaceSwitcher({
         remove.type = "button"; remove.className = "ws-remove-listed"; remove.tabIndex = -1;
         remove.dataset.workspacePath = id; remove.textContent = "Remove"; remove.disabled = adding;
         remove.setAttribute("aria-label", `Remove ${name} from this computer's list`);
-        remove.title = `Remove ${name} from this computer's list. Nothing on disk changes.`;
-        remove.addEventListener("click", () => { if (!adding) void runRemove(id, name); });
+        remove.dataset.title = `Remove ${name} from this computer's list. Nothing on disk changes.`;
+        remove.title = remove.dataset.title;
+        remove.addEventListener("click", () => { if (!adding && !cliHeldBack(HELD_WRITES[".ws-remove-listed"])) void runRemove(id, name); });
         row.append(remove);
       }
       staleGroup.append(row);
@@ -379,6 +379,7 @@ export function createWorkspaceSwitcher({
         .find((button) => button.dataset.workspaceId === focusId)?.focus();
     }
     if (!all.length && !status.textContent) setStatus("No matching OATS workspaces found.");
+    applyHolds();
   };
 
   const paintDiscoveryState = () => {
@@ -418,14 +419,15 @@ export function createWorkspaceSwitcher({
     if (notes.length) { const more = document.createElement("p"); more.className = "ws-pick-more"; more.textContent = `${notes.join(". ")}.`; pickEl.append(more); }
     if (pickOffer && typeof onboardWorkspace === "function") {
       const setup = document.createElement("button"); setup.type = "button"; setup.className = "ws-pick-setup secondary";
-      setup.textContent = "Set up a new deployment here…"; setup.disabled = adding;
+      setup.textContent = "Set up a new deployment here…"; setup.disabled = adding; setup.dataset.title = "";
       setup.addEventListener("click", () => {
-        if (adding || !pickOffer) return;
+        if (adding || !pickOffer || cliHeldBack(HELD_WRITES[".ws-pick-setup"])) return;
         const offer = pickOffer; clearPick(); setStatus(""); enterOnboarding(offer);
       });
       pickEl.append(setup);
     }
     pickEl.hidden = !pickEl.childElementCount;
+    applyHolds();
   };
   const setAdding = (value) => {
     adding = value;
@@ -437,6 +439,7 @@ export function createWorkspaceSwitcher({
     refInput.disabled = value;
     for (const button of suggestionsEl.querySelectorAll("button")) button.disabled = value;
     for (const button of pickEl.querySelectorAll("button")) button.disabled = value;
+    applyHolds();
     confirm.disabled = value || !refInput.value.trim();
     if (value) status.focus();
   };
@@ -758,20 +761,7 @@ export function createWorkspaceSwitcher({
 
   confirm.hidden = true;
   render(null);
-  /** Show only the current workspace, or every one; remembered on this computer. Focus on a row that goes moves to
-   * the current row. */
-  const setCurrentOnly = (on) => {
-    currentOnly = !!on;
-    try { if (currentOnly) storage?.setItem(CURRENT_ONLY_KEY, "1"); else storage?.removeItem(CURRENT_ONLY_KEY); } catch { /* not remembered */ }
-    currentOnlyButton?.setAttribute("aria-pressed", String(currentOnly));
-    renderOptions();
-  };
-  currentOnlyButton?.addEventListener("click", () => setCurrentOnly(!currentOnly));
-
   return {
-    /** The "Show only the current workspace" toggle (workspaces.currentOnly). */
-    toggleCurrentOnly() { setCurrentOnly(!currentOnly); },
-    get currentOnly() { return currentOnly; },
     begin() {
       const token = ++generation;
       return (workspace, list) => {
@@ -812,6 +802,7 @@ export function createWorkspaceSwitcher({
     /** Open the Add dialog (the chooser's button, a window with nothing to show); `opener` gets focus back. */
     openModal,
     dispose() {
+      offCli();
       resized?.disconnect();
       closeRowMenu(false);
     },

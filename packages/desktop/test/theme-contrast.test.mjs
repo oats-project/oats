@@ -10,7 +10,7 @@ import { deriveHostTokens, mixHex } from "../renderer/host-theme.mjs";
 import { hostState } from "./helpers/host-theme-fixture.mjs";
 import { createSoulMark, createRuntimeBadge, identityCSS } from "../renderer/identity-marks.mjs";
 import { workspaceStatusData, syncData } from "../../client/deployment-data.mjs";
-import { renderCapabilities, renderCapabilitySections, renderRepoPills, repoChoices, sourceChip } from "../renderer/workspace-catalog.mjs";
+import { renderCapabilityList, sourceChip, capabilityRowElement } from "../renderer/workspace-catalog.mjs";
 import { capabilitySections, hostKeyOf, memberNames } from "../../client/capability-rows.mjs";
 import { renderSetup, teamsBox } from "../renderer/workspace-setup.mjs";
 import { discoveryCSS } from "../renderer/workspace-discovery.mjs";
@@ -20,12 +20,12 @@ import { createTerminalSettings, settingsTerminalCSS } from '../renderer/setting
 import { createForgePrPanel } from '../renderer/forge-pr.mjs';
 import { instanceGitCSS } from '../renderer/instance-git.mjs';
 import { createContextPanel, contextPanelCSS } from '../renderer/context-panel.mjs';
-import { prChip, rosterPrCSS } from '../renderer/roster-pr.mjs';
 import { createNotificationCenter, notificationCSS } from '../renderer/notifications.mjs';
 import { createWorkspaceSwitcher } from '../renderer/workspace-switcher.mjs';
 import { instanceActions } from '../renderer/instance-actions.mjs';
 import { iconElement } from '../renderer/shell-icons.mjs';
-import { createSettingsMenu } from '../renderer/sidebar-settings.mjs';
+import { createSidebarFoot } from '../renderer/sidebar-foot.mjs';
+import { DESKTOP_NOUNS } from '../renderer/desktop-terms.mjs';
 import { instanceActionTarget } from '../renderer/instance-action-target.mjs';
 import { pullRequest } from '../renderer/forge-contract.mjs';
 import { target as forgeTarget, pr as forgePr } from './helpers/forge-fixture.mjs';
@@ -111,7 +111,7 @@ test("the shared inventory holds token names only, covers the 16 ANSI colours, a
   assert.equal(new Set(pairs.map(pair => pair.join(" on "))).size, pairs.length, "no pair twice");
   assert.equal(ansi.length, 16);
   for (const token of ansi) assert.ok(pairs.some(([fg, bg]) => fg === token && bg === "term-bg"), `--${token} is held on --term-bg`);
-  assert.deepEqual(GRAPHIC_PAIRS, [["graph-edge", "bg"], ["graph-edge", "surface"], ["graph-edge", "surface-2"], ["tree-link", "surface"], ["tree-link", "surface-2"], ["tree-link", "sel"], ["muted", "surface"], ["muted", "surface-2"], ["term-sel", "term-bg"], ["accent", "surface"], ["danger", "sel"],
+  assert.deepEqual(GRAPHIC_PAIRS, [["graph-edge", "bg"], ["graph-edge", "surface"], ["graph-edge", "surface-2"], ["tree-link", "surface"], ["tree-link", "surface-2"], ["tree-link", "sel"], ["tree-stroke", "surface"], ["tree-stroke", "surface-2"], ["tree-stroke", "sel"], ["muted", "surface"], ["muted", "surface-2"], ["term-sel", "term-bg"], ["accent", "surface"], ["danger", "sel"],
     ...soulTones.flatMap(tone => ["bg", "surface", "surface-2", "sel"].map(bg => [`instance-${tone}`, bg]))]);
   assert.deepEqual(PAINTED_OVER, [["md-code-bg", "bg"]]);
   assert.deepEqual(HOST_UNADJUSTED_PAIRS, ansi.map(token => [token, "term-bg"]), "the host theme's one exception: its terminal colours, unadjusted");
@@ -385,14 +385,16 @@ test("White uses neutral surfaces, ink primaries and AA-safe orange distinct fro
   assert.equal(light.get("graph-edge-coord"), light.get("accent"));
 });
 
-test("dark color palette is preserved; primary is an existing opaque ink/surface pair", () => {
+// Slice 3c of the Desktop UI rework: the chrome takes the prototype's Tokyo Night hues (muted, faint and the nav ink
+// lifted to AA); the terminal's colours are kept.
+test("dark color palette is the prototype's Tokyo Night; primary is an existing opaque ink/surface pair", () => {
   const expected = {
-    bg: "#0e1116", surface: "#161b22", "surface-2": "#1c2129", border: "#2d333c",
-    fg: "#e6edf3", muted: "#9aa4b2", faint: "#8b949e", accent: "#4493f8", "accent-fg": "#ffffff",
-    violet: "#c297ff", ok: "#3fb950", warn: "#d29922", danger: "#f85149",
-    "chip-bg": "#21262e", "chip-fg": "#adb6c2", sel: "#1b2b40",
+    bg: "#1a1b26", surface: "#1f2130", "surface-2": "#24273a", border: "#2f3244",
+    fg: "#c0caf5", muted: "#9aa2c8", faint: "#9098bf", accent: "#7aa2f7", "accent-fg": "#16161e",
+    violet: "#bb9af7", ok: "#9ece6a", warn: "#e0af68", danger: "#f7768e",
+    "chip-bg": "#292e42", "chip-fg": "#a9b1d6", sel: "#262c45",
     "term-bg": "#0a0d12", "term-fg": "#e6edf3", "term-sel": "#2f6496", "term-sel-fg": "#f5f9ff",
-    "md-code-bg": "#ffffff10", "md-rule": "#ffffff2e", "graph-edge": "#636c79", "graph-edge-coord": "#4493f8",
+    "md-code-bg": "#ffffff10", "md-rule": "#ffffff2e", "graph-edge": "#6f77a0", "graph-edge-coord": "#7aa2f7",
   };
   for (const [key, value] of Object.entries(expected)) assert.equal(dark.get(key), value, key);
   assert.deepEqual(ansi.map(key => dark.get(key)), [
@@ -451,13 +453,13 @@ function spawnViewCSS() {
 for (const [name] of palettes) test(`${name}: actual identity/runtime markup wins the cascade and meets AA`, t => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><head></head><body>
     <div id="app"><aside id="sidebar"><button class="ctx-inst active"></button><button class="ctx-inst idle"></button></aside>
-      <div class="oats-view"><button class="soul-card"><span class="sname"></span></button>
+      <div class="oats-view"><aside class="soul-inspector soul-page"><div class="inspector-head"></div></aside>
         <button class="act primary"><span class="inspector-marks"></span></button></div></div>
   </body></html>`);
   t.after(() => dom.window.close());
   const { document } = dom.window;
   const spawnCSS = spawnViewCSS();
-  assert.ok(spawnCSS, "exercise actual late-mounted soul card/glyph rules");
+  assert.ok(spawnCSS, "exercise the actual late-mounted Souls rules");
   for (const source of [css, readFileSync(new URL("shell.css", renderer), "utf8"), spawnCSS, identityCSS]) {
     const style = document.createElement("style"); style.textContent = source; document.head.append(style);
   }
@@ -491,7 +493,8 @@ for (const [name] of palettes) test(`${name}: actual identity/runtime markup win
     }
     assert.ok(svg.getAttribute("fill") === "currentColor" || svg.getAttribute("stroke") === "currentColor");
   }
-  for (const selector of [".ctx-inst", ".soul-card .sname", ".inspector-marks"]) {
+  // A soul card carries no mark (slice 3a); the soul page's head does.
+  for (const selector of [".ctx-inst", ".soul-page .inspector-head", ".inspector-marks"]) {
     const container = document.querySelector(selector);
     for (const color of soulTones) {
       const mark = createSoulMark(document, { name: "Fixture soul", agentsRoot: "/fixture/agents", color });
@@ -509,18 +512,6 @@ for (const [name] of palettes) test(`${name}: actual identity/runtime markup win
     const invalid = document.createElement("span"); invalid.dataset.avatarColor = "red; background:url(x)";
     container.append(invalid); check(invalid, "chip");
   }
-  // A stopped instance's provider mark dims: whatever pair the shell paints it
-  // with must be one the inventory lists, so every theme (and a host palette)
-  // holds it at AA. (An unreported harness is not dimmed: it keeps its own pair.)
-  const token = value => value.match(/^var\(--([a-z0-9-]+)\)$/)?.[1];
-  for (const runtime of runtimes) {
-    const stopped = createRuntimeBadge(document, runtime); stopped.classList.add("ctx-runtime");
-    document.querySelector(".ctx-inst.idle").append(stopped);
-    const style = dom.window.getComputedStyle(stopped), fg = token(style.color), bg = token(style.background);
-    assert.ok(pairs.some(pair => pair[0] === fg && pair[1] === bg),
-      `${name} stopped ${runtime} mark: ${style.color} on ${style.background} is not a pair in the contrast inventory`);
-    check(stopped, fg.replace(/-fg$/, ""));
-  }
 });
 
 for (const [name] of palettes) test(`${name}: workspace catalog, sources and sync text use AA tokens on their computed surfaces`, t => {
@@ -536,16 +527,12 @@ for (const [name] of palettes) test(`${name}: workspace catalog, sources and syn
   // Kernel #217: rows carry a description (rendered as a muted line under the name).
   const rows = f2('capabilities').result.capabilities.map(r => ({ ...r, description: `About ${r.name}.` }));
   const names = memberNames(status);
-  // Workspace owned's repository pills: one pressed (the first repository), the rest not, and the shown count.
-  const repos = repoChoices(rows, names, hostKeyOf(status));
-  renderRepoPills(doc.querySelector('.filters'), { repos, value: repos[0].key, total: rows.length, shown: repos[0].count, narrowed: true, onChange() {} });
-  renderCapabilities(doc.querySelector('.caps'), { rows, status, instances: [], root: dir });
-  // The boxed source chip left the list (its group heading names the source); a soul's capability tables and the
-  // capability page still draw it with this sheet.
+  // The Desktop UI rework, slice 3b: one list of rows (name, tags, who made it, one line), with the defaults sentence.
+  // F7 (kernel #185): core capabilities and a repo-owned (private) row carry their tags.
+  const f7rows = JSON.parse(readFileSync(new URL('fixtures/workspace-v2/f7/capabilities.json', new URL('./', import.meta.url)), 'utf8')).result.capabilities.map(r => ({ ...r, description: `About ${r.name}.` }));
+  renderCapabilityList(doc.querySelector('.caps'), { rows: [...rows, ...f7rows], status: { ...status, defaults: { slots: { knowledge: { name: 'oats.okf', from: 'package' } }, capabilities: [] } }, onOpen() {} });
+  // The boxed source chip left the list; a soul's capability tables and the capability page still draw it with this sheet.
   doc.querySelector('.caps').append(sourceChip(doc, rows[0], names, { boxed: true }));
-  // F7 (kernel #185): the three sections, with a repo-owned (private) row.
-  const sections = capabilitySections(JSON.parse(readFileSync(new URL('fixtures/workspace-v2/f7/capabilities.json', new URL('./', import.meta.url)), 'utf8')).result.capabilities);
-  renderCapabilitySections(doc.querySelector('.sections'), { sections, shown: sections.workspace, filterHost: null, privateListed: true, status, instances: [], root: dir });
   // Kernel #217 desktop facts: a hosted workspace file, clones (one here, one refused, the rest not cloned), the lock file.
   const unconfirmed = status.members.find(m => m.status !== 'confirmed');
   const facts = { ...status, workspace: { ...status.workspace, file: { path: 'oats-workspace.yaml', url: 'https://github.com/northwind/agents/blob/a/oats-workspace.yaml' } },
@@ -559,31 +546,25 @@ for (const [name] of palettes) test(`${name}: workspace catalog, sources and syn
   renderSetup(doc.querySelector('.sources'), { status: listed, instances: [{ agent: 'a', running: true }], souls: [{ team: 'marketing' }], cli: { version: '0.26.0' }, openExternal() {} });
   // The Workspace's Teams tab (0.29 box; first tab since 2026-09-28), beside Setup.
   doc.querySelector('.sources').append(teamsBox(doc, { status: facts, souls: [{ team: 'marketing' }] }));
-  renderSetup(doc.querySelector('.graph'), { status: { ...facts, unsynced: ['x.pkg'] }, view: 'graph', selected: unconfirmed.key, openExternal() {} });
+  // A member's panel, open under its row (the graph went in slice 3b).
+  renderSetup(doc.querySelector('.graph'), { status: { ...facts, unsynced: ['x.pkg'] }, selected: unconfirmed.key, openExternal() {} });
   // The sync sheet's refusal text, as createWorkspaceSync builds it.
   const sheet = doc.createElement('section'); sheet.className = 'ws-sync-dialog';
   sheet.innerHTML = '<div class="ws-sync-body"><p class="ws-sync-lead error">x</p><p class="ws-sync-lead">x</p><button class="ws-sync-details">Details</button><p class="ws-sync-detail">x</p></div>';
   doc.querySelector('main').append(sheet);
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
-    // Workspace v4.1: the column head sits on the page; each capability is a row card (surface) with its
-    // name, one-line description and used-by words; the boxed source chip (soul tables, the page).
-    ['.catalog-head', '.oats-view', 'muted', 'bg'],
-    ['.catalog-name', 'button.catalog-row', 'fg', 'surface'],
-    ['.catalog-desc', 'button.catalog-row', 'muted', 'surface'],
+    // Slice 3b: the defaults sentence on the page; each capability a row with its name, its dim tags, who made it (the
+    // official mark's check, "by <source>" in --muted) and its one line; the boxed source chip (the page). Slice 3c: the
+    // rows sit on the page's --bg (no box), the check in --accent, "default" on its --tag-bg fill.
+    ['.cap-lead', '.oats-view', 'muted', 'bg'], ['.cap-lead b', '.oats-view', 'fg', 'bg'], ['.cap-intro', '.oats-view', 'muted', 'bg'],
+    ['.cap-part-title', '.oats-view', 'muted', 'bg'], ['.cap-group-title', '.oats-view', 'fg', 'bg'], ['.cap-slot-label', '.oats-view', 'muted', 'bg'],
+    ['.cap-row-name', '.oats-view', 'fg', 'bg'],
+    ['.cap-row-desc', '.oats-view', 'muted', 'bg'],
+    ['.cap-tag[data-tag=core]', '.oats-view', 'muted', 'bg'], ['.cap-tag[data-tag=private]', '.oats-view', 'muted', 'bg'], ['.cap-tag[data-tag=default]', '.cap-tag[data-tag=default]', 'muted', 'tag-bg'],
+    ['.cap-origin:not([data-official])', '.oats-view', 'muted', 'bg'], ['.cap-official', '.oats-view', 'accent', 'bg'],
     ['.source-chip', '.source-chip.boxed', 'muted', 'surface'], ['.source-chip-name', '.source-chip.boxed', 'fg', 'surface'],
-    ['.catalog-used-count.none', 'button.catalog-row', 'muted', 'surface'],
-    // Repository pills (rule 1): unpressed --muted on --surface, pressed --accent on --sel (name and count), and the shown count.
-    ['.catalog-pills button[aria-pressed=false]', '.catalog-pills button[aria-pressed=false]', 'muted', 'surface'],
-    ['.catalog-pills button[aria-pressed=true]', '.catalog-pills button[aria-pressed=true]', 'accent', 'sel'],
-    ['.catalog-shown', '.oats-view', 'muted', 'bg'],
     ['.catalog-note.warn', '.oats-view', 'warn', 'bg'], ['.catalog-note:not(.warn)', '.oats-view', 'muted', 'bg'],
-    // Sections: the segmented jump (current = brand tint, rule 1), titles with their lead, repo headings.
-    ['.capability-nav button[aria-current]', '.capability-nav button[aria-current]', 'accent', 'sel'],
-    ['.capability-nav button:not([aria-current])', '.capability-nav', 'muted', 'surface'],
-    ['.capability-section-title', '.oats-view', 'fg', 'bg'], ['.capability-section-lead', '.oats-view', 'muted', 'bg'],
-    // A repository group's heading (the Souls tab's, group-heading.mjs): the name --fg, its qualifier --muted.
-    ['.catalog-group .souls-group-name', '.oats-view', 'fg', 'bg'], ['.catalog-group .souls-group-note', '.oats-view', 'muted', 'bg'],
     // Workspace v4 Setup (W1/W2), the 2026-10-14 redesign: the lede and its summary on the page, the overview card
     // (the drawing's boxes on --surface-2), Shared through Git's boxes, the This computer zone (--surface-2).
     ['.setup-lede h2', '.oats-view', 'fg', 'bg'], ['.setup-summary', '.oats-view', 'muted', 'bg'],
@@ -614,12 +595,6 @@ for (const [name] of palettes) test(`${name}: workspace catalog, sources and syn
     ['.setup-def dt', '.setup-box', 'muted', 'surface'], ['.setup-def dd.muted', '.setup-box', 'muted', 'surface'],
     ['.setup-def-cap:not(.off) .setup-def-name', '.setup-box', 'fg', 'surface'], ['.setup-def-from', '.setup-box', 'muted', 'surface'],
     ['.setup-team-adds', '.setup-box', 'muted', 'surface'], ['.setup-def-cap.off .setup-def-name', '.setup-box', 'muted', 'surface'],
-    ['.setup-caption', '.setup-here', 'muted', 'surface-2'], ['.setup-card-title', '.setup-computer', 'fg', 'surface'], ['.setup-card-meta', '.setup-computer', 'muted', 'surface'],
-    ['.setup-ws .setup-card-meta', '.setup-ws', 'fg', 'sel'],
-    ['.setup-lock.warn', '.oats-view', 'warn', 'bg'],
-    ['.setup-tree-label', '.setup-shared', 'muted', 'surface'],
-    ['.setup-node:not(.bad) .setup-node-name', '.setup-node:not(.bad)', 'fg', 'surface'], ['.setup-node:not(.bad) .setup-node-meta', '.setup-node:not(.bad)', 'muted', 'surface'],
-    ['.setup-node.bad .setup-node-name', '.setup-node.bad', 'fg', 'attn-bg'], ['.setup-node.bad .setup-node-meta', '.setup-node.bad', 'warn', 'attn-bg'],
     ['.setup-panel-name', '.setup-panel', 'fg', 'surface'], ['.setup-panel h4', '.setup-panel', 'muted', 'surface'],
     ['.setup-hand-title', '.setup-panel', 'fg', 'surface'], ['.setup-hand-sub', '.setup-panel', 'muted', 'surface'], ['.setup-hand-mark.warn', '.setup-panel', 'warn', 'surface'],
     ['.setup-panel p:not(.muted):not(.warn)', '.setup-panel', 'fg', 'surface'], ['.setup-panel p.warn', '.setup-panel', 'warn', 'surface'], ['.setup-panel p.muted', '.setup-panel', 'muted', 'surface'],
@@ -637,18 +612,17 @@ for (const [name] of palettes) test(`${name}: workspace catalog, sources and syn
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${selector} on ${bg}`);
     for (let parent = el; parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1');
   }
-  // A keyboard-focused pill takes the shell's tint (its own rule out-ranks the global one): its --muted
-  // (unpressed) and --accent (pressed) ink on --sel are inventoried pairs and meet AA here.
-  // (jsdom does not resolve the pill's :focus-visible here: the declared rule is read.)
-  assert.ok([...doc.styleSheets].flatMap(sheet => [...sheet.cssRules]).some(rule => rule.selectorText === '.oats-view .catalog-pills button:focus-visible' && rule.style.background === 'var(--sel)'), 'the pill focus tint rule');
-  for (const fg of ['muted', 'accent']) {
+  // A keyboard-focused row takes the shell's tint (its own rule out-ranks the global one): its --fg and --muted
+  // ink on --sel are inventoried pairs and meet AA here. (jsdom does not resolve :focus-visible: the declared rule is read.)
+  assert.ok([...doc.styleSheets].flatMap(sheet => [...sheet.cssRules]).some(rule => rule.selectorText === '.oats-view button.cap-row:focus-visible' && rule.style.background === 'var(--sel)'), 'the row focus tint rule');
+  for (const fg of ['muted', 'fg']) {
     assert.ok(pairs.some(([f, b]) => f === fg && b === 'sel'), `--${fg} on --sel is inventoried`);
-    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue('--sel').trim())) >= 4.5, `focused pill: --${fg} on --sel`);
+    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue('--sel').trim())) >= 4.5, `focused row: --${fg} on --sel`);
   }
 });
 
-// Workspace › Capabilities' Workspace defaults panel (filled and empty core slots, additional defaults from a package
-// and a member repository, one the workspace turned off) and the "About capabilities" dialog in the lifecycle frame: every text on its computed surface.
+// Workspace › Capabilities' defaults (slice 3b: a sentence and a tag; one turned off) and the "About capabilities" dialog
+// in the lifecycle frame: every text on its computed surface.
 for (const [name] of palettes) test(`${name}: Workspace defaults and the About dialog use AA tokens on their computed surfaces`, t => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><main class="oats-view"><div class="sections"></div><div class="tools"></div></main></body></html>`, { pretendToBeVisual: true });
   const doc = dom.window.document;
@@ -659,24 +633,13 @@ for (const [name] of palettes) test(`${name}: Workspace defaults and the About d
   const status = { workspace: { key: 'github.com/nw/agents', name: 'northwind' }, members: [],
     defaults: { slots: { knowledge: { name: 'oats.okf', from: 'package' }, messaging: 'none', tasks: null },
       capabilities: [{ name: 'oats.core', from: 'package', off: false }, { name: 'house-style', from: 'here', off: false }, { name: 'old-style', from: null, off: true }] } };
-  const sections = capabilitySections(rows);
-  renderCapabilitySections(doc.querySelector('.sections'), { sections, shown: sections.workspace, filterHost: null, privateListed: false, status, instances: [], onOpen() {} });
+  renderCapabilityList(doc.querySelector('.sections'), { rows: [...rows, { name: 'old-style', kind: 'member', repoKey: 'github.com/nw/agents' }], status, onOpen() {} });
   const about = createAboutDialog(doc, { copy: ABOUT_COPY.capabilities, id: 'about' });
   doc.querySelector('.tools').append(about.button); about.open();
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
-    ['.ws-defaults-scope', '.ws-defaults-panel', 'fg', 'surface'], ['.ws-defaults-sub', '.ws-defaults-panel', 'muted', 'surface'],
-    // The two groups' headings and leads, the one cell's words, its chip and tiles (core tints, an empty slot and a
-    // package neutral, a member capability clay), an additional default turned off.
-    ['.ws-defaults-group-head', '.ws-defaults-panel', 'fg', 'surface'], ['.ws-defaults-group-lead', '.ws-defaults-panel', 'muted', 'surface'],
-    ['button.ws-default-cell .ws-default-label', 'button.ws-default-cell', 'muted', 'surface'],
-    ['button.ws-default-cell .ws-default-name', 'button.ws-default-cell', 'fg', 'surface'],
-    ['button.ws-default-cell .source-chip', 'button.ws-default-cell', 'muted', 'surface'], ['button.ws-default-cell .source-chip-name', 'button.ws-default-cell', 'fg', 'surface'],
-    ['div.ws-default-cell .ws-default-none', 'div.ws-default-cell', 'muted', 'surface'], ['div.ws-default-cell .ws-default-note', 'div.ws-default-cell', 'muted', 'surface'],
-    ['.ws-default-tile[data-tint=slate]', '.ws-default-tile[data-tint=slate]', 'soul-slate-fg', 'soul-slate-bg'],
-    ['.ws-default-tile[data-tint=clay]', '.ws-default-tile[data-tint=clay]', 'soul-clay-fg', 'soul-clay-bg'],
-    ['.ws-default-tile:not([data-tint])', '.ws-default-tile:not([data-tint])', 'chip-fg', 'chip-bg'],
-    ['.ws-default-cell.off .ws-default-name', '.ws-default-cell.off', 'muted', 'surface'], ['.ws-default-cell.off .ws-default-note', '.ws-default-cell.off', 'muted', 'surface'],
+    ['.cap-lead', '.oats-view', 'muted', 'bg'], ['.cap-lead b', '.oats-view', 'fg', 'bg'], ['.cap-lead .cap-lead-name', '.oats-view', 'fg', 'bg'],
+    ['.cap-tag[data-tag=default]', '.cap-tag[data-tag=default]', 'muted', 'tag-bg'], ['.cap-tag[data-tag=default-off]', '.cap-tag[data-tag=default-off]', 'muted', 'tag-bg'],
     ['.ws-info-button', '.ws-info-button', 'muted', 'surface'],
     ['.about-dialog h2', '.about-dialog', 'fg', 'surface'], ['.about-dialog > p', '.about-dialog', 'fg', 'surface'],
     ['.about-dialog .lifecycle-mark', '.about-dialog .lifecycle-mark', 'accent', 'surface-2'],
@@ -793,7 +756,7 @@ for (const [name, palette] of palettes) test(`${name}: the Workspace heading, th
 });
 
 // The sidebar's one visible shortcut hint was the roster filter's ⌘F; it went with the filter. The sidebar paints
-// none (the product owner, 2026-10-26: Spawn instance's chord is in its tooltip), so no hint ink sits on a sidebar
+// none (the product owner, 2026-10-26: New agent's chord is in its tooltip), so no hint ink sits on a sidebar
 // surface (the spawn dialog's hints are held in spawn-dialog.test.mjs).
 for (const [name] of palettes) test(`${name}: the shipped sidebar paints no shortcut hint, and a hidden hint takes no box`, t => {
   const dom = new JSDOM(readFileSync(new URL("index.html", renderer), "utf8"));
@@ -804,16 +767,16 @@ for (const [name] of palettes) test(`${name}: the shipped sidebar paints no shor
   }
   assert.equal(doc.querySelector("#sidebar .shortcut-hint, #sidebar [data-shortcut], #sidebar kbd, .ctx-filter-field, .ctx-filter"), null,
     "no hint and no filter field in the sidebar");
-  // Spawn instance (the bar's words alone) names itself in words; its chord is the tooltip's.
+  // New agent names itself in words (the shell's, from DESKTOP_NOUNS); its chord is the tooltip's.
   const spawn = doc.getElementById("sidebar-spawn");
-  assert.equal(spawn.getAttribute("title"), "Spawn instance"); assert.equal(spawn.getAttribute("data-action"), "app.quickOpenSouls");
+  assert.equal(spawn.getAttribute("data-action"), "app.quickOpenSouls"); assert.equal(spawn.querySelector("kbd"), null);
   const hint = doc.createElement("kbd"); hint.className = "shortcut-hint"; hint.hidden = true; doc.body.append(hint);
   assert.equal(dom.window.getComputedStyle(hint).display, "none");
 });
 
-// The sidebar (the product owner, 2026-10-26): the nav (Workspace overview, Automations) sits under the list of
-// workspaces on the sidebar's --surface (the foot holds the bar: the sidebar toggle, Spawn instance and the
-// settings cog, below). Each one's ink, at rest, hovered, current
+// The sidebar (the product owner, 2026-10-26; slice 1): the pinned rows (Workspace, Automations) sit under the
+// list of workspaces on the sidebar's --surface, Automations with its --danger failure mark while a run failed. Each
+// one's ink, at rest, hovered, current
 // and under the keyboard tint, is a token pair the inventory holds to AA (so "This computer" is held too,
 // host-theme.mjs), and meets it here on the effective colours, with no opacity on it or under it.
 for (const [name] of palettes) test(`${name}: the nav's items meet computed AA in every state`, t => {
@@ -822,11 +785,13 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
   const doc = dom.window.document, win = dom.window; doc.documentElement.dataset.theme = name;
   const shellCss = readFileSync(new URL("shell.css", renderer), "utf8");
   for (const source of [css, shellCss]) { const style = doc.createElement("style"); style.textContent = source; doc.head.append(style); }
-  // The nav's buttons as shell.mjs builds them from NAV: an icon, then the label; Workspace overview current.
-  for (const [label, current] of [["Workspace overview", true], ["Automations", false]]) {
+  // The nav's buttons as shell.mjs builds them from NAV: an icon, then the label; Workspace current.
+  for (const [label, current] of [["Workspace", true], ["Automations", false]]) {
     const b = doc.createElement("button"); b.type = "button"; b.className = `nav-item${current ? " active" : ""}`;
     if (current) b.setAttribute("aria-current", "page");
     b.innerHTML = `<span class="icon"><svg class="shell-icon" aria-hidden="true"></svg></span><span class="label">${label}</span>`;
+    // The failure mark, as paintAutomationsFailed draws it.
+    if (label === "Automations") b.insertAdjacentHTML("beforeend", `<span class="nav-failed"><span class="nav-failed-dot" aria-hidden="true"></span><span class="sr-only">, a run failed</span></span>`);
     doc.getElementById("nav").append(b);
   }
   const root = win.getComputedStyle(doc.documentElement);
@@ -845,7 +810,7 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
     assert.ok(!bg || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(bg), `#${id} paints nothing of its own: the sidebar shows under it (${bg})`);
   }
   const controls = [...doc.querySelectorAll("#nav button")];
-  assert.deepEqual(controls.map(b => b.id || b.textContent), ["Workspace overview", "Automations"]);
+  assert.deepEqual(controls.map(b => b.id || b.textContent), ["Workspace", "Automations, a run failed"]);
   assert.equal(doc.getElementById("nav-title"), null, "no title over the views");
   for (const control of controls) {
     const what = control.id || control.textContent, current = control.classList.contains("active");
@@ -866,25 +831,28 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
   const focus = rule(":is(button, a, summary):focus-visible");
   assert.equal(focus.background, "var(--sel)");
   for (const ink of ["nav-fg", "fg", "accent"]) held(ink, "sel", ink === "accent" ? GRAPHIC_CONTRAST : TEXT_CONTRAST, `focused ${ink}`);
+  // The failure mark: a --danger dot (yellow means needs input only), 3:1 on the row at rest, hovered and focused.
+  const dot = doc.querySelector(".nav-failed-dot");
+  assert.equal(token(win.getComputedStyle(dot).background), "danger");
+  for (const bg of ["surface", token(hover.background), "sel"]) held("danger", bg, GRAPHIC_CONTRAST, `the failure mark on --${bg}`);
+  for (let node = dot; node; node = node.parentElement) assert.equal(win.getComputedStyle(node).opacity, "1", "the failure mark: no opacity");
   // The labels are always shown (a column, as before 2026-10-23): no container rule hides or fades them.
   assert.doesNotMatch(shellCss, /@container/);
   for (const label of doc.querySelectorAll("#nav .label")) assert.notEqual(win.getComputedStyle(label).position, "absolute", label.textContent);
 });
 
-// The sidebar's icon buttons (the product owner, 2026-10-26): the head's Show only the current workspace and Add local
-// workspace…, and the bar's sidebar toggle and settings cog are one control style (.side-icon-button): --muted on the
-// sidebar's --surface at rest, --fg on --surface-2 hovered, --fg on the --sel tint focused. Spawn instance, the bar's
-// words alone, has the same tokens in rules of its own. The cog's menu (the instance actions' popover) holds its items in
-// --fg, their chords in --muted, on its --surface or the --sel of a hovered or focused item. A clash (keymapConflicts)
-// marks the cog and the menu's Keyboard shortcuts… with a --warn dot (WCAG 1.4.11, 3:1 on what it sits on).
-for (const [name] of palettes) test(`${name}: Add local workspace…, the sidebar toggle, the settings cog and its menu, and Spawn instance meet computed AA in every state`, t => {
+// The sidebar's icon buttons (the product owner, 2026-10-26; slice 1): the head's Add local workspace… and the foot's ?
+// are one control style (.side-icon-button): --muted on the sidebar's --surface at rest, --fg on --surface-2 hovered,
+// --fg on the --sel tint focused. New agent and N need you have the same fills in rules of their own: New agent
+// --muted at rest, the count --fg with its needs-input mark. A clash (keymapConflicts) marks ? with a --danger dot
+// (WCAG 1.4.11, 3:1 on what it sits on).
+for (const [name] of palettes) test(`${name}: Add local workspace…, ?, New agent and N need you meet computed AA in every state`, t => {
   const dom = new JSDOM(readFileSync(new URL("index.html", renderer), "utf8"));
   t.after(() => dom.window.close());
   const doc = dom.window.document, win = dom.window; doc.documentElement.dataset.theme = name;
   const shellCss = readFileSync(new URL("shell.css", renderer), "utf8");
   for (const source of [css, shellCss]) { const style = doc.createElement("style"); style.textContent = source; doc.head.append(style); }
-  const settings = createSettingsMenu(doc, doc.getElementById("sidebar-settings"), { run() {}, shortcut: id => id === "app.shortcuts" ? "Ctrl+," : "" });
-  settings.refresh();
+  createSidebarFoot(doc, { nouns: DESKTOP_NOUNS }).paint(3);
   const root = win.getComputedStyle(doc.documentElement);
   const token = value => { const m = /^var\(--([\w-]+)\)$/.exec(value); assert.ok(m, `a token, never a raw colour: ${value}`); return m[1]; };
   const ratio = (fg, bg) => contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim()));
@@ -896,7 +864,7 @@ for (const [name] of palettes) test(`${name}: Add local workspace…, the sideba
   const noOpacity = (el, what) => { for (let node = el; node; node = node.parentElement) assert.equal(win.getComputedStyle(node).opacity, "1", `${what}: no opacity over it`); };
   assert.equal(token(win.getComputedStyle(doc.getElementById("sidebar")).background), "surface");
   // One control style: each is a .side-icon-button, with no colour rule of its own.
-  const buttons = ["ws-current-only", "ws-add-open", "sidebar-toggle", "sidebar-settings"].map(id => doc.getElementById(id));
+  const buttons = ["ws-add-open", "sidebar-help"].map(id => doc.getElementById(id));
   for (const button of buttons) {
     assert.ok(button.classList.contains("side-icon-button"), `${button.id}: the sidebar's icon-button style`);
     const idle = win.getComputedStyle(button);
@@ -904,66 +872,40 @@ for (const [name] of palettes) test(`${name}: Add local workspace…, the sideba
     held(token(idle.color), "surface", TEXT_CONTRAST, `${button.id} at rest`);
     noOpacity(button, button.id);
   }
-  assert.deepEqual([...shellCss.matchAll(/^([^{}]*#sidebar-(?:settings|toggle)[^{}]*)\{([^}]*)\}/gm)].filter(m => /(^|[\s;])(color|background)\s*:/.test(m[2]) && !/has-clash/.test(m[1])).map(m => m[1].trim()), [],
-    "none has a colour of its own: the .side-icon-button tokens are theirs");
-  // Spawn instance (the product owner, 2026-10-26: its words alone, a ground only on hover): --muted on the sidebar at
-  // rest, --fg on --surface-2 hovered, --fg on --sel focused, as the icon buttons; no opacity; disabled, --faint.
-  const spawn = doc.getElementById("sidebar-spawn");
+  assert.deepEqual([...shellCss.matchAll(/^([^{}]*#sidebar-help[^{}]*)\{([^}]*)\}/gm)].filter(m => /(^|[\s;])(color|background)\s*:/.test(m[2]) && !/has-clash/.test(m[1])).map(m => m[1].trim()), [],
+    "? has no colour of its own: the .side-icon-button tokens are its");
+  // New agent (a + and its words, a ground only on hover): --muted on the sidebar at rest, --fg on --surface-2
+  // hovered, --fg on --sel focused; no opacity; disabled, --faint. N need you: --fg at rest, on the same grounds.
+  const spawn = doc.getElementById("sidebar-spawn"), need = doc.getElementById("sidebar-need-you");
   assert.equal(spawn.classList.contains("side-icon-button"), false); assert.equal(spawn.classList.contains("primary"), false);
-  assert.equal(spawn.querySelector("[data-shell-icon], svg"), null, "no icon: words alone");
-  const spawnIdle = win.getComputedStyle(spawn);
-  assert.match(spawnIdle.background, /^(none|transparent|rgba\(0, 0, 0, 0\))?$/, "Spawn instance: no fill at rest");
-  assert.equal(token(spawnIdle.color), "muted");
-  held("muted", "surface", TEXT_CONTRAST, "Spawn instance at rest");
-  for (const [state, selector, bg] of [["hovered", "#sidebar-spawn:hover:not(:disabled)", "surface-2"], ["focused", "#sidebar-spawn:focus-visible", "sel"]]) {
-    const r = rule(selector); assert.ok(r, selector);
-    assert.deepEqual([token(r.color), token(r.background)], ["fg", bg], `Spawn instance ${state}`);
-    held("fg", bg, TEXT_CONTRAST, `Spawn instance ${state}`);
+  for (const [el, ink, what] of [[spawn, "muted", "New agent"], [need, "fg", "N need you"]]) {
+    const idle = win.getComputedStyle(el);
+    assert.match(idle.background, /^(none|transparent|rgba\(0, 0, 0, 0\))?$/, `${what}: no fill at rest`);
+    assert.equal(token(idle.color), ink, what);
+    held(ink, "surface", TEXT_CONTRAST, `${what} at rest`);
+    noOpacity(el, what);
   }
-  noOpacity(spawn, "Spawn instance");
+  for (const [state, selector, bg] of [["hovered", "#sidebar-need-you:hover, #sidebar-spawn:hover:not(:disabled)", "surface-2"], ["focused", "#sidebar-need-you:focus-visible, #sidebar-spawn:focus-visible", "sel"]]) {
+    const r = rule(selector); assert.ok(r, selector);
+    assert.deepEqual([token(r.color), token(r.background)], ["fg", bg], `New agent and N need you ${state}`);
+    held("fg", bg, TEXT_CONTRAST, `New agent and N need you ${state}`);
+    held("warn", bg, GRAPHIC_CONTRAST, `the count's needs-input mark ${state}`);
+  }
+  held("warn", "surface", GRAPHIC_CONTRAST, "the count's needs-input mark at rest");
   spawn.disabled = true;
   assert.equal(token(win.getComputedStyle(spawn).color), "faint", "disabled");
   assert.match(win.getComputedStyle(spawn).background, /^(none|transparent|rgba\(0, 0, 0, 0\))?$/, "disabled: no fill");
   spawn.disabled = false;
   for (const [state, selector] of [["hovered", ".side-icon-button:hover"], ["focused", ".side-icon-button:focus-visible"]]) {
     const r = rule(selector); assert.ok(r, selector);
-    held(token(r.color), token(r.background), TEXT_CONTRAST, `the headings' icon buttons ${state}`);
+    held(token(r.color), token(r.background), TEXT_CONTRAST, `the sidebar's icon buttons ${state}`);
   }
-  // Show only the current workspace, pressed: its icon in --accent (the current nav item's), on the sidebar at rest,
-  // and on the hover and focus fills, which keep it (3:1 for a graphic; the --accent pairs hold 4.5:1 too).
-  const toggle = doc.getElementById("ws-current-only");
-  toggle.setAttribute("aria-pressed", "true");
-  assert.equal(token(win.getComputedStyle(toggle).color), "accent", "pressed: the accent");
-  held("accent", "surface", GRAPHIC_CONTRAST, "the pressed toggle at rest");
-  const pressed = rule('.ws-current-only[aria-pressed="true"], .ws-current-only[aria-pressed="true"]:hover, .ws-current-only[aria-pressed="true"]:focus-visible');
-  assert.ok(pressed, "one rule for the pressed toggle in every state"); assert.equal(token(pressed.color), "accent");
-  for (const [state, selector] of [["hovered", ".side-icon-button:hover"], ["focused", ".side-icon-button:focus-visible"]]) {
-    held("accent", token(rule(selector).background), GRAPHIC_CONTRAST, `the pressed toggle ${state}`);
-  }
-  toggle.setAttribute("aria-pressed", "false");
-  assert.equal(token(win.getComputedStyle(toggle).color), "muted", "not pressed: the icon buttons' --muted");
-  // The menu: its surface, its items' ink and their chords, at rest and on a hovered or focused item.
-  const menu = settings.menu, menuBg = token(rule(".ctx-instance-menu").background);
-  assert.equal(menuBg, "surface");
-  const item = settings.items.find(b => b.dataset.menuAction === "app.shortcuts"), keys = item.querySelector("kbd");
-  assert.equal(keys.hidden, false); assert.equal(keys.textContent, "Ctrl+,");
-  held(token(win.getComputedStyle(item).color), menuBg, TEXT_CONTRAST, "a settings item");
-  held(token(win.getComputedStyle(keys).color), menuBg, TEXT_CONTRAST, "a settings item's chord");
-  const lit = token(rule(".ctx-instance-menu button:hover, .ctx-instance-menu button:focus-visible").background);
-  held(token(win.getComputedStyle(item).color), lit, TEXT_CONTRAST, "a hovered or focused settings item");
-  held(token(win.getComputedStyle(keys).color), lit, TEXT_CONTRAST, "a hovered or focused item's chord");
-  const icon = item.querySelector(".ctx-menu-icon");
-  held(token(win.getComputedStyle(icon).color), menuBg, GRAPHIC_CONTRAST, "a settings item's icon");
-  noOpacity(keys, "a settings item's chord"); noOpacity(icon, "a settings item's icon");
-  assert.ok(menu.contains(item));
-  // The clash dot: --danger (a key no longer does what it says; yellow means needs input only), on the cog's --surface
-  // (the sidebar), hovered (--surface-2) and focused (--sel), and on a menu item at rest and lit.
-  const cogDot = rule("#sidebar-settings.has-clash::after"), itemDot = rule(".sidebar-settings-menu button.has-clash > .sidebar-settings-label::after");
-  assert.ok(cogDot && itemDot, "both clash dots ship");
-  for (const [what, dot, on] of [["the cog's clash dot", cogDot, ["surface", "surface-2", "sel"]], ["the item's clash dot", itemDot, [menuBg, lit]]]) {
-    assert.equal(dot.background, "var(--danger)", what); assert.equal(dot.opacity, "", `${what}: no opacity`);
-    for (const bg of on) held("danger", bg, GRAPHIC_CONTRAST, `${what} on --${bg}`);
-  }
+  // The clash dot: --danger (a key no longer does what it says; yellow means needs input only), on ?'s --surface
+  // (the sidebar), hovered (--surface-2) and focused (--sel).
+  const clashDot = rule("#sidebar-help.has-clash::after");
+  assert.ok(clashDot, "the clash dot ships");
+  assert.equal(clashDot.background, "var(--danger)"); assert.equal(clashDot.opacity, "", "no opacity");
+  for (const bg of ["surface", "surface-2", "sel"]) held("danger", bg, GRAPHIC_CONTRAST, `the clash dot on --${bg}`);
 });
 
 for (const [name] of palettes) test(`${name}: actual Stop/Retire confirmations meet computed AA without text opacity, in every phase`, async t => {
@@ -1183,15 +1125,19 @@ for (const [name] of palettes) test(`${name}: actual Connections and reported PR
 for (const [name] of palettes) test(`${name}: Show sidebar / Show instance panel, disabled menu reasons, workspace rows, explicit Open toast and the Needs input roll-up pill meet computed AA`, async t => {
   const dom = new JSDOM(readFileSync(new URL('index.html', renderer), 'utf8'), { pretendToBeVisual: true }), doc = dom.window.document;
   doc.documentElement.dataset.theme = name;
-  for (const source of [css, readFileSync(new URL('shell.css', renderer), 'utf8'), identityCSS, contextPanelCSS, notificationCSS, rosterPrCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
+  for (const source of [css, readFileSync(new URL('shell.css', renderer), 'utf8'), identityCSS, contextPanelCSS, notificationCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
   const row = { instance: 'dev-1', agent: 'dev', agentsRoot: '/team/agents', home: '/team/agents/dev/instances/dev-1', createdAt: '2026-09-23T00:00:00.000Z' };
-  // forge-roster: a PR chip in each state on a roster row (a draft also on the active row), and the row's open-PR tool.
   const list = doc.querySelector('#instance-roster .ctx-list');
-  for (const [state, extra, active] of [['OPEN', false, false], ['OPEN', true, false], ['MERGED', false, false], ['CLOSED', false, false], ['OPEN', true, true]]) {
+  // Slice 1: a row's second line (soul · machine), on an idle and a selected row.
+  for (const active of [false, true]) {
     const wrap = doc.createElement('div'); wrap.className = `ctx-tree-row${active ? ' active' : ''}`;
-    wrap.append(prChip(doc, { home: '/h', number: 1, state, isDraft: extra, url: null })); list.append(wrap);
+    const button = doc.createElement('button'); button.className = 'ctx-inst';
+    const copy = doc.createElement('span'); copy.className = 'ctx-copy';
+    const detail = doc.createElement('span'); detail.className = 'ctx-meta ctx-row-detail'; detail.textContent = 'dev · This Mac';
+    copy.append(detail); button.append(copy); wrap.append(button); list.append(wrap);
   }
-  const prOpen = doc.createElement('button'); prOpen.className = 'act ctx-pr-open'; list.append(prOpen);
+  // The foot as the shell paints it (sidebar-foot.mjs): New agent's words, and its count while two rows need you.
+  createSidebarFoot(doc, { nouns: DESKTOP_NOUNS }).paint(2);
   // Spec D: the "N below" roll-up pill paints its own surface, on an idle and a selected row (a waiting row's own mark
   // is its dot since 2026-10-26: the test after the workspace rows').
   for (const active of [false, true]) {
@@ -1224,19 +1170,16 @@ for (const [name] of palettes) test(`${name}: Show sidebar / Show instance panel
     ['.ws-option[aria-current="true"] .ws-option-name', '#sidebar', 'fg', 'surface'],
     ['.ws-option:not([aria-current]) .ws-option-name', '#sidebar', 'fg', 'surface'],
     ['#ws-add-open', '#sidebar', 'muted', 'surface'],
-    // The bar's buttons, on the same tokens: the sidebar toggle and the settings cog (.side-icon-button), and Spawn
-    // instance, its words alone with no fill at rest (the product owner, 2026-10-26).
-    ['#sidebar-toggle', '#sidebar', 'muted', 'surface'], ['#sidebar-settings', '#sidebar', 'muted', 'surface'],
-    ['#sidebar-spawn', '#sidebar', 'muted', 'surface'],
+    // The bar's buttons (slice 1), on the same tokens: ? (.side-icon-button) and New agent, no fill at rest; the
+    // count of rows that need you in --fg.
+    ['#sidebar-help', '#sidebar', 'muted', 'surface'], ['#sidebar-spawn', '#sidebar', 'muted', 'surface'],
+    ['#sidebar-need-you', '#sidebar', 'fg', 'surface'],
+    // A row's second line: --muted, on the sidebar and on the selection.
+    ['.ctx-tree-row:not(.active) .ctx-row-detail', '#sidebar', 'muted', 'surface'],
+    ['.ctx-tree-row.active .ctx-row-detail', '.ctx-tree-row.active', 'muted', 'sel'],
     // The headings: the Workspace heading in --fg, the Instances heading in the nav's ink, on the sidebar.
     ['.ws-heading', '#sidebar', 'fg', 'surface'], ['#instance-roster > .ctx-head', '#sidebar', 'nav-fg', 'surface'],
     ['.app-toast-open', '.app-toast-open', 'primary-fg', 'primary-bg'],
-    ['.ctx-pr[data-pr-state=open]', '.ctx-pr[data-pr-state=open]', 'fg', 'tag-bg'],
-    ['.ctx-pr[data-pr-state=merged]', '.ctx-pr[data-pr-state=merged]', 'fg', 'tag-bg'],
-    ['.ctx-pr[data-pr-state=closed]', '.ctx-pr[data-pr-state=closed]', 'muted', 'tag-bg'],
-    ['.ctx-tree-row:not(.active) .ctx-pr[data-pr-state=draft]', '#sidebar', 'muted', 'surface'],
-    ['.ctx-tree-row.active .ctx-pr[data-pr-state=draft]', '.ctx-tree-row.active', 'muted', 'sel'],
-    ['.ctx-pr-open', '.ctx-pr-open', 'accent', 'surface'],
     ['.ctx-tree-row:not(.active) .ctx-attn.rollup', '.ctx-tree-row:not(.active) .ctx-attn.rollup', 'warn', 'attn-bg'],
     ['.ctx-tree-row.active .ctx-attn.rollup', '.ctx-tree-row.active .ctx-attn.rollup', 'warn', 'attn-bg'],
   ]) {
@@ -1353,7 +1296,7 @@ test("yellow means needs input only: no shipped rule paints a dot, disc or fill 
     assert.doesNotMatch(rule(selector), /dashed/, `${selector}: not a dashed ring (stopped's, in slice 2)`);
   }
   // The problem dots.
-  for (const selector of ["#sidebar-settings.has-clash::after", ".sidebar-settings-menu button.has-clash > .sidebar-settings-label::after", ".workspace-attn", ".auto-dot.warn"])
+  for (const selector of ["#sidebar-help.has-clash::after", ".nav-failed-dot", ".workspace-attn", ".auto-dot.warn"])
     assert.match(rule(selector), /background:\s*var\(--danger\);/, selector);
 });
 
@@ -1542,7 +1485,7 @@ for (const [name] of palettes) test(`${name}: the spawn footer's Preview ready c
 // Workspace v4 pages (W4/W5b) — replaces the F7 page inventory (header band,
 // facts, used-by rows, borderless back): the page bar, side cards, key/value
 // facts, the used-by table and a soul's composition table with its why tags.
-import { renderCapabilityPage, renderSoulCapabilities, renderSoulCore, capabilityPageCSS, pageCardCSS, soulCapabilitiesCSS } from '../renderer/capability-page.mjs';
+import { renderCapabilityPage, renderSoulCapabilities, renderSoulCore, capabilityPageCSS, pageCardCSS, soulCapabilitiesCSS, pageCard, pageFacts } from '../renderer/capability-page.mjs';
 for (const [name] of palettes) test(`${name}: v4 page bar, cards, facts, used-by rows, why tags and the core table meet computed AA`, () => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><section class="host"></section><section class="soul"></section><section class="core"></section></div></body></html>`, { pretendToBeVisual: true });
   const doc = dom.window.document;
@@ -1560,14 +1503,22 @@ for (const [name] of palettes) test(`${name}: v4 page bar, cards, facts, used-by
     { slot: 'knowledge', id: null, cap: null, reported: true, why: 'off', reason: 'slot-none', names: ['oats.okf'], name: 'oats.okf', overrides: 'workspace' },
     { slot: 'messaging', id: 'oats.aweb', cap: { id: 'oats.aweb', version: '1.17.3', from: { kind: 'package', package: 'oats.aweb', version: '1.17.3' } }, reported: true, why: 'workspace', detail: 'Default team only' },
     { slot: 'tasks', id: null, cap: null, reported: true, why: 'none' }] });
+  // A side card (the soul page and Automations still draw them; the capability page folds its facts since slice 3b).
+  const card = pageCard(doc, 'Card'); card.card.append(pageFacts(doc, [['Key', 'value']])); doc.querySelector('.oats-view').append(card.card);
+  // The capability page's folds are open, so their facts are laid out.
+  for (const fold of doc.querySelectorAll('details.cap-fold')) fold.open = true;
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
     ['.page-crumbs', '.page-bar', 'muted', 'surface'],
     ['.page-crumb-current', '.page-bar', 'fg', 'surface'],
     ['button.page-back', 'button.page-back', 'fg', 'surface'],
-    ['.page-tag', '.page-tag', 'fg', 'chip-bg'],
+    ['.page-tag', '.oats-view', 'muted', 'bg'],
     ['.page-card-title', '.page-card', 'muted', 'surface'],
-    ['.page-kv dt', '.page-card', 'muted', 'surface'],
+    ['.page-card .page-kv dt', '.page-card', 'muted', 'surface'],
+    // Slice 3b: the capability page's origin line, its paragraph and its folds sit on the page's --bg.
+    ['.cap-page-origin .cap-origin', '.oats-view', 'muted', 'bg'], ['.cap-page-where', '.oats-view', 'muted', 'bg'],
+    ['.cap-fold > summary', '.oats-view', 'fg', 'bg'], ['.cap-fold-count', '.oats-view', 'muted', 'bg'],
+    ['.capability-page .page-kv dt', '.oats-view', 'muted', 'bg'],
     ['.page-table-row.head', '.capability-page .page-table', 'muted', 'surface'],
     ['.used-name', 'button.used-row', 'fg', 'surface'],
     ['.used-meta.warn', 'button.used-row', 'warn', 'surface'],
@@ -1577,8 +1528,8 @@ for (const [name] of palettes) test(`${name}: v4 page bar, cards, facts, used-by
     ['.why-tag:not(.soul)', '.why-tag:not(.soul)', 'fg', 'tag-bg'],
     ['.why-tag.soul', '.why-tag.soul', 'primary-fg', 'primary-bg'],
     ['.why-note', '.soul-caps', 'muted', 'surface'],
-    ['.page-why-label', '.capability-page .page-card', 'fg', 'surface'],
-    ['.page-why-note', '.capability-page .page-card', 'muted', 'surface'],
+    ['.page-why-label', '.oats-view', 'fg', 'bg'],
+    ['.page-why-note', '.oats-view', 'muted', 'bg'],
     ['.soul-core .soul-cap-slot', '.soul-core', 'muted', 'surface'],
     ['.soul-core .soul-cap-row.none .soul-cap-id', '.soul-core', 'muted', 'surface'],
     ['.soul-core .soul-cap-row.none .soul-cap-why-note', '.soul-core', 'muted', 'surface'],
@@ -1599,46 +1550,52 @@ for (const [name] of palettes) test(`${name}: v4 page bar, cards, facts, used-by
   dom.window.close();
 });
 
-// Kernel #217: a soul a spawn here would refuse says why on its card and its page, in the warn token.
-for (const [name] of palettes) test(`${name}: the can't-spawn-here notes meet computed AA`, t => {
-  const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><div class="souls"><div class="soul-tile"><button class="soul-card"><span class="sbody"><span class="sproblem">Can't spawn here</span></span></button></div></div>
-    <aside class="soul-inspector soul-page"><div class="inspector-head"><p class="inspector-refusal">Can't spawn here</p></div></aside></div></body></html>`);
-  t.after(() => dom.window.close());
-  const doc = dom.window.document, spawnCSS = spawnViewCSS();
-  for (const source of [css, spawnCSS, inspectorCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
-  const root = dom.window.getComputedStyle(doc.documentElement);
-  const painted = el => { for (let p = el; p; p = p.parentElement) { const bg = dom.window.getComputedStyle(p).background; if (/^var\(--/.test(bg)) return bg.slice(6, -1); } return null; };
-  for (const selector of ['.sproblem', '.inspector-refusal']) {
-    const el = doc.querySelector(selector), bg = painted(el);
-    assert.equal(dom.window.getComputedStyle(el).color, 'var(--warn)', selector); assert.ok(bg, selector);
-    assert.ok(contrast(opaqueChannels(root.getPropertyValue('--warn').trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${selector} on ${bg}`);
-    for (let p = el; p; p = p.parentElement) assert.equal(dom.window.getComputedStyle(p).opacity, '1');
-  }
-});
-
-// Board 3 soul cards: the labelled chips (the default team's muted "· default" too) on the tag tint, and the
-// foot's lines on the card: a running count, a stopped one, and a refusal over its muted running count.
-for (const [name] of palettes) test(`${name}: soul-card chips, the default note and the foot lines meet computed AA`, t => {
+// Slice 3a: the Souls grid's cards (name, what it does, its agents and kind, a refusal in the warn token), its table
+// (a header, a group row, the cells, a refusal, an unreported cell) and a soul page's top block (the facts, Ready as a
+// word or a problem, its Details) and capability rows, each on its actual painted ground.
+for (const [name] of palettes) test(`${name}: the Souls grid, its table and a soul page's top block and rows meet computed AA`, t => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><div class="souls">
-    <div class="soul-tile" id="refused"><button class="soul-card"><span class="sbody"><span class="schips"><span class="schip" data-default="true"><span class="schip-key">Team</span><b>oats</b><span class="schip-note">· default</span></span><span class="schip"><span class="schip-key">Repo</span><b>agents</b></span></span></span>
-      <span class="sfoot"><span class="sfoot-lines"><span class="sproblem">Can't spawn here · disabled</span><span class="sactivity running">1 instance running</span></span></span></button></div>
-    <div class="soul-tile" id="running"><button class="soul-card"><span class="sfoot"><span class="sactivity running">2 instances running</span></span></button></div>
-    <div class="soul-tile" id="stopped"><button class="soul-card"><span class="sfoot"><span class="sactivity">1 stopped</span></span></button></div></div></div></body></html>`);
+    <button class="soul-card" id="refused"><span class="stitle">writer</span><span class="sdesc">Writes</span><span class="sfoot"><span class="sproblem">Can't spawn here · disabled</span><span class="skind">· developer</span></span></button>
+    <button class="soul-card" id="running"><span class="stitle">dev</span><span class="sfoot"><span class="sactivity running">2 agents running</span><span class="skind">· other</span></span></button>
+    <button class="soul-card" id="stopped"><span class="sfoot"><span class="sactivity">No agents running</span></span></button>
+    <div class="souls-grid"><table class="souls-table"><thead><tr><th>Name</th></tr></thead><tbody><tr><th class="souls-table-group"><h3 class="souls-group-title"><span class="souls-group-name plain">agents</span><span class="souls-group-note">2 souls</span></h3></th></tr>
+      <tr class="soul-row"><td class="name"><button class="soul-row-open">dev</button></td><td class="what">Builds</td><td class="kind">developer</td><td class="agents muted">0</td><td class="problem">disabled</td><td class="muted">—</td></tr></tbody></table></div>
+    <p class="souls-lede">A soul is</p></div>
+    <div class="workspace-page soul-page"><div class="inspector-content inspector-main"><dl class="soul-top"><dt>Ready</dt><dd><span class="strong">Claude</span><span class="muted"> · opus</span><span class="soul-top-note">Set in x</span>
+      <div class="soul-ready"><span class="soul-ready-line problem">disabled</span><details class="soul-ready-details"><summary>Details</summary></details></div></dd></dl>
+      <section class="soul-capabilities"><p class="soul-capabilities-note">Turned off: x</p></section></div></div></div></body></html>`);
   t.after(() => dom.window.close());
   const doc = dom.window.document, spawnCSS = spawnViewCSS();
-  for (const source of [css, spawnCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
+  for (const source of [css, readFileSync(new URL('shell.css', renderer), 'utf8'), spawnCSS, inspectorCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
+  // The soul page's capability rows are the Capabilities page's (slice 3b: capabilityRowElement; slice 3c: on the page's --bg).
+  const capRows = doc.createElement('ul'); capRows.className = 'cap-list';
+  for (const origin of [{ official: false, by: 'oats.okf', reason: null }, { official: true, by: 'OATS', reason: 'oats-repo' }]) {
+    const item = doc.createElement('li');
+    item.append(capabilityRowElement(doc, { row: { name: 'oats.okf', kind: 'package', package: 'oats.okf', description: 'Keeps knowledge' }, core: 'knowledge', default: null, origin }, { onOpen() {} }));
+    capRows.append(item);
+  }
+  doc.querySelector('.soul-capabilities').append(capRows);
   const root = dom.window.getComputedStyle(doc.documentElement);
-  const painted = el => { for (let p = el; p; p = p.parentElement) { const bg = dom.window.getComputedStyle(p).background; if (/^var\(--/.test(bg)) return bg.slice(6, -1); } return null; };
+  const painted = el => { for (let p = el; p; p = p.parentElement) { const bg = dom.window.getComputedStyle(p).background; if (/^var\(--/.test(bg)) return bg.slice(6, -1); } return 'bg'; };
   for (const [selector, fg, bg] of [
-    ['#refused .schip .schip-key', 'muted', 'tag-bg'], ['#refused .schip b', 'fg', 'tag-bg'], ['#refused .schip .schip-note', 'muted', 'tag-bg'],
-    ['#refused .sfoot-lines .sproblem', 'warn', 'surface'], ['#refused .sfoot-lines .sactivity', 'muted', 'surface'],
-    ['#running .sactivity.running', 'fg', 'surface'], ['#stopped .sactivity', 'muted', 'surface'],
+    ['#refused .stitle', 'fg', 'surface'], ['#refused .sdesc', 'muted', 'surface'], ['#refused .sproblem', 'warn', 'surface'], ['#refused .skind', 'muted', 'surface'],
+    ['#running .sactivity.running', 'muted', 'surface'], ['#stopped .sactivity', 'muted', 'surface'],
+    ['.souls-table thead th', 'muted', 'bg'], ['.souls-table .souls-group-note', 'muted', 'bg'], ['.souls-table td.what', 'fg', 'bg'], ['.souls-table td.kind', 'fg', 'bg'],
+    ['.souls-table td.agents.muted', 'muted', 'bg'], ['.souls-table td.problem', 'warn', 'bg'], ['.souls-table button.soul-row-open', 'fg', 'bg'], ['.souls-lede', 'muted', 'bg'],
+    ['.soul-top dt', 'muted', 'bg'], ['.soul-top dd .strong', 'fg', 'bg'], ['.soul-top dd .muted', 'muted', 'bg'], ['.soul-top .soul-top-note', 'muted', 'bg'],
+    ['.soul-ready-line.problem', 'warn', 'bg'], ['.soul-ready-details > summary', 'muted', 'bg'], ['.soul-capabilities-note', 'muted', 'bg'],
+    ['.soul-capabilities .cap-row-name', 'fg', 'bg'], ['.soul-capabilities .cap-origin:not([data-official])', 'muted', 'bg'], ['.soul-capabilities .cap-official', 'accent', 'bg'],
+    ['.soul-capabilities .cap-tag[data-tag=core]', 'muted', 'bg'], ['.soul-capabilities .cap-row-desc', 'muted', 'bg'],
   ]) {
-    const el = doc.querySelector(selector);
-    assert.equal(dom.window.getComputedStyle(el).color, `var(--${fg})`, selector); assert.equal(painted(el), bg, `${selector} painted`);
+    const el = doc.querySelector(selector); assert.ok(el, selector);
+    const color = dom.window.getComputedStyle(el).color;
+    assert.ok(color === `var(--${fg})` || (fg === 'fg' && ['', 'inherit'].includes(color)), `${selector}: ${color}`); assert.equal(painted(el), bg, `${selector} painted`);
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${selector}: ${fg} on ${bg}`);
     for (let p = el; p; p = p.parentElement) assert.equal(dom.window.getComputedStyle(p).opacity, '1');
   }
+  // A hovered table row and a hovered or focused capability row: their text on --surface, --surface-2 and --sel.
+  for (const [fg, bg] of [['fg', 'surface'], ['muted', 'surface'], ['warn', 'surface'], ['fg', 'surface-2'], ['muted', 'surface-2'], ['accent', 'surface-2'], ['fg', 'sel'], ['muted', 'sel'], ['warn', 'sel'], ['accent', 'sel']])
+    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${fg} on ${bg}`);
 });
 
 // 0.30 launch preferences: the soul page's notes under the facts and the side panel's Harness card
@@ -1739,17 +1696,17 @@ for (const [name] of palettes) test(`${name}: team model v2 cards, left entries,
 
 // Spec A (Teams says whose default it is): team model 3's card rows (Default for, May join, a quiet fallback),
 // the address, the nobody line, the openable card's label and foot, the closed local teams' sentence and the
-// souls: table, on a teamsApi 2 document shaped like the lfx rig.
+// souls: table, on a teamsApi 2 document shaped like the lab rig.
 for (const [name] of palettes) test(`${name}: team model 3 card facts, address, foot and souls table meet computed AA`, async t => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"></div></body></html>`, { pretendToBeVisual: true });
   const doc = dom.window.document;
   for (const source of [css, computerTeamsCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
-  const team = (label, extra = {}) => ({ label, team: `${label}:lfx.aweb.ai`, description: null, from: 'shared', default: false, at: 'x', ...extra });
+  const team = (label, extra = {}) => ({ label, team: `${label}:lab.aweb.ai`, description: null, from: 'shared', default: false, at: 'x', ...extra });
   const document = { teamsApi: 2, deployment: '/d', localTeams: false, problems: [],
-    defaultTeam: { label: 'lfx-all', team: null, from: 'workspace' },
-    teams: [team('lfx-all', { team: null, default: true }), team('lfx-ai-team'), team('idle'), team('lone')],
-    souls: { '*': { default: 'idle', teams: [] }, 'lfx-ai-engineering/*': { default: 'lfx-ai-team', teams: ['lfx-all'] } } };
-  const TEAM = 'lfx-ai-team:lfx.aweb.ai';
+    defaultTeam: { label: 'lab-all', team: null, from: 'workspace' },
+    teams: [team('lab-all', { team: null, default: true }), team('lab-ai-team'), team('idle'), team('lone')],
+    souls: { '*': { default: 'idle', teams: [] }, 'lab-ai-engineering/*': { default: 'lab-ai-team', teams: ['lab-all'] } } };
+  const TEAM = 'lab-ai-team:lab.aweb.ai';
   const page = createComputerTeams(doc, { request: async () => structuredClone(document), readMembers: async () => ({ members: [{ workspace: '/d', server: null, serverLabel: null,
     instance: 'ai-reviewer', agent: 'ai-reviewer', agentsRoot: '/d/agents', home: '/d/agents/ai-reviewer/instances/ai-reviewer', team: TEAM, running: true, addressable: true, missingRemotely: false, reason: null }], servers: [], notReached: [] }),
     onOpenTeam: () => {} });
@@ -1758,18 +1715,18 @@ for (const [name] of palettes) test(`${name}: team model 3 card facts, address, 
   for (let i = 0; i < 6; i++) await new Promise(resolve => setImmediate(resolve));
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
-    ['[data-team="lfx-ai-team"] .ct-fact dt', '.ct-card', 'muted', 'surface'],
-    ['[data-team="lfx-ai-team"] .ct-fact[data-fact=default] dd', '.ct-card', 'fg', 'surface'],
-    ['[data-team="lfx-ai-team"] .ct-fact[data-fact=default] .ct-name', '.ct-card', 'fg', 'surface'],
-    ['[data-team="lfx-all"] .ct-fact[data-fact=join] dd', '.ct-card', 'muted', 'surface'],
-    ['[data-team="lfx-all"] .ct-fact[data-fact=join] .ct-name', '.ct-card', 'muted', 'surface'],
-    ['[data-team="lfx-all"] .ct-quiet', '.ct-card', 'muted', 'surface'],
-    ['[data-team="lfx-ai-team"] dd.ct-address', '.ct-card', 'muted', 'surface'], ['dd.ct-address.none', '.ct-card', 'warn', 'surface'],
+    ['[data-team="lab-ai-team"] .ct-fact dt', '.ct-card', 'muted', 'surface'],
+    ['[data-team="lab-ai-team"] .ct-fact[data-fact=default] dd', '.ct-card', 'fg', 'surface'],
+    ['[data-team="lab-ai-team"] .ct-fact[data-fact=default] .ct-name', '.ct-card', 'fg', 'surface'],
+    ['[data-team="lab-all"] .ct-fact[data-fact=join] dd', '.ct-card', 'muted', 'surface'],
+    ['[data-team="lab-all"] .ct-fact[data-fact=join] .ct-name', '.ct-card', 'muted', 'surface'],
+    ['[data-team="lab-all"] .ct-quiet', '.ct-card', 'muted', 'surface'],
+    ['[data-team="lab-ai-team"] dd.ct-address', '.ct-card', 'muted', 'surface'], ['dd.ct-address.none', '.ct-card', 'warn', 'surface'],
     ['[data-team="lone"] .ct-fact[data-fact=join] dd.none', '.ct-card', 'muted', 'surface'],
     // The workspace's default: its tag in the brand tint, and where it is set.
-    ['[data-team="lfx-all"] .ct-tag', '[data-team="lfx-all"] .ct-tag', 'accent', 'sel'], ['[data-team="lfx-all"] .ct-from', '.ct-card', 'muted', 'surface'],
-    // The card opens its team's page: the label's button, the foot's count, "None of your instances" and the cue.
-    ['.ct-name-h button.ct-open', '.ct-card', 'fg', 'surface'], ['[data-team="lfx-ai-team"] .ct-sum-count', '.ct-card', 'fg', 'surface'],
+    ['[data-team="lab-all"] .ct-tag', '[data-team="lab-all"] .ct-tag', 'accent', 'sel'], ['[data-team="lab-all"] .ct-from', '.ct-card', 'muted', 'surface'],
+    // The card opens its team's page: the label's button, the foot's count, "None of your agents" and the cue.
+    ['.ct-name-h button.ct-open', '.ct-card', 'fg', 'surface'], ['[data-team="lab-ai-team"] .ct-sum-count', '.ct-card', 'fg', 'surface'],
     ['[data-team="idle"] .ct-sum-more', '.ct-card', 'muted', 'surface'], ['.ct-go', '.ct-card', 'muted', 'surface'],
     // The souls: table in its card: the headers, the pattern (its folder muted, "* every soul"), the team chips and "none".
     ['.ct-souls th', '.ct-souls-card', 'muted', 'surface'], ['.ct-pattern', '.ct-souls-card', 'fg', 'surface'],
@@ -2032,17 +1989,33 @@ for (const [name] of palettes) test(`${name}: capability Contents navigation, re
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${selector}`);
     for (let parent = el; parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1');
   }
-  // Provides: one card, a row per kind, every name its own code chip.
+  // Slice 3b: the Commands and Hooks folds (every name its own code chip, "None" on the page), the Skills rows, and the
+  // whole skill in the pane (its title, hint and files on the page; its reader on the viewer's ground).
   const page = doc.createElement('section'); doc.querySelector('.oats-view').append(page);
-  renderCapabilityPage(page, { row: { name: 'oats.aweb', kind: 'package', package: 'oats.aweb', skills: ['oats-aweb'], commands: ['join'], hooks: [] }, status: null, instances: [], root: '/ws', onBack() {} });
-  for (const [selector, painted, fg, bg] of [['.provides-chip', '.provides-chip', 'fg', 'tag-bg'], ['.provides-kind', '.provides-card', 'muted', 'surface'], ['.provides-items .page-note', '.provides-card', 'muted', 'surface']]) {
-    const el = page.querySelector(selector), surface = page.querySelector(painted); assert.ok(el && surface, selector);
+  renderCapabilityPage(page, { row: { name: 'oats.aweb', kind: 'package', package: 'oats.aweb', skills: ['oats-aweb'], commands: ['join'], hooks: [] }, status: null, instances: [], root: '/ws', onBack() {},
+    skills: contents.skills, skillView: contents.skillView });
+  for (const fold of page.querySelectorAll('details.cap-fold')) fold.open = true;
+  const skillRow = page.querySelector('button.cap-skill-row');
+  for (const [selector, painted, fg, bg] of [['.provides-chip', '.provides-chip', 'fg', 'tag-bg'], ['.provides-items .page-note', '.oats-view', 'muted', 'bg'],
+    ['.cap-skill-name', '.oats-view', 'fg', 'bg'], ['.cap-skill-desc', '.oats-view', 'muted', 'bg']]) {
+    const el = page.querySelector(selector), surface = page.querySelector(painted) || doc.querySelector(painted); assert.ok(el && surface, selector);
     const color = dom.window.getComputedStyle(el).color;
     assert.ok(color === `var(--${fg})` || (fg === 'fg' && ['', 'var(--fg)'].includes(color)), `${selector}: ${color}`);
     assert.equal(dom.window.getComputedStyle(surface).background.replace(/^.*(var\(--[\w-]+\)).*$/, '$1'), `var(--${bg})`, painted);
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${selector}`);
   }
-  // Provides › Trigger sources (feature trigger-sources): the manifest's words quoted (the lead-in, the text, the kernel's
+  skillRow.click(); await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0));
+  for (const [selector, painted, fg, bg] of [['.skill-view-title', '.oats-view', 'fg', 'bg'], ['.skill-view-hint', '.oats-view', 'muted', 'bg'],
+    ['.skill-view .cap-reader-path', '.skill-view-reader', 'fg', 'bg'], ['.skill-view .cap-reader-line', '.skill-view-reader', 'muted', 'bg'], ['button.skill-back', 'button.skill-back', 'fg', 'surface']]) {
+    const el = page.querySelector(selector), surface = selector === '.skill-view-title' || selector === '.skill-view-hint' ? doc.querySelector(painted) : page.querySelector(painted); assert.ok(el && surface, selector);
+    const color = dom.window.getComputedStyle(el).color;
+    assert.ok(color === `var(--${fg})` || (fg === 'fg' && ['', 'var(--fg)'].includes(color)), `${selector}: ${color}`);
+    assert.equal(dom.window.getComputedStyle(surface).background.replace(/^.*(var\(--[\w-]+\)).*$/, '$1') || 'var(--bg)', `var(--${bg})`, painted);
+    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${selector}`);
+    for (let parent = el; parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1');
+  }
+  contents.closeSkill({ focus: false });
+  // Triggers › Trigger sources (feature trigger-sources): the manifest's words quoted (the lead-in, the text, the kernel's
   // note under it), and the plain lines of a declaration that can't be read (the Desktop's, then the kernel's).
   const quoted = doc.createElement('div'), unreadable = doc.createElement('div');
   fillTriggerSourcesRow(quoted, { sources: [{ name: 'harvest-branches', events: ['opened', 'updated'], description: 'Ready harvest branches', problems: [] },
@@ -2069,16 +2042,16 @@ for (const [name] of palettes) test(`${name}: capability Contents navigation, re
   contents.dispose(); dom.window.close();
 });
 
-// Spec D (B1): the soul page's Instructions — the Contents card's grammar on the soul page, its own copy (the
-// group label, the file's repository path, the truncated flag, the unreadable line) on the same grounds.
+// Slice 3a: the soul page's two instruction tabs (each a reader with its section list) and its folded Skills (the
+// Contents card's tree and reader), their own copy on the same grounds.
 import { createSoulInstructions, soulInstructionsCSS } from '../renderer/soul-instructions.mjs';
-for (const [name] of palettes) test(`${name}: the soul page's Instructions section meets computed AA without opacity`, () => {
+for (const [name] of palettes) test(`${name}: the soul page's instruction tabs and Skills meet computed AA without opacity`, () => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><div class="workspace-page soul-page"><div class="inspector-content inspector-main"></div></div></div></body></html>`, { pretendToBeVisual: true });
   const doc = dom.window.document;
   for (const source of [css, inspectorCSS, pageCardCSS, capabilityPageCSS, capabilityContentsCSS, soulInstructionsCSS, MARKDOWN_CSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
   const section = createSoulInstructions(doc, { openExternal() {}, canOpenCapability: () => true, openCapability() {} }); doc.querySelector('.inspector-main').append(section.element);
   const soul = text => ({ name: 'release-manager', path: 'souls/release-manager', instructions: { file: '/cache/AGENTS.md', text, truncated: true } });
-  section.update(soul('---\nname: x\n---\n# T\n\n[a](https://example.com)\n'));
+  section.update(soul('---\nname: x\n---\n# T\n\n[a](https://example.com)\n\n## U\n\n### V\n'));
   const root = dom.window.getComputedStyle(doc.documentElement);
   const check = list => { for (const [selector, painted, fg, bg] of list) {
     const el = doc.querySelector(selector), surface = doc.querySelector(painted); assert.ok(el && surface, selector);
@@ -2088,61 +2061,68 @@ for (const [name] of palettes) test(`${name}: the soul page's Instructions secti
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${selector}`);
     for (let parent = el; parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1');
   } };
+  const own = '[role=tabpanel][data-tab=own]', composed = '[role=tabpanel][data-tab=composed]';
   check([
-    ['.soul-instructions .page-section-lead', '.workspace-page', 'muted', 'bg'],
-    ['.cap-contents-group-label', '.cap-contents', 'muted', 'surface'],
-    ['[aria-selected=true] .cap-node-name', '[aria-selected=true] > .cap-node', 'fg', 'sel'],
-    ['[aria-selected=true] .cap-node-file', '[aria-selected=true] > .cap-node', 'muted', 'sel'],
-    ['.cap-reader-path', '.cap-reader-head', 'fg', 'bg'],
-    ['.cap-reader-flag', '.cap-reader-head', 'warn', 'bg'],
-    ['.cap-fm th', '.cap-contents-reader', 'muted', 'bg'],
-    ['.cap-reader-body .mdv a', '.cap-contents-reader', 'accent', 'bg'],
+    ['.soul-tab[aria-selected=true]', '.workspace-page', 'fg', 'bg'],
+    ['.soul-tab[aria-selected=false]', '.workspace-page', 'muted', 'bg'],
+    [`${own} .soul-tab-lead`, '.workspace-page', 'muted', 'bg'],
+    [`${own} .soul-doc-link`, `${own} .soul-doc`, 'fg', 'bg'],
+    [`${own} li[data-depth="1"] .soul-doc-link`, `${own} .soul-doc`, 'muted', 'bg'],
+    [`${own} .cap-reader-path`, `${own} .cap-reader-head`, 'fg', 'bg'],
+    [`${own} .cap-reader-flag`, `${own} .cap-reader-head`, 'warn', 'bg'],
+    [`${own} .cap-fm th`, `${own} .cap-contents-reader`, 'muted', 'bg'],
+    [`${own} .cap-reader-body .mdv a`, `${own} .cap-contents-reader`, 'accent', 'bg'],
+    [`${composed} .soul-panel-note`, '.workspace-page', 'muted', 'bg'],
   ]);
+  // A focused or hovered section link: its text on --sel and --surface-2.
+  for (const [fg, bg] of [['fg', 'sel'], ['fg', 'surface-2'], ['muted', 'sel'], ['muted', 'surface-2']])
+    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${fg} on ${bg}`);
   section.update({ ...soul(null), instructions: { file: '/cache/AGENTS.md', text: null, truncated: false } });
-  check([['.cap-reader-line', '.cap-contents-reader', 'muted', 'bg']]);
-  assert.equal(doc.querySelector('.cap-reader-line').textContent, "This soul's AGENTS.md could not be read.");
-  // B2: the composed document's part headers ("From this soul" / "Injected by …", file, size, the cut flag) and the
+  check([[`${own} .cap-reader-line`, `${own} .cap-contents-reader`, 'muted', 'bg']]);
+  assert.equal(doc.querySelector(`${own} .cap-reader-line`).textContent, "This soul's AGENTS.md could not be read.");
+  // The composed document's part headers ("From this soul" / "Injected by …", file, size, the cut flag) and the
   // past-the-limit line. A kernel-shaped answer: the body, a capability block cut by the cap, a block wholly past it.
   const body = '# T\n\n', block = '<!-- oats:capability:oats.core -->\n## Core\n\nText that the cap cuts.\n<!-- /oats:capability:oats.core -->\n\n';
   const cap = body.length + 40, text = (body + block).slice(0, cap);
   section.update({ ...soul('# T\n'), composedInstructions: { file: null, text, truncated: true, resolution: 'r', body: { start: 0, end: body.length, truncated: false },
     sources: [{ source: 'capability:oats.core', file: '.oats/modules/oats.core/inject.md', start: body.length, end: cap, truncated: true },
       { source: 'work-mode:worktree', file: null, start: cap, end: cap, truncated: true }] } });
-  doc.querySelector('[data-path="composed"] .cap-node-name').click();
+  section.setTab('composed');
   check([
-    ['.cap-tree [role=group] [role=treeitem] .cap-node-name.mono', '.cap-contents', 'fg', 'surface'],
-    ['[data-path=composed][aria-selected=true] > .cap-node .cap-node-desc', '[data-path=composed][aria-selected=true] > .cap-node', 'muted', 'sel'],
-    ['.soul-part[data-source=soul] .soul-part-title', '.cap-contents-reader', 'fg', 'bg'],
-    ['.soul-part[data-source=soul] .soul-part-file', '.cap-contents-reader', 'fg', 'bg'],
-    ['.soul-part[data-source^=capability] .soul-part-size', '.cap-contents-reader', 'muted', 'bg'],
-    ['.soul-part[data-source^=capability] .soul-part-flag', '.cap-contents-reader', 'warn', 'bg'],
-    ['.soul-part[data-source^=work-mode] .cap-reader-line', '.cap-contents-reader', 'muted', 'bg'],
+    [`${composed} .soul-doc-link`, `${composed} .soul-doc`, 'fg', 'bg'],
+    ['.soul-part[data-source=soul] .soul-part-title', `${composed} .cap-contents-reader`, 'fg', 'bg'],
+    ['.soul-part[data-source=soul] .soul-part-file', `${composed} .cap-contents-reader`, 'fg', 'bg'],
+    ['.soul-part[data-source^=capability] .soul-part-size', `${composed} .cap-contents-reader`, 'muted', 'bg'],
+    ['.soul-part[data-source^=capability] .soul-part-flag', `${composed} .cap-contents-reader`, 'warn', 'bg'],
+    ['.soul-part[data-source^=work-mode] .cap-reader-line', `${composed} .cap-contents-reader`, 'muted', 'bg'],
   ]);
-  // #1144: the Skills group (the shared skill item, "more files", a selected file) and a cut skill file's head; then its note in place.
+  // #1144: the Skills (the shared skill item, "more files", a selected file) and a cut skill file's head; then its note in place.
   section.update({ ...soul('# T\n'), skills: [{ name: 'oats-pr-review', path: 'skills/oats-pr-review', description: 'Reviews. More.', filesTruncated: true,
     files: [{ path: 'skills/oats-pr-review/SKILL.md', bytes: 300000, text: '# R\n', binary: false, truncated: true }] }] });
+  doc.querySelector('.soul-skills').open = true;
   doc.querySelector('[data-skill] > .cap-node').click();
   doc.querySelector('[data-path="file:skills/oats-pr-review/SKILL.md"] > .cap-node').click();
   check([
-    ['[data-skill] > .cap-node .cap-node-name', '.cap-contents', 'fg', 'surface'],
-    ['[data-skill] > .cap-node .cap-node-desc', '.cap-contents', 'muted', 'surface'],
-    ['.cap-more', '.cap-contents', 'muted', 'surface'],
+    ['.soul-skills > summary', '.workspace-page', 'fg', 'bg'],
+    ['[data-skill] > .cap-node .cap-node-name', '.soul-skills .cap-contents', 'fg', 'surface'],
+    ['[data-skill] > .cap-node .cap-node-desc', '.soul-skills .cap-contents', 'muted', 'surface'],
+    ['.cap-more', '.soul-skills .cap-contents', 'muted', 'surface'],
     ['[aria-selected=true] .cap-node-name.mono', '[aria-selected=true] > .cap-node', 'fg', 'sel'],
-    ['.cap-reader-path', '.cap-reader-head', 'fg', 'bg'],
-    ['.cap-reader-flag', '.cap-reader-head', 'warn', 'bg'],
+    ['.soul-skills .cap-reader-path', '.soul-skills .cap-reader-head', 'fg', 'bg'],
+    ['.soul-skills .cap-reader-flag', '.soul-skills .cap-reader-head', 'warn', 'bg'],
   ]);
   section.update({ ...soul('# T\n'), skills: [] });
-  check([['[role=tree] .cap-contents-group-label', '.cap-contents', 'muted', 'surface'], ['[role=tree] .cap-contents-note', '.cap-contents', 'muted', 'surface'],
-    // The two sections' headings ("Defined in this soul", "Composed for an instance"); the rule between them is a border, not text.
-    ['[role=tree] .soul-section-title', '.cap-contents', 'fg', 'surface']]);
+  check([['[role=tree] .cap-contents-note', '.soul-skills .cap-contents', 'muted', 'surface'],
+    // The two sections' headings ("Defined in this soul", "Every skill an agent gets"); the rule between them is a border, not text.
+    ['[role=tree] .soul-section-title', '.soul-skills .cap-contents', 'fg', 'surface']]);
   section.dispose(); dom.window.close();
 });
 
 // #517: Add a machine (every step status) and the Setup tab's Registered machines box (a row, its states and the Remove confirmation).
 import { openAddMachineDialog, addMachineCSS } from '../renderer/add-machine-dialog.mjs';
 import { createWorkspaceMachines, machinesCSS, resetMachineChecks } from '../renderer/workspace-machines.mjs';
-for (const [name] of palettes) test(`${name}: Add a machine and the Registered machines box meet computed AA without opacity`, async t => {
-  const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><div class="setup" id="setup"></div></div></body></html>`, { pretendToBeVisual: true });
+for (const [name] of palettes) test(`${name}: Add a machine and the Machines list meet computed AA without opacity`, async t => {
+  const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><div id="setup"></div></div></body></html>`, { pretendToBeVisual: true });
   const doc = dom.window.document;
   for (const source of [css, readFileSync(new URL('shell.css', renderer), 'utf8'), setupCSS, machinesCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
   const steps = [{ step: 'ssh', status: 'ok' }, { step: 'oats', status: 'done', detail: 'installed' },
@@ -2150,18 +2130,41 @@ for (const [name] of palettes) test(`${name}: Add a machine and the Registered m
     { step: 'deployment', status: 'failed', code: 'E_DEPLOYMENT', detail: 'failed' }, { step: 'register', status: 'skipped', detail: 'waits for git' }];
   const machine = (id, check) => ({ id, label: id, sshHost: id, workspace: `/srv/${id}`, workspaceKey: 'k', check });
   const ctx = { api: async path => ({ ok: true, status: 200, json: async () => path.startsWith('/api/servers')
-    ? { servers: [machine('up', { reachable: true, version: '0.39.0', error: null }), machine('down', { reachable: false, version: null, error: 'ssh failed' })], filtered: true, key: 'k', deployment: '/Users/j/Agents/k', aweb: false }
-    : { schemaVersion: 1, ok: true, result: { id: 'altair-k', ready: false, steps } } }) };
+    ? { servers: [machine('up', { reachable: true, version: '0.39.0', error: null }), machine('down', { reachable: false, version: null, error: 'ssh failed' })], filtered: true, key: 'k', deployment: '/Users/alex/Agents/k', aweb: false }
+    : { schemaVersion: 1, ok: true, result: { id: 'devbox-k', ready: false, steps } } }) };
   resetMachineChecks();
   const box = createWorkspaceMachines(doc, { ctx, ws: 'ws:x' }); doc.getElementById('setup').append(box.element);
-  const dialog = openAddMachineDialog(doc, { ctx, ws: 'ws:x', deployment: '/Users/j/Agents/k' });
+  const dialog = openAddMachineDialog(doc, { ctx, ws: 'ws:x', deployment: '/Users/alex/Agents/k' });
   t.after(() => { dialog.close(); box.dispose(); dom.window.close(); });
-  const host = doc.querySelector('.machine-host'); host.value = 'altair'; host.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const host = doc.querySelector('.machine-host'); host.value = 'devbox'; host.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const folder = doc.querySelector('.machine-folder'); folder.value = '~/k'; folder.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   doc.querySelector('.machine-primary').click();
   for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve));
-  doc.querySelector('[data-machine="down"] .machine-remove').click();
   const root = dom.window.getComputedStyle(doc.documentElement);
+  const measure = list => { for (const [selector, painted, fg, bg] of list) {
+    const el = doc.querySelector(selector), surface = doc.querySelector(painted); assert.ok(el && surface, selector);
+    assert.equal(dom.window.getComputedStyle(el).color, `var(--${fg})`, selector);
+    assert.equal(dom.window.getComputedStyle(surface).background.replace(/^.*(var\(--[\w-]+\)).*$/, '$1'), `var(--${bg})`, painted);
+    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${selector}`);
+    for (let parent = el; parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1', selector);
+  } };
+  // The Machines list (slice 3b): this computer and each machine a row on --surface; an open machine's Check and Remove.
+  doc.querySelector('[data-machine="up"] .machine-row').click();
+  measure([
+    ['.machines-title', '.oats-view', 'fg', 'bg'], ['.machines-lead', '.oats-view', 'muted', 'bg'], ['.machines-add', '.oats-view', 'accent', 'bg'],
+    ['[data-machine="up"] .machine-cell.name', '[data-machine="up"] .machine-row', 'fg', 'surface'],
+    ['[data-machine="up"] .machine-cell.version', '[data-machine="up"] .machine-row', 'muted', 'surface'],
+    ['[data-machine="up"] .machine-state', '[data-machine="up"] .machine-row', 'muted', 'surface'], ['[data-machine="up"] .machine-state .shell-icon', '[data-machine="up"] .machine-row', 'ok', 'surface'],
+    ['[data-machine="down"] .machine-state', '[data-machine="down"] .machine-state', 'warn', 'attn-bg'],
+    ['[data-machine="up"] .machine-facts dt', '.machines-list', 'muted', 'surface'], ['[data-machine="up"] .machine-facts dd', '.machines-list', 'fg', 'surface'],
+    ['[data-machine="up"] .machine-check', '[data-machine="up"] .machine-check', 'fg', 'surface'],
+  ]);
+  doc.querySelector('[data-machine="down"] .machine-row').click();
+  doc.querySelector('[data-machine="down"] .machine-remove').click();
+  measure([
+    ['.machine-confirm p', '.machine-confirm', 'fg', 'surface-2'], ['.machine-confirm-cancel', '.machine-confirm-cancel', 'fg', 'surface'],
+    ['.machine-confirm-remove', '.machine-confirm-remove', 'primary-fg', 'danger'],
+  ]);
   for (const [selector, painted, fg, bg] of [
     ['.machine-dialog h2', '.machine-dialog', 'fg', 'surface'], ['.machine-lede', '.machine-dialog', 'muted', 'surface'],
     ['.machine-field span', '.machine-dialog', 'muted', 'surface'], ['.machine-install-row span', '.machine-dialog', 'fg', 'surface'],
@@ -2175,15 +2178,6 @@ for (const [name] of palettes) test(`${name}: Add a machine and the Registered m
     ['.machine-step-code', '.machine-phase', 'muted', 'surface-2'], ['.machine-command code', '.machine-command code', 'fg', 'surface'],
     ['.machine-status', '.machine-dialog', 'muted', 'surface'], ['.machine-copy', '.machine-copy', 'fg', 'surface'],
     ['.machine-primary', '.machine-primary', 'primary-fg', 'primary-bg'], ['.machine-cancel', '.machine-cancel', 'fg', 'surface'],
-    // The Registered machines box: a solid --surface card (in Setup's This computer zone), Setup's members grammar.
-    ['.setup-machines .setup-box-head h4', '.setup-machines', 'fg', 'surface'], ['.setup-machines .setup-box-lead', '.setup-machines', 'muted', 'surface'],
-    ['[data-machine="up"] .machine-cell.name', '.setup-machines', 'fg', 'surface'], ['[data-machine="up"] .machine-cell.ssh', '.setup-machines', 'fg', 'surface'],
-    ['[data-machine="up"] .machine-cell.folder', '.setup-machines', 'muted', 'surface'], ['[data-machine="up"] .machine-cell.version', '.setup-machines', 'muted', 'surface'],
-    ['[data-machine="up"] .machine-state', '.setup-machines', 'muted', 'surface'], ['[data-machine="up"] .machine-state .shell-icon', '.setup-machines', 'ok', 'surface'],
-    ['[data-machine="down"] .machine-state', '[data-machine="down"] .machine-state', 'warn', 'attn-bg'],
-    ['[data-machine="up"] .machine-check', '.setup-machines', 'accent', 'surface'], ['.machines-add', '.setup-machines', 'accent', 'surface'],
-    ['.machine-confirm p', '.machine-confirm', 'fg', 'surface-2'], ['.machine-confirm-cancel', '.machine-confirm-cancel', 'fg', 'surface'],
-    ['.machine-confirm-remove', '.machine-confirm-remove', 'primary-fg', 'danger'],
   ]) {
     const el = doc.querySelector(selector), surface = doc.querySelector(painted); assert.ok(el && surface, selector);
     assert.equal(dom.window.getComputedStyle(el).color, `var(--${fg})`, selector);

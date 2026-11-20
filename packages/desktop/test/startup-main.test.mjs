@@ -1,7 +1,7 @@
 // A Finder launch (cwd `/`, no --dir) runs main's shipped startup in a vm (#518): the real registry,
 // records and window code over a real userData folder and real deployment folders, with Electron and
 // the backend process faked at their boundary. What the backend is spawned with (argv, cwd and stdio, through
-// the real serverSpawnSpec), the
+// the real serverSpawnSpec and launchServerChild), the
 // window it opens and what is written to workspace-open.json and windows.json are asserted.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,8 +17,8 @@ import { trustedForgeFrame } from '../forge-proxy.mjs';
 import { validWorkspaceId } from '../renderer/workspace-id.mjs';
 import { workspaceHash, trustedRendererUrl } from '../renderer/window-binding.mjs';
 import { fakeWindowClass } from './helpers/fake-window.mjs';
-import { serverSpawnSpec, LIFELINE_FLAG } from '../server-host.mjs';
-import { launchInstance } from '../single-instance.mjs';
+import { serverSpawnSpec, launchServerChild, LIFELINE_FLAG } from '../server-host.mjs';
+import { launchInstance, createLaunchReporter } from '../single-instance.mjs';
 
 const RENDERER = 'file:///app/renderer/index.html';
 const HERE = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
@@ -28,12 +28,15 @@ const windowSection = between('// ---- windows: one per workspace (#481)', 'func
 const windowBlock = source.match(/function createWindow\(workspaceId, record = null\)[^]*?\n\}/)[0];
 const noteServedBlock = source.match(/function noteServed\(list\) \{[^]*?\n\}/)[0];
 const wsValidateBlock = source.match(/const wsValidate = \(p\) => validateWorkspace\(p, \{[^]*?\n\}\);/)[0];
-const spawnChildBlock = source.match(/spawnChild: (\(dirs, onPort\) => \{[^]*?\n {2}\}),/)[1];
+const spawnChildBlock = source.match(/spawnChild: (\(dirs\) => \{[^]*?\n {2}\}),/)[1];
 const knownDirsBlock = source.match(/const knownDirs = new Set\(\);\nconst knowDirs = [^\n]*/)[0];
 const suggestionListBlock = source.match(/\n  list: (async \(\) => \{\n    const read = await deploymentList\([^]*?\n  \}),\n/)[1];
 const startupBody = (() => {
-  const head = 'const primaryInstance = startSingleInstance(app, (argv, workingDirectory) => openLaunch(launchDirectory(argv, workingDirectory), launchInstance(argv)), async () => {';
-  return between(head, '\n}, ownLaunch(app), offerVersionRestart);\n\nif (primaryInstance)').slice(head.length);
+  const section = between('const primaryInstance = startSingleInstance(app,', '\n}, ownLaunch(app), offerVersionRestart);\n\nif (primaryInstance)');
+  const head = '}, async () => {';
+  const start = section.indexOf(head);
+  assert.ok(start >= 0, 'the startup callback follows the repeated-launch handler');
+  return section.slice(start + head.length);
 })();
 const FakeWindow = fakeWindowClass(RENDERER);
 
@@ -58,13 +61,20 @@ async function launch(m, { launch: WORKSPACE = '/', argv = ['/app/OATS Desktop']
     BrowserWindow: Object.assign(FakeWindow, { fromWebContents: (wc) => FakeWindow.all.find((w) => w.webContents === wc), getAllWindows: () => FakeWindow.all }),
     ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, screen: { getAllDisplays: () => [{ workArea: { x: 0, y: 25, width: 1440, height: 875 } }] },
     Menu: {}, shell: {}, console: { log: (m) => logs.push(m), error: (m) => logs.push(m) },
-    // The backend process, at its boundary: what main spawns it with is recorded. The spec is the real one.
-    serverSpawnSpec,
+    // The backend process, at its boundary: what main spawns it with is recorded, with what is written to its
+    // fd 3 (the credential). The spec and the launch (its private socket directory, under this machine's root) are the real ones.
+    serverSpawnSpec, launchServerChild, socketBase: () => m.root,
+    // The startup sweep of earlier launches' socket directories (backend-socket.mjs, tested there): none here.
+    sweepStaleSocketDirs: async () => [],
     spawn: (bin, args, options) => {
-      spawned.push({ bin, args: [...args], cwd: options.cwd, stdio: [...options.stdio] });
-      return { stdin: { on() {} }, stdout: { on() {} }, stderr: { on() {} } };
+      const record = { bin, args: [...args], cwd: options.cwd, stdio: [...options.stdio], token: [] };
+      spawned.push(record);
+      const stream = () => ({ on() {} });
+      return { stdin: stream(), stdout: stream(), stderr: stream(), on() {},
+        stdio: [null, null, null, { on() {}, end: (secret) => record.token.push(secret) }] };
     },
-    process: { execPath: '/app/OATS Desktop', env: {}, argv }, homedir: () => m.home, readCliChoice: () => null, loginPath: { source: 'login-shell', error: null },
+    process: { execPath: '/app/OATS Desktop', env: {}, argv }, homedir: () => m.home, CLI_CHOICE_FILE: () => join(m.userData, 'oats-cli-choice.json'),
+    loginPath: { source: 'login-shell', error: null },
     REMOTE_IDENTITY_FILE: () => join(m.userData, 'remote-identity.json'), HERE,
     // The real code main runs at startup.
     WORKSPACE, workspaceDirs: [], openDirs: [], join, existsSync, readFileSync, realpathSync, lstatSync, validateWorkspace,
@@ -76,7 +86,8 @@ async function launch(m, { launch: WORKSPACE = '/', argv = ['/app/OATS Desktop']
     workspaceSuggestions, listState,
     // A launch's --instance (single-instance.mjs launchInstance, the real reader): the window main asks to select it,
     // recorded with what it asks.
-    launchInstance, selectLaunchInstance: (win, instance, dir) => selects.push({ win, instance, dir }),
+    launchInstance, createLaunchReporter: (argv, dir) => createLaunchReporter(argv, dir, message => logs.push(message)),
+    selectLaunchInstance: (win, instance, dir, report) => { selects.push({ win, instance, dir }); report?.(); },
     // This computer's deployments list (#1390), at the kernel's boundary: what is asked is recorded, the answer given.
     deploymentList: async (options) => { kernel.push(options); return listed; },
     startupDeploymentList: async (path) => { listedAtStartup.push(path); },
@@ -100,7 +111,7 @@ ${windowBlock}
 ${noteServedBlock}
 /* The backend serves the local deployments it was spawned with (and here no remote one). */
 let serving = [];
-async function ensureServer() { spawnChild([...workspaceDirs], 4821); serving = [...workspaceDirs]; await panelWorkspaces(); }
+async function ensureServer() { spawnChild([...workspaceDirs]); serving = [...workspaceDirs]; await panelWorkspaces(); }
 async function panelWorkspaces() {
   const list = serving.map((dir) => ({ id: dir, name: dir.split('/').pop(), deployments: [dir] }));
   allowedWs = new Set(list.map((w) => w.id)); noteServed(list); return list;
@@ -132,11 +143,15 @@ test('main spawns the backend with its stdin as the owner lifeline: a pipe, and 
   try {
     const r = await launch(m, { launch: m.deployment });
     assert.equal(r.spawned.length, 1, 'one backend');
-    const { bin, args, stdio } = r.spawned[0];
+    const { bin, args, stdio, token } = r.spawned[0];
     assert.equal(bin, '/app/OATS Desktop', 'the executable, run as Node');
-    assert.deepEqual(args.slice(0, 4), [join(HERE, 'server', 'oats-web.mjs'), 'start', '--port', '4821']);
+    // Its own socket, in a private directory made for it under the socket base, and its credential over fd 3.
+    const socket = args[3];
+    assert.deepEqual(args.slice(0, 6), [join(HERE, 'server', 'oats-web.mjs'), 'start', '--socket', socket, '--token-fd', '3']);
+    assert.ok(socket.startsWith(`${m.root}/`) && socket !== join(m.root, basename(socket)), `a directory of its own under the base: ${socket}`);
+    assert.equal(token.length, 1); assert.ok(typeof token[0] === 'string' && token[0].length > 0, 'a credential is written to fd 3');
     assert.ok(args.includes(LIFELINE_FLAG), `the server is told stdin is its lifeline: ${args.join(' ')}`);
-    assert.deepEqual(stdio, ['pipe', 'pipe', 'pipe'], 'stdin a pipe main holds, never "ignore"');
+    assert.deepEqual(stdio, ['pipe', 'pipe', 'pipe', 'pipe'], 'stdin a pipe main holds, never "ignore"; fd 3 the credential\'s pipe');
   } finally { rmSync(m.root, { recursive: true, force: true }); }
 });
 
@@ -204,12 +219,16 @@ test('a first launch with --dir on a deployment and --instance asks that deploym
     assert.equal(r.selects[0].win, r.windows[0], 'the --dir deployment\'s own window');
     assert.deepEqual(r.selects[0].instance, { ok: true, name: 'dev-2' });
     assert.equal(r.selects[0].dir, m.deployment);
+    assert.deepEqual(r.logs.filter(line => line.startsWith('oats-desktop: launch --instance')),
+      [`oats-desktop: launch --instance dev-2: selecting it in ${m.deployment}`]);
     const plain = await launch(m, { launch: m.deployment, argv: ['/app/OATS Desktop', '--dir', m.deployment] });
     assert.deepEqual(plain.selects, [], 'no --instance: as before');
     const cwd = await launch(m, { launch: m.deployment, argv: ['/app/OATS Desktop', '--instance', 'dev-2'] });
     assert.deepEqual(cwd.selects, [], 'a deployment cwd without --dir ignores --instance');
+    assert.ok(cwd.logs.includes('oats-desktop: launch --instance: not selected (no --dir)'));
     const folder = await launch(m, { launch: m.folders[0], argv: ['/app/OATS Desktop', '--dir', m.folders[0], '--instance', 'dev-2'] });
     assert.deepEqual(folder.selects, [], 'a --dir that is not a deployment ignores --instance');
+    assert.ok(folder.logs.includes('oats-desktop: launch --instance: not selected (--dir is not an OATS deployment)'));
   } finally { rmSync(m.root, { recursive: true, force: true }); }
 });
 
@@ -217,7 +236,7 @@ test('the switcher suggests this computer\'s deployments not served: a saved one
   const m = machine();
   try {
     // Saved, but its volume was not mounted at launch: kept, not served (#472).
-    const later = join(m.root, 'Volumes', 'work', 'tsm');
+    const later = join(m.root, 'Volumes', 'work', 'web');
     const acme = join(m.home, 'acme'), gone = join(m.home, 'gone'), plain = m.folders[0];
     mkdirSync(acme, { recursive: true }); writeFileSync(join(acme, 'oats-local.yaml'), '');
     const row = (path, state) => ({ path, name: basename(path), state });
@@ -239,7 +258,7 @@ test('without the deployments-list feature the switcher offers the saved set onl
   const m = machine();
   try {
     mkdirSync(join(m.home, 'Agents', 'jro'), { recursive: true }); writeFileSync(join(m.home, 'Agents', 'jro', 'oats-local.yaml'), '');
-    const later = join(m.root, 'Volumes', 'work', 'tsm');
+    const later = join(m.root, 'Volumes', 'work', 'web');
     const r = await launch(m, { openSet: [later] });
     mkdirSync(later, { recursive: true }); writeFileSync(join(later, 'oats-local.yaml'), '');
     const { suggestions, list } = JSON.parse(JSON.stringify(await r.main.suggestions())); // made in the vm's realm

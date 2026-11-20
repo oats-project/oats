@@ -12,15 +12,20 @@ import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { paletteRows, createPalette, PALETTE_COMMAND_CAP } from "../renderer/palette.mjs";
 import { createOverlayPicker } from "../renderer/overlay-picker.mjs";
-import { createQuickOpen } from "../renderer/quick-open.mjs";
+import { createSoulPicker as createQuickOpen } from "./helpers/soul-picker.mjs";
 import { treeConnectors } from "../renderer/instance-tree-view.mjs";
 import { rosterGroups, instanceId } from "../../client/instance-tree.mjs";
 import { rosterSections } from "../../client/roster-sections.mjs";
 import { pickerCycleDirection, paletteGroupDirection, paletteGroupHint, setBinding, resetBinding, setChordFamily, DEFAULT_KEYMAP } from "../renderer/keybindings.mjs";
 import { DEFAULT_CHORD_FAMILY } from "../../client/keymap.mjs";
 import { DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
+import { RELATED_WORK_FEATURE } from "../../client/related-work.mjs";
 
-const at = (instance, extra = {}) => ({ instance, agent: "dev", home: `/w/${instance}`, agentsRoot: "/w", running: true, ...extra });
+// Rows of a host that declares instance-related-work, each reporting related work (to its parent, or to the sibling
+// its siblingInstance names), so every line of the sidebar's builder is drawn (related-work.mjs: no flag, no line;
+// related-work-lines.test.mjs pins the rule's other cases, the palette's included).
+const at = (instance, extra = {}) => ({ instance, agent: "dev", home: `/w/${instance}`, agentsRoot: "/w", running: true,
+  relatedWorkKnown: RELATED_WORK_FEATURE, relatedWork: true, ...extra });
 // Two relation clusters and two unrelated instances, deliberately out of order.
 const ROSTER = [
   at("solo-y", { running: false }),
@@ -219,16 +224,15 @@ test("each relation group is one named role=group in the listbox; depth is inden
   assert.equal(p.input().getAttribute("aria-activedescendant"), ids[0]);
 });
 
-test("the shell wires the cycle to the live app.palette chord; Quick Open (⌘P) keeps its plain toggle", async () => {
+test("the shell wires the cycle to the live app.palette chord; ⌘P opens the palette on its souls and closes it", async () => {
   const { readFileSync } = await import("node:fs");
   const shell = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
   assert.match(shell, /cycleKey: \(e\) => pickerCycleDirection\(e, "app\.palette", isMac\)/);
   assert.match(shell, /groupKey: \(e\) => paletteGroupDirection\(e, isMac\),\n\s*footer: paletteGroupHint\(isMac\),/, "the group keys and their footer, per platform");
   assert.equal(shell.match(/groupKey:|footer: paletteGroupHint/g).length, 2, "only the palette gets them");
   assert.match(shell, /registerAction\(\{ id: "app\.palette", [^\n]*palette\.toggle\(\)/, "the action still opens it; open, it cycles");
-  const quickOpen = readFileSync(new URL("../renderer/quick-open.mjs", import.meta.url), "utf8");
-  assert.doesNotMatch(quickOpen, /cycleKey/, "a second ⌘P still closes Quick Open");
-  assert.doesNotMatch(quickOpen, /groupKey|footer/, "Quick Open has no group keys and no footer");
+  // Quick Open folded into the palette (slice 4): ⌘P / Alt+P opens it on its souls, and a second press closes it.
+  assert.match(shell, /function openPaletteOnSouls\(\) \{\n  tabOpenIntents\.invalidate\(\);\n  if \(palette\.isOpen\(\)\) \{ palette\.close\(\); return; \}\n  paletteTargetId = leaderTargetId\(document\.activeElement\); void palette\.open\(\{ query: "\+" \}\);/);
 });
 
 // The palette's group keys (packages/client/keymap.mjs PALETTE_KEYS; paletteGroupDirection's pure
@@ -373,7 +377,7 @@ test("the footer names the group keys per platform: plain text in the dialog, af
   assert.match(rule, /font-size: 11\.5px/, "small, as the rows' details");
 });
 
-test("Quick Open takes no group keys and has no footer: ⌘N passes through, Alt+Shift+↓ is its arrow", async t => {
+test("a picker without group keys (a test picker of the family) has no footer: ⌘N passes through, Alt+Shift+↓ is its arrow", async t => {
   const dom = new JSDOM('<!doctype html><body><button id="opener">Open</button></body>', { url: "http://localhost" });
   t.after(() => dom.window.close());
   const doc = dom.window.document, reached = [];
@@ -447,7 +451,7 @@ test("two relation groups whose roots share a name (two agents roots) stay two n
 // sections the roster by deployment, each clustered on its own. The palette lists the
 // same sections in the same order, and a relation or a query's context never crosses one.
 const D1 = { id: "/a", machine: "This Mac", path: "/a", label: "~/a", local: true, reachable: true, primary: true };
-const D2 = { id: "remote:altair:b", machine: "altair", path: "/b", label: "~/b", local: false, reachable: true, primary: false };
+const D2 = { id: "remote:devbox:b", machine: "devbox", path: "/b", label: "~/b", local: false, reachable: true, primary: false };
 const inD = (d, instance, extra = {}) => ({ instance, agent: "dev", home: `${d.path}/agents/dev/instances/${instance}`, agentsRoot: `${d.path}/agents`,
   running: true, deployment: { id: d.id }, ...extra });
 
@@ -544,6 +548,9 @@ test("instance rows carry the sidebar row's connectors and state; commands carry
     [["alpha", "stopped"], ["alpha-kid", "running"], ["lead", "running"], ["child-a", "running"], ["grandchild", "running"], ["child-b", "stopped"], ["solo-x", "running"], ["solo-y", "stopped"]]);
   assert.deepEqual(paletteRows([at("maybe", { running: null })], [], "", {}).map(r => r.state), ["unknown"]);
   for (const row of rows.filter(r => !r.group)) assert.ok(!Object.hasOwn(row, "connectors") && !Object.hasOwn(row, "state"), row.label);
+  // No flag, no line: the same roster with no related work reported carries empty connectors on every row.
+  const plain = SIBLINGS.map(({ relatedWork: _flag, ...row }) => row);
+  assert.ok(instanceRows(paletteRows(plain, [], "", {})).every(r => Array.isArray(r.connectors) && r.connectors.length === 0));
 });
 
 test("under a query a row's connectors are the sidebar's over the listed cluster: context rows keep theirs", () => {
@@ -576,13 +583,16 @@ test("rendered: the sidebar's guides (one builder) and state dot on each instanc
   assert.ok(command.querySelector(".picon"), "a command keeps its chevron");
   assert.equal(command.querySelector(".ctx-guides, .ctx-dot"), null);
   assert.ok(!command.classList.contains("tree"));
-  // The one builder: the shell draws both its row kinds with it, and the picker too; nobody repeats the loop.
+  // The one builder: the picker and the roster draw their rows' guides with it; nobody repeats the loop. The roster's
+  // rows draw the lines again for related work (the related-work lines), through the same connectors and builder.
   for (const file of ["../renderer/shell.mjs", "../renderer/overlay-picker.mjs"]) {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     assert.doesNotMatch(source, /className = `ctx-guide \$\{kind\}`/, file);
   }
   const shell = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
-  assert.equal(shell.match(/treeGuides\(document, treeConnectors\(items, i, instances\)\)/g)?.length, 2, "the roster row and the pending spawn's");
+  assert.match(shell, /treeConnectors\(items, i, instances\)/, "the roster's connectors: the same builder over the cluster's drawn rows");
+  assert.match(shell, /treeGuides\(document, connectors\)/, "and the same DOM builder");
+  assert.match(readFileSync(new URL("../renderer/overlay-picker.mjs", import.meta.url), "utf8"), /row\.prepend\(treeGuides\(doc, it\.connectors\)\)/, "the palette's rows, through the one builder");
 });
 
 test("the palette's tree rows reuse the sidebar's guide rules with the sidebar's geometry (no copied .ctx-guide rule)", () => {

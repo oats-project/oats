@@ -8,7 +8,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import builder from '../electron-builder.config.cjs';
-import { decodeICNS, decodePNG, deriveIconSet, encodePNG, GENERATED, ICNS_TYPES, LINUX_SIZES, pixelDigest, resize, SIDEBAR_SIZE, SOURCE } from '../build-icons.mjs';
+import { decodeICNS, decodePNG, deriveIconSet, encodePNG, GENERATED, ICNS_TYPES, LINUX_SIZES, pixelDigest, resize, SOURCE } from '../build-icons.mjs';
 
 const PKG = fileURLToPath(new URL('../', import.meta.url));
 const read = path => readFileSync(join(PKG, path));
@@ -43,8 +43,6 @@ test('every checked-in PNG decodes to the pixels its size derives from the sourc
     assert.equal(pixelDigest(image), derived.manifest.pixels[String(size)], `${size}px`);
     assert.equal(image.pixels[3], 0, `${size}px keeps the transparent ground`);
   }
-  const sidebar = decodePNG(read(`${GENERATED}/sidebar-${SIDEBAR_SIZE}.png`));
-  assert.equal(pixelDigest(sidebar), derived.manifest.pixels[String(SIDEBAR_SIZE)]);
 });
 
 test('the ICNS container carries each Apple type at its size, derived from the source', () => {
@@ -75,10 +73,11 @@ test('the codec and resampler are exact: round trip, identity size, premultiplie
   assert.throws(() => decodePNG(Buffer.from('not a png')), /not a PNG/);
 });
 
-test('electron-builder wires the derived icons per platform; only the sidebar mark ships as a file', () => {
+test('electron-builder wires the derived icons per platform; no brand image ships as a file', () => {
   assert.equal(builder.mac.icon, `${GENERATED}/oats.icns`);
   assert.equal(builder.linux.icon, `${GENERATED}/linux`);
-  assert.ok(builder.files.includes(`${GENERATED}/sidebar-${SIDEBAR_SIZE}.png`));
+  assert.ok(!builder.files.some(f => f.startsWith(`${GENERATED}/`)), 'no generated image ships as a file (the sidebar mark went in slice 2)');
+  assert.ok(!existsSync(join(PKG, GENERATED, 'sidebar-48.png')), 'nor is it generated');
   assert.ok(!builder.files.some(f => /oats-logo\.png|assets\/brand\/\*|assets\/\*\*/.test(f)), 'the source artwork is not packaged');
   assert.ok(builder.files.includes('!build-icons.mjs'));
   for (const path of [builder.mac.icon, builder.linux.icon]) assert.ok(existsSync(join(PKG, path)), path);
@@ -86,17 +85,13 @@ test('electron-builder wires the derived icons per platform; only the sidebar ma
   assert.equal(scripts.icons, 'node build-icons.mjs', 'regenerate from source is one command');
 });
 
-// The sidebar (the product owner, 2026-10-26): the head is the Workspace heading alone; the OATS mark sits at the left
-// end of the foot's one bar, Spawn instance beside it, the generated sidebar-48.png (pinned and packaged above) drawn at 20px, 2x.
-test('the renderer shows the sidebar mark once, in the bottom bar; nothing references a download path', () => {
+// The sidebar (the Desktop UI rework): the brand mark left the foot in slice 1, so the renderer draws no mark in the
+// sidebar, and slice 2 stopped generating and packaging sidebar-48.png (above).
+test('the renderer shows no sidebar mark; nothing references a download path', () => {
   const html = read('renderer/index.html').toString('utf8');
   assert.doesNotMatch(html, /ws-brand-image|ws-brand-mark/, 'the old head mark is gone');
-  assert.doesNotMatch(read('renderer/shell.css').toString('utf8'), /\.ws-brand-(image|mark)\b/, 'no style is left for it');
-  const marks = [...html.matchAll(/sidebar-\d+\.png/g)];
-  assert.equal(marks.length, 1, 'one use of the sidebar mark');
-  assert.match(html, new RegExp(`<div id="sidebar-bar" role="group" aria-label="Sidebar tools">\\s*<span class="sidebar-brand" aria-hidden="true"><img class="sidebar-brand-image" src="\\.\\./${GENERATED.replace(/\./g, '\\.')}/sidebar-${SIDEBAR_SIZE}\\.png" width="20" height="20" alt="" draggable="false"></span>`),
-    'first in the bottom bar, decorative, the generated file');
-  assert.match(html, /<div id="nav-foot">\s*<div id="sidebar-bar"[^>]*>\s*<span class="sidebar-brand"[^]*?<\/span>\s*<button id="sidebar-toggle"/, 'the bar is the foot, the sidebar toggle right after the mark');
+  assert.doesNotMatch(read('renderer/shell.css').toString('utf8'), /\.ws-brand-(image|mark)\b|\.sidebar-brand\b/, 'no style is left for either mark');
+  assert.equal([...html.matchAll(/sidebar-\d+\.png|sidebar-brand/g)].length, 0, 'no sidebar mark in the markup');
   for (const file of ['renderer/index.html', 'electron-builder.config.cjs', 'build-icons.mjs', 'package.json', `${GENERATED}/manifest.json`]) {
     assert.doesNotMatch(read(file).toString('utf8'), /Downloads|\/Users\/|~\//, file);
   }

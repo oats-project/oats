@@ -1,0 +1,17 @@
+{
+  "capability": "oats.engineering-expert",
+  "version": "4.0.2",
+  "compatibility": {
+    "oats": ">=0.69.7"
+  },
+  "description": "The expert, as an orchestrator: owns one effort from plan to merge on a fresh instance. One agent is the default; a child earns its place by protecting context, parallel work or specialisation, named in its brief, and the tree is sized to the work (alone where it is simple; alone with short-lived probes and helpers where it is complex but not large; one long-lived specialist per area where it is large or crosses areas). The briefing says how to behave in each seat (root lead, specialist, helper or probe), and every expert's task names its seat. Five skills: plan-and-spec (the plan, the specs, who builds each), orchestrate-agents (whether a child is worth it, which kind, the relation, the brief, what comes back), coordinate-developers (launching developers and the one verification of what they hand back, ending in VERIFIED at the head), hand-off-and-ask (hand-offs by message at exact references, handing a whole effort over, the decision card for a person, findings, blocks, other people's paths) and land-on-agreement (the agreements at a PR's exact head, a lane maintainer's green light where the landing rules ask for one, the merge by whoever they name, releases). Copied from the engineering template, template-v4.0.2.",
+  "requires": [],
+  "inject": "injects/expert.md",
+  "skills": [
+    "skills/plan-and-spec",
+    "skills/orchestrate-agents",
+    "skills/coordinate-developers",
+    "skills/hand-off-and-ask",
+    "skills/land-on-agreement"
+  ]
+}
