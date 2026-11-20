@@ -22,20 +22,21 @@ import { workspaceTabs } from "../renderer/workspace-discovery.mjs";
 const PKG = join(dirname(fileURLToPath(import.meta.url)), "..");
 const shellSource = () => readFileSync(join(PKG, "renderer", "shell.mjs"), "utf8");
 
-// The sidebar's pages (the Desktop UI rework, slice 2; before it, the product owner, 2026-10-26): Home, the
-// Workspace page (Workspace overview, no row of its own: Home opens it) and Automations (Schedules | Triggers);
-// Deployments became the Workspace page's Machines tab. The pinned rows: Home, then Automations.
-test("NAV is exactly Home, Workspace overview and Automations, in that order; Home and Automations are pinned", () => {
+// The sidebar's pages (the Desktop UI rework, slices 2 and 2b; before them, the product owner, 2026-10-26): Home, the
+// Workspace page (its own row again since slice 2b: Pepe, 2026-11-20) and Automations (Schedules | Triggers);
+// Deployments became the Workspace page's Machines tab. The pinned rows: Home, Workspace, then Automations.
+test("NAV is exactly Home, Workspace and Automations, in that order, each a pinned row", () => {
   assert.deepEqual(NAV.map((v) => v.name), ["home", "spawn", "automations"],
     "page destinations are Home, Workspace and Automations; Machines (formerly Deployments, formerly Active overview) is a tab of Workspace");
-  assert.deepEqual(NAV.map((v) => v.label), ["Home", "Workspace overview", "Automations"],
+  assert.deepEqual(NAV.map((v) => v.label), ["Home", "Workspace", "Automations"],
     "Knowledge/Tasks remain deferred; Workspace keeps the internal spawn route");
   for (const v of NAV) {
     assert.ok(v.label && v.icon && v.title, `${v.name} entry carries full rail chrome`);
   }
-  assert.deepEqual(NAV.map((v) => v.title), ["Home", "Workspace overview", "Automations"]);
-  assert.deepEqual(PINNED.map((v) => v.name), ["home", "automations"]);
-  assert.equal(pinnedRowFor("spawn"), "home");
+  assert.deepEqual(NAV.map((v) => v.title), ["Home", "Workspace", "Automations"]);
+  assert.deepEqual(PINNED.map((v) => v.name), ["home", "spawn", "automations"]);
+  assert.equal(pinnedRowFor("spawn"), "spawn");
+  assert.equal(pinnedRowFor("hierarchy"), null, "a tab of a page has no row of its own: showStage opens its page");
 });
 
 // A destination that is a tab of a page keeps its name (stage.hierarchy, ⌘1 / Ctrl+1) and says which page and tab
@@ -48,7 +49,7 @@ test("NAV_TABS maps hierarchy to the Workspace page's Machines tab; navTab() fin
     assert.ok(NAV.some((v) => v.name === entry.page), `${entry.name}: its page is a NAV page`);
     assert.ok(!NAV.some((v) => v.name === entry.name), `${entry.name}: not a page of its own as well`);
     assert.ok(workspaceTabs.includes(entry.tab), `${entry.name}: a tab the Workspace page has`);
-    // Its label names its page, by the page's own name: "Workspace › Machines" for the nav's "Workspace overview".
+    // Its label names its page, by the page's own name: "Workspace › Machines" for the nav's "Workspace".
     const [page, tab] = entry.label.split(" › ");
     assert.ok(tab && NAV.find((v) => v.name === entry.page).label.startsWith(page), `${entry.name}: its label names its page`);
   }
@@ -140,7 +141,7 @@ test("a nav button runs its stage action once; New agent and ? run their own onc
   assert.equal(document.getElementById("nav-foot").contains(nav), false, "not in the foot");
   const buttons = [...nav.querySelectorAll("button")];
   assert.deepEqual(buttons.map((b) => [b.dataset.view, b.dataset.action, b.querySelector(".label").textContent, b.title]),
-    [["home", "stage.home", "Home", "Home"], ["automations", "stage.automations", "Automations", "Automations"]]);
+    [["home", "stage.home", "Home", "Home"], ["spawn", "stage.spawn", "Workspace", "Workspace"], ["automations", "stage.automations", "Automations", "Automations"]]);
   for (const b of buttons) {
     ran.length = 0; b.click();
     assert.deepEqual(ran, [b.dataset.action], `${b.dataset.view}: one run per click`);

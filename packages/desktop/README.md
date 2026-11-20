@@ -56,9 +56,15 @@ The shell has three navigation contexts:
 - **Instances** — the shell's single sidebar becomes a compact, recursively
   nested roster. Selecting a running instance opens its direct tmux-attach
   xterm terminal in the main area. Terminal tabs are scoped to this context.
-- **Home** (where a window opens, the Desktop UI rework's slice 2) — what needs you (the agents waiting on you,
-  then the running ones) and what you have (a count for each part of the workspace, each opening its
-  Workspace tab), Home › Agents (every agent), and a first run for a workspace with no agents yet.
+- **Home** (where a window opens, the Desktop UI rework's slices 2 and 2b) — what needs you (the agents waiting on
+  you, eight then Show all), one summary line of counts, the workspace as one row of tiles, each a count that opens
+  its part (Agents, Souls, Capabilities, Teams, Machines, Automations), then the running agents, five then Show all;
+  one centred column. Home › Agents (every agent), and a first run for a workspace with no agents yet. The Workspace
+  page has its own sidebar row, and every Workspace page says where you are as a trail of links (Home › Workspace ›
+  Souls › dev); Esc goes up a level.
+- **An agent's mail** (Alt+M, the Desktop UI rework's S2-M3) — a read-only sheet from the right over the
+  panes: the agent's own mail through the messaging layer's `messaging:mail`, which never acknowledges, read
+  on open and on Refresh only ([docs/desktop-mail-sheet.md](docs/desktop-mail-sheet.md)).
 - **Souls** (Workspace › Souls) — the souls grouped by where they come from, in kind
   order (`packages/client/soul-role.mjs`), as a searchable grid of cards or a table (`v`); a soul's page shows its
   facts, its capabilities as one list of rows and its two prompts as two tabs, its skills folded below. Brain and

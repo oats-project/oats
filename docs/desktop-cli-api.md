@@ -170,7 +170,8 @@ see the [official catalog](official-catalog.md) for current pins.
 | `roster-workspace-key` | `oats server roster --workspace-key <key>`, repeatable: only the groups that can belong to one of the given workspaces are probed and returned (registered for one of them, registered with no known `workspaceKey`, or saved routes only); the answer's shape is unchanged, OATS 0.56.0 ([The remote roster](#roster-workspace-key)). Gate on the probe: a kernel without it ignores the flag and probes and answers every group | |
 | `spawn-apply-max-age` | `--max-age <s>` on a spawn apply bound by `--expect-decision <revision>`: the apply reuses member heads as the preview does, its decision fence unchanged, and its answer carries no `observation` block, OATS 0.58.0 ([Apply](#apply)). Gate on the probe: a kernel without it refuses the flag on an apply (`E_BAD_ARGS`) | |
 | `instance-color` | `oats instance color <instance> (<color> \| --clear)`, local and `--server` ([An instance's colour](#an-instances-colour-oats-instance-color)); `color` on `oats status --json` instance rows, on `oats server roster --json` rows and on `oats inspect --home` `instance` (`null` for none). Gate on the probe, locally or in the host's `probe.features`: an older kernel's rows have no `color` | `instanceColorApi: 1` (payload only) |
-| `instance-same-work` | `oats instance same-work <instance> on\|off` and `oats spawn … --same-work`, local and `--server` ([Same work as the parent](#same-work-as-the-parent-oats-instance-same-work)); `sameWork: true` on `oats status --json` instance rows and on `oats server roster --json` rows while the instance's flag is bound to its current `parentInstance`, the key absent otherwise ([`sameWork`](#row-same-work)). Gate on the probe, locally or in the host's `probe.features`: an older kernel's rows never carry `sameWork`, and it refuses the flag and the verb (`E_BAD_ARGS`) | |
+| `instance-related-work` | `oats instance related-work <instance> on\|off` and `oats spawn … --related-work`, local and `--server` ([Related work](#related-work-oats-instance-related-work)); `relatedWork: true` on `oats status --json` instance rows and on `oats server roster --json` rows while the instance's flag is bound to its current `parentInstance`, or, with no parent, to its current `siblingInstance`, the key absent otherwise ([`relatedWork`](#row-related-work)). It renames `instance-same-work`, still advertised beside it ([below](#feature-instance-same-work)). Gate on the probe, locally or in the host's `probe.features`: an older kernel's rows never carry `relatedWork`, and it refuses the flag and the verb (`E_BAD_ARGS`) | |
+| <a id="feature-instance-same-work"></a>`instance-same-work` | the related-work flag by its old name, kept for a release at least ([The deprecated aliases](#the-deprecated-aliases)): `oats spawn … --same-work` and `oats instance same-work <instance> on\|off` work as the new spellings, each use saying so in one line on stderr and never in `--json`; status and roster rows carry `sameWork: true` beside `relatedWork: true` for a parent binding; `.oats-same-work.json` reads as a parent binding while `.oats-related-work.json` is absent. An older kernel advertises it alone: there the flag binds a parent only. Its removal gets its own release-notes entry | |
 | `deployments-list` | `oats deployments [list]\|add\|remove\|import --json`, this computer's list of its deployments (`~/.oats/config/deployments.json`); `listed` on `oats onboard --json`; a kernel command run in an unlisted deployment lists it ([This computer's deployments](#this-computers-deployments-oats-deployments)). Gate on the probe: there is no fallback scan | `deploymentsApi: 1` |
 | `status-retire-state` | `retire` on `oats status --json` instance rows and on remote roster rows: whether a retire of the home is running, cannot be told, failed or was interrupted, read only from the files beside the home, OATS 0.59.0 ([`retire`](#row-retire)). `retirePending` is unchanged. Gate on the probe: a kernel without it never carries the field, so its absence there says nothing | |
 | `instance-suggest-name` | `oats instance suggest-name [--soul <soul>] (--task <t> \| --task-file <f>) [--harness claude\|pi] [--model <m>] [--launch-config <n>] --json`: the name a `--suggest-name` spawn would get, chosen on this machine for a spawn that may land on another, not made unique ([A name for a spawn elsewhere](#a-name-for-a-spawn-elsewhere-oats-instance-suggest-name)). Local only: `--server` is `E_BAD_ARGS`. Gate on the local probe; without it, the spawn goes unnamed (numbered, or named where it lands) | |
@@ -326,13 +327,14 @@ for `--no-recursive`) is never ignored.
 | Command | Arguments | Flags that take a value | Switches | Refused in their own words | Its own answers |
 |---|---|---|---|---|---|
 | `oats retire` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir`, `--server` | `--plan`, `--self`, `--discard-worktree`, `--keep-dir`, `--force`, `--json` | `--delete-branch` | none |
-| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-config`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--same-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral` | an unknown flag, an argument after the last |
+| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-config`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--related-work`, `--same-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral` | an unknown flag, an argument after the last |
 | `oats sync` | none | `--dir` | `--plan`, `--json` | `--approve` | none |
 | `oats instance stop` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--grace-ms`, `--home`, `--dir`, `--server` | `--plan`, `--apply`, `--no-recursive`, `--json` | none | none |
 | `oats instance upgrade` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir` | `--undo`, `--plan`, `--json` | `--server` | none |
 | `oats instance color` | `<instance>` `[<color>]` | `--home`, `--dir`, `--server` | `--clear`, `--json` | none | none |
 | `oats instance background` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
 | `oats instance pin` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
+| `oats instance related-work` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
 | `oats instance same-work` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
 | `oats instance waiting set` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
 | `oats instance waiting clear` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
@@ -1008,6 +1010,15 @@ oats operation run <layer>:<name> (--home <abs> | --soul <name> [--dir <d>]) [--
   at the top level; `stderr` appears when the provider wrote any.
 - A `view` operation must answer `{documents: [{label, kind?, path?, text?}]}`
   (`kind` `markdown` or `text`), else `E_OPERATION_RESULT`.
+- **A view may carry one structured field** beside `documents`, named after
+  its operation and versioned by its own `<name>Api` inside it: `mail` with
+  `mailApi` for `messaging:mail` ([Mail](#mail-mailapi-1)). `documents` stays
+  the plain rendering every view reader can show. The kernel validates
+  `documents` only, and relays the provider's `result` unchanged, locally and
+  through `--server`, where the routing keys (`server`, `route`) sit beside
+  `result`, never inside it. A client reads the structured field only at a
+  `<name>Api` it knows, and falls back to `documents` otherwise. A view carries
+  at most one such field.
 - Errors: `E_OPERATION_UNKNOWN`, `E_OPERATION_UNAVAILABLE` (empty slot, or a
   home operation without `--home`), `E_CAPABILITY_REQUIRES`, `E_BAD_ARGS`
   (undeclared or missing `--arg`), `E_CAPABILITY_BROKEN`. A provider's `ok:
@@ -1025,6 +1036,119 @@ advertises `operations`.
 **Knowledge operations.** Discover a knowledge provider's operations from
 inspect; the provider's version owns their result shapes. For oats.okf, see
 [knowledge.md](knowledge.md#knowledge-operations).
+
+**Messaging operations.** The messaging provider's operations are listed by
+inspect too. One of them is a contract of the messaging layer, whatever the
+provider: `messaging:mail`, below. oats.aweb is its first provider, from the
+release that adds it (its `docs/mail-read.md` says how it reads).
+
+<a id="mail-mailapi-1"></a>
+#### Mail, `mailApi: 1`
+
+`messaging:mail` is a read-only view of an instance's own mail, received and
+sent, newest first. It **never acknowledges** or marks anything read on the
+agent's behalf. Any messaging provider may answer it.
+
+```text
+oats operation run messaging:mail --home <abs> [--arg limit=50] [--arg cursor=<nextCursor>] [--arg conversation=<id>] [--server <id>] --json
+```
+
+The provider's manifest declares it as a home view operation with three
+optional args:
+
+```json
+"mail": {"kind": "view", "command": "mail", "context": "home",
+  "description": "Read-only: this instance's mail, received and sent, newest first. Never acknowledges.",
+  "args": [{"name": "limit", "flag": "--limit"}, {"name": "cursor", "flag": "--cursor"}, {"name": "conversation", "flag": "--conversation"}]}
+```
+
+Its `result`:
+
+```json
+{"documents":[{"label":"Mail","kind":"markdown","text":"…plain rendering…"}],
+ "mail":{"mailApi":1,"acknowledges":false,"observedAt":"2026-11-19T12:00:00.000Z",
+  "identities":[{"team":"oats","alias":"dev-1","identity":"<opaque>","primary":true,"error":null},
+                {"team":"alpha","alias":"dev-1","identity":"<opaque>","primary":false,"error":"conversation-unreadable",
+                 "unreadableConversations":["<opaque>"]}],
+  "messages":[{"id":"<opaque>","conversationId":"<opaque>","threadTitle":"Review","direction":"received","team":"oats",
+    "from":{"alias":"lead","address":"oats.aweb.ai/lead","identity":"<opaque>"},
+    "to":{"alias":"dev-1","address":"oats.aweb.ai/dev-1","identity":"<opaque>"},
+    "subject":"Review","body":"…","truncated":false,"createdAt":"2026-11-19T11:58:00Z",
+    "readByAgent":false,"encrypted":false,"verification":"verified","priority":"normal"}],
+  "conversations":[{"id":"<opaque>","partial":null}],
+  "hasMore":false,"nextCursor":null}}
+```
+
+- **Opaque values.** `identity` ids, message and conversation ids, `team`
+  labels and `nextCursor` are the provider's strings: a client compares them
+  and passes them back, and never parses them. `from`/`to` `address` may be
+  `null`; `conversationId` is `null` for mail with no conversation.
+- **Order.** Newest first by `createdAt`, across every identity of the
+  instance (its primary one and each joined team's), merged, each message
+  labelled by the `team` it was read in. `direction` is decided by the
+  sender's identity against the identity read. `identities` lists each
+  identity read, the primary one first.
+- **Read state.** `readByAgent` reports the server's read state of a received
+  message, and is `true` for a sent one. The read never changes it, and
+  `acknowledges` is always `false`.
+- **Closed sets.** `direction`: `received` or `sent`. `verification`:
+  `verified`, `unverified`, `failed` or `unknown`. `priority`: `normal`,
+  `high` or `unknown`. `partial`: `null` or `oldest-first-only`. A client
+  shows any other value as unknown.
+- **Bounds.** Each `body` is at most 16 KiB of UTF-8, cut at a character
+  boundary, with `truncated: true`. The whole `result` is at most 256 KiB;
+  past it the answer stops early, with `hasMore: true` and a `nextCursor`.
+  Where one message alone wouldn't fit, its `subject` and `threadTitle` are
+  cut too, and `truncated: true` marks that as well: `truncated` means the
+  provider shortened the message, whichever of its texts it cut. An answer
+  is never sent oversized, nor as an empty page with `hasMore: true` and no
+  `nextCursor`. `limit` is 1 to 200, default 50 (`E_BAD_ARGS` otherwise).
+- **Paging.** `nextCursor`, passed back as `--arg cursor=…`, gives the next
+  messages in the same order, with no overlap. What a cursor encodes is the
+  provider's (oats.aweb's: the last message's `createdAt`, id and team). `--arg conversation=<id>`
+  reads one conversation, newest first; its cursor is valid only with the same
+  conversation.
+- **Partial conversations.** Where the provider can read only the oldest part
+  of a long conversation, the conversation is listed in `conversations` with
+  `partial: "oldest-first-only"`, and its newest messages are missing, never
+  shown as the latest. A client says "older part of a long conversation
+  shown; the newest messages can't be read yet".
+- **Untrusted text.** `subject`, `threadTitle` and `body` are the sender's
+  plain text: show them as text, attributed to their sender, never as markup.
+- **Encrypted mail.** End-to-end encrypted bodies are decrypted with the
+  agent's keys, and shown to whoever can run `oats operation run` on that
+  machine (routed reads included): the access that attaching to the agent's
+  terminal already gives, no wider. `encrypted: true` marks them.
+- **Errors per identity.** In `identities[].error`, a provider's code (such
+  as a grant without mail read). **An identity's `error` doesn't mean it has
+  no messages:** it can come with that identity's messages beside it, and a
+  reader shows both the mail and that some of it couldn't be read. One code
+  is the layer's: `conversation-unreadable`, one or more of that identity's
+  conversations couldn't be read; its other messages are shown, and the row
+  names the missing ones in `unreadableConversations` (conversation ids,
+  present only with that code, the list's tail dropped first if the 256 KiB
+  bound needs it, so it may name fewer than failed, or none).
+- **Whole failures.** The operation fails whole, with no answer, in two
+  cases: `E_MAIL_UNREADABLE` when no identity can be read
+  (`details.identities` holds the rows), and `E_MAIL_TOO_LARGE` when even an
+  answer with no messages can't fit the 256 KiB bound (its identities alone).
+- **Cost.** Each read calls the messaging service several times. Read on
+  demand (opening a view, a manual refresh), never on a status poll.
+- **Older sides.** A home whose provider copy predates the operation answers
+  `E_OPERATION_UNKNOWN` (inspect doesn't list `mail`): the home gets it from
+  `oats instance upgrade` or a new spawn. A home with no messaging slot
+  answers `E_OPERATION_UNAVAILABLE`, and a remote host without `operations`
+  `E_REMOTE_INCOMPATIBLE`. A provider's own refusals are relayed with their
+  code, such as oats.aweb's `E_AW_TOO_OLD` (`details: {version, needs}`) for
+  an aw too old to read mail without acknowledging it.
+- **The provider's own.** How a provider maps its service's values onto the
+  closed sets, its other identity error codes, what its cursor encodes and how
+  much of a body its `documents` rendering shows are its own, in its docs. For
+  oats.aweb: the "messaging:mail" section of its
+  [README](https://github.com/awebai/oats-aweb/blob/main/README.md#messagingmail-an-instances-mail-read-without-acknowledging-it)
+  and its [docs/mail-read.md](https://github.com/awebai/oats-aweb/blob/main/docs/mail-read.md)
+  (the aw commands it runs, the verification and priority mappings, the
+  cursor, every error code, a 500-character body excerpt in `documents`).
 
 <a id="workspace-model-workspaceapi-2"></a>
 ## Workspace
@@ -3343,7 +3467,7 @@ kernel stage raised as well.
 
 | Code | Details | When |
 |---|---|---|
-| `E_USAGE`, `E_BAD_ARGS` | | no soul; bad, contradictory, removed or unknown flags; an argument after the soul; `--same-work` for an instance that would record no parent ([Same work as the parent](#same-work-as-the-parent-oats-instance-same-work)) |
+| `E_USAGE`, `E_BAD_ARGS` | | no soul; bad, contradictory, removed or unknown flags; an argument after the soul; `--related-work` (or its deprecated alias `--same-work`) for an instance that would record no parent or sibling ([Related work](#related-work-oats-instance-related-work)) |
 | `E_LOCAL_MISSING`, `E_NO_DEPLOYMENT` | | no `oats-local.yaml`; no `agents/` root |
 | `E_SOUL_UNKNOWN` | `{name, members, packages, unconfirmed?}` | no such soul, or not at `--agents-root`. `unconfirmed`, only when a member could not be confirmed: `[{key, reason, detail}]`, which the message repeats with what to do |
 | `E_SOUL_AMBIGUOUS` | `{name, repos, qualified}` | several souls answer the bare name; use one of `qualified` |
@@ -3841,15 +3965,21 @@ its absence.
   row. It carries no history and no context: `oats inspect --home <h> --board`
   does. A `board` in `instance.json` never stands in for it, and an older
   kernel's rows have no key.
-- <a id="row-same-work"></a>**`sameWork`** (feature `instance-same-work`):
-  `true` when the home's same-work flag
-  ([Same work as the parent](#same-work-as-the-parent-oats-instance-same-work))
-  is bound to the parent the row's `parentInstance` names. Otherwise the key
-  is absent, never `false` or `null`: no flag, a flag bound to an earlier
-  parent, no `parentInstance`, and a row whose `instance.json` cannot be read.
-  A `sameWork` in `instance.json` never stands in for it. Clients draw the
-  parent→child line for a row that carries it; a client that does not know
-  the key ignores it, and an older kernel never sends it.
+- <a id="row-related-work"></a><a id="row-same-work"></a>**`relatedWork`**
+  (feature `instance-related-work`): `true` when the home's related-work
+  flag ([Related work](#related-work-oats-instance-related-work)) is bound
+  to the parent the row's `parentInstance` names, or, on a row with no
+  `parentInstance`, to the sibling its `siblingInstance` names. Otherwise
+  the key is absent, never `false` or `null`: no flag, a flag bound to an
+  earlier relation, neither relation, and a row whose `instance.json`
+  cannot be read. A `relatedWork` or `sameWork` in `instance.json` never
+  stands in for it. **`sameWork`** (feature `instance-same-work`), the
+  flag's old name, stands beside it as `true` when the binding is to the
+  parent, for a client that reads the old key; it is absent for a sibling
+  binding and whenever `relatedWork` is, never `false` or `null`.
+  Clients draw the line between the row and the instance it is bound to; a
+  client that does not know the key ignores it, and an older kernel never
+  sends it.
 - <a id="row-retire"></a>**`retire`** (feature `status-retire-state`, OATS
   0.59.0): `{state, since, self, code?, message?}` while a retire of the home
   is running, scheduled or owed; absent otherwise, and from older kernels.
@@ -4127,11 +4257,17 @@ route target:
   has the key. It is read by this kernel's own rules: each fact and question
   within its bounds and the whole within 8 KiB, or else an empty board.
   `null` stays `null` ([`board`](#row-board)).
-- **`sameWork`** (feature `instance-same-work`) is on a row only when the
-  host's row has `sameWork: true`, and is then `true`. Any other value, a host
-  whose kernel predates the feature, and a saved route the host did not list
-  carry no key ([`sameWork`](#row-same-work)). `oats status --server <id>
-  --json` relays the host's answer verbatim, `sameWork` included.
+- **`relatedWork`** (feature `instance-related-work`) is on a row only when
+  the host's row has `relatedWork: true`, and is then `true`. From a host
+  whose features list `instance-same-work` and not `instance-related-work`
+  (an older OATS), its row's `sameWork: true` is relayed as `relatedWork:
+  true`. Any other value, a host whose kernel predates both features, and a
+  saved route the host did not list carry no key
+  ([`relatedWork`](#row-related-work)). `sameWork: true` is relayed beside
+  `relatedWork: true` when the host's row says it (a parent binding), and
+  never on its own. `oats status --server <id> --json` relays the host's
+  answer as it gave it, except for these two keys: each instance row carries
+  them by the same rule (an older host's `sameWork: true` as both).
 - **`sessionEnd`** (feature `session-resume`; relayed from 0.69.5) is on a row only
   when the host's row has the key, with the host's value: a host whose kernel
   predates the feature, a row the host reports without it (one that runs,
@@ -4376,7 +4512,7 @@ instance's own machine: the local command, with `--server <id>` added.
 | `oats instance color <name> (<color> \| --clear) --server <id>` | none | `instance-color` |
 | `oats instance background <name> on\|off --server <id>` | none | `instance-background` |
 | `oats instance pin <name> on\|off --server <id>` | none | `instance-pin` |
-| `oats instance same-work <name> on\|off --server <id>` | none | `instance-same-work` |
+| `oats instance related-work <name> on\|off --server <id>` | none | `instance-related-work`; a host with only `instance-same-work` is asked by the old name for a parent binding ([Related work](#related-work-oats-instance-related-work)) |
 
 - The flags are the local command's. The instance is addressed like every
   routed instance command ([servers.md](servers.md#run-there)): `--home` as
@@ -7127,87 +7263,144 @@ home files: a capability cannot declare them, and a retire counts neither as
 work. A start, restart or upgrade keeps them, and a retire removes them with
 the home.
 
-## Same work as the parent (`oats instance same-work`)
+## Related work (`oats instance related-work`)
 
-Feature `instance-same-work` (awebai/oats#1577).
+<a id="same-work-as-the-parent-oats-instance-same-work"></a>
+Feature `instance-related-work`. It renames `instance-same-work`
+(awebai/oats#1577), which the kernel still advertises beside it for the
+[deprecated aliases](#the-deprecated-aliases) and the old row field.
 
 ```text
-oats instance same-work <instance> on|off [--home <abs>] [--dir <d>] [--json]
-oats spawn <soul> … --same-work
+oats instance related-work <instance> on|off [--home <abs>] [--dir <d>] [--json]
+oats spawn <soul> … --related-work
 ```
 
-The flag records that an instance does the same work as its parent. Clients
-draw the parent→child line for an instance that carries it. Nothing else in
-the kernel reads it: it is not identity, it grants nothing and it never
-addresses anything.
+The flag records that an instance does related work with the instance it is
+bound to: its parent, or, when it has no parent, its sibling. Clients draw a
+line between the two for an instance that carries it. Nothing else in the
+kernel reads it: it is not identity, it grants nothing and it never
+addresses anything. The kernel never sets it on its own, for any relation:
+only `--related-work` and `on` do.
 
-- **The record** is `<home>/.oats-same-work.json`, `{"sameWorkApi": 1,
-  "parent": "<instance>", "at": "<ISO time>"}`, mode 0600, written
-  atomically. Present means on; `off` removes it. It is a kernel-owned home
-  file: a capability cannot declare it as its own, a retire does not count it
-  as work (on its own it never makes a recovery copy), and `oats instance
+- **The binding.** The flag binds the home's recorded `parentInstance` when
+  it has one, else its recorded `siblingInstance`. With neither, it cannot
+  be set. A sibling binding names the sibling the home records. For a
+  sibling of a top-level instance R, that is R. For a sibling of R's
+  sibling S, the home records S, the anchor it was spawned beside, so the
+  binding is to S, not R.
+- **The record** is `<home>/.oats-related-work.json`, either
+  `{"relatedWorkApi": 1, "parent": "<instance>", "at": "<ISO time>"}` or
+  `{"relatedWorkApi": 1, "sibling": "<instance>", "at": "<ISO time>"}`,
+  exactly one of `parent` and `sibling`, mode 0600, written atomically.
+  Present means on; `off` removes it. It is a kernel-owned home file: a
+  capability cannot declare it as its own, a retire does not count it as
+  work (on its own it never makes a recovery copy), and `oats instance
   upgrade` does not see it as a change to the home.
 - **A reader** takes a regular file only, without following a link, of at
-  most 4 KiB, holding JSON with `sameWorkApi: 1` and a non-empty string
-  `parent`. Anything else reads as off, never as an error.
-- **Bound to the parent.** The flag is on only while the record's `parent` is
-  the home's current recorded `parentInstance`. A reparent leaves the record
-  naming the old parent, so the flag reads off: a retire's lineage relink
-  (the instances pointing at the retiree re-pointed to its parent) and a
-  `--relation parent` spawn re-pointing its anchor. `on` binds it to the
-  current parent again.
+  most 4 KiB, holding JSON with `relatedWorkApi: 1` and exactly one of a
+  non-empty string `parent` and `sibling`. Anything else reads as off, never
+  as an error.
+- **Bound to the relation.** A parent binding is on only while its `parent`
+  is the home's current recorded `parentInstance`. A sibling binding is on
+  only while the home records no parent and its `sibling` is the current
+  `siblingInstance`. A relink that changes the relation leaves the record
+  naming the old instance, so the flag reads off: a retire's lineage relink
+  (the instances pointing at the retiree re-pointed to its parent, or their
+  sibling link moved to its sibling) and a `--relation parent` spawn
+  re-pointing its anchor. `on` binds it to the current relation again.
 - **Lifetime.** It survives `oats session restart`, a stop and a start, a
   resume (`oats session start --resume`) and `oats instance upgrade`. Only
   `off` and retirement clear it.
+- **The old flag.** A same-work record, `<home>/.oats-same-work.json`
+  (`{"sameWorkApi": 1, "parent": "<instance>", "at": "<ISO time>"}`), reads
+  as a parent binding while nothing stands at the new record's name, by the
+  same reader rules; so an instance flagged before the rename keeps its
+  flag. When both exist, the new record wins, whatever it holds. The write
+  that creates the new record removes the old one, and `off` removes both.
+  `on` for a binding the old record already holds writes nothing. Both names
+  are kernel-owned.
+
+<a id="the-deprecated-aliases"></a>
+**The deprecated aliases.** `oats spawn … --same-work` is `--related-work`,
+and `oats instance same-work <instance> on|off` is `oats instance
+related-work`, with the same binding rule (the parent, else the sibling),
+the same refusals and the same answer; spawnInstance's `sameWork` option is
+`relatedWork`, and each call with it emits one Node `DeprecationWarning`
+(code `OATS_SAME_WORK`, `sameWork is renamed: use relatedWork`). Each CLI use prints one line on stderr, before the command runs
+or is sent with `--server`: `oats: --same-work is renamed: use
+--related-work`, or `oats: oats instance same-work is renamed: use oats
+instance related-work`. It is never in the `--json` answer: the envelope is
+the one the new spelling gives, with no `warnings`. The aliases, the
+feature `instance-same-work` and the [`sameWork`](#row-related-work) row
+field stay until their removal is decided on its own, with its own
+release-notes entry.
 
 **The verb.** The instance is addressed as `oats instance color` addresses
 it, and refused with the same answers.
 
-- `on` binds the flag to the instance's recorded `parentInstance`; an
-  instance with none is refused. `on` again while the flag is bound to that
-  parent writes nothing; `on` after a reparent rebinds it to the current
-  parent.
-- `off` removes whatever stands at the record's name (a file, a link, a
-  directory). It succeeds whether or not the flag was on and whether or not a
-  parent is recorded; `off` again is the same answer.
+- `on` binds the flag to the instance's recorded `parentInstance`, else to
+  its recorded `siblingInstance`; an instance with neither is refused. `on`
+  again while the flag holds that binding writes nothing; `on` after a
+  relink rebinds it to the current relation.
+- `off` removes whatever stands at either record's name (a file, a link, a
+  directory). It succeeds whether or not the flag was on and whether or not
+  a relation is recorded; `off` again is the same answer.
 
-The answer, the envelope's `result`, has exactly these two keys:
+The answer, the envelope's `result`, has exactly these three keys:
 
 ```json
-{"instance":"dev-a","sameWork":true}
+{"instance":"dev-a","relatedWork":true,"sameWork":true}
 ```
 
-`sameWork` is the binding rule read after the write: `true` after `on`,
-`false` after `off`. The text answer is `dev-a: same work on` (or `off`).
+`relatedWork` is the binding rule read after the write: `true` after `on`,
+`false` after `off`. `sameWork` is the old verb's answer: `true` only when
+the flag holds a parent binding, so `false` for a sibling binding. The text
+answer is `dev-a: related work on` (or `off`).
 
 | Code | When |
 |---|---|
-| `E_BAD_ARGS` | Neither `on` nor `off`, or more than one word; a `--home` that is not absolute; `on` for an instance with no recorded parent: `<instance> has no parent instance: same work is declared against a recorded parent; the flag was not changed` |
+| `E_BAD_ARGS` | Neither `on` nor `off`, or more than one word; a `--home` that is not absolute; `on` for an instance with neither a recorded parent nor a recorded sibling: `<instance> would record no parent or sibling instance: related work is declared against a recorded parent or sibling; the flag was not changed` |
 | *(as `oats instance color`)* | Instance resolution: `E_SESSION_UNKNOWN`, `E_AMBIGUOUS_INSTANCE`, `E_HOME_MISMATCH`, `E_UNIDENTIFIED_INSTANCE_HOME` |
 | `E_INSTANCE_RETIRING` | A retire of the home is in flight (its pending marker, or a live retire holding the home's lifecycle claim, which the command reads and never takes), or the home is quarantined. Nothing was written |
 | `E_LIFECYCLE_BUSY` | The home's claim file cannot be read as a claim, or a retire's liveness cannot be read, as for `oats worktree add` |
 
-**At spawn.** `oats spawn … --same-work` sets the flag on the new instance,
-bound to the parent its home records, whichever relation gave it: `--parent
-<instance>` or `--relation child`; `--relation sibling` of an anchor that has
-a parent (the new instance shares it); `--relation parent` of an anchor that
-had a parent (the new instance inherits it); `--work attached` (the owner of
-the tree). The record is written inside the spawn, before the launch, so the
-instance's first status row carries `sameWork: true`; a spawn rolled back
-removes it with the home. When the new instance would record no parent (no
-relation, `--relation unrelated`, a sibling of a root anchor, `--relation
-parent` of a root anchor), the spawn is refused with `E_BAD_ARGS` before
-anything is created, `--preview` included.
+**At spawn.** `oats spawn … --related-work` sets the flag on the new
+instance. It is bound to the parent the new home records, whichever
+relation gave it: `--parent <instance>` or `--relation child`; `--relation
+sibling` of an anchor that has a parent (the new instance shares it);
+`--relation parent` of an anchor that had a parent (the new instance
+inherits it); `--work attached` (the owner of the tree). Else it is bound to
+the sibling the new home records: `--relation sibling` of an anchor with no
+parent (the anchor itself), and `--relation parent` of an anchor with a
+sibling link and no parent (the new instance inherits the link). The record
+is written inside the spawn, before the launch, so the instance's first
+status row carries `relatedWork: true`; a spawn rolled back removes it with
+the home. When the new instance would record neither (no relation,
+`--relation unrelated`, `--relation parent` of a top-level anchor with no
+sibling link), the spawn is refused with `E_BAD_ARGS` before anything is
+created, `--preview` included: `--related-work needs a parent or a sibling:
+<instance> would record no parent or sibling instance …; nothing was
+spawned`.
 
 Routed with `--server <id>`, the verb runs on the host
 ([Routed reads and plans](#routed-reads-and-plans)) and `spawn --server …
---same-work` sends the flag there. A host whose probe does not advertise
-`instance-same-work` is refused with `E_REMOTE_INCOMPATIBLE` for either, and
-nothing is sent.
+--related-work` sends the flag there. A host that advertises
+`instance-related-work` is sent the new spellings, the aliases included. A
+host that advertises only `instance-same-work` (an older OATS), and only
+that host, is asked by the old spellings when the binding is a parent:
+`--same-work` and `oats instance same-work`, its answer's `sameWork`
+returned with `relatedWork` beside it. The binding
+is read from the spawn's arguments and the host's own roster (the anchor's
+row for `--relation sibling|parent`, the instance's row for `on`). A sibling
+binding is refused there with `E_REMOTE_INCOMPATIBLE`, naming the host and
+the feature it lacks, and nothing is sent; it is never dropped. A host that
+advertises neither feature is refused with `E_REMOTE_INCOMPATIBLE` for
+either, and nothing is sent.
 
-Where it is read: `sameWork` on [status rows](#row-same-work) and on
-[remote roster rows](#the-remote-roster-oats-server-roster---json) (only
-`true` is relayed).
+Where it is read: `relatedWork` (and `sameWork` beside it for a parent
+binding) on [status rows](#row-related-work) and on [remote roster
+rows](#the-remote-roster-oats-server-roster---json) (only `true` is
+relayed).
 
 ## Sessions and launch configurations
 

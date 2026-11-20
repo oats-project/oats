@@ -14,9 +14,9 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   `hierarchy.mjs`, the Deployments page of before, only while its tab is shown (chosen, or
   preselected by `stage.hierarchy`) and unmounts it on
   leaving (`syncMachines`), and that view's "Workspace" (`s`, Go to soul's page) is the Souls tab
-  here. `shell-nav.mjs` NAV is Home (`home`, the Desktop UI rework's slice 2), Workspace overview
-  (`spawn`, since slice 2 without a pinned row of its own: `PINNED` is Home and Automations, and
-  `pinnedRowFor("spawn")` is Home's row, which opens it) and Automations (`automations`, a page of its
+  here. `shell-nav.mjs` NAV is Home (`home`, the Desktop UI rework's slice 2), Workspace
+  (`spawn`, with its own pinned row again since slice 2b: `PINNED` is Home, Workspace and Automations, and
+  `pinnedRowFor` is each stage's own row) and Automations (`automations`, a page of its
   own again, as before 2026-10-23), and its NAV_TABS route
   `stage.hierarchy` (⌘1 / Ctrl+1), the palette's **View: Workspace › Machines** (the entry's label
   names its page, as the shortcuts editor's row does) and every
@@ -1607,16 +1607,21 @@ workspace is observed through its server and never synced from here.
   repaint. Back from a page returns to the row with the list's scroll offset
   and search.
   **The defaults** (`workspace-defaults.mjs` `defaultsLead`) are a tag on their
-  own rows and one sentence above the list (`p.cap-lead`), whenever `oats
-  workspace status` reports `defaults` (`defaultsSummary`); without it there is
-  no sentence and no tag. The sentence says what defaults are and what they are
+  own rows and, since slice 2b's Amendment 1 (D), a **Workspace defaults** part above the list
+  (`workspace-catalog.mjs` `workspaceDefaultsPart`, from `packages/client/capability-list.mjs`
+  `workspaceDefaultsSections`: Core, one slot each for Knowledge, Messaging, Tasks, its default's row or "No default";
+  then Additional, every other default, on or off; a slot whose declared default no row matches names it, `unlisted`,
+  never "No default"), opened by one sentence (`p.cap-lead`), then **All capabilities**
+  over the list, whenever `oats workspace status` reports `defaults` (`defaultsSummary`); without it there is no part,
+  no sentence and no tag, and the list is the tab's only content. The part's rows are the list's own
+  (`capabilityRowElement`), one roving stop across both groups, their focus key prefixed `defaults:`. The sentence says what defaults are and what they are
   for (one shared way of working; a soul can turn one off and choose its own),
   then which core slot no default fills and any declared default no row
   matches (`defaultNames` matches by name and source: `from: "package"` a
   package row, a member key that member's row, `"here"` the host's). The search
-  never narrows it. This replaces the Core / Additional panel
-  (workspace-defaults-show-scope-and-purpose, superseded by Joan's design in
-  the rework); it never edited the defaults, which the workspace file declares.
+  never narrows it. Slice 3b had replaced slice 0's Core / Additional panel with the tag and the sentence; slice 2b
+  brings the Core / Additional grouping back as rows (Pepe, 2026-11-20, Joan's yes). Neither ever edited the defaults,
+  which the workspace file declares.
   The capability page (`capability-page.mjs` `renderCapabilityPage`) is one
   column: the name and its tags, the origin line (who made it, then the package
   and version or the repository at its latest), the description as one
@@ -2535,7 +2540,7 @@ node packages/desktop/renderer/harness-server.mjs --port 4899 --api-socket "$dir
 # open the URL it prints: http://127.0.0.1:4899/harness.html#t=<its token>
 ```
 
-## Home (`views/home.mjs`, the Desktop UI rework's slice 2)
+## Home (`views/home.mjs`, the Desktop UI rework's slices 2 and 2b)
 
 The landing surface: `showStage("home")` at start and when a window is bound again (`onWindowState`), and the
 nav's fallback when no stage shows (`setNavActive(stage?.name || "home")`). A stage view on the `mount(el, ctx)`
@@ -2546,31 +2551,65 @@ doesn't read already:
   read's `phase`: loading, failed, unavailable (the kernel could not observe the deployment: the sidebar's note, never
   an empty workspace, so no first run and no zero) or ready, the held-stale rule, this machine's name and Retry) and
   `ctx.subscribeHomeRoster(fn)`, run after each paint of the roster (and after a first read fails with nothing
-  shown). The board's groups are the shared `packages/client/home-board.mjs` (`homeBoard`: Needs you by the one
-  claim gate, newest claim first; Running, newest spawn first; `homeAgents`; `startedBy`), so the TUI can draw the
-  same Home. Nothing reorders the roster.
+  shown). The board is the shared `packages/client/home-board.mjs` (`homeBoard`: Needs you by the one claim gate,
+  newest claim first, and the summary line's counts, each row counted once as running, needing you, stopped or
+  unknown; `homeAgents`, pinned first where the roster shows pins (`ctx.homeRoster().pins`), then newest spawn first;
+  `startedBy`), so the TUI can draw the same Home. Nothing reorders the roster. Slice 2b (Pepe, 2026-11-20) replaced
+  slice 2's full Running list: Home shows what needs you (`NEEDS_YOU_SHOWN`, 8, then "Show all N", which expands in
+  place and focuses the first row it showed), then one summary line ("24 agents · 21 running · 3 need you · 0
+  stopped"), then the tiles, then a cropped Running group (`RUNNING_SHOWN`, 5, in the roster's order, then "Show all
+  N running" / "Show fewer"; no row says "running").
 - **Counts**: Souls from `GET /api/agents` (read by the Workspace page's rules: a `catalog.reason` is a failure; an
   empty list while the catalog is still reading, or with no catalog observed yet, is pending, "Counting…", and is
   asked again every 3 s on a timer Home owns (cleared on a switch and on disposal) for as long as it stays pending,
   never taken as zero (not on the roster's paints: an unchanged roster read paints nothing); a remote view's answer has
   no catalog of its own, and its list is the count), Capabilities from `POST /api/workspace-sync {action:"read"}`, Teams from
   `POST /api/workspace-teams {action:"list"}` (only where the CLI has a team model: "Counting…" while its probe is
-  pending, no line where it has none; `onCliChange` settles it), Machines from the roster's deployments (a workspace
-  with no deployment list is this machine's: one). Each count is its own read, owned by the workspace generation it
-  was asked in (a late answer or failure for a workspace since left is dropped), and never rejects: a refused or
-  malformed answer is that count's "Couldn't count them", the others stand. The stage stays mounted across a
+  pending, no count where it has none; `onCliChange` settles it), Machines from the roster's deployments (a workspace
+  with no deployment list is this machine's: one), Automations from `POST /api/automations {kind, action:"list"}`
+  for schedules and triggers (only where `automationsSupported`; its red mark is the sidebar row's, slice 1's
+  reader, through `ctx.automationsFailed()` and `ctx.subscribeAutomationsFailed`). Each count is its own read, owned
+  by the workspace generation it was asked in and by its own serial (`revoke`: a newer read of that count, or the CLI's
+  gate taking Teams or Automations away, supersedes it; a superseded read's answer or failure is dropped, and a read of
+  several answers asks nothing more), so a late answer or failure for a workspace since left is dropped, and
+  never rejects: a refused or malformed answer is that count's "Couldn't count", the others stand. The tiles are one
+  row of buttons (`TILES`), each named with its count ("Souls, 26"); their heights are `HOME_LAYOUT`'s, the budget the
+  DOM test sums so the tiles stay in the first viewport at 1280×800 with 8 needs-you rows. No Graph tile: the Graph is
+  frozen, and Machines keeps List | Map. The stage stays mounted across a
   workspace switch, so Home follows `onWorkspaceChange` itself: its board again, and the new workspace's counts.
 - **Identity**: an agent row is known by `instanceId` (its home, its host), never its bare name, so a repaint keeps
   focus and activation on the same agent when names repeat across roots and hosts.
 - **Opening**: an agent row runs `ctx.openAgent(row)`, the shell's `openRosterInstance`, which activates the
   roster's own row (showing it first if a collapsed parent or the closed Background section hides it), so its gates
-  are the row's (held, unknown or unaddressable, stopped on a stale roster: refused) and can't drift. An overview row runs
+  are the row's (held, unknown or unaddressable, stopped on a stale roster: refused) and can't drift. A tile runs
   `ctx.openWorkspaceTab(tab, options)` (`openWorkspaceTabFocused`: `openWorkspaceSouls`, then the focus on the
   page's tab control where the Home button it left is gone, so the first Esc is heard); the Workspace page's unclaimed Esc (no field, dialog, menu or
-  list took it) goes back to Home (`stageHost`'s keydown in shell.mjs), and Home focuses the row that opened it.
+  list took it) goes back to Home (`stageHost`'s keydown in shell.mjs), and Home focuses the tile that opened it.
+  The Automations tile opens its page (`ctx.openPage`, `showStageFocused`).
   Agents opens Home › Agents in place (the board's dot grammar: a row with a claim wears the needs-input mark and says
   "needs you" first); its Esc, or its "‹ Home" back control (the capability page's quiet `.page-back` look, named
   "Back to Home"), returns to the board.
 - **First run** (the roster is ready and empty): two lines, three keys (`ctx.chordText`: New agent's and the
-  palette's bound keys; Home's is its palette command until it has a key), then the overview.
+  palette's bound keys; Home's is its palette command until it has a key), then the tiles.
+- **Where you are** (slice 2b; supersedes slice 2's "Home's row stands for the Workspace page"): `PINNED` is Home,
+  Workspace and Automations, and `pinnedRowFor(name)` is a stage's own row, so every way onto the Workspace page (a
+  tile, the palette, ⌘2 / Ctrl+2, a soul's or capability's page, a soul's files) marks Workspace, and Home's row marks
+  Home and Home › Agents only. The Workspace page's head is a trail, "Home › Workspace › <tab>", above its tab bar
+  (`views/spawn.mjs` `nav.workspace-title`, the tab its `h1`, `syncWorkspaceTitle`; Home's head type), hidden while a
+  soul's, capability's or team's page shows its bar. A Workspace page's bar (`capability-page.mjs` `pageBar`, crumbs
+  starting "Workspace") draws the same trail one level deeper, Home first, each part above the page a link, resolved
+  by its place, never its name (a soul may be called "Teams"): Home, Workspace and the tab after it dispatch
+  `workspace-navigate` (`workspaceNavigate`), which the Workspace page handles (`navigateTrail`: Home through
+  `ctx.openPage`; else its pages closed, then the tab, focus on its control); a deeper part carries its own
+  `{ label, go }` (a soul's name on its capability's page: that page's Back); a plain part just above the page is its
+  Back. A capability's open skill extends the trail (a MutationObserver on the skill view's `hidden`), the capability
+  then a link that closes the skill. Esc goes up one level wherever focus is on a page, its trail included (a skill to
+  its capability, a page to its list, the page to Home: shell.mjs `stageHost`).
+- **Arrival**: Home already the stage (its row, the palette's Home, a trail's Home; a terminal in front or not), the
+  shell's `showStage` calls the stage module's `arrive()` instead of returning silently, and Home shows its board
+  (`toBoard`), so its row always returns to Home (review r3). A module without `arrive` is left as it is.
+- **Amendment 1** (Pepe, 2026-11-20; Joan's yes): the column is centred (`.home-inner` 880px, `margin:0 auto`); a
+  Running group under the tiles (`RUNNING_SHOWN`, 5, in the roster's order, "Show all N running" / "Show fewer");
+  the Souls grid's cards in the information-role type scale (name 17 / 700, what it does 13 muted, the meta line 12
+  muted).
 

@@ -1915,8 +1915,9 @@ open, `Alt+Shift+Up` and `Alt+Shift+Down` move between its groups instead
 ([The palette](#the-palette)).
 
 `CHORDS` also holds the Desktop's `edit-instance` (`Alt+R`, its name and
-colour dialog). The TUI has no such action, so it binds no key for it and
-`Alt+R` stays the agent's.
+colour dialog) and `mail` (`Alt+M`, its read-only mail sheet). The TUI has no
+such actions, so it binds no keys for them and `Alt+R` and `Alt+M` stay the
+agent's.
 
 There are three families, one choice per user for both clients
 ([Switch family](#switch-family)):

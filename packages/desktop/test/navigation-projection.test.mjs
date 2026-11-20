@@ -40,7 +40,7 @@ function shell(t, shellSource = source) {
   t.after(() => dom.window.close());
   const document = dom.window.document, loads = [], contexts = [], focusCalls = [], navWrites = [], preselected = [], regionCalls = [];
   const navEl = document.getElementById("nav");
-  for (const view of PINNED) { // the rows the shell pins (Home, Automations: slice 2)
+  for (const view of PINNED) { // the rows the shell pins (Home, Workspace, Automations: slice 2b)
     const b = document.createElement("button"); b.className = "nav-item";
     b.dataset.view = view.name; b.textContent = view.label; navEl.append(b);
   }
@@ -70,7 +70,7 @@ function shell(t, shellSource = source) {
     ctx: { notify: message => assert.fail(`unexpected notice: ${message}`) },
   };
   const names = ["closeStage", "showStage", "setNavActive", "showTabLayer", "updateActiveContexts", "setSidebarMode", "updateContextTabs",
-    "addTab", "selectTab", "activateTab", "revealActiveRosterRow", "closeTab", "tabStrips", "revealActiveTabs", "observeTabStrips", "onTabKeydown", "walkedTabs", "visibleTabEntries", "renderSplit", "selectEmptyGroup", "restoreWorkspaceTabs", "showTerminalContext", "openViewTab", "openWorkspaceSouls", "showStageFocused"];
+    "addTab", "selectTab", "activateTab", "revealActiveRosterRow", "closeTab", "tabStrips", "revealActiveTabs", "observeTabStrips", "onTabKeydown", "walkedTabs", "visibleTabEntries", "renderSplit", "selectEmptyGroup", "restoreWorkspaceTabs", "showTerminalContext", "openViewTab", "openWorkspaceSouls", "showStageFocused", "openWorkspaceTabFocused"];
   const functions = names.map(name => {
     const match = shellSource.match(new RegExp(`(?:async )?function ${name}\\([^]*?\\n\\}`));
     assert.ok(match, `execute shipped ${name}`); return match[0];
@@ -141,7 +141,7 @@ test("live-driver order: covered Souls stage → independent A/B splits → A ha
 });
 
 async function restoredFile(t, context, shellSource = source) {
-  const s = shell(t, shellSource), expected = context === "souls" ? ["home"] : []; // the Workspace page's row is Home's (slice 2)
+  const s = shell(t, shellSource), expected = context === "souls" ? ["spawn"] : []; // the Workspace page's own row (slice 2b)
   await s.stage(context === "souls" ? "spawn" : "automations");
   if (context === "instances") s.seed();
   const file = s.seed("file");
@@ -167,7 +167,7 @@ for (const context of ["instances", "souls"]) {
 test("brain restoration keeps Souls navigation; returning to a stage reflects the visible stage", async t => {
   const s = shell(t); await s.stage("spawn"); const brain = s.seed("brain");
   s.switchTo("B"); await s.stage("automations"); s.switchTo("A");
-  assert.equal(s.c.activeTab, brain.id); assert.deepEqual(s.nav(), ["home"]);
+  assert.equal(s.c.activeTab, brain.id); assert.deepEqual(s.nav(), ["spawn"]);
   await s.stage("automations");
   assert.equal(s.c.tabLayerVisible, false); assert.deepEqual(s.nav(), ["automations"]);
   assert.deepEqual(s.contexts, ["stage:automations"]);
@@ -190,7 +190,7 @@ for (const boundary of ["load", "mount"]) for (const outcome of ["resolve", "rej
 }
 
 for (const boundary of ["load", "mount"]) for (const outcome of ["resolve", "reject"]) {
-  // Two pages of their own (Workspace overview, Automations; the product owner, 2026-10-26): from no stage, the older switch and the newer one are
+  // Two pages of their own (Workspace, Automations; the product owner, 2026-10-26): from no stage, the older switch and the newer one are
   // three distinct states, so neither "the older one" nor "where it started" can pass for the newer.
   test(`late stage ${boundary} ${outcome} preserves a newer real stage selection (not a blanket nav reset)`, async t => {
     const s = shell(t);
@@ -203,7 +203,7 @@ for (const boundary of ["load", "mount"]) for (const outcome of ["resolve", "rej
     await old; await tick();
     assert.equal(s.loads.at(-1).name, "spawn");
     s.loads.at(-1).resolve({ mount() {} }); await newer;
-    assert.deepEqual(s.nav(), ["home"]); assert.deepEqual(s.contexts, ["stage:spawn"]);
+    assert.deepEqual(s.nav(), ["spawn"]); assert.deepEqual(s.contexts, ["stage:spawn"]);
     assert.equal(s.c.tabLayerVisible, false);
   });
 }
@@ -252,9 +252,9 @@ async function machinesFrom(t, start, shellSource = source) {
   await done;
   return s;
 }
-test("the sidebar's views: Home, the Workspace page (no row of its own: Home's) and Automations, each a page; Machines is the Workspace page's tab", () => {
-  assert.deepEqual(NAV.map(v => [v.name, v.label]), [["home", "Home"], ["spawn", "Workspace overview"], ["automations", "Automations"]]);
-  assert.deepEqual(NAV.filter(v => v.pinned !== false).map(v => v.name), ["home", "automations"]);
+test("the sidebar's views: Home, the Workspace page (its own row again: slice 2b) and Automations, each a page; Machines is the Workspace page's tab", () => {
+  assert.deepEqual(NAV.map(v => [v.name, v.label]), [["home", "Home"], ["spawn", "Workspace"], ["automations", "Automations"]]);
+  assert.deepEqual(NAV.filter(v => v.pinned !== false).map(v => v.name), ["home", "spawn", "automations"]);
   assert.deepEqual(NAV_TABS, [{ name: "hierarchy", label: "Workspace › Machines", page: "spawn", tab: "machines" }]);
   assert.deepEqual(navTab("hierarchy"), NAV_TABS[0]);
   assert.equal(navTab("automations"), null, "a page of its own again"); assert.equal(navTab("spawn"), null);
@@ -264,17 +264,64 @@ for (const start of [null, "automations"]) test(`stage.hierarchy from ${start ??
   assert.deepEqual(s.preselected, ["machines"], "the tab is chosen before the page shows");
   assert.equal(s.c.stage.name, "spawn");
   assert.ok(!s.loads.some(load => load.name === "hierarchy"), "Machines is no page of its own");
-  assert.deepEqual(s.nav(), ["home"], "Home's row is the current one: Home opens the Workspace page (slice 2)");
+  assert.deepEqual(s.nav(), ["spawn"], "the Workspace row is the current one, never Home's (slice 2b)");
   assert.equal(s.c.sidebarMode, "souls"); assert.deepEqual(s.contexts, ["stage:spawn"]);
   // showStageFocused compares the stage on screen with the PAGE (spawn), so a keyboard open keeps focus on a control.
   assert.deepEqual(s.regionCalls, ["main"], "focus was on <body>: the stage's first control");
+});
+
+// The Desktop UI rework, slice 2b (supersedes slice 2's "Home's row stands for the Workspace page"; Pepe, 2026-11-20):
+// the Workspace page has its own pinned row, and every way onto it marks that row, never Home's. Home's row marks
+// Home (and Home › Agents, a view of Home's own stage) only.
+test("slice2b workspace row highlights for workspace pages", async t => {
+  const shipped = { tile: "openWorkspaceTab: (tab, options) => openWorkspaceTabFocused(tab, options),",
+    palette: '...["souls", "capabilities", "teams", "sources"].map((tab) => ({ label: `Workspace › ${WORKSPACE_TAB_NAMES[tab]}`, run: () => openWorkspaceSouls(tab) })),',
+    key: "...[...NAV, ...NAV_TABS].map((v) => ({ label: v.label, detail: chordDetail(`stage.${v.name}`), run: () => showStageFocused(v.name) })),",
+    row: "b.addEventListener(\"click\", () => runAction(`stage.${v.name}`));" };
+  for (const [what, line] of Object.entries(shipped)) assert.ok(source.includes(line), `${what}: the shipped route onto the page`);
+  const routes = { tile: s => s.openWorkspaceTabFocused("souls"), palette: s => s.openWorkspaceSouls("souls"), "Mod+2": s => s.showStageFocused("spawn"),
+    "its row": s => s.showStage("spawn"), "Workspace › Machines": s => s.showStageFocused("hierarchy") };
+  for (const [via, open] of Object.entries(routes)) {
+    const s = shell(t); await s.stage("home");
+    assert.deepEqual(s.nav(), ["home"], "Home's row on Home");
+    s.navWrites.length = 0;
+    const before = s.loads.length, done = open(s);
+    for (let i = 0; i < 3 && s.loads.length === before; i++) await tick();
+    s.loads.at(-1).resolve({ mount(el) { el.innerHTML = '<div role="tablist"><button id="workspace-tab-souls" role="tab">Souls</button></div>'; return () => {}; } });
+    await done;
+    assert.equal(s.c.stage.name, "spawn", via);
+    assert.deepEqual(s.nav(), ["spawn"], `${via}: the Workspace row, not Home's`);
+    assert.ok(!s.navWrites.includes("home"), `${via}: Home's row is never marked on the way`);
+    assert.equal(s.document.querySelector('#nav [data-view="spawn"]').classList.contains("active"), true);
+  }
+  // A soul's or capability's page is the Workspace page (views/spawn.mjs): its row too; its files (a brain tab) as well.
+  const s = shell(t); await s.stage("spawn"); s.seed("brain");
+  assert.deepEqual(s.nav(), ["spawn"]);
+});
+
+// Review r3 (slice 2b, Amendment 1, E: "the sidebar's Home row always returns to Home"): Home already the stage, in a
+// view of its own (Home › Agents), or covered by a terminal: the shipped showStage hands the arrival to its module.
+test("slice2b the Home row returns to Home's board from Home › Agents, also from a terminal over it", async t => {
+  const s = shell(t); let arrivals = 0;
+  const done = s.showStage("home"); await tick();
+  s.loads.at(-1).resolve({ mount() {}, arrive() { arrivals++; } }); await done;
+  await s.showStage("home");
+  assert.equal(arrivals, 1, "already on Home: its module hears the arrival");
+  s.seed(); terminalForeground(s);
+  await s.showStage("home");
+  assert.equal(arrivals, 2, "with a terminal in front: the stage shows again, and its module hears it");
+  assert.equal(s.c.tabLayerVisible, false); assert.deepEqual(s.nav(), ["home"]);
+  // A stage module without the hook (every other page) is left as it is.
+  const v = shell(t); const other = v.showStage("automations"); await tick();
+  v.loads.at(-1).resolve({ mount() {} }); await other;
+  await v.showStage("automations"); assert.equal(v.c.stage.name, "automations");
 });
 
 test("stage.hierarchy while the Workspace page is on screen switches its tab, without reloading the page", async t => {
   const s = await machinesFrom(t, "spawn");
   assert.deepEqual(s.preselected, ["machines"]);
   assert.equal(s.loads.length, 1, "the page already on screen stays mounted");
-  assert.equal(s.c.stage.name, "spawn"); assert.deepEqual(s.nav(), ["home"]);
+  assert.equal(s.c.stage.name, "spawn"); assert.deepEqual(s.nav(), ["spawn"]);
   assert.deepEqual(s.regionCalls, ["main"]);
 });
 

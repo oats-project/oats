@@ -1,0 +1,41 @@
+{
+  "operationsApi": 2,
+  "operation": "messaging:mail",
+  "capability": "oats.aweb",
+  "version": "1.43.0",
+  "argv": ["oats-aweb", "mail"],
+  "cwd": "/w/agents/dev/instances/dev-1",
+  "target": { "home": "/w/agents/dev/instances/dev-1", "instance": "dev-1" },
+  "result": {
+    "documents": [{ "label": "Mail", "kind": "markdown", "text": "3 messages" }],
+    "mail": {
+      "mailApi": 1,
+      "acknowledges": false,
+      "observedAt": "2026-11-19T21:00:00Z",
+      "identities": [
+        { "team": "default", "alias": "dev-1", "identity": "did:aw:dev-1-default", "primary": true, "error": null },
+        { "team": "product", "alias": "dev-1", "identity": "did:aw:dev-1-product", "primary": false, "error": null }
+      ],
+      "messages": [
+        { "id": "m-3", "conversationId": "c-1", "threadTitle": "Review of the sheet", "direction": "received", "team": "default",
+          "from": { "alias": "sheet-reviewer", "address": null, "identity": "did:aw:sheet-reviewer" },
+          "to": { "alias": "dev-1", "address": null, "identity": "did:aw:dev-1-default" },
+          "subject": "Round 1: two findings", "body": "Line one of the review.\nLine two, with a tab\there.\n\n", "truncated": false,
+          "createdAt": "2026-11-19T20:58:00Z", "readByAgent": false, "encrypted": true, "verification": "verified", "priority": "high" },
+        { "id": "m-2", "conversationId": "c-2", "threadTitle": "Mount", "direction": "sent", "team": "product",
+          "from": { "alias": "dev-1", "address": "product/dev-1", "identity": "did:aw:dev-1-product" },
+          "to": { "alias": "view-dev", "address": "product/view-dev", "identity": "did:aw:view-dev" },
+          "subject": "Where the sheet mounts", "body": "My proposal is below.", "truncated": false,
+          "createdAt": "2026-11-19T19:00:00Z", "readByAgent": true, "encrypted": false, "verification": "verified", "priority": "normal" },
+        { "id": "m-1", "conversationId": "c-2", "threadTitle": "Mount", "direction": "received", "team": "product",
+          "from": { "alias": "view-dev", "address": "product/view-dev", "identity": "did:aw:view-dev" },
+          "to": { "alias": "dev-1", "address": "product/dev-1", "identity": "did:aw:dev-1-product" },
+          "subject": "", "body": "A very long message, cut by the provider.", "truncated": true,
+          "createdAt": "2026-11-19T18:00:00Z", "readByAgent": true, "encrypted": false, "verification": "unverified", "priority": "normal" }
+      ],
+      "conversations": [ { "id": "c-1", "partial": null }, { "id": "c-2", "partial": "oldest-first-only" } ],
+      "hasMore": true,
+      "nextCursor": "cursor-after-m-1"
+    }
+  }
+}

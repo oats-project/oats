@@ -52,6 +52,7 @@ import { createStatusLine, statusLineCSS } from "./status-line.mjs";
 import { sheetCSS } from "./sheet.mjs";
 import { createForgetDialog, forgetSuccessor } from './forget-dialog.mjs';
 import { createInstanceColorDialog, instanceColorCSS } from './instance-color-dialog.mjs';
+import { createMailSheet, mailSheetCSS } from './mail-sheet.mjs';
 import { createInstanceBackgroundMenu } from './instance-background-menu.mjs';
 import { createInstancePinMenu, PIN_LABELS } from './instance-pin-menu.mjs';
 import { desktopActs } from './desktop-acts.mjs';
@@ -150,7 +151,7 @@ hostTheme.start();
 window.addEventListener("pagehide", () => hostTheme.dispose(), { once: true });
 mountShellIcons(document);
 const identityStyle = document.createElement("style");
-identityStyle.textContent = identityCSS + contextPanelCSS + teamsCSS + instanceSoulCSS + instanceGitCSS + notificationCSS + statusLineCSS + sheetCSS + connectionsCSS + settingsTerminalCSS + lifecycleCSS + instanceColorCSS + themePickerCSS; document.head.append(identityStyle);
+identityStyle.textContent = identityCSS + contextPanelCSS + teamsCSS + instanceSoulCSS + instanceGitCSS + notificationCSS + statusLineCSS + sheetCSS + connectionsCSS + settingsTerminalCSS + lifecycleCSS + instanceColorCSS + mailSheetCSS + themePickerCSS; document.head.append(identityStyle);
 // The sidebar's foot (slice 1): its count of the rows that need you, painted with the roster; its button focuses the
 // first of them (focusFirstNeedingYou).
 const sidebarFoot = createSidebarFoot(document, { nouns: DESKTOP_NOUNS, onNeedYou: () => focusFirstNeedingYou() });
@@ -159,6 +160,7 @@ const sidebarFoot = createSidebarFoot(document, { nouns: DESKTOP_NOUNS, onNeedYo
 // host name the kernel reports (oats-local.yaml `host.name`), read from the schedule list the failure mark reads;
 // until one is known, or where this machine has none, DESKTOP_TERMS.thisMachine.
 let thisHostName = null;
+const automationsFailedListeners = new Set(); // Home's Automations tile (slice 2b) follows the same mark
 const automationsFailure = createAutomationsFailure({
   read: async (ws, kind) => {
     const r = await api(`/api/automations?ws=${encodeURIComponent(ws)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind, action: "list" }) });
@@ -166,7 +168,10 @@ const automationsFailure = createAutomationsFailure({
     return r.result;
   },
   supported: () => automationsSupported(cliStatus()),
-  onChange: paintAutomationsFailed,
+  onChange: (failed) => {
+    paintAutomationsFailed(failed);
+    for (const listener of automationsFailedListeners) { try { listener(failed); } catch (e) { console.error(e); } }
+  },
   onHost: (name) => { if (name !== thisHostName) { thisHostName = name; if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } },
 });
 // A workspace switch (or the chooser) revokes the mark and any read in flight at once, before the new workspace's
@@ -252,12 +257,16 @@ const ctx = {
   // #1247: this window's own retires in flight. A view that reads its own roster draws its rows through
   // `retiringRows` and draws them again when `subscribeRetires` says the held set changed.
   retiringRows: (rows) => shownRows(rows),
-  // Home (slice 2): the roster as the sidebar shows it, a subscription to its paints, a row's activation, and a
-  // Workspace tab by its id (Souls, Capabilities, Teams, Machines, Setup), which Esc leaves back to Home.
+  // Home (slices 2 and 2b): the roster as the sidebar shows it, a subscription to its paints, a row's activation, a
+  // Workspace tab by its id (Souls, Capabilities, Teams, Machines, Setup), which Esc leaves back to Home, a page by its
+  // stage name (Automations) with the focus kept on a control, and the Automations row's failure mark, read and followed.
   homeRoster: () => homeRoster(),
   subscribeHomeRoster: (fn) => subscribeHomeRoster(fn),
   openAgent: (row) => openRosterInstance(row),
   openWorkspaceTab: (tab, options) => openWorkspaceTabFocused(tab, options),
+  openPage: (name) => showStageFocused(name),
+  automationsFailed: () => automationsFailure.failed,
+  subscribeAutomationsFailed: (fn) => { automationsFailedListeners.add(fn); return () => automationsFailedListeners.delete(fn); },
   // A bound action's key as the keyboard reference writes it ("Ctrl+K"), or "" when it has none.
   chordText: (id) => { const b = getBinding(id, navigator.platform.includes("Mac")); return b ? formatChord(b, navigator.platform.includes("Mac")) : ""; },
   subscribeRetires: (fn) => { retireListeners.add(fn); return () => retireListeners.delete(fn); },
@@ -377,7 +386,7 @@ window.addEventListener('pagehide', () => spawnJobs.dispose(), { once: true });
 // you accumulate and close, not places you navigate. Selecting a nav item
 // hides the tab layer; activating a tab covers the stage.
 const stageHost = document.getElementById("stagehost");
-// Esc on the Workspace page goes back to Home, which opens it (slice 2): only an Esc nothing on the page took
+// Esc on the Workspace page goes back to Home, whose tiles open it (slices 2 and 2b): only an Esc nothing on the page took
 // (a field, a list, a menu or a dialog handles its own, and marks it), from no text field.
 stageHost.addEventListener("keydown", (e) => {
   if (e.key !== "Escape" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || stage?.name !== "spawn") return;
@@ -413,7 +422,9 @@ async function showStage(name) {
   setSidebarMode(stageSidebarMode(name));
   setNavActive(name);
   showTabLayer(false);
-  if (stage && stage.name === name) return;   // already on this surface
+  // Already on this surface: a page that has views of its own goes back to its first (Home › Agents to Home: its row
+  // always returns to Home; slice 2b review r3).
+  if (stage && stage.name === name) { try { stage.mod?.arrive?.(); } catch (e) { console.error(e); } return; }
   const myOp = await closeStage();
   if (myOp === null) return;                  // superseded by a faster switch
   let mod;
@@ -592,6 +603,7 @@ function homeRoster() {
   const phase = contextDeploymentNote !== null ? "unavailable"
     : rosterState?.hasData ? "ready" : rosterState?.state === "failed" ? "failed" : contextInstances.length ? "ready" : rosterState?.settled === "empty" ? "ready" : "loading";
   return { rows: shownRows(contextInstances), deployments: contextDeployments, phase, note: contextDeploymentNote, stale: (row) => rosterStale || rowStale(row, contextDeployments), here: thisHostName,
+    pins: pinsShown(),
     retry: () => { void refreshContextRoster({ user: true }); } };
 }
 let contextWorkspace = "";
@@ -1816,6 +1828,8 @@ const contextPanel = createContextPanel({
     forget: (instance, workspace) => openForgetDialog(instance, workspace),
   },
   // Soul tab → the soul in the Workspace view (same hand-off as Quick Open).
+  // Messaging's Mail → the mail sheet for this row (as the chord opens it; mail-sheet.mjs).
+  openMail: ({ instance }) => { if (instance) openInstanceMail(instanceId(instance)); },
   openSoul: async ({ workspace, name, agentsRoot, server }) => {
     const owns = tabOpenIntents.begin();
     let mod;
@@ -2681,7 +2695,7 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
 // prove every entry resolves to a real mount-exporting view. The permanent
 // instance tree in the sidebar is the instances surface itself — selecting
 // an instance opens its terminal; there is no separate Instances stage.
-// The pinned destinations (the Desktop UI rework, slices 1 and 2): Home and Automations, rows under the
+// The pinned destinations (the Desktop UI rework, slices 1, 2 and 2b): Home, Workspace and Automations, rows under the
 // switcher in the roster rows' style. Automations carries a --danger dot while a run failed (automations-failure.mjs,
 // paintAutomationsFailed), its words after the name, so the row's name says it ("Automations, a run failed").
 const navEl = document.getElementById("nav");
@@ -2816,6 +2830,8 @@ const palette = createPalette({
     // selected.") the focus stays there, never on <body>; the dialog returns to it when it closes.
     { label: "Instance: name and colour…", detail: chordDetail("instance.edit"),
       run: () => { takePickerFocusReturn(document)?.restore(); openInstanceEdit(paletteTargetId); } },
+    { label: "Agent: mail", detail: chordDetail("instance.mail"),
+      run: () => { takePickerFocusReturn(document)?.restore(); openInstanceMail(paletteTargetId); } },
     // Pin to top / Unpin (feature instance-pin): listed only where the leader's target offers it, as its row menu does.
     // Named with D3's noun ("Agent: Pin to top"), from DESKTOP_NOUNS, as the slice 4 palette's own rows are.
     ...Object.entries(PIN_LABELS).map(([action, label]) => ({ label: `${DESKTOP_NOUNS.instance[0].toUpperCase()}${DESKTOP_NOUNS.instance.slice(1)}: ${label}`,
@@ -3072,6 +3088,29 @@ const appearance = createAppearanceSheet({ doc: document, themes: THEMES, curren
   currentFamily: () => terminalTypography().fontFamily,
   onIntent: () => tabOpenIntents.invalidate() });
 window.addEventListener('pagehide', () => appearance.dispose(), { once: true });
+
+/* The agent's mail (S2-M3; mail-sheet.mjs): a read-only sheet from the right, for the leader's target, opened by its
+ * chord (instance.mail), the palette's entry and Details' Mail button. It reads only `messaging:mail`, through the
+ * capabilities route the Teams card uses, on open and on its own Refresh: never on the poll. */
+const mailSheet = createMailSheet({ doc: document,
+  request: (workspace, body) => api(`/api/capabilities?ws=${encodeURIComponent(workspace)}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  }),
+  generation: workspaceGeneration, subscribeWorkspace: onWorkspaceChange, cli: cliStatus,
+  heldBack: () => cliHeldBack('POST /api/capabilities run'),
+  onIntent: () => tabOpenIntents.invalidate(), applyFocus: fn => tabOpenIntents.applyFocus(fn),
+});
+/** Opens the mail sheet for the instance `id` names (leaderTargetId), as this window's roster shows it; with none,
+ * the hint says so. The sheet already open for it closes (the chord toggles). */
+function openInstanceMail(id) {
+  const instance = rosterInstance(id);
+  if (!instance) { sayInHint("No agent is focused or selected."); return; }
+  const open = mailSheet.current();
+  if (open && open.home === instance.home && open.server === (instance.server ?? null)) { mailSheet.close(); return; }
+  connections.close(); shortcutsEditor.close(); lifecycleDialog.close(); forgetDialog.close();
+  mailSheet.open(instance, rowDeployment(instance));
+}
+window.addEventListener('pagehide', () => mailSheet.dispose(), { once: true });
 
 /** The sidebar's way into the instances, never nothing (the roster's filter was that once): the roster's current
  * row (the roving stop), else its first row, else a control the roster shows (Retry, after a failed read), else, on
@@ -3728,6 +3767,10 @@ for (const [id, does] of [["roster.openPrevious", "previous"], ["roster.openNext
 // every focus, a terminal's included. Inert under a modal dialog or the palette, as the leader is.
 registerAction({ id: "instance.edit", label: "Instance: name and colour…", context: "global", when: () => !modalOpen(),
   run: (e) => openInstanceEdit(leaderTargetId(e?.target ?? document.activeElement)) });
+// The agent's mail (CHORDS mail): the leader's target, from every focus, a terminal's included. Inert under any other
+// modal dialog or the palette; with the mail sheet open the chord closes it.
+registerAction({ id: "instance.mail", label: "Agent: mail", context: "global", when: () => !modalOpen() || mailSheet.isOpen(),
+  run: (e) => { if (mailSheet.isOpen()) { mailSheet.close(); return; } openInstanceMail(leaderTargetId(e?.target ?? document.activeElement)); } });
 
 // Chord-suffixed tooltips, live against the keymap: any control that
 // declares data-action gets “ … (chord)” appended to its base title.

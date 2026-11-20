@@ -1014,15 +1014,18 @@ test("routed spawn --suggest-name on an apply (#1490 §3) needs the host's spawn
   }
 });
 
-test("routed spawn --same-work (#1577) needs the host's instance-same-work: refused before the spawn is sent, a preview's included; else the flag travels as given", () => {
-  const base = mkdtempSync("/tmp/oats-rsw-");
+test("routed spawn --related-work (or its alias --same-work): as --related-work to a host with instance-related-work; by its old spelling to a host with only instance-same-work for a parent binding, E_REMOTE_INCOMPATIBLE there for a sibling one; refused by any other host; nothing sent on a refusal, a preview's included", () => {
+  const base = mkdtempSync("/tmp/oats-rrw-");
   const prevHomeDir = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "oats-home"); mkdirSync(process.env.OATS_HOME_DIR);
   try {
     const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
     const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.68.1", desktopApi: 1, harnesses: ["pi", "claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features });
-    const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "claude", instances: [] }] } };
-    const made = { instance: "dev-kid", agent: "dev", home: "/w/agents/dev/instances/dev-kid", work: "checkout", harness: "claude", launched: false, parent: "boss" };
-    const preview = { spawnPreviewApi: 2, preview: true, agent: "dev", kind: "persistent", instance: "dev-kid", home: "/w/agents/dev/instances/dev-kid", work: "checkout", harness: "claude", modelSource: "harness default", decision: { revision: "r1" }, parentInstance: "boss" };
+    // The host's lineage: boss a root, kid its child, peer a sibling of the root, peer2 a sibling of peer.
+    const row = (instance, lineage = {}) => ({ instance, home: `/w/agents/dev/instances/${instance}`, running: false, ...lineage });
+    const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "claude", instances: [
+      row("boss"), row("kid", { parentInstance: "boss" }), row("peer", { siblingInstance: "boss" }), row("peer2", { siblingInstance: "peer" })] }] } };
+    const made = { instance: "dev-new", agent: "dev", home: "/w/agents/dev/instances/dev-new", work: "checkout", harness: "claude", launched: false };
+    const preview = { spawnPreviewApi: 2, preview: true, agent: "dev", kind: "persistent", instance: "dev-new", home: "/w/agents/dev/instances/dev-new", work: "checkout", harness: "claude", modelSource: "harness default", decision: { revision: "r1" } };
     const remote = (features) => {
       const sent = [];
       const exec = (bin, argv) => {
@@ -1035,22 +1038,57 @@ test("routed spawn --same-work (#1577) needs the host's instance-same-work: refu
       };
       return { sent, exec, spawned: () => sent.filter((w) => w.includes(" spawn ")) };
     };
-    const apply = ["dev", "--purpose", "kid", "--parent", "boss", "--same-work"];
-    for (const args of [apply, [...apply, "--preview"]]) {
-      const old = remote(["spawn-preview-2"]);
-      assert.throws(() => routeCommand("build", "spawn", args, { server, execFileSync: old.exec }),
-        (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.68.1 at h does not advertise instance-same-work; upgrade it there; nothing was sent", args.join(" "));
-      assert.deepEqual(old.spawned(), [], `${args.join(" ")}: nothing was sent`);
+    const route = (features, args) => {
+      rmSync(REMOTE_SNAPSHOT_DIR(), { recursive: true, force: true });
+      const host = remote(features);
+      return { host, run: () => routeCommand("build", "spawn", args, { server, execFileSync: host.exec }) };
+    };
+    let flag;
+    const spawnArgs = (relation) => ["dev", "--purpose", "new", ...relation, flag];
+    const PARENT = [["--parent", "boss"], ["--relation", "child", "--relative-to", "boss"], ["--relation", "sibling", "--relative-to", "kid"], ["--relation", "parent", "--relative-to", "kid"], ["--work", "attached", "--work-dir", "/w/agents/dev/instances/boss/work"]];
+    const SIBLING = [["--relation", "sibling", "--relative-to", "boss"], ["--relation", "sibling", "--relative-to", "peer"], ["--relation", "parent", "--relative-to", "peer2"]];
+    // The deprecated alias --same-work routes as --related-work does: the host is sent the spelling it takes.
+    for (const [spelling, preview] of [["--related-work", false], ["--related-work", true], ["--same-work", false], ["--same-work", true]]) {
+      flag = spelling;
+      const tail = preview ? ["--preview"] : [];
+      // A host that advertises neither feature refuses the flag, as it refused --same-work before.
+      for (const relation of [...PARENT, ...SIBLING]) {
+        const { host, run } = route(["spawn-preview-2"], [...spawnArgs(relation), ...tail]);
+        assert.throws(run, (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.68.1 at h does not advertise instance-related-work; upgrade it there; nothing was sent", relation.join(" "));
+        assert.deepEqual(host.spawned(), [], `${relation.join(" ")}: nothing was sent`);
+      }
+      // A host with instance-related-work takes the flag as given, for either binding.
+      for (const relation of [...PARENT, ...SIBLING]) {
+        const { host, run } = route(["spawn-preview-2", "instance-related-work", "instance-same-work"], [...spawnArgs(relation), ...tail]);
+        run();
+        assert.equal(host.spawned().length, 1, relation.join(" "));
+        assert.ok(host.spawned()[0].includes(` ${relation.join(" ")} --related-work `), host.spawned()[0]);
+        assert.doesNotMatch(host.spawned()[0], /--same-work/);
+      }
+      // A host with only instance-same-work: a parent binding by its old spelling, and nothing else changed.
+      for (const relation of PARENT) {
+        const { host, run } = route(["spawn-preview-2", "instance-same-work"], [...spawnArgs(relation), ...tail]);
+        run();
+        assert.equal(host.spawned().length, 1, relation.join(" "));
+        assert.ok(host.spawned()[0].includes(` spawn dev --purpose new ${relation.join(" ")} --same-work ${preview ? "--preview " : ""}--dir /w --json`), host.spawned()[0]);
+        assert.doesNotMatch(host.spawned()[0], /--related-work/);
+      }
+      // ... and a sibling binding refused there, naming the host and the feature it lacks; never dropped.
+      for (const relation of SIBLING) {
+        const { host, run } = route(["spawn-preview-2", "instance-same-work"], [...spawnArgs(relation), ...tail]);
+        assert.throws(run, (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.68.1 at h does not advertise instance-related-work, which a sibling binding needs (its instance-same-work binds a parent only); upgrade it there; nothing was sent", relation.join(" "));
+        assert.deepEqual(host.spawned(), [], `${relation.join(" ")}: nothing was sent`);
+      }
+      // A spawn whose binding nothing here establishes (no relation): the host answers it, by the old spelling.
+      const { host, run } = route(["spawn-preview-2", "instance-same-work"], [...spawnArgs([]), ...tail]);
+      run();
+      assert.match(host.spawned()[0], / spawn dev --purpose new --same-work /);
     }
-    // Without the flag, nothing about the feature is asked.
-    const without = remote([]);
-    routeCommand("build", "spawn", ["dev", "--purpose", "kid", "--parent", "boss"], { server, execFileSync: without.exec });
+    // Without the flag, nothing about either feature is asked.
+    const { host: without, run } = route([], ["dev", "--purpose", "new", "--parent", "boss"]);
+    run();
     assert.equal(without.spawned().length, 1);
-    rmSync(REMOTE_SNAPSHOT_DIR(), { recursive: true, force: true });
-    const current = remote(["spawn-preview-2", "instance-same-work"]);
-    routeCommand("build", "spawn", apply, { server, execFileSync: current.exec });
-    assert.equal(current.spawned().length, 1);
-    assert.match(current.spawned()[0], / spawn dev --purpose kid --parent boss --same-work --dir \/w --json$/);
+    assert.doesNotMatch(without.spawned()[0], /--(?:related|same)-work/);
   } finally {
     if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
     rmSync(base, { recursive: true, force: true });
