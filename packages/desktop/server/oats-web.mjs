@@ -59,7 +59,7 @@
 import { launchEnvironment } from "../../client/own-environment.mjs";
 import { createServer } from "node:http";
 import { execFile, spawn } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, chmodSync, realpathSync, accessSync, constants as fsConstants } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, chmodSync, realpathSync, accessSync, openSync, fstatSync, readSync, closeSync, constants as fsConstants } from "node:fs";
 import { StartupRefusal, readSecretFd, readSecretFile, checkSocketParent, bearerBytes, bearerMatches, sameFile, carriesSecret, CREDENTIAL_IN_REPLY, UNAUTHORIZED } from "./request-checks.mjs";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -1000,9 +1000,7 @@ function canonicalInside(path, parent) {
   } catch { return null; }
 }
 function containedIn(base) {
-  let real;
-  try { real = realpathSync(base); } catch { return () => false; }
-  return (file) => { try { const target = realpathSync(file); return target === real || target.startsWith(real + sep); } catch { return false; } };
+  try { return [realpathSync(base)]; } catch { return []; }
 }
 function listSkills(dir, contained) {
   // skills live as <dir>/<skill>/SKILL.md with `name`/`description` frontmatter
@@ -1019,11 +1017,9 @@ function listSkills(dir, contained) {
 function skillEntry(skillDir, contained) {
   const p = join(skillDir, "SKILL.md");
   if (!existsSync(p)) return null;
-  // A nested SKILL.md symlink can escape its owning tree even when the tree
-  // dir itself is contained — reject per file.
-  if (contained && !contained(p)) return null;
-  let meta = {};
-  try { if (!sameFile(statSync(p), TOKEN_FILE)) meta = skillFrontmatter(readFileSync(p, "utf8")); } catch { /* unreadable skill */ }
+  const read = readContainedFile(p, contained || [], { maxBytes: FILE_MAX_BYTES, tokenFile: TOKEN_FILE });
+  if (read.error === "path outside allowed roots" || read.code === 404) return null;
+  const meta = read.buf ? skillFrontmatter(read.buf.toString("utf8")) : {};
   return { name: meta.name || basename(skillDir), path: p, description: String(meta.description || "").trim() };
 }
 function mdTree(dir) {
@@ -1120,12 +1116,54 @@ function brainData(agentName, wsId) {
 function underRoot(realPath, realRoot) {
   return realPath === realRoot || realPath.startsWith(realRoot.endsWith(sep) ? realRoot : realRoot + sep);
 }
-function resolveGuardedFile(requested, allowedRoots) {
+function resolveGuardedFile(requested, allowedRoots, io = { realpathSync }) {
   if (typeof requested !== "string" || !requested.startsWith("/")) return { error: "path must be absolute", code: 400 };
   let real;
-  try { real = realpathSync(resolve(requested)); } catch { return { error: "no such file", code: 404 }; }
+  try { real = io.realpathSync(resolve(requested)); } catch { return { error: "no such file", code: 404 }; }
   if (!allowedRoots.some((root) => underRoot(real, root))) return { error: "path outside allowed roots", code: 403 };
   return { real };
+}
+/** Read only the opened regular file whose identity matches the contained path.
+ * Roots are admission-time canonical strings; all content reads are bounded. */
+function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null,
+  io = { openSync, fstatSync, realpathSync, statSync, readSync, closeSync } } = {}) {
+  if (typeof requested !== "string" || !requested.startsWith("/")) return { error: "path must be absolute", code: 400 };
+  const missing = { error: "no such file", code: 404 };
+  const outside = { error: "path outside allowed roots", code: 403 };
+  const notFile = { error: "not a regular file", code: 400 };
+  const flags = fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK;
+  let fd;
+  try {
+    try {
+      try { fd = io.openSync(requested, flags); }
+      catch (e) {
+        if (e.code === "ELOOP") {
+          const g = resolveGuardedFile(requested, allowedRoots, io);
+          if (g.error) return g;
+          fd = io.openSync(g.real, flags);
+        } else if (["ENXIO", "ENODEV", "EISDIR"].includes(e.code)) return notFile;
+        else return missing;
+      }
+      const st = io.fstatSync(fd);
+      const g = resolveGuardedFile(requested, allowedRoots, io);
+      if (g.error) return g;
+      if (!sameFile(st, io.statSync(g.real))) return outside;
+      if (sameFile(st, tokenFile)) return { error: "forbidden", code: 403 };
+      if (!st.isFile()) return notFile;
+      if (st.size > maxBytes) return { error: `file too large (${st.size} bytes)`, code: 413 };
+      const buf = Buffer.alloc(maxBytes + 1);
+      let size = 0;
+      while (size < buf.length) {
+        const n = io.readSync(fd, buf, size, buf.length - size, null);
+        if (n === 0) break;
+        size += n;
+      }
+      if (size > maxBytes) return { error: `file too large (${size} bytes)`, code: 413 };
+      return { real: g.real, st, buf: buf.subarray(0, size) };
+    } finally {
+      if (fd !== undefined) io.closeSync(fd);
+    }
+  } catch { return missing; }
 }
 /* OATSWEB_FILEGUARD_END */
 
@@ -1168,17 +1206,13 @@ function fileRoots() {
 }
 
 function fileData(requested) {
-  const g = resolveGuardedFile(requested, fileRoots());
+  const g = readContainedFile(requested, fileRoots(), { maxBytes: FILE_MAX_BYTES, tokenFile: TOKEN_FILE });
   if (g.error) return g;
-  const st = statSync(g.real);
-  if (sameFile(st, TOKEN_FILE)) return { error: "forbidden", code: 403 };
-  if (!st.isFile()) return { error: "not a regular file", code: 400 };
-  if (st.size > FILE_MAX_BYTES) return { error: `file too large (${st.size} bytes)`, code: 413 };
-  const buf = readFileSync(g.real);
+  const { st, buf } = g;
   if (buf.includes(0)) return { error: "binary file", code: 415 };
   return {
     body: {
-      path: g.real, name: basename(g.real), size: st.size, mtime: st.mtime.toISOString(),
+      path: g.real, name: basename(g.real), size: buf.length, mtime: st.mtime.toISOString(),
       markdown: MARKDOWN_EXT.has(extname(g.real).toLowerCase()),
       content: buf.toString("utf8"),
     },

@@ -6,7 +6,7 @@ CLI command asks the Desktop to open a file.
 
 ## Reading a file: `GET /api/file?path=<absolute>`
 
-`server/oats-web.mjs` (`fileData`, `resolveGuardedFile`, `fileRoots`). The server-wide credential check
+`server/oats-web.mjs` (`fileData`, `readContainedFile`, `resolveGuardedFile`, `fileRoots`). The server-wide credential check
 and Host guard apply (loopback only). A GET carries no Origin check, so the guards below are what keep it narrow.
 The `--token-file` a server started by hand reads its credential from is never served, by any path
 that names it (a link, a hard link): 403 with no content. Nor is any file that holds the credential (a
@@ -31,18 +31,24 @@ A remote (server-routed) instance grants no local roots.
 - **the roots are never re-resolved at use.** Re-resolving them would reopen the
   admission-to-use race: a directory swapped for a symlink between admission and the check.
 
-**The read** (`fileData`):
+**The read** (`readContainedFile`, shared by `fileData` and brain skill frontmatter):
+- the server opens read-only without following the final link or waiting on a FIFO. A final
+  symlink is resolved and opened with the same flags, preserving in-root links;
+- the descriptor's identity must match the canonical, contained path before any content is read;
 - a non-regular file is 400;
-- larger than 2 MiB is 413;
+- metadata and credential-file checks use the opened descriptor;
+- reads take at most 2 MiB plus one byte; larger than 2 MiB is 413;
 - containing a NUL byte ("binary") is 415.
 
 The answer is `{path (canonical), name, size, mtime, markdown, content}`. `markdown` is true for
-`.md`, `.markdown`, `.mdown` and `.mkd`.
+`.md`, `.markdown`, `.mdown` and `.mkd`. `size` is the number of bytes read; `mtime` comes
+from the opened descriptor. Every read closes its descriptor, including refusals.
 
 The route is **not workspace-pinned**: a `ws` query does not narrow the allowed roots.
 
 The guard block is extracted between the `OATSWEB_FILEGUARD` markers and exercised by the repo
-root's `test/desktop-server.test.mjs`.
+root's `test/desktop-server.test.mjs`. `packages/desktop/test/contained-file.test.mjs` covers
+descriptor identity, bounded reads and cleanup on macOS and Linux.
 
 ## Rendering: `renderer/views/markdown.mjs`
 
