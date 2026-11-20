@@ -4874,8 +4874,10 @@ oats instance attention [--message=<text>] [--clear] --json
   `producer` the caller's `--producer`. The board's claim (producer
   `oats.board`, [The agent's board](#the-agents-board-oats-instance-board))
   also carries `session`, the id of the session it was set in. A row with a
-  `session` counts only while that is still the current session; no verb
-  sets one.
+  `session` counts only while that is still the current session, and only
+  where the read proves it: a session boundary is in the rows read, or the
+  log was read whole (not cut to its last 4 MiB). No verb sets one; a row
+  without `session` counts as before.
 - **`waiting`.** `--producer` matches `^[a-z0-9][a-z0-9._/-]{0,63}$` and is
   not `kernel`. `set` needs `--reason`, one of `permission`, `question`,
   `attention` (closed). `clear` refuses `--reason` and `--message`. The home

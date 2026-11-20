@@ -27,7 +27,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { v2Deployment, CLI } from "./helpers/v2-deployment.mjs";
 import { BOARD_FILE, ROW_MAX, askBoardQuestion, boardRow, readBoardDocument, readBoardRow, readRemoteBoard, setBoardFact } from "../lib/instance-board.mjs";
-import { appendEvent, readEvents, waitingHold } from "../lib/instance-events.mjs";
+import { appendEvent, liveSession, readEvents, waitingHold } from "../lib/instance-events.mjs";
 import { disposableHomeRootProblem } from "../lib/capability-contract.mjs";
 import { KERNEL_HOME_RECEIPTS } from "../lib/core.mjs";
 
@@ -404,4 +404,23 @@ test("two session boundaries of one millisecond are two sessions: the earlier on
   await fx.inEnv(() => setBoardFact(home, { key: "pr", label: "Pull request", value: "#1" }));
   assert.equal(readEvents(home).waitingOnYou, null, "a later fact write sets no claim for the ended question");
   assert.deepEqual(readBoardRow(home).questions, []);
+});
+
+test("a claim bound to the first session counts only where the read proves that session: a boundary written during a board write, then cut out of the log's bounded read, brings no ended question's claim back", async () => {
+  const home = await freshHome();
+  // Asked before any boundary: the first session, proved by a whole read.
+  ok(agent(home, ["ask", "Old?", "--option", "a", "--option", "b"]), "a question of the first session");
+  assert.equal(readEvents(home).waitingOnYou.message, "Old?");
+  // While a fact write runs (after it read the session, before it sets the claim): a restart, then more than
+  // the read's 4 MiB of valid rows in the home log, so the boundary is no longer in its bounded read.
+  await fx.inEnv(() => setBoardFact(home, { key: "pr", label: "Pull request", value: "#1" }, { now: () => {
+    const boundary = appendEvent(home, { kind: "restarted" });
+    const line = JSON.stringify({ ...boundary.row, kind: "launch-warning", data: { message: "x".repeat(2000) } }) + "\n";
+    appendFileSync(join(home, ".oats-events.jsonl"), line.repeat(Math.ceil((4.5 * 1024 * 1024) / line.length)));
+    return new Date();
+  } }));
+  assert.deepEqual(readBoardRow(home).questions, [], "the board shows no question");
+  assert.equal(liveSession(home).sessionKnown, false);
+  assert.equal(liveSession(home).waitingOnYou, null, "the status rows' read shows no claim");
+  assert.equal(readEvents(home).waitingOnYou, null, "nor does the events read");
 });
