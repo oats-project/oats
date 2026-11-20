@@ -2496,8 +2496,8 @@ oats sandbox start|stop|reconcile <name> (--plan | --plan-revision <r> --idempot
 [{step, detail?}]}` and changes nothing. The apply answers `{sandboxApi,
 sandbox, act, state, server, receipts: [{step, ok, detail?}], problems}`;
 `reconcile` adds `seats` (as in status) and `replays` (`{spawnKey, instance,
-seat, outcome}`, outcome `replayed`, `held-<state>`, `deleted-<state>` or
-`no-ledger-entry`). An apply whose `state` is `failed` or `unknown` exits 1.
+seat, outcome}`, outcome `replayed`, `held-<state>`, `held-unlisted`,
+`deleted-<state>` or `no-ledger-entry`). An apply whose `state` is `failed` or `unknown` exits 1.
 
 - A start records the sandbox as started before its act runs; a stop
   answered `stopped` or `absent` drops it. `absent` is never a failure.
@@ -2511,7 +2511,9 @@ seat, outcome}`, outcome `replayed`, `held-<state>`, `deleted-<state>` or
 - `reconcile` runs the provider's act first, then replays each kept routed
   spawn whose seat it reports `delivered`, unchanged, with its spawn key
   (never one `minting` or `mint-uncertain`); one whose seat is `released` is
-  deleted.
+  deleted. A kept spawn for a sandbox this host no longer lists is never
+  replayed (`held-unlisted`), nor one the provider's ledger does not hold
+  (`no-ledger-entry`): readiness reports both.
 
 ### Placement on status rows, and the spawn answer
 
@@ -2534,6 +2536,7 @@ seat, outcome}`, outcome `replayed`, `held-<state>`, `deleted-<state>` or
 | `E_SANDBOX_NOT_HERE` | `not-running` | a spawn into a listed sandbox its provider does not answer `ready` |
 | `E_SANDBOX_HOST_AGENT` | `host-spawn`, `host-session`, `host-home-running`, `host-home-unreadable` | a deployment that lists a sandbox: a host-placed spawn; a session start, restart or resume of a host home (the resume sweep reports it as a refused row); a sandbox start while a host home runs or cannot be read |
 | `E_SANDBOX_PLACEMENT` | `spawn-from-host`, `not-placed-here` | inside a sandbox: a spawn without a host-delivered seat (an `identity.seat` provider option on an apply bound by `--expect-decision` and keyed), or of a soul placed elsewhere |
+| `E_SANDBOX_PLACEMENT` | `caller-bound` | on the host: a spawn into a sandbox that brings its own `--expect-decision` or `--idempotency-key` (the Desktop's apply among them). The kernel binds and keys a spawn into a sandbox itself, so nothing is minted, kept or spawned; `details: {reason, sandbox, flags, remedy}`, the remedy also ending the message. Spawn without them (`oats spawn <soul>`), or from a schedule. A `--preview` is answered as before |
 | `E_SANDBOX_TEAM` | `team-not-created` | a start of, or a spawn into, a sandbox whose team has no provider id |
 | `E_SANDBOX_CREDENTIAL` | `no-source`, `missing` | a start of a sandbox with a declared credential the local file does not give, or whose file does not exist |
 | `E_REMOTE_INCOMPATIBLE` | | a spawn into a sandbox whose kernel does not advertise `sandboxes`, `spawn-task-stdin`, `spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2` (`details.missing`) |
@@ -2543,8 +2546,8 @@ seat, outcome}`, outcome `replayed`, `held-<state>`, `deleted-<state>` or
 
 `oats readiness` lists them under `checks.configured` with `producer:
 "sandboxes"`, `status: "fail"`, `required: false`, `code`, `reason` and
-`remedy`, in a deployment whose workspace declares a sandbox or whose local
-file lists one. They refuse nothing, and readiness exits 0.
+`remedy`, in a deployment whose workspace declares a sandbox, whose local
+file lists one, or that still keeps a routed request. They refuse nothing, and readiness exits 0.
 
 | Code | When |
 |---|---|
@@ -2554,7 +2557,7 @@ file lists one. They refuse nothing, and readiness exits 0.
 | `sandbox-provider-missing` | no composed capability declares the `sandbox` hook, or two do |
 | `sandbox-ssh-include-missing` | the provider's `status` problem: the SSH `Include` of its file is missing (its remedy, unchanged) |
 | `sandbox-state-orphaned` | the provider's `status` problem: its state for a listed sandbox is under another deployment key |
-| `sandbox-seat-unsettled` | a `mint-uncertain` seat; a `delivered` seat with no kept request; or a `delivered` seat whose last replay answered `E_IDEMPOTENCY_CONFLICT` or `E_SPAWN_INCOMPLETE` |
+| `sandbox-seat-unsettled` | a `mint-uncertain` seat; a `delivered` seat with no kept request; a `delivered` seat whose last replay answered `E_IDEMPOTENCY_CONFLICT` or `E_SPAWN_INCOMPLETE`; a kept routed request whose seat the provider's ledger does not hold; or a kept request for a sandbox this host no longer lists (also once the workspace no longer declares it), named by its spawn key |
 | `sandbox-pending-stale` | a kept routed request older than 24 hours, named by its spawn key and never its task |
 
 ## Launch preferences

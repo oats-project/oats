@@ -9,7 +9,9 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileS
 import { join } from "node:path";
 import { sandboxDeployment } from "./helpers/sandbox-fixture.mjs";
 import { FAKE_SEAT_CAPABILITY } from "./helpers/fake-sandbox-provider.mjs";
-import { rowFromStart } from "../lib/session-resume.mjs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { OUTCOME, SESSION_END } from "../lib/session-resume-contract.mjs";
+import { waitUntil } from "./helpers/host-fixture.mjs";
 
 const doc = (r) => r.json();
 const ok = (r, what) => { assert.equal(r.status, 0, `${what}: ${r.stderr}${r.stdout}`); const d = doc(r); assert.equal(d.ok, true, what); return d.result; };
@@ -75,10 +77,38 @@ test("E_SANDBOX_HOST_AGENT: a host spawn, and a session start, restart or resume
     assert.match(e.message, /remove sandboxes:/);
   }
   assert.equal(existsSync(join(home, ".oats-start.lock")), false, "the start took nothing");
-  // The resume sweep runs exactly that start, and reports its refusal as a refused row.
-  const row = rowFromStart({ home, instance: "dev-before", deployment: fx.dep }, { schemaVersion: 1, ok: false, error: { code: "E_SANDBOX_HOST_AGENT", message: "refused", details: { reason: "host-session" } } });
-  assert.equal(row.outcome, "refused");
-  assert.equal(row.code, "E_SANDBOX_HOST_AGENT");
+});
+
+const HAS_TMUX = !spawnSync("tmux", ["-V"], { stdio: "ignore" }).error;
+test("E_SANDBOX_HOST_AGENT: the resume sweep starts no lost host home in a deployment that lists a sandbox; it reports the refusal as a refused row", { skip: !HAS_TMUX && "tmux is not installed" }, async (t) => {
+  // On real tmux (the fixture's own server): a host home launched with a stand-in harness that records
+  // each start, seen running, then lost (its window killed by hand); then this deployment lists a sandbox.
+  const fx = sandboxDeployment({ t });
+  const records = join(fx.base, "launches");
+  mkdirSync(records);
+  const executable = join(fx.base, "harness-stand-in");
+  writeFileSync(executable, `#!/bin/sh\necho "$$" > '${records}'/"$OATS_INSTANCE.$(date +%s%N).$$"\nexec sleep 600\n`, { mode: 0o755 });
+  const launchConfigs = { "launch-configs": { "stand-in": { harness: "pi", executable } } };
+  hostLocal(fx, launchConfigs);
+  ok(fx.cliS(["sync", "--json"]), "sync");
+  const launches = () => readdirSync(records).length;
+  const row = () => JSON.parse(fx.cli(["status", "--json"]).stdout).agents.flatMap((a) => a.instances).find((i) => i.instance === "dev-lost");
+  // The spawn is the kernel's CLI, a child with the fixture's environment.
+  const made = ok(fx.cliS(["spawn", "dev", "--name", "dev-lost", "--launch-config", "stand-in", "--json"]), "a launched host home");
+  await waitUntil(() => launches() === 1, "the harness to start", 30000);
+  await waitUntil(() => row()?.running === true, "dev-lost to read as running", 30000);
+  const { tmux } = JSON.parse(readFileSync(join(made.home, "instance.json"), "utf8"));
+  execFileSync("tmux", ["-u", "-S", tmux.socket, "kill-window", "-t", `=${tmux.session}:=${tmux.window}`], { stdio: "ignore" });
+  await waitUntil(() => row()?.sessionEnd === SESSION_END.LOST, "dev-lost to read as lost", 30000);
+  hostLocal(fx, { ...launchConfigs, sandboxes: ["ingest"], credentials: { "sources-read": { fromFile: fx.credential } } });
+  const sweep = fx.cliS(["session", "resume", "--deployment", fx.dep, "--json"]).json();
+  assert.equal(sweep.ok, true, JSON.stringify(sweep));
+  const refusedRow = sweep.result.rows.find((r) => r.home === made.home);
+  assert.ok(refusedRow, JSON.stringify(sweep.result.rows));
+  assert.equal(refusedRow.outcome, OUTCOME.REFUSED, JSON.stringify(refusedRow));
+  assert.equal(refusedRow.code, "E_SANDBOX_HOST_AGENT", JSON.stringify(refusedRow));
+  assert.equal(launches(), 1, "the sweep started nothing on the host");
+  assert.equal(row()?.sessionEnd, SESSION_END.LOST, "the home is still lost");
 });
 
 test("E_SANDBOX_HOST_AGENT: a sandbox start while a host home runs, or while one cannot be read", async (t) => {

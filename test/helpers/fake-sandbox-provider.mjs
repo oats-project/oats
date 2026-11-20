@@ -67,10 +67,12 @@ process.stdout.write(JSON.stringify({ sandboxApi: 1, act, receipts: [], ...entry
 
 /** The capabilities a fixture composes for the fake: the provider (its `sandbox` hook) and the seat
  *  capability its seat plan names. Settings: `region` (a default the workspace and the host override). */
-export function fakeSandboxCapabilities({ name = FAKE_SANDBOX_CAPABILITY } = {}) {
+export function fakeSandboxCapabilities({ name = FAKE_SANDBOX_CAPABILITY, layer = null } = {}) {
   return {
     [name]: {
       manifest: {
+        // `layer`: a provider that fills a slot (messaging or tasks) also takes the workspace's payload.
+        ...(layer ? { layer } : {}),
         hooks: { sandbox: "sandbox.mjs" },
         settings: { region: { default: "manifest" }, tier: { default: "manifest" }, zone: { default: "manifest" } },
       },

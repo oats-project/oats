@@ -14,6 +14,26 @@ const ok = (r, what) => { assert.equal(r.status, 0, `${what}: ${r.stderr}${r.std
 const refused = (r, code, what) => { assert.notEqual(r.status, 0, `${what}: exit`); const d = r.json(); assert.equal(d.ok, false, `${what}: ${r.stdout}`); assert.equal(d.error.code, code, `${what}: ${d.error.message}`); return d.error; };
 const acts = (fx) => fx.sandbox.calls().map((c) => (c.act === "plan" ? `plan:${c.request.target}` : c.act));
 
+test("the provider's settings merge manifest → workspace → host, when it fills a slot (the workspace's payload is a slot's)", (t) => {
+  const name = "fixture.tasks-sandbox";
+  const fx = sandboxDeployment({ t, capabilities: fakeSandboxCapabilities({ name, layer: "tasks" }) });
+  fx.commitWorkspace(fx.workspace({
+    defaults: { knowledge: "none", messaging: "none", tasks: { [name]: { from: fx.key } }, capabilities: { "fixture.sandbox": "off" } },
+    tasks: { tier: "workspace", zone: "workspace" },
+  }));
+  fx.writeLocal({ host: { name: "cloud-1" }, sandboxes: ["ingest"], credentials: { "sources-read": { fromFile: fx.credential } }, settings: { [name]: { zone: "host" } } });
+  ok(fx.cliS(["sync", "--json"]), "sync");
+  fx.sandbox.reset();
+  ok(fx.cliS(["sandbox", "status", "--json"]), "status");
+  const [call] = fx.sandbox.calls();
+  assert.equal(call.env.OATS_CAPABILITY, name);
+  assert.equal(call.env.OATS_LAYER, "tasks");
+  assert.deepEqual(JSON.parse(call.env.OATS_SETTINGS), { region: "manifest", tier: "workspace", zone: "host" });
+  const origins = JSON.parse(call.env.OATS_SETTINGS_ORIGINS);
+  assert.deepEqual([origins["/region"].kind, origins["/tier"].kind, origins["/zone"].kind], ["manifest-default", "workspace", "host"]);
+  assert.equal(origins["/tier"].at, "oats-workspace.yaml#/tasks");
+});
+
 test("provider selection: none composed is E_SANDBOX_PROVIDER none; two are ambiguous, naming both; settings merge manifest → host", (t) => {
   const fx = sandboxDeployment({ t, capabilities: fakeSandboxCapabilities({ name: "fixture.other" }) });
   ok(fx.cliS(["sync", "--json"]), "sync");

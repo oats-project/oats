@@ -210,3 +210,164 @@ test("a listed sandbox its provider does not answer ready is E_SANDBOX_NOT_HERE 
   fx.commitWorkspace(fx.workspace({ teams: { global: { description: "Fixture team" }, "ingest-team": {} } }));
   await assert.rejects(fx.spawnInto(fakeHost(fx)), (e) => e.code === "E_SANDBOX_TEAM" && e.details.reason === "team-not-created");
 });
+
+// D-S1-4: a spawn into a sandbox is bound and keyed by the kernel (steps 1–5); a caller's own
+// `--expect-decision` or `--idempotency-key` is refused before any provider act, kept file or seat.
+test("D-S1-4: a caller-bound apply, with a key, without one, or a key alone, is E_SANDBOX_PLACEMENT caller-bound; nothing is minted or kept; the unbound spawn goes through", async (t) => {
+  const fx = await routed(t);
+  const base = ["ingester", "--purpose", "a", "--no-launch"];
+  for (const [what, extra] of [
+    ["bound with a key", ["--expect-decision", D, "--idempotency-key", "caller-key"]],
+    ["bound without a key", ["--expect-decision", D]],
+    ["a key alone", ["--idempotency-key", "caller-key"]],
+  ]) {
+    const host = fakeHost(fx);
+    await assert.rejects(fx.spawnInto(host, { args: [...base, ...extra] }), (e) => {
+      assert.equal(e.code, "E_SANDBOX_PLACEMENT", `${what}: ${e.message}`);
+      assert.equal(e.details.reason, "caller-bound", what);
+      assert.equal(e.details.sandbox, "ingest", what);
+      assert.equal(e.details.remedy, "Spawn it with `oats spawn ingester` (OATS binds it to the sandbox itself) or from a schedule; the Desktop can't spawn into a sandbox yet.", what);
+      assert.ok(e.message.endsWith(e.details.remedy), `${what}: the message carries the remedy`);
+      return true;
+    });
+    assert.deepEqual(acts(fx), [], `${what}: no provider act (no status, plan, seat)`);
+    assert.deepEqual(host.calls, [], `${what}: nothing is sent to the sandbox`);
+    assert.deepEqual(fx.kept(), [], `${what}: nothing is kept`);
+  }
+  // The same soul, unbound: the kernel binds and keys it, with one flag pair, its own.
+  const host = fakeHost(fx);
+  const out = await fx.spawnInto(host, { args: base });
+  assert.equal(out.envelope.ok, true, JSON.stringify(out.envelope));
+  assert.deepEqual(acts(fx), ["status", "plan:seat", "seat", "plan:bind", "bind"]);
+  const apply = host.calls.find((c) => !c.preview);
+  const spawnKey = fx.sandbox.calls()[1].request.instance.spawnKey;
+  assert.equal(apply.command.split("--expect-decision").length, 2, apply.command);
+  assert.equal(apply.command.split("--idempotency-key").length, 2, apply.command);
+  assert.ok(apply.command.includes(`--expect-decision ${D} --idempotency-key ${spawnKey}`), apply.command);
+});
+
+/** A fake `ssh` on PATH that answers as a sandbox's kernel would (the probe, the roster, the preview, the
+ *  apply), logging each remote command, for a test that runs the real CLI end to end. */
+function sshAsSandboxKernel(dir) {
+  const bin = join(dir, "ssh-bin");
+  mkdirSync(bin, { recursive: true });
+  const log = join(dir, "ssh-commands.log");
+  const probe = { schemaVersion: 1, name: "@awebai/oats", version: "0.70.0", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status", "retire"], features: FEATURES };
+  const status = { schemaVersion: 1, ok: true, result: { root: "/sbx/agents", agents: [{ name: "ingester", harness: "pi", instances: [] }] } };
+  const preview = { schemaVersion: 1, ok: true, result: { spawnPreviewApi: 2, preview: true, agent: "ingester", instance: "ingester-a", home: "/sbx/agents/ingester/instances/ingester-a", decision: { instance: "ingester-a", revision: D } } };
+  const applied = { schemaVersion: 1, ok: true, result: { instance: "ingester-a", agent: "ingester", home: "/sbx/agents/ingester/instances/ingester-a", launched: false, warnings: [], decision: { instance: "ingester-a", revision: D }, replayed: false, capabilityMeta: { "fixture.seat": { seat: "seat" } } } };
+  writeFileSync(join(bin, "ssh"), `#!${process.execPath}
+const fs = require("node:fs");
+const command = String(process.argv.at(-1));
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(command) + "\\n");
+const answer = command.includes("version --json") ? ${JSON.stringify(probe)}
+  : command.includes(" status ") ? ${JSON.stringify(status)}
+  : command.includes(" spawn ") ? (command.includes("--preview") ? ${JSON.stringify(preview)} : ${JSON.stringify(applied)})
+  : null;
+if (!answer) { process.stderr.write("unexpected remote call\\n"); process.exit(255); }
+process.stdin.resume(); process.stdin.on("end", () => { process.stdout.write(JSON.stringify(answer)); });
+`, { mode: 0o755 });
+  return { PATH: `${bin}:${process.env.PATH}`, commands: () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []) };
+}
+
+test("D-S1-4: a schedule tick of a sandboxed soul takes the unbound path: the kernel binds and keys it, through the seven steps", async (t) => {
+  // The schedule is added while ingester runs on the host (a deployment that lists no sandbox); then the
+  // workspace places it in the sandbox, and this deployment lists it.
+  const fx = sandboxDeployment({ t, workspace: { souls: { "ws/ingester": {} } } });
+  fx.writeLocal({ host: { name: "cloud-1" } });
+  assert.equal(fx.cliS(["sync", "--json"]).status, 0);
+  const add = fx.cliS(["schedule", "add", "ingest-daily", "--spec-json", JSON.stringify({ kind: "spawn", cron: "0 6 * * *", tz: "UTC", agent: "ingester", task: `Ingest.\n${SENTINEL}` }), "--json"]);
+  assert.equal(add.status, 0, add.stdout);
+  fx.commitWorkspace(fx.workspace({ souls: { "ws/ingester": { default: "ingest-team" } } }));
+  fx.writeLocal({ host: { name: "cloud-1" }, sandboxes: ["ingest"], credentials: { "sources-read": { fromFile: fx.credential } } });
+  assert.equal(fx.cliS(["sync", "--json"]).status, 0);
+  mkdirSync(fx.env.OATS_HOME_DIR, { recursive: true });
+  writeFileSync(join(fx.env.OATS_HOME_DIR, "servers.json"), JSON.stringify({ schemaVersion: 1, servers: { "sandbox-ingest": { sshHost: "sandbox-ingest", workspace: "/sbx" } } }));
+  const ssh = sshAsSandboxKernel(fx.base);
+  fx.sandbox.reset();
+  const run = fx.cliS(["schedule", "run", "ingest-daily", "--json"], { PATH: ssh.PATH });
+  assert.equal(run.stdout.includes("caller-bound"), false, run.stdout);
+  assert.equal(run.status, 0, run.stdout);
+  assert.deepEqual(acts(fx), ["status", "plan:seat", "seat", "plan:bind", "bind"]);
+  const spawns = ssh.commands().filter((c) => c.includes(" spawn "));
+  assert.equal(spawns.length, 2, spawns.join("\n"));
+  const spawnKey = fx.sandbox.calls()[1].request.instance.spawnKey;
+  assert.ok(spawns[0].includes("--preview"), spawns[0]);
+  assert.ok(spawns[1].includes(`--expect-decision ${D} --idempotency-key ${spawnKey}`), spawns[1]);
+  assert.equal(spawns[1].split("--expect-decision").length, 2, "one decision, the kernel's own");
+  for (const c of spawns) assert.equal(c.includes(SENTINEL), false, "the task is on no command line");
+});
+
+/** A kept request left by a spawn whose apply came back with no answer; → its spawn key and seat ID. */
+async function keptByLostAnswer(fx) {
+  fx.sandbox.set({ bind: { state: "ready", seat: { id: "s", certificateId: "c", state: "delivered" } } });
+  await assert.rejects(fx.spawnInto(fakeHost(fx, { apply: "no-answer" })), (e) => e.code === "E_SSH");
+  const spawnKey = fx.sandbox.calls().find((x) => x.act === "plan" && x.request.target === "seat").request.instance.spawnKey;
+  assert.deepEqual(fx.kept(), [`${spawnKey}.json`]);
+  fx.sandbox.reset();
+  return { spawnKey, seatId: `seat-${spawnKey.slice(0, 8)}` };
+}
+const readinessItems = (fx) => {
+  const r = fx.cliS(["readiness", "--soul", "dev", "--json"], { FAKE_SANDBOX_PENDING: fx.pendingDir });
+  assert.equal(r.status, 0, r.stdout);
+  return r.json().result.checks.configured.items.filter((i) => i.producer === "sandboxes");
+};
+
+test("an explicit reconcile of a sandbox this host no longer lists replays nothing, even for a delivered seat: held-unlisted", async (t) => {
+  const fx = await routed(t);
+  const { spawnKey, seatId } = await keptByLostAnswer(fx);
+  fx.sandbox.set({ reconcile: { state: "ready", server: "sandbox-ingest", seats: [{ seatId, state: "delivered" }] } });
+  // Delisted here; the workspace still declares it.
+  fx.writeLocal({ host: { name: "cloud-1" } });
+  const host = fakeHost(fx);
+  const answer = await fx.withKernel((sb, ctx) => sb.reconcileSandbox(ctx, "ingest", { planRevision: "r", idempotencyKey: "k", io: host.io }));
+  assert.deepEqual(answer.replays, [{ spawnKey, instance: "ingester-a", seat: seatId, outcome: "held-unlisted" }]);
+  assert.deepEqual(host.calls, [], "no apply is sent");
+  assert.deepEqual(acts(fx), ["reconcile"], "the provider settles first; no bind");
+  assert.deepEqual(fx.kept(), [`${spawnKey}.json`], "kept, and reported");
+  const items = readinessItems(fx);
+  assert.ok(items.some((i) => i.code === "sandbox-seat-unsettled" && i.evidence.spawnKey === spawnKey && i.reason.includes("no longer lists")), JSON.stringify(items));
+});
+
+test("readiness reports a kept request whose seat the ledger does not hold, and one whose sandbox is declared and listed nowhere; never its task", async (t) => {
+  const fx = await routed(t);
+  const { spawnKey } = await keptByLostAnswer(fx);
+  // Listed, ready, and a ledger with no entry for the kept seat.
+  fx.sandbox.set({ status: { state: "ready", server: "sandbox-ingest", seats: [] } });
+  let items = readinessItems(fx);
+  const orphan = items.find((i) => i.code === "sandbox-seat-unsettled" && i.evidence.spawnKey === spawnKey);
+  assert.ok(orphan && orphan.reason.includes("no entry"), JSON.stringify(items));
+  // The sandbox removed from the workspace and from this deployment's local file: still reported.
+  fx.commitWorkspace(fx.workspace({ sandboxes: undefined }));
+  fx.writeLocal({ host: { name: "cloud-1" } });
+  const r = fx.cliS(["readiness", "--soul", "dev", "--json"], { FAKE_SANDBOX_PENDING: fx.pendingDir });
+  assert.equal(r.status, 0, r.stdout);
+  assert.equal(r.stdout.includes(SENTINEL), false, "readiness never shows the task");
+  items = r.json().result.checks.configured.items.filter((i) => i.producer === "sandboxes");
+  assert.ok(items.some((i) => i.code === "sandbox-seat-unsettled" && i.evidence.spawnKey === spawnKey), JSON.stringify(items));
+  // Older than 24 hours: stale too.
+  const later = fx.cliS(["readiness", "--soul", "dev", "--json"], { OATS_TEST_NOW_MS: String(Date.now() + 25 * 60 * 60 * 1000), FAKE_SANDBOX_PENDING: fx.pendingDir });
+  assert.ok(later.json().result.checks.configured.items.some((i) => i.code === "sandbox-pending-stale" && i.evidence.spawnKey === spawnKey), later.stdout);
+  assert.deepEqual(fx.kept(), [`${spawnKey}.json`], "never discarded");
+});
+
+test("a self-retire inside the sandbox, then an otherwise no-op sync: the sync still calls reconcile, which reports the seat released; nothing starts, stops or is replayed", async (t) => {
+  // The record's pinned test, kernel side: a home that retires itself inside the sandbox tells the host
+  // nothing; the host's next sync, with nothing else to do, still asks the provider to reconcile.
+  const fx = await routed(t);
+  const out = await fx.spawnInto(fakeHost(fx));
+  assert.equal(out.envelope.ok, true);
+  const spawnKey = fx.sandbox.calls().find((x) => x.act === "plan" && x.request.target === "seat").request.instance.spawnKey;
+  const seatId = `seat-${spawnKey.slice(0, 8)}`;
+  assert.deepEqual(fx.kept(), [], "the seat went active: nothing kept");
+  // Inside the sandbox, ingester-a retires itself: the provider's ledger shows its seat released.
+  fx.sandbox.set({ reconcile: { state: "ready", server: "sandbox-ingest", seats: [{ seatId, instance: "ingester-a", state: "released" }] } });
+  fx.sandbox.reset();
+  const host = fakeHost(fx);
+  const pass = await fx.withKernel((sb, ctx) => sb.syncSandboxes(ctx, { io: host.io }));
+  assert.deepEqual(pass.problems, []);
+  assert.equal(pass.sandboxes[0].action, "none", "nothing else to do");
+  assert.deepEqual(acts(fx), ["status", "plan:start", "plan:reconcile", "reconcile"], "no start or stop; reconcile is still called");
+  assert.deepEqual(host.calls, [], "no replay is sent");
+  assert.deepEqual(pass.sandboxes[0].seats.map((s) => [s.seatId, s.state]), [[seatId, "released"]]);
+});

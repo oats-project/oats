@@ -35,7 +35,11 @@
   seat the provider mints and delivers, bound to the preview's decision and
   keyed; the request is kept, 0600, until its seat settles, and replayed by
   the next reconcile when no answer came back. A retire from the host releases
-  the seat.
+  the seat. The kernel binds and keys that spawn itself: a spawn into a sandbox
+  that brings its own `--expect-decision` or `--idempotency-key` is refused
+  (`E_SANDBOX_PLACEMENT`, `caller-bound`), so the Desktop cannot spawn into a
+  sandbox yet ([#2017](https://github.com/oats-project/oats/issues/2017));
+  spawn with `oats spawn <soul>` or from a schedule.
 - **A deployment that lists a sandbox runs no agent on the host**
   (`E_SANDBOX_HOST_AGENT`), and readiness reports the sandboxes' state in eight
   new items under `configured`. Server ids starting `sandbox-` are reserved
