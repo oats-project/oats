@@ -966,7 +966,9 @@ test("T12: relayed rows and routed answers for a provider home carry no session.
 
   // `oats server roster`: the host's own rows, relayed in the kernel's shapes only.
   const saved = process.env.OATS_HOME_DIR;
-  process.env.OATS_HOME_DIR = join(fx.base, "client-home");
+  // Short (`<base>/h`): it holds ssh's control socket, whose path ssh needs within 86 bytes, also
+  // under CI's per-file TMPDIR; a longer one makes the route warn that it runs without reuse.
+  process.env.OATS_HOME_DIR = join(fx.base, "h");
   t.after(() => { if (saved === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = saved; });
   writeServers({ build: { sshHost: "build-host", workspace: fx.dep } });
   const roster = await rosterGroups({ server: "build", io: { execFileAsync: async () => local.status.stdout, serverId: `build-${Date.now()}` } });

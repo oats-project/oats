@@ -7533,7 +7533,7 @@ state: "stopped"}`; `E_SESSION_STOP_FAILED` when the provider does not confirm
 (the home stays recorded as stopped; a second stop asks the provider again). A retire goes on
 only when no process works in the home after the provider's stop, confirmed
 or not: otherwise `E_RUNTIME_QUIESCE_FAILED`, naming the processes. When the
-provider could not confirm the stop, its answer carries a warning.
+provider could not confirm the stop, the retire's answer carries a warning.
 
 **Attach.** `E_SESSION_NO_TERMINAL`, `details: {backend, open}`; its message
 carries the `open` link when there is one. A client shows that link instead
