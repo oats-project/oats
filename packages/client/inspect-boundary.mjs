@@ -100,7 +100,7 @@ export function capabilityAdmission(request, { workspace, cli, agents = [], inst
     context = undefined;
     // Identity coordinates: a restarted or re-spawned seat under the same home is another subject.
     key = inspectKey({ deployment: workspace.scope, server, kind: 'home', home, instance: instance.instance,
-      identity: [instance.createdAt, instance.startedAt, instance.soul, instance.modules], board });
+      identity: [instance.createdAt, instance.startedAt, instance.soul, instance.modules] });
   } else if (selector.soul !== undefined) {
     const matches = agents.filter(a => a.name === selector.soul && a.agentsRoot === selector.agentsRoot);
     if (matches.length !== 1) fail('Select one soul and its agents root in this workspace');

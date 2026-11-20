@@ -2408,14 +2408,14 @@ loop in between. Only a read of 0 types. In a mode (tmux copy mode, where `q` is
 has no local pane to read, answers `E_TERM_MODE_UNKNOWN` (`MODE_UNKNOWN_NOTE`); either way not one character is
 written, and never a cancel. A remote row's view (`row.server`) never asks: its numbers are disabled from the start,
 with `remoteNote` (follow-up #2029: the remote kernel reporting the pane's mode would enable it). The frame and lease checks come before the read, so a document that holds no lease learns
-nothing about a pane. Not closed: a key the person presses into the scrollback during the read's few milliseconds. While
-an answer is pending (typed, no Enter yet; Ctrl+C or Ctrl+U frees it) a further press is refused (`PENDING_NOTE`).
-While the board has a question, answered on this tab or not, `sync` keeps its claim off the waiting row. The person's Enter is seen through its
+nothing about a pane. Not closed: a key the person presses into the scrollback during the read's few milliseconds. The view keeps no state about the input line: a card stays until the agent clears its
+question, and after a press the zone shows `TYPED_NOTE`, information only, which the next terminal input (`input`) or a
+changed board ends. While the board has a question, `sync` keeps its claim off the waiting row. The person's input is seen through its
 `onInput` observer. Before a number types, the view reads the claims again
 (`checkClaims`): only the latest claims read paints and may let the press type,
 and the shell's `inView` (the tab's pane active, the tab layer shown, its
 workspace current) is checked before the read, after it and at the write.
-A question's optimistic state is keyed by its occurrence (`id@since`). The
+A question's "typed" note and its context are keyed by its occurrence (`id@since`). The
 facts strip and the question zone are F6 regions (`focus-regions.mjs`, `facts`
 before `main` and `questions` after it, through the active tab's `part` and
 `focusPart`); `agent.viewFocus`, the palette's command, has no chord (Alt+T is

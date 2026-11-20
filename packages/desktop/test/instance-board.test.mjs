@@ -104,7 +104,7 @@ test('board read: inspect --home --board, admitted for a home only, sent only to
   assert.equal(capabilityAdmission({ action: 'inspect', selector: { home: instance.home }, board: true }, context([]), ['inspect']).board, false);
   assert.throws(() => capabilityAdmission({ action: 'inspect', selector: { soul: 'dev', agentsRoot: '/w/agents' }, board: true }, context([BOARD_FEATURE]), ['inspect']), /Invalid board flag/);
   assert.throws(() => capabilityAdmission({ action: 'inspect', selector: { home: instance.home }, board: 'yes' }, context([BOARD_FEATURE]), ['inspect']), /Invalid board flag/);
-  assert.notEqual(admitted.key, capabilityAdmission({ action: 'inspect', selector: { home: instance.home } }, context([BOARD_FEATURE]), ['inspect']).key, 'its own cache key');
+  // No cache key of its own: a board read never goes through the cache (inspect-boundary.mjs; agent-view.test.mjs "r4: overlapping board reads").
   let argv = null;
   const exec = (bin, args, opts, done) => { argv = args; done(null, JSON.stringify({ schemaVersion: 1, ok: true, result: {} }), ''); };
   const call = capabilityCall({ action: 'inspect' }, admitted, { workspace: { scope: '/w' }, cli: cli([BOARD_FEATURE]), localCwd: '/w' });

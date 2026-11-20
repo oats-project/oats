@@ -106,7 +106,8 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
       const claimsSig = JSON.stringify([state.board?.questions.map(q => q.id) ?? [], claim?.producer ?? null, claim?.reason ?? null, claim?.since ?? null]);
       if (state.board?.questions.length && (fresh || claimsSig !== state.claimsSig)) { state.claimsSig = claimsSig; void readClaims(state, workspace, row); }
       else if (!state.board?.questions.length) { state.claimsSig = claimsSig; state.claims = []; }
-      // While the board has a question, answered on this tab or not, its claim is the zone's, never the waiting row's.
+      // While the board has a question (its card shows until the agent clears it), its claim is the zone's, never the
+      // waiting row's.
       return boardClaim(claim) && (state.board?.questions.length ?? 0) > 0;
     },
     close,

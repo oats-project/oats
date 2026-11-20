@@ -1169,13 +1169,13 @@ option, puts `<id>: <option>` on the agent's input line, for example
 your Enter in the terminal sends it, as if you had typed it, so you see what
 goes. No bare digit is ever typed, and nothing is typed into a terminal that
 isn't on screen: a press whose terminal left the screen while the Desktop read
-the agent's claims types nothing. The card hides once you press Enter; the
-agent removes the question for real once it has read the answer.
+the agent's claims types nothing. After a press the card says, quietly, "Typed
+on the input line: press Enter in the terminal to send it." until your next
+input in the terminal or a change on the board. The Desktop doesn't guess what
+the input line holds: the card stays until the agent clears the question once
+it has read your answer, and a second press types again, as typing would.
 
-One answer goes on the line at a time: while an answer is there unsent, another
-press types nothing and the zone says "An answer is already on the input line:
-send it, or clear it first." (Enter sends it; Ctrl+C or Ctrl+U clearing the line
-frees it.) While the terminal is in its scrollback (you scrolled up with the
+While the terminal is in its scrollback (you scrolled up with the
 wheel or Shift+PgUp), nothing is typed either, because the scrollback would
 read the answer's first letter as its own key: the zone says "The terminal is
 in its scrollback: press q or scroll to the bottom, then press the number

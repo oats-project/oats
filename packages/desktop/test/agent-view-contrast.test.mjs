@@ -26,7 +26,7 @@ const TEXTS = [
   ['.agent-q-tag', '.agent-questions', 'attn-bg'], ['.agent-q-age', '.agent-questions', 'attn-bg'], ['.agent-q-text', '.agent-questions', 'attn-bg'],
   ['.agent-q-option:not(:disabled)', '.agent-q-option:not(:disabled)', 'surface'], ['.agent-q-option:not(:disabled) .agent-q-num', '.agent-q-option:not(:disabled) .agent-q-num', 'surface-2'],
   ['.agent-q-option:disabled', '.agent-q-option:disabled', 'surface'], ['.agent-q-option:disabled .agent-q-num', '.agent-q-option:disabled .agent-q-num', 'surface-2'],
-  ['.agent-q-turn', '.agent-q-turn', 'surface'], ['.agent-q-note', '.agent-questions', 'attn-bg'], ['.agent-q-hint', '.agent-questions', 'attn-bg'],
+  ['.agent-q-turn', '.agent-q-turn', 'surface'], ['.agent-q-note', '.agent-questions', 'attn-bg'], ['.agent-q-hint', '.agent-questions', 'attn-bg'], ['.agent-q-typed', '.agent-questions', 'attn-bg'],
   ['.agent-q-context > summary', '.agent-questions', 'attn-bg'], ['.agent-q-says', '.agent-questions', 'attn-bg'], ['.agent-q-context-text', '.agent-questions', 'attn-bg'],
 ];
 

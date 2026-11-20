@@ -19,11 +19,11 @@ export const INSPECT_CACHE_TTL_MS = HELD_TTL_MS;
 /** Every field travels, absent ones as null: two subjects that differ in any
     coordinate never share an entry (same soul name under two agents roots, the
     same home before and after a restart, a catalog that changed under a soul). */
-export function inspectKey({ deployment, server = null, kind, soul, agentsRoot, catalogKey, home, instance, identity, instructions = false, skills = false, composedSkills = false, board = false }) {
+export function inspectKey({ deployment, server = null, kind, soul, agentsRoot, catalogKey, home, instance, identity, instructions = false, skills = false, composedSkills = false }) {
   if (kind !== 'soul' && kind !== 'home') throw Object.assign(new Error('Inspect cache keys name a soul or a home'), { code: 'E_BAD_ARGS' });
   const part = value => value === undefined ? null : value;
   return JSON.stringify([part(deployment), part(server), kind, part(soul), part(agentsRoot), part(catalogKey), part(home), part(instance),
-    Array.isArray(identity) ? identity.map(part) : part(identity), instructions === true, skills === true, composedSkills === true, ...(board === true ? [true] : [])]);
+    Array.isArray(identity) ? identity.map(part) : part(identity), instructions === true, skills === true, composedSkills === true]);
 }
 
 export function createInspectCache({ limit = INSPECT_CACHE_LIMIT, ttlMs = INSPECT_CACHE_TTL_MS, now = () => Date.now() } = {}) {

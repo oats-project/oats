@@ -7,6 +7,7 @@ import { runInNewContext } from 'node:vm';
 import { join } from 'node:path';
 import { createTerminalOwnerBroker, installTerminalHandlers } from '../terminal-owner.mjs';
 import { createTerminalIo, readTerminalCli } from '../terminal-io.mjs';
+import { admitTerminalTarget } from '../terminal-target.mjs';
 import { runTerminalCommand } from '../../client/terminal-exec.mjs';
 import { prepareTerminalAttachments } from '../terminal-attachments.mjs';
 import { handle, opened, confirmed, ready } from './helpers/terminal-wire.mjs';
@@ -228,4 +229,32 @@ test('preload termWrite with { answer: true } asks main (term:answer) and resolv
   calls.length = 0;
   assert.deepEqual(bridge.termWrite(h, 'q'), { terminalApi: 2, ok: true, status: 'sent' });
   assert.deepEqual(calls, [['send', 'term:write', { ...h }, 'q']]);
+});
+
+// The Opus whole read r4 (minor): the real mode read behind term:answer, pinned at the tmux boundary. The local io reads
+// `#{pane_in_mode}` on the viewer's own =-anchored session through the saved socket, synchronously; only "0" and "1"
+// are answers, and anything else (an empty line, another value, a tmux failure) is unknown, which types nothing.
+test('the local terminal io reads the viewer pane\'s mode on its =-anchored session; anything but 0 or 1 is unknown', () => {
+  let reply = () => '0';
+  const commands = [];
+  const io = createTerminalIo({ context: () => 'ctx', attachmentDirectory: () => '/memory/attachments', sweep() {},
+    spawnPty: () => ({ onData() {}, onExit() {}, write() {}, resize() {}, kill() {} }),
+    execFileSync: (bin, args) => {
+      commands.push([bin, args]);
+      if (args.includes('display-message')) return reply();
+      return args.includes('new-session') ? '@81\n' : '';
+    },
+    fetch: async () => assert.fail('a local terminal reads no CLI'), run: async () => assert.fail('the mode read is synchronous') });
+  const { spec } = admitTerminalTarget({ session: 'agents', window: 'one', socket: '/memory/socket', cols: 80, rows: 24 });
+  const opened = io.create(spec, undefined, { current: () => true });
+  assert.equal(typeof opened.inMode, 'function');
+  commands.length = 0;
+  assert.equal(opened.inMode(), false);
+  assert.deepEqual(commands, [['tmux', ['-u', '-S', '/memory/socket', 'display-message', '-p', '-t', `=${opened.viewer}:`, '#{pane_in_mode}']]]);
+  assert.match(opened.viewer, /^oatsdesk-/);
+  reply = () => '1\n'; assert.equal(opened.inMode(), true);
+  for (const bad of [() => '', () => '2', () => 'true', () => { throw new Error('tmux: no server'); }]) {
+    reply = bad;
+    assert.throws(() => opened.inMode(), 'unknown, never a mode or no mode');
+  }
 });

@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, IN_MODE_NOTE, MODE_UNKNOWN_NOTE, PENDING_NOTE, remoteNote, DETAIL_NOTES, BOARD_MALFORMED, boardDropped } from '../renderer/agent-board.mjs';
+import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, IN_MODE_NOTE, MODE_UNKNOWN_NOTE, TYPED_NOTE, remoteNote, DETAIL_NOTES, BOARD_MALFORMED, boardDropped } from '../renderer/agent-board.mjs';
 import { createTabBoards } from '../renderer/agent-board-tabs.mjs';
 import { boardData, boardDetailData, BOARD_FEATURE } from '../../client/instance-board.mjs';
 import { defaultBinding, TERMINAL_ALLOWLIST, DEFAULT_KEYMAPS } from '../renderer/keybindings.mjs';
@@ -156,18 +156,12 @@ test('agent view answering: a number puts "<id>: <option>" on the input line, un
   f.zone().focus(); f.key(f.zone(), '1');
   assert.deepEqual(f.typed, ['q1: Yes, one clean commit']);
   assert.equal(f.doc.activeElement, f.terminal);
-  // A second press before the person's Enter would be typed onto the same line: it is refused, and the zone says why
-  // (the Opus whole read, 2026-11-20; it was typed before).
+  // The Desktop never guesses what is on the input line (the lead, 2026-11-20): a quiet note says the answer was typed,
+  // and a second press types again, as the person would. It replaced a refusal of the second press.
+  const typedNote = () => f.zone().querySelector('.agent-q-typed');
+  assert.equal(typedNote().hidden, false); assert.equal(typedNote().textContent, TYPED_NOTE);
   f.zone().focus(); f.key(f.zone(), 'Tab'); f.key(f.zone(), '3');
-  assert.deepEqual(f.typed, ['q1: Yes, one clean commit']);
-  assert.equal(f.zone().querySelector('.agent-q-note').textContent, PENDING_NOTE);
-  assert.equal(f.zone().querySelector('.agent-q-note').hidden, false);
-  f.view.input('\r');
-  assert.equal(f.zone().querySelector('.agent-q-note').hidden, true, 'the Enter sent it: the line is free');
-  f.zone().focus(); f.key(f.zone(), '3');
   assert.deepEqual(f.typed, ['q1: Yes, one clean commit', 'q2: Close']);
-  // Ctrl+U (or Ctrl+C) clears the line: the answer is gone, unsent, and a press types again.
-  f.view.input('\x15');
   f.zone().querySelectorAll('.agent-q-option')[0].click();
   assert.equal(f.typed.at(-1), 'q2: Merge', 'a press of the option types the same');
 });
@@ -180,15 +174,16 @@ test('agent view answering: no digit is ever typed without its id, and nothing i
   assert.ok(f.typed.length >= 1);
   for (const text of f.typed) { assert.match(text, /^q\d: \S/); assert.doesNotMatch(text, /[\r\n]/); }
   assert.ok(!f.typed.some(text => /^\d+$/.test(text)), 'no bare digit');
-  assert.equal(f.typed.length, 1, 'the 2 is refused while the 1 is unsent, and 9 and 5 name no option: nothing typed');
-  assert.equal(f.view.question, 'q1', 'the card stays until the person sends');
-  f.view.input('x'); assert.equal(f.view.question, 'q1');
-  f.view.input('\n'); assert.equal(f.view.question, 'q1', 'Shift+Enter is a new line, not a send');
+  assert.equal(f.typed.length, 2, '9 and 5 name no option: nothing typed');
+  // The card stays until the agent clears its question: the Desktop never hides it on a guess about the input line
+  // (the lead, 2026-11-20; it hid optimistically on the person's Enter before).
   f.view.input('\r');
-  assert.equal(f.view.question, 'q2', 'after Enter the card hides optimistically');
+  assert.equal(f.view.question, 'q1', 'an Enter hides no card');
+  assert.equal(f.zone().querySelector('.agent-q-typed').hidden, true, 'the next terminal input ends the "typed" note');
   f.view.update(boardData(board()));
-  assert.equal(f.view.question, 'q2', 'until the agent clears it');
+  assert.equal(f.zone().querySelectorAll('.agent-q-dot').length, 2);
   f.view.update(boardData({ ...board(), questions: [question('q2')] }));
+  assert.equal(f.view.question, 'q2', 'the agent\'s --clear removes it');
   f.view.update(boardData(board()));
   assert.equal(f.zone().querySelectorAll('.agent-q-dot').length, 2, 'a cleared id asked again is a new question');
 });
@@ -252,8 +247,9 @@ test('agent view answering: no lease, nothing typed, the card stays and the focu
   const f = fixture(t, { typeOk: false });
   f.view.update(boardData(board()));
   f.zone().focus(); f.key(f.zone(), '1');
-  assert.equal(f.doc.activeElement, f.zone()); f.view.input('\r');
+  assert.equal(f.doc.activeElement, f.zone());
   assert.equal(f.view.question, 'q1');
+  assert.equal(f.zone().querySelector('.agent-q-typed').hidden, true, 'no "typed" note for an answer not typed');
 });
 
 test('agent view keys: the palette command cycles terminal → questions → facts → terminal; Esc goes back; no chord takes Alt+T', t => {
@@ -539,10 +535,12 @@ test('r1: with several questions, the keyboard reaches the Context fold (c), and
 test('r1: an id cleared and asked again between two polls is a new question', t => {
   const f = fixture(t);
   f.view.update(boardData(board()));
-  f.zone().focus(); f.key(f.zone(), '1'); f.view.input('\r');
-  assert.equal(f.view.question, 'q2', 'q1 answered and hidden');
+  f.zone().focus(); f.key(f.zone(), '1');
+  assert.equal(f.zone().querySelector('.agent-q-typed').hidden, false);
   f.view.update(boardData({ ...board(), questions: [question('q1', { question: 'A new decision?', since: '2026-11-19T10:03:00.000Z' }), question('q2')] }));
   assert.equal(f.zone().querySelectorAll('.agent-q-dot').length, 2, 'the new q1 shows, without an empty board seen in between');
+  assert.equal(f.view.question, 'q1'); assert.match(f.zone().textContent, /A new decision\?/);
+  assert.equal(f.zone().querySelector('.agent-q-typed').hidden, true, 'the earlier q1\'s "typed" note is not this one\'s');
 });
 
 test('r1: a withheld fact text is withheld in its accessible names too', t => {
@@ -827,8 +825,7 @@ test('agent view answering: an answer refused for the scrollback types nothing, 
   assert.deepEqual(typed, []);
   assert.equal(note().textContent, IN_MODE_NOTE); assert.equal(note().hidden, false);
   assert.notEqual(doc.activeElement, terminal, 'the focus stays in the zone');
-  view.input('\r');
-  assert.equal(view.question, 'q1', 'nothing was pending: an Enter hides no card');
+  assert.equal(zone.querySelector('.agent-q-typed').hidden, true, 'nothing typed: no "typed" note');
   // A mode main could not read (or an agent on another machine) types nothing either, and says so.
   mode = 'mode-unknown';
   zone.querySelectorAll('.agent-q-option')[0].click(); for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -838,19 +835,20 @@ test('agent view answering: an answer refused for the scrollback types nothing, 
   zone.querySelectorAll('.agent-q-option')[0].click(); for (let i = 0; i < 10; i++) await Promise.resolve();
   assert.deepEqual(typed, ['q1: Yes, one clean commit']);
   assert.equal(note().hidden, true, 'the line goes once a press types');
+  assert.equal(zone.querySelector('.agent-q-typed').hidden, false);
   assert.equal(doc.activeElement, terminal);
 });
 
 // The Opus whole read (2026-11-20): the board's claim stays off the waiting row while the board has a question, also
-// once the person answered the last one on this tab and the agent has not cleared it yet.
-test('agent view gate: after the last open question is answered, the waiting row still gives way to the zone', async t => {
+// once the person typed and sent its answer, until the agent clears it; and its card stays meanwhile.
+test('agent view gate: after the last open question is answered, the card and the zone stay, and the waiting row stays off', async t => {
   const f = tabsFixture(t, { events: false });
   const claim = { producer: 'oats.board', reason: 'attention', since: AT, message: 'Squash q1?' };
   const row = f.row({ board: boardData({ facts: [], questions: [question('q1')] }) });
   assert.equal(f.boards.sync(f.tab, row, claim, 'w'), true);
   f.pane.querySelector('.agent-q-option').click(); await f.flush();
   f.boards.input(f.tab, '\r');
-  assert.equal(f.pane.querySelector('.agent-questions'), null, 'the answered card hides');
+  assert.ok(f.pane.querySelector('.agent-questions'), 'the card stays until the agent clears it');
   assert.equal(f.boards.sync(f.tab, row, claim, 'w'), true, 'the next poll keeps the claim off the waiting row');
 });
 
@@ -874,6 +872,25 @@ test('agent view answering: on an agent on another machine the numbers are disab
   assert.equal(f.boards.sync(f.tab, f.row(), claim, 'w'), true);
   f.pane.querySelector('.agent-q-option').click(); await f.flush();
   assert.deepEqual(typed, ['q1: Yes, one clean commit']);
+});
+
+// The lead's rule (2026-11-20): the "typed" note is information only. It outlives an unchanged poll, and the person's
+// next terminal input or a changed board ends it; nothing it says blocks a press.
+test('agent view answering: the "typed" note stays through an unchanged poll and goes on terminal input or a changed board', t => {
+  const f = fixture(t);
+  f.view.update(boardData(board()));
+  const typedNote = () => f.zone().querySelector('.agent-q-typed');
+  f.zone().focus(); f.key(f.zone(), '1');
+  f.view.update(boardData(board()));
+  assert.equal(typedNote().hidden, false, 'an unchanged poll keeps it');
+  f.view.input('x');
+  assert.equal(typedNote().hidden, true, 'terminal input ends it');
+  f.zone().focus(); f.key(f.zone(), '2');
+  assert.equal(typedNote().hidden, false);
+  f.view.update(boardData({ ...board(), questions: [...board().questions, question('q3')] }));
+  assert.equal(typedNote().hidden, true, 'a changed board ends it');
+  f.zone().focus(); f.key(f.zone(), '1');
+  assert.deepEqual(f.typed, ['q1: Yes, one clean commit', 'q1: No, keep them', 'q1: Yes, one clean commit'], 'nothing it says blocks a press');
 });
 
 // The round-4 delta's finding: the occurrence check fails closed.
