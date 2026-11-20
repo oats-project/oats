@@ -1141,7 +1141,7 @@ function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null
           const g = resolveGuardedFile(requested, allowedRoots, io);
           if (g.error) return g;
           fd = io.openSync(g.real, flags);
-        } else if (["ENXIO", "ENODEV", "EISDIR"].includes(e.code)) return notFile;
+        } else if (["ENXIO", "ENODEV", "EISDIR", "EOPNOTSUPP", "ENOTSUP"].includes(e.code)) return notFile;
         else return missing;
       }
       const st = io.fstatSync(fd);
