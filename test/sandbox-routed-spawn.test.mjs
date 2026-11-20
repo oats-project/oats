@@ -522,14 +522,17 @@ test("C4: with a request kept, a reconcile that leaves out its seats is no empty
 });
 
 /** A process that holds kept request `spawnKey`'s in-flight lock, as a routed spawn between its seat and
- *  its bind does → { kill() → a promise of its exit }. */
-async function inFlightHolder(fx, spawnKey) {
+ *  its bind does → { kill() → a promise of its exit }. With `hook: { write, afterMs }` it also runs a
+ *  hook's group of its own, recorded in the lock as runOwnedGroup records one, that writes `late` there. */
+async function inFlightHolder(fx, spawnKey, { hook = null } = {}) {
   const { spawn } = await import("node:child_process");
   const { dirname } = await import("node:path");
   const lock = join(dirname(fx.pendingDir), "pending.locks", `${spawnKey}.lock`);
   mkdirSync(dirname(lock), { recursive: true, mode: 0o700 });
   const lib = new URL("../lib/dir-lock.mjs", import.meta.url).href;
-  const child = spawn(process.execPath, ["--input-type=module", "-e", `import { acquireDirLock } from ${JSON.stringify(lib)}; acquireDirLock(${JSON.stringify(lock)}, { what: "a spawn in flight" }); console.log("held"); setInterval(() => {}, 1000);`], { stdio: ["ignore", "pipe", "inherit"] });
+  const identity = new URL("../packages/record/lib/process-identity.mjs", import.meta.url).href;
+  const runHook = hook === null ? "" : `const g = spawn(process.execPath, ["-e", ${JSON.stringify(`setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(hook.write)}, "late"), ${Number(hook.afterMs)})`)}], { detached: true, stdio: "ignore" }); g.unref(); release.record({ hookPgid: g.pid, hookStart: processStart(g.pid).token ?? null });`;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", `import { spawn } from "node:child_process"; import { acquireDirLock } from ${JSON.stringify(lib)}; import { processStart } from ${JSON.stringify(identity)}; const release = acquireDirLock(${JSON.stringify(lock)}, { what: "a spawn in flight" }); ${runHook} console.log("held"); setInterval(() => {}, 1000);`], { stdio: ["ignore", "pipe", "inherit"] });
   await new Promise((done, failed) => { child.stdout.on("data", (b) => { if (String(b).includes("held")) done(); }); child.on("exit", () => failed(new Error("the holder exited"))); });
   return { kill: () => new Promise((done) => { child.once("exit", done); child.kill("SIGKILL"); }) };
 }
@@ -580,4 +583,19 @@ test("the E_DECISION_STALE interleaving: while the original holds its request, a
   assert.deepEqual(replayed.replays.map((r) => r.outcome), ["replayed"], JSON.stringify(replayed.replays));
   assert.ok(host.calls.find((c) => c.command.includes(" spawn ")).command.includes(`--idempotency-key ${spawnKey}`));
   assert.deepEqual(fx.kept(), [], "bound active, settled");
+});
+
+test("a routed spawn killed outright while a hook of its runs under the kept request's lock: the next reconcile ends that hook's group before it takes the request over and replays it", async (t) => {
+  const fx = await routed(t);
+  const { spawnKey, seatId } = await keptByLostAnswer(fx);
+  const late = join(fx.dep, "late-effect");
+  const holder = await inFlightHolder(fx, spawnKey, { hook: { write: late, afterMs: 2500 } });
+  await holder.kill();
+  fx.sandbox.set({ ...delivered(seatId), bind: { state: "ready", seat: { id: seatId, certificateId: "c", state: "active" } } });
+  fx.sandbox.reset();
+  const host = fakeHost(fx);
+  const replayed = await fx.withKernel((sb, ctx) => sb.reconcileSandbox(ctx, "ingest", { planRevision: "rev-reconcile", idempotencyKey: "rk-hook", io: host.io }));
+  assert.deepEqual(replayed.replays.map((r) => r.outcome), ["replayed"], JSON.stringify(replayed.replays));
+  await new Promise((done) => setTimeout(done, 3000));
+  assert.equal(existsSync(late), false, "the killed spawn's hook never acted after its request was taken over");
 });

@@ -1269,6 +1269,18 @@ size limit, and a signal or an exit of the kernel kill the whole group at once.
 So nothing the hook started (`aw`, `ssh`, a provider's tool) acts after its act
 or its lock, on success and on failure alike.
 
+A kernel killed outright (SIGKILL: the OOM killer, `kill -9`, a lost host
+session) cannot end its hook's group. So the kernel records the group (its
+leader's pid and start) in the lock it holds around the act, the sandbox's and,
+for a routed spawn, the kept request's. The next oats that takes that lock over
+from its dead holder first ends the recorded group (SIGTERM, then SIGKILL) and
+waits for it to go, and only then acts. A recorded group whose leader's start no
+longer matches is someone else's and is left alone. One that cannot be told (its
+leader's start unreadable, or its leader gone with members left) or that
+survives SIGKILL is never signalled blind: the lock stays held, the act is
+refused `E_LIFECYCLE_BUSY` (a kept request is `held-in-flight`), and the
+refusal names the group to check by hand.
+
 A provider that needs a process to outlive an act (an SSH ControlMaster, a
 daemon) starts it in its own session (`setsid`) and owns it: the kernel never
 ends a process that left the hook's group.

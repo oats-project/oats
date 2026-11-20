@@ -2521,8 +2521,10 @@ seat, outcome}`, outcome `replayed`, `held-<state>`, `held-unlisted`,
   (`~/.oats/remote/<server>/pending.locks/<spawnKey>.lock`) from keeping it
   until its bind has settled it, and a reconcile that finds the lock held
   reports the request `held-in-flight` and does nothing to it. A spawn that
-  was killed or crashed leaves its lock, which the next reconcile takes over:
-  the request is replayable again. The kept apply names the instance the
+  was killed or crashed leaves its lock, which the next reconcile takes over,
+  once it has ended the hook group the dead spawn recorded there (the
+  capabilities reference, "The hook's process group"): the request is
+  replayable again. The kept apply names the instance the
   preview showed (`--name`, in place of `--purpose` or `--suggest-name`;
   the decision is unchanged), so a replay meets that instance's own keyed
   home, or a name- or placement-taken refusal (`E_INSTANCE_NAME_TAKEN`,

@@ -9,6 +9,9 @@
 //   - an answer object (the envelope's sandboxApi and act are filled in when absent);
 //   - a list of them, taken in turn per sandbox (the last one repeats);
 //   - `{ "$exit": <n> }`, `{ "$sleepMs": <n> }` (then the default answer), `{ "$raw": "<stdout>" }`;
+//   A sleeping hook ends itself once the kernel that started it is gone (it polls its parent pid), as a
+//   test helper does, so a test that kills the kernel leaves nothing running; real providers do not,
+//   which the kernel's takeover of a dead holder's lock covers. `"$stayOrphaned": true` keeps it running.
 //   - `{ "$child": { "write": "<path>", "afterMs": <n>, "holds": "stderr"? } }`, alone (then the default
 //     answer) or with any of those: first a child of the hook, in its process group, holding none of its
 //     pipes (or only its stderr), that writes `late` to the path after n ms.
@@ -70,7 +73,15 @@ if (entry && entry.$child) {
 }
 if (entry && entry.$exit !== undefined) process.exit(entry.$exit);
 if (entry && entry.$raw !== undefined) { process.stdout.write(entry.$raw); process.exit(0); }
-if (entry && entry.$sleepMs !== undefined) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, entry.$sleepMs); entry = defaults[key]; }
+if (entry && entry.$sleepMs !== undefined) {
+  const parent = process.ppid, until = Date.now() + entry.$sleepMs, cell = new Int32Array(new SharedArrayBuffer(4));
+  while (Date.now() < until) {
+    Atomics.wait(cell, 0, 0, Math.min(50, until - Date.now()));
+    if (!entry.$stayOrphaned && process.ppid !== parent) process.exit(0);
+  }
+  const { $sleepMs, $stayOrphaned, ...rest } = entry;
+  entry = Object.keys(rest).length ? rest : defaults[key];
+}
 process.stdout.write(JSON.stringify({ sandboxApi: 1, act, receipts: [], ...entry }) + "\n");
 `;
 

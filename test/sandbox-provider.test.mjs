@@ -195,6 +195,30 @@ test("a hook that answers in time: the act waits for a child that holds its stde
   assert.equal(existsSync(late), false, "nothing the hook started acts after its act");
 });
 
+test("an oats killed outright (SIGKILL) while its hook runs: the next act takes the lock over only once that hook's group is ended, and then runs its own act", async (t) => {
+  const fx = sandboxDeployment({ t });
+  ok(fx.cliS(["sync", "--json"]), "sync");
+  const late = join(fx.dep, "late-effect");
+  const pause = (ms) => new Promise((done) => setTimeout(done, ms));
+  // A start whose hook would run 20 s, and whose child would write after 3 s; neither ends itself.
+  fx.sandbox.set({ start: { $child: { write: late, afterMs: 3000 }, $sleepMs: 20000, $stayOrphaned: true } });
+  fx.sandbox.reset();
+  const { spawn: spawnChild } = await import("node:child_process");
+  const kernel = spawnChild(process.execPath, [CLI, "sandbox", "start", "ingest", "--plan-revision", "rev-start", "--idempotency-key", "k-killed", "--json"], { cwd: fx.dep, env: { ...fx.env, ...fx.sandbox.env }, stdio: "ignore" });
+  for (let i = 0; i < 200 && !fx.sandbox.calls().some((c) => c.act === "start"); i++) await pause(25);
+  assert.ok(fx.sandbox.calls().some((c) => c.act === "start"), "the start's hook runs");
+  // The kernel alone is killed, as by the OOM killer or kill -9: its hook's group, of its own, is not.
+  await new Promise((done) => { kernel.once("exit", done); kernel.kill("SIGKILL"); });
+  // The next mutating act: the lock's holder is gone, its recorded hook group is ended first.
+  const stop = fx.cliS(["sandbox", "stop", "ingest", "--plan-revision", "rev-stop", "--idempotency-key", "k-after", "--json"]);
+  assert.equal(stop.status, 0, stop.stdout);
+  const d = JSON.parse(stop.stdout.trim().split("\n").pop());
+  assert.equal(d.result.state, "stopped", stop.stdout);
+  assert.ok(fx.sandbox.calls().some((c) => c.act === "stop"), "the stop's own act ran");
+  await pause(3500);
+  assert.equal(existsSync(late), false, "the killed oats's hook never acted after the lock was taken over");
+});
+
 test("a stale plan answer is E_PLAN_STALE with its fresh plan, as a stale apply's", (t) => {
   const fx = sandboxDeployment({ t });
   ok(fx.cliS(["sync", "--json"]), "sync");
