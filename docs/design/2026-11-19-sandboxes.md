@@ -48,8 +48,9 @@ use is scheduled knowledge-base ingestor agents on a cloud machine: they read un
 content, so they must not reach the engineers' agents, credentials or network.
 
 **Done means:** on a Linux machine with Docker, a workspace that declares one sandbox,
-and a deployment whose local file lists it, `oats sync` builds and starts the sandbox.
-A workspace schedule whose `runsOn` names that machine spawns a soul the sandbox lists
+and a deployment whose local file lists it, `oats sync` builds and starts the sandbox,
+and one reviewed `oats sync --admission-revision` admits its souls' capabilities (an
+ordinary sync widens nothing, so the first tick needs that first admission). A workspace schedule whose `runsOn` names that machine spawns a soul the sandbox lists
 inside it, with an identity minted on the host. The agent reaches only the declared
 destinations and reads only the declared credentials. It messages only as its team,
 its server and aweb's policy allow. For the ingestors that is a closed topology: their
@@ -178,7 +179,7 @@ default team is S's team").
 
 - On a host that lists the selected sandbox S and has it started, a spawn (by hand, or
   by a schedule tick) is routed into S, as a remote spawn through S's server
-  registration. S1 builds on #1912's floor (lane:juan, held): the task goes on stdin,
+  registration. S1 builds on #1912's floor (lane:juan; its hold is lifted, and it is not yet merged): the task goes on stdin,
   the apply is bound to its preview and keyed, and a host below 0.69.15 is refused.
   This costs nothing, because the sandbox's kernel must already be the release with
   `sandboxes`. S1 does not merge before #1912. If #1912 is withdrawn, S1 itself
@@ -252,7 +253,12 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
    seat ID (derived from `spawnKey`), its path and the `spawnProvider` options, or
    refuses a team it can't serve (C8, `team-not-served`). Its `planRevision` fences the
    sandbox's provider state, `spawnKey` and T.
-2. The kernel runs the remote preview **with those options**. The preview chooses the
+2. The kernel runs the remote preview **with those options**, and with
+   `--sandbox <S>`, the same selector as the outer spawn, naming the sandbox the host
+   placed it in (r5). The in-sandbox kernel compares it with its `self` (C3b), and a
+   different sandbox refuses at the preview with `wrong-sandbox`, before anything is
+   kept or minted. The selector is part of the decision, so `D` binds it, and the
+   apply carries the same `--sandbox <S>` from the kept request. The preview chooses the
    instance name when the caller gave none (a schedule passes `--purpose`, not
    `--name`), and answers `decision.revision`, `D`, the hash of the whole decision
    that the apply's `--expect-decision` must match, as #1912 requires. The in-sandbox
@@ -344,8 +350,8 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
    unchanged, keyed by its `spawnKey`, and its answer goes to `bind` as in 6. A replay of an apply that was
    never sent is that apply, with its task, and a stale `D` refuses it terminally.
    Before each replay, the host runs step 5's admission fence under the request's
-   lock (r5). The recorded entry only widens, but an exclusion added since can refuse
-   the replay. A request with no recorded send that the fence refuses settles as in
+   lock (r5). The recorded entry only widens or replaces a capability's source, so a source
+   replaced since, or an exclusion added since, can refuse the replay. A request with no recorded send that the fence refuses settles as in
    step 6 ("No apply sent"). A replay of a request that was sent before, and fails the
    fence, is not sent. Its request is kept and reported (`held-not-admitted`), and
    its seat stays `delivered` (readiness, `sandbox-seat-unsettled`), because an
@@ -654,9 +660,14 @@ sandboxes:
       `admissionRevision` and changes in its detail) and records nothing. The refusal
       is reported once in the answer's top-level `problems`, the rest of the sync
       goes on, and sync exits nonzero.
+    - **First admission.** A listed soul with no recorded entry is a change of its
+      own (`first: true`), whatever its derived set, the empty set included. A missing
+      entry and a recorded empty entry are different states: the first refuses every
+      spawn (`capability-not-applied`), and the second admits a composition with no
+      capabilities. The first reviewed apply writes the entry.
     - **The commit point:** a sync that applies an admission revision writes, in one
       atomic write under sync's own lock, only the entries whose changes are
-      non-empty: an added capability or a changed source. Each such entry records its
+      non-empty: a first admission, an added capability or a changed source. Each such entry records its
       recorded set plus the additions, with the source changes applied, and the
       revision. A capability the soul no longer derives stays recorded, so if the
       soul derives it again from the same source it is admitted without a new apply,
@@ -668,6 +679,13 @@ sandboxes:
       anywhere writes none. Its infrastructure changes stand, as they always have,
       and a later sync with a fresh revision applies the admission. So when sandbox A
       succeeds and sandbox B fails, A's admission isn't widened either.
+    - **The commit fence.** The rows written are the ones captured from the exact
+      plan whose revision matched, and they are never re-resolved for writing. Under
+      sync's lock, immediately before the write, the kernel recomputes the hashed
+      inputs. If any changed while the sync ran (a member's composition, the lock, an
+      exclusion or this host's listing), the whole admission is refused as
+      `E_PLAN_STALE` and nothing is written. No newer or partly recomputed plan is ever
+      written under the earlier revision.
     - **Where they live:** in the host deployment's own state, per sandbox and soul.
       The in-sandbox kernel never reads them: the host checks them against what `D`
       binds (Identities, step 2).
@@ -805,7 +823,9 @@ its own because a kernel reads it:
   others with `E_SANDBOX_PLACEMENT`, reason `not-placed-here` (r5), whose remedy says
   to spawn it from the host into a sandbox that lists it. A routed request must name
   the sandbox, soul and composition its preview showed, and its sandbox must equal
-  `self`. One that names another sandbox is refused with `E_SANDBOX_PLACEMENT`,
+  `self`. The sandbox reaches the in-sandbox kernel as `--sandbox <S>` on both the
+  remote preview and the apply (Identities, step 2); a routed request without it is
+  refused (`wrong-sandbox`), and `D` binds it. One that names another sandbox is refused with `E_SANDBOX_PLACEMENT`,
   reason `wrong-sandbox`, even when the soul is eligible in both. Its remedy says the
   host routed it to the wrong registration, and to check the host's `sandbox-<name>`
   server entry (C7). Nothing is spawned. `D`
@@ -913,7 +933,8 @@ and by act:
   (`seats[].team`). The answer's readers change with it (below).
 - `oats spawn <soul> --sandbox <id>` selects among a soul's eligible sandboxes, and a
   `run: spawn` schedule's `sandbox: <id>` does the same (C2, r5). Both are new
-  contracts. `--sandbox` is refused together with `--server`, which names a target of
+  contracts. Inside a sandbox, the host's routed preview and apply carry the same
+  `--sandbox <S>`, which must equal `self` (C3b). `--sandbox` is refused together with `--server`, which names a target of
   its own (`E_BAD_ARGS`).
 - `oats sandbox start|stop <name> --plan --json` answers
   `{sandboxApi:1, sandbox, act, planRevision, actions}`; the apply answers
@@ -921,7 +942,9 @@ and by act:
   revision refuses `E_PLAN_STALE` with the fresh plan in its detail (r1).
 - `oats sync --json` gains `sandboxes` with the same entries plus `action`
   (`build|start|stop|none`), and, in a plan, the admission it would apply: each
-  sandbox entry carries `admissionChanges: [{soul, added:[{id, source}], sourceChanged:[{id, from, to}]}]`,
+  sandbox entry carries `admissionChanges: [{soul, first, added:[{id, source}], sourceChanged:[{id, from, to}]}]`
+  (`first: true` for a soul with no recorded entry, whose `added` is its whole derived
+  set, possibly empty),
   and the answer carries one top-level `admissionRevision`, the hash of the whole
   admission plan (C1) (r5). `oats sync --admission-revision <revision>` takes that one value and
   applies all of it or none (C1, "The applied-plan gate"), and a sync without the
@@ -1163,9 +1186,9 @@ egress routes only.
   spawn key, never its task (r3);
 - `sandbox-soul-unknown`: a sandbox's `souls` names a soul no member or package
   offers (r5);
-- `sandbox-admission-pending`: a soul whose current derived capabilities add a
-  capability, or change one's source, beyond the last applied plan, with the
-  additions and changes listed (r5).
+- `sandbox-admission-pending`: a listed soul with no recorded entry yet, or one whose
+  current derived capabilities add a capability, or change one's source, beyond the
+  last applied plan, with the first admission, additions and changes listed (r5).
 
 The refusals belong to the acts:
 
@@ -1282,8 +1305,8 @@ the release notes when that feature ships (r5).
 | --- | --- |
 | Same team, separate sandboxes | A reviewer and a deployer in one team, in two sandboxes, exchange the messages aweb allows. Their state, session material and mounts stay separate, and the reviewer can't use the deployment credential. The same holds with cross-team messaging allowed, and with it denied, by aweb's policy. Pending for v1's provider until aweb's maintainers say whether teamctl runs two sandboxes for one team (C8). |
 | Teams independent of the runtime | Changing a soul's default team, or a label's alias, moves no soul. Two teams in one sandbox, accepted as co-resident trust, run on a provider that serves several teams; v1's provider refuses it with `team-not-served`. One team in two sandboxes introduces no second team. |
-| Placement and capability refusals | An ambiguous target, a wrong host, a wrong sandbox, an excluded capability, a capability not yet applied, a forged seat binding and an unavailable provider route each fail with the responsible decision and a remedy, before any placement succeeds or usable authority leaks. |
-| The admission fence and its commit | An exclusion committed between the seat and the apply: the apply is not sent, the seat is released with no home made, and the request is gone. The same exclusion before a replay of an apply that was sent: the replay isn't sent and the seat stays delivered (`held-not-admitted`). Sandbox A's sync step succeeds and B's fails under `--admission-revision`: neither's admission is recorded. Both succeed under the plan's one revision: both sandboxes' widened entries are recorded in one write. A's entry had narrowed while B's widens: A keeps its recorded set. An upstream change in B after the plan: `--admission-revision` refuses `E_PLAN_STALE` in the top-level `problems`, neither A's nor B's admission is recorded, both sandboxes' infrastructure steps still run, and sync exits nonzero. |
+| Placement and capability refusals | An ambiguous target, a wrong host, a wrong sandbox, an excluded capability, a capability not yet applied, a forged seat binding and an unavailable provider route each fail with the responsible decision and a remedy, before any placement succeeds or usable authority leaks. A route meant for sandbox A that resolves to sandbox B's registration, for a soul eligible in both, refuses at the remote preview with `wrong-sandbox`, and no seat is minted. |
+| The admission fence and its commit | An exclusion committed between the seat and the apply: the apply is not sent, the seat is released with no home made, and the request is gone. The same exclusion before a replay of an apply that was sent: the replay isn't sent and the seat stays delivered (`held-not-admitted`). Sandbox A's sync step succeeds and B's fails under `--admission-revision`: neither's admission is recorded. Both succeed under the plan's one revision: both sandboxes' widened entries are recorded in one write. A's entry had narrowed while B's widens: A keeps its recorded set. An upstream change in B after the plan: `--admission-revision` refuses `E_PLAN_STALE` in the top-level `problems`, neither A's nor B's admission is recorded, both sandboxes' infrastructure steps still run, and sync exits nonzero. A member's composition, or this host's listing, changes while sandbox B starts, after the plan matched: the commit fence refuses the whole admission with `E_PLAN_STALE` and writes nothing. A soul with no recorded entry is refused until the first reviewed apply, which records it, an empty derived set included (`first: true`); a recorded empty entry admits it. |
 | Capabilities widen only through an applied plan | One sandbox lists review (capability `read`) and deploy (`read` and `deploy`). Upstream adds `deploy` to review, with no new applied plan. A manual spawn of review and its tick both refuse before minting (`capability-not-applied`), and deploy still works. After the revised plan is approved and applied, review may load the capability, which still grants it no credential or operation. |
 | Identity apart from the route | Designed while grant seats stay on the host. A grant-backed agent restarts with the same stable DID and a new valid session; one without public inbound reach stays usable as the same principal; an alias match, a wrong team or a stale session can't spend its grant; revocation stops the next dispatch with both sandboxes left in place. |
 | Target and policy | With Compose: start, authorized work, stop, resume and delist, with separate state and one clock. The same contract against an existing Kubernetes cluster, including storage across a workload replacement and a check of the network policy, before that provider is claimed. |
@@ -1292,7 +1315,7 @@ the release notes when that feature ships (r5).
 
 | Spec | Surface | Lane | Builds first |
 | --- | --- | --- | --- |
-| S1a Kernel, the part placement doesn't touch: C1's shape (validated when read), C3, C3b, C4's caller and runner, C5's lifecycle and sync, C7, the kept-request custody and replay fence, readiness | `lib/`, `bin/`, schemas, `docs/` | lane:product | first; reuses the reviewed work of #2025 that no team placement touches, merged after #1912's hold lifts |
+| S1a Kernel, the part placement doesn't touch: C1's shape (validated when read), C3, C3b, C4's caller and runner, C5's lifecycle and sync, C7, the kept-request custody and replay fence, readiness | `lib/`, `bin/`, schemas, `docs/` | lane:product | first; reuses the reviewed work of #2025 that no team placement touches, merged after #1912 |
 | S1b Kernel, placement: C2's selection, derived admission and the applied-plan gate (C1), the seat's team and settings (C4), C3b's checks, the r5 refusals (C10), the status answer without `team` | `lib/`, `bin/`, schemas, `docs/` | lane:product | after S1a |
 | S2 Provider: `oats.aweb-sandbox`, C4's hook, C6, C7, C8's one served team, the registry setting (C3) | the oats-aweb package | lane:setup, aweb's maintainers read first | after S1b's contract is merged |
 | S3 Credential mount and the `forge` role: C8, the egress component, teamctl's inputs | `container/agent`, and teamctl on aweb's maintainers' side | lane:juan | in parallel with S1 |
