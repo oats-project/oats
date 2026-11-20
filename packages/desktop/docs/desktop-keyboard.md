@@ -367,7 +367,7 @@ The three Linux / Windows columns are [the chord families](#the-chord-families):
 | The sidebar's width back to 288px (`sidebar.resetWidth`; the palette's **Sidebar: reset width**; also Enter or a double-click on the sidebar's width handle) | none | none | none | none | – (the palette keeps it) |
 | Focus the instance roster, on its current row, or, on an empty roster, the foot's New agent (`sidebar.focusFilter`, its id from when the roster had a filter; to find an instance by name, use the command palette) | ⌘F | Alt+F | Ctrl+Alt+F | Ctrl+Alt+F | yes |
 | An instance's name and colour, for the leader's target (`instance.edit`; also **Instance: name and colour…**; no leader key) | ⌥⌘R | Alt+R | Ctrl+Alt+R | Ctrl+Alt+R | yes |
-| The agent's mail, a read-only sheet from the right, for the leader's target; pressed again, or Esc, it closes (`instance.mail`; also **Agent: mail** and Details' **Mail**; no leader key; [desktop-mail-sheet.md](desktop-mail-sheet.md)) | ⌥⌘M | Alt+M | Ctrl+Alt+M | Ctrl+Alt+M | yes |
+| The agent's mail, a read-only sheet from the right, for the leader's target; pressed again, or Esc, it closes (`instance.mail`; also **Agent: mail** and Details' **Mail**; no leader key; [desktop-mail-sheet.md](desktop-mail-sheet.md)) | ⌥⌘M | Alt+M | Ctrl+Alt+M | Ctrl+Alt+M | yes (ESC m, which Esc, then m still sends: Emacs's M-m, back-to-indentation, and zsh's copy-prev-shell-word; readline binds none) |
 | Instance panel (`panel.toggle`; also Show instance panel while it is closed, and the panel's own close button) | ⌘I | Ctrl+Shift+I | the same | the same | yes (plain Ctrl+I, the Tab byte, stays the program's) |
 | The Appearance sheet, on Theme (`app.themePicker`; also the palette's **Appearance…**) | ⇧⌘Space | Ctrl+Shift+Space | the same | the same | yes |
 | The Appearance sheet, on Font (`app.fontPicker`; also the palette's **Font: choose…**) | none | none | none | none | – (the palette keeps it) |
@@ -740,6 +740,7 @@ takes those (docs/tui.md).
 | Claude Code | Alt+P | the model picker | unknown: its docs don't say whether Esc, then P is Meta+P, and Esc alone interrupts; switch to Ctrl+Alt |
 | Claude Code | Alt+O | fast mode on or off | as Alt+P |
 | Claude Code | Alt+F | forward a word | as Alt+P |
+| Claude Code | Alt+M, on Windows only where its runtime can't read Shift+Tab | cycle the permission mode (Shift+Tab everywhere else) | as Alt+P |
 | Codex | Alt+R | raw output on or off | unknown; switch to Ctrl+Alt |
 | Codex | Alt+F | a word right | Ctrl+→, its other key for it |
 | pi | Alt+F | a word right | Esc, then f: pi reads ESC f as a word right |
@@ -755,7 +756,8 @@ takes those (docs/tui.md).
 | Emacs (`emacs -nw`) | Alt+K, E, Shift+E, Z, W, F, R, M | kill-sentence, forward-sentence (with Shift too), zap-to-char, kill-ring-save, forward-word, move-to-window-line, back-to-indentation | Esc, then the letter |
 | Emacs | Alt+1–Alt+9 | a numeric argument | Esc, then the digit |
 
-Not taken from any of them: Alt+A, which the Alt family leaves alone (the
+Alt+M takes Emacs's M-m (back-to-indentation) and zsh's copy-prev-shell-word, both still Esc, then m; readline binds
+none. Not taken from any of them: Alt+A, which the Alt family leaves alone (the
 next group is Alt+Shift+→ there), so zsh's accept-and-hold, irssi's and
 WeeChat's next active window or buffer and Emacs's backward-sentence keep it.
 Not taken from these programs, by their docs: Alt+K, Z, W, E and R in
