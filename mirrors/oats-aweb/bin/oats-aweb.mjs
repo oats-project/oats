@@ -895,16 +895,68 @@ function recordedSeat() {
   return record;
 }
 /** A present seat record owns the seat, resident and team, even if meta differs.
- *  Missing records retain the legacy path pending an approved migration. */
+ *  Legacy grants acquire that record once their three recorded sources agree. */
 function withRecordedSeat(meta, record) {
   if (!record) return meta;
   const identity = meta.identity || {};
   return { ...meta, identity: { ...identity, mode: "global", seat: record.seat, resident: record.resident, team: record.team } };
 }
+/** Fill only a recorded GLOBAL grant, never a retained or LOCAL identity.
+ *  1.12–1.24 minted bare oats:<instance> labels (the 1.25 change introduced
+ *  seat ids). Their current grant remains owned by its recorded id; sweeps
+ *  keep that id, and renewal/retire revoke it even without a seat label.
+ *  Preview checks local facts only. No custody call or write precedes it. */
+function legacySeat(meta) {
+  const identity = meta.identity;
+  if (identity?.mode !== "global" || !identity.grant?.id || meta.retained === true || identitySettings.source) return undefined;
+  const refuse = (cause, cleanup = "") => out({ meta, warning: `oats-aweb: respawn this home; cannot fill the legacy seat record: ${cause}${cleanup}` }, 1);
+  const { resident, team, grant } = identity;
+  if (typeof resident !== "string" || !resident.trim()) refuse("recorded identity.resident is missing; configure settings.oats.aweb.residents.<name>");
+  if (!validAwebTeamId(team)) refuse("recorded identity.team is missing or invalid");
+  const custody = residentCustodyOf(resident);
+  if (!custody) refuse(`recorded resident does not resolve; set ${residentKeyHint(resident)} to its custody directory`);
+  let text;
+  try { text = readFileSync(join(priorGrantHome(meta), "grant.yaml"), "utf8"); }
+  catch (error) { refuse(`grant.yaml is unreadable (${error.code || "read failed"})`); }
+  // These are top-level fields in aw's grant writer. Never select a nested
+  // or duplicate field, or silently interpret escapes/collections as an id.
+  const field = (key) => {
+    const lines = text.split(/\r?\n/).filter(line => line.startsWith(`${key}:`));
+    if (lines.length !== 1) return undefined;
+    return new RegExp(`^${key}: +(?:"([^"\\\\]*)"|'([^']*)'|([^\\s"'#[\\]{}]+))(?: +#.*)? *$`).exec(lines[0])?.slice(1).find(value => value !== undefined);
+  };
+  const grantTeam = field("team_id"), grantId = field("grant_id");
+  if (!grantTeam || !sameAwebTeamId(team, grantTeam)) {
+    const cleanup = grantTeam && validAwebTeamId(grantTeam) && grantId
+      ? `; ${unrevokedGrant({ grant: grantId, expiresAt: grant.expiresAt, custody, team: grantTeam })}; after manual cleanup, run \`oats retire ${instance} --force\`, then respawn`
+      : "";
+    refuse("grant.yaml team differs from recorded identity.team or is missing", cleanup);
+  }
+  if (grantId !== grant.id) refuse("grant.yaml grant_id differs from recorded identity.grant.id or is missing");
+  if ((identitySettings.resident && identitySettings.resident !== resident) || (defaultTeamId() && !sameAwebTeamId(defaultTeamId(), team))) refuse("configured resident or team differs from the recorded identity; respawn this home to change its resident or team");
+  // Invalid launch configuration must not leave a filled record either.
+  checkedGrantTTL();
+  checkedRenewMode();
+  if (process.env.OATS_LAUNCH_PREVIEW === "1") return undefined;
+  let shown;
+  try { shown = grantShow(custody, grant.id, team); }
+  catch (error) { refuse(`custody grant is unreadable (${String(error.message || error).slice(0, 200)})`); }
+  if (shown.grant_id !== grant.id) refuse("custody grant id differs from recorded identity.grant.id");
+  if (!sameAwebTeamId(shown.team_id, team)) refuse("custody grant team differs from recorded identity.team");
+  if (shown.status !== "active") refuse("custody grant is not active");
+  const prefix = `oats:${instance}:`;
+  const labeledSeat = typeof shown.label === "string" && shown.label.startsWith(prefix) ? shown.label.slice(prefix.length) : "";
+  const seat = /^[0-9a-f]{16}$/.test(labeledSeat) ? labeledSeat : newSeatId();
+  const record = { seat, instance, resident, team };
+  try { persistSeat(record); }
+  catch (error) { refuse(`seat.json could not be written (${error.code || "write failed"})`); }
+  return record;
+}
 function launchSeat(meta) {
   let record;
   try { record = recordedSeat(); }
   catch { fatal(`respawn this home; refusing to replace an unreadable or incomplete seat record or mint a new seat: ${seatRecordFile()}`, meta); }
+  if (!record) return legacySeat(meta);
   const grantTeam = record ? recoverGrantHome(priorGrantHome(meta)).team : undefined;
   if (record && grantTeam && !sameAwebTeamId(grantTeam, record.team)) fatal(`respawn this home; the selected grant home records a different team from the seat record: ${seatRecordFile()}`, meta);
   // Do not erase the only evidence needed for manual cleanup of a grant in
