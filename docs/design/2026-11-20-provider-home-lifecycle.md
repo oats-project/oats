@@ -93,8 +93,8 @@ before its home can be acted on):
 |---|---|---|---|
 | 1 | What can refuse: the plan, the launch hooks, the provider's `check` with the planned launch. (Three checks run right before step 4: the home's roots, the kernel's shim, the host run's admission. One that refuses there leaves the home as it then is: stopped by step 3, or as before the verb) | none | unchanged |
 | 2 | If unsettled: settle | see Settling | planned or stopped |
-| 3 | If launched before: stop the session at `E`. A restart of *running* whose session is there records `stoppedAt` and the stop receipt first (the stop rule). A start or a restart of *stopped*, and of *running* whose session is gone, ask the provider's `stop {endpoint: E}` again and record nothing (so a stop that is not confirmed leaves a lost home lost, not stopped as by an operator); not confirmed is `E_SESSION_STOP_FAILED`, nothing started | receipt, stop receipt (a restart of a session that is there) | stopped, or running-and-gone with `E` stopped |
-| 4 | **Mark**: receipt `launchSent: t` (and `launched: true` from planned), then the record's `launched: true` from planned | receipt, then record | sent or resent |
+| 3 | If launched before: stop the session at `E`. A restart of *running* whose session is there records `stoppedAt` and the stop receipt first (the stop rule). A start or a restart of *stopped* asks the provider's `stop {endpoint: E}` again; not confirmed is `E_SESSION_STOP_FAILED`, nothing started. (*Running* whose session is gone: step 4) | receipt, stop receipt (a restart of a session that is there) | stopped, or running-and-gone |
+| 4 | **Mark**: receipt `launchSent: t` (and `launched: true` from planned), then the record's `launched: true` from planned. Then, for *running* whose session is gone, the provider's `stop {endpoint: E}`, and nothing is recorded of it (so a stop that is not confirmed leaves a lost home lost, not stopped as by an operator): not confirmed is `E_SESSION_STOP_FAILED`, the mark taken back (6b), nothing started. After the mark, because an input holds no claim: see the crossings | receipt, then record | sent or resent |
 | 5 | The provider's `launch` | none | sent or resent |
 | 6a | It answered `E'`: receipt `endpoint: E'`, `stoppedAt: null`, **`launchSent` kept**; then the record (`launched: true`, `endpoint: E'`, new `startId`); then the receipt's `launchSent` removed | receipt, record, receipt | running at `E'` |
 | 6b | It refused (nothing was started): **unmark**: record, then receipt | record, then receipt | as before step 4 |
@@ -107,7 +107,9 @@ session runs that the receipt does not account for with either an endpoint
 or `launchSent`.
 
 A spawn that fails after step 4 undoes itself: 6b or 6c, then the home is
-removed; when the stop of 6c is not confirmed the home is retained,
+removed. A home it keeps for another debt after a stop that was confirmed (a
+hook's cleanup is owed) is left planned, record and receipt alike, with its
+rollback marker. When the stop of 6c is not confirmed the home is retained,
 unsettled, with its rollback marker. A retire of a retained provider home
 reads the launch from its receipt and record, never from the marker.
 
@@ -191,9 +193,12 @@ one read of the home, whatever the provider answered (a refusal included):
 | running, another `startId`, another endpoint | a restart landed | `stop {E}` again (the old one); `E_SESSION_NOT_RUNNING` |
 | running, another `startId`, the same endpoint | a restart landed, and the provider reused the locator, which it must not (below) | nothing is stopped (that locator is the new session's); `E_SESSION_NOT_RUNNING`. The provider may have delivered the input to the new session all the same: the mail stays unread and is presented again, a duplicate, never a loss |
 
-The same read before the send refuses without sending. A start's step 3
-covers the input that finished between the start's inspect and its mark: the
-session it restarted at `E` is stopped before the new one is launched.
+The same read before the send refuses without sending. A start of a lost
+home stops the session at `E` after its mark (step 4), which covers the
+input that finished before the mark: its provider call had ended by then, so
+the session it restarted at `E` is stopped before the new one is launched,
+and an input that reads the home after the mark stops it itself (the row
+"unsettled").
 
 A provider that hands a launch an endpoint it used before for the home
 breaks the rule below. In the rows "stopped" and "unsettled" the `stop {E}`

@@ -5350,7 +5350,11 @@ oats instance stop <instance> --plan [--no-recursive] [--home <abs>] [--dir <d>]
   `E_GIT_FAILED` for an error that has none; `E_WORK_INSPECTION_FAILED` for
   a home the kernel cannot look into, where whether it has a `work/` cannot
   be told; OATS 0.52.0).
-- `midTask`: `true`, `false` or `"unknown"`.
+- `midTask`: `true`, `false` or `"unknown"`. A home on a
+  [session provider](execution-targets.md#session-providers) whose session
+  is there and reports no activity (`session.state: "unknown"`) reads
+  `"unknown"`, or `true` with changed work: never `true` on the session
+  alone.
 - `retiring` and `stopPending`, booleans on every target, say who holds the
   target's home when the plan is read (OATS 0.52.0, feature
   `lifecycle-claim-stop`). `retiring`: a self-retire is scheduled for it

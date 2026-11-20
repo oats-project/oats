@@ -14,7 +14,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inputInstanceSession, inspectInstanceSession, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
-import { FAKE_CAPABILITY, FAKE_SERVER, LOST, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
+import { FAKE_CAPABILITY, FAKE_SERVER, LOST, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, "..", "bin", "oats.mjs");
@@ -470,10 +470,62 @@ test("a resume's notice that fails without a refusal leaves a home stopped with 
   assert.equal(await answerOf(fx, "resume", home), "resumed");
 });
 
-test("a stop's plan does not report a provider session whose activity is not known as mid-task: unknown", async (t) => {
+test("a stop's plan does not report a provider session whose activity is not known as mid-task: unknown, where a tmux home's running harness is", async (t) => {
   const fx = providerDeployment(t);
   await fx.launch("idle");
-  const planOf = () => JSON.parse(fx.cli(["instance", "stop", "idle", "--plan", "--json"]).stdout.trim().split("\n").pop()).result.targets.at(-1);
-  const plan = planOf();
-  assert.deepEqual([plan.session.state, plan.session.present, plan.midTask], ["unknown", true, "unknown"]);
+  const plan = JSON.parse(fx.cli(["instance", "stop", "idle", "--plan", "--json"]).stdout.trim().split("\n").pop()).result.targets.at(-1);
+  assert.deepEqual([plan.session.backend, plan.session.state, plan.session.present, plan.midTask], ["fake", "unknown", true, "unknown"]);
+});
+
+test("a spawn whose launch answer was lost, whose stop the provider confirmed and whose home is kept for a hook's cleanup leaves it planned, record and receipt alike: a retire takes it", async (t) => {
+  const files = fakeFiles();
+  // The spawn hook reports state it made, and the capability has no retire hook: the rollback owes a cleanup.
+  const hook = files["bin/hook.mjs"].replace("process.stdout.write(JSON.stringify({ env:", "process.stdout.write(JSON.stringify({ meta: { made: true }, env:");
+  assert.notEqual(hook, files["bin/hook.mjs"]);
+  files["bin/hook.mjs"] = hook;
+  const fx = providerDeployment(t, { capabilities: { [FAKE_CAPABILITY]: { manifest: fakeManifest(), files } } });
+  fx.control({ q: { launch: { exit: 1 } } });
+  const failed = JSON.parse(fx.cli(["spawn", "dev", "--name", "q", "--backend", "fake", "--launch-config", "claude", "--json"]).stdout);
+  const home = join(fx.root, "dev", "instances", "q");
+  assert.deepEqual([failed.ok, existsSync(home), existsSync(join(home, ".oats-rollback-incomplete.json")), callsOf(fx, home)], [false, true, true, ["launch", "stop:null"]]);
+  assert.deepEqual([runtimeOf(home), recordOf(home).launched, recordOf(home).session], [{ launched: false, backend: "fake", provider: FAKE_CAPABILITY }, false, { provider: FAKE_CAPABILITY, endpoint: null }]);
+  fx.control({});
+  const retired = JSON.parse(fx.cli(["retire", "q", "--force", "--json"]).stdout);
+  assert.deepEqual([retired.retired, existsSync(home)], ["q", false], JSON.stringify(retired).slice(0, 400));
+});
+
+test("a pending start receipt in a provider home is not read: a start launches on the provider, and the receipt keeps its backend", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("p");
+  const plain = await fx.spawn("plain", { name: "t" });
+  // A file the home's agent can write, shaped as a tmux home's pending start.
+  writeFileSync(join(home, ".oats-start-pending.json"), JSON.stringify({ id: "planted-1", target: { backend: "tmux", session: "nosuch", window: "p", socket: join(fx.base, "no-such-socket") }, command: recordOf(plain.home).command, model: null, startedAt: new Date().toISOString() }));
+  fx.control({ p: { inspect: { result: LOST } } });
+  fx.clearCalls();
+  assert.equal(await answerOf(fx, "start", home), "launched");
+  const runtime = runtimeOf(home);
+  assert.deepEqual([callsOf(fx, home), runtime.backend, runtime.provider, runtime.tmux, recordOf(home).tmux, stateOf(home)], [["inspect", "stop:E", "launch"], "fake", FAKE_CAPABILITY, undefined, undefined, "running"]);
+});
+
+test("the host's stop leaves a stopped home as it is: the provider is not called, and an operator's stop stays the operator's", async (t) => {
+  const fx = providerDeployment(t);
+  fx.controls = {};
+  for (const [state, resume] of [["stopped (operator)", undefined], ["stopped (host)", true]]) {
+    const home = await STATES[state](fx, state.includes("host") ? "h" : "o");
+    const before = [runtimeOf(home), stopReceiptOf(home)];
+    assert.equal(before[1]?.resume, resume);
+    fx.clearCalls();
+    const r = spawnSync(process.execPath, [HOST_STOP_CHILD, home, "20000"], { cwd: fx.dep, env: fx.env, encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual([callsOf(fx, home), runtimeOf(home), stopReceiptOf(home)], [[], ...before], state);
+  }
+});
+
+test("a resume of a home whose session is there and reports no activity is refused: it did not lose its session", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("there");
+  fx.control({ there: { inspect: { result: { present: true, state: "unknown", running: null } } } });
+  fx.clearCalls();
+  assert.equal(await answerOf(fx, "resume", home), "E_RESUME_NOT_LOST");
+  assert.deepEqual([callsOf(fx, home), stateOf(home)], [["inspect"], "running"]);
 });
