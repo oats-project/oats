@@ -4,12 +4,18 @@
 // (`--expect-decision`, `--idempotency-key`) of a soul placed in one is refused, reason `caller-bound`, with
 // a remedy in `details.remedy` that also ends the message. The transport keeps the code, the kernel's
 // message and `details: {reason, remedy}`, each bounded, and nothing else of the details; an unknown code is
-// still E_CLI_FAILED. The kernel is a scripted `execFile`: this is the reader's rule, not the kernel's.
+// still E_CLI_FAILED. The confirmed-spawn broker (spawn-apply.mjs) answers it refused (nothing was created),
+// in the kernel's words, and the sheet's shared words (spawn-messages.mjs) say so with the remedy behind
+// Details. The kernel is a scripted `execFile`: this is the reader's rule, not the kernel's.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cliSpawnApply } from '../packages/client/spawn-apply-cli.mjs';
 import { spawnApplyReason, kernelWordedDetails } from '../packages/client/spawn-apply-contract.mjs';
-import { cli, target, data } from '../packages/desktop/test/helpers/spawn-preview-fixture.mjs';
+import { spawnProblem } from '../packages/client/spawn-messages.mjs';
+import { cli, target, data, selector } from '../packages/desktop/test/helpers/spawn-preview-fixture.mjs';
+import { applyContext, applyPreview } from '../packages/desktop/test/helpers/spawn-apply-fixture.mjs';
+
+const brokerModules = async () => ({ ...(await import('../packages/client/spawn-apply.mjs')), ...(await import('../packages/client/spawn-apply-contract.mjs')) });
 
 const capable = () => ({ ...structuredClone(cli), spawnApplyApi: 1, features: [...cli.features, 'spawn-apply-2', 'spawn-idempotency-2'] });
 const options = () => ({ target: structuredClone(target), choices: {}, decision: data().decision, key: 'a'.repeat(64), task: 'Ingest the feed.' });
@@ -55,4 +61,32 @@ test('an over-long or unsafe message falls back to the fixed sentence; an over-l
   // No valid detail: no details at all.
   const bare = await applied({ code: 'E_SANDBOX_PLACEMENT', message: MESSAGE, details: { reason: 'NOT A SLUG' } });
   assert.equal(Object.hasOwn(bare.envelope.error, 'details'), false);
+});
+
+test('through the confirmed-spawn broker: refused, nothing created, in the kernel\'s words; the view and the sheet\'s words keep the remedy', async () => {
+  const { createSpawnApplyBoundary, spawnApplyView } = await brokerModules();
+  const c = applyContext();
+  const error = { code: 'E_SANDBOX_PLACEMENT', message: MESSAGE, details: { reason: 'caller-bound', sandbox: 'ingest', flags: ['--expect-decision', '--idempotency-key'], remedy: REMEDY } };
+  const exec = (_bin, _argv, _options, done) => { done({ code: 1 }, JSON.stringify({ schemaVersion: 1, ok: false, error })); return { kill() { return true; } }; };
+  const broker = createSpawnApplyBoundary({ read: async () => ({ status: 'available', data: applyPreview(target) }), exec });
+  const send = (request) => broker(request, () => c);
+  const prepared = await send({ action: 'prepare', selector, choices: {}, task: '' });
+  assert.equal(prepared.status, 'prepared', JSON.stringify(prepared));
+  const answered = await send({ action: 'apply', spawnRef: prepared.spawnRef });
+  assert.equal(answered.status, 'refused', JSON.stringify(answered));
+  assert.deepEqual(answered.reason, { code: 'E_SANDBOX_PLACEMENT', message: MESSAGE });
+  // The Desktop's HTTP view, projected again at its trust boundary, keeps it.
+  const view = spawnApplyView(JSON.parse(JSON.stringify(answered)), { workspace: target.workspace });
+  assert.equal(view.status, 'refused');
+  assert.deepEqual(view.reason, { code: 'E_SANDBOX_PLACEMENT', message: MESSAGE });
+  // The sheet's words (every client's): what happened, and the kernel's remedy behind Details.
+  const problem = spawnProblem(view.reason, 'spawn');
+  assert.match(problem.fact, /runs in a sandbox/);
+  assert.match(problem.fact, /Nothing was created/);
+  assert.ok(problem.detail.endsWith(REMEDY), problem.detail);
+  // Any other dispatched refusal the broker does not know is still unknown, never refused.
+  const other = createSpawnApplyBoundary({ read: async () => ({ status: 'available', data: applyPreview(target) }),
+    exec: (_b, _a, _o, done) => { done({ code: 1 }, JSON.stringify({ schemaVersion: 1, ok: false, error: { code: 'E_SOMETHING_NEW', message: 'm' } })); return { kill() { return true; } }; } });
+  const p2 = await other({ action: 'prepare', selector, choices: {}, task: '' }, () => c);
+  assert.equal((await other({ action: 'apply', spawnRef: p2.spawnRef }, () => c)).status, 'unknown');
 });

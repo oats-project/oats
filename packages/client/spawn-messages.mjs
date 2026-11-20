@@ -89,6 +89,8 @@ const SPAWN_FACTS = {
   E_CLI_OUTPUT_LIMIT: said('OATS couldn’t confirm the spawn.', 'check-result'),
   E_CLI_PROTOCOL: said('OATS couldn’t complete the spawn.', 'details'),
   E_CLI_FAILED: said('OATS couldn’t complete the spawn.', 'details'),
+  // Feature sandboxes (D-S1-4): the kernel binds a spawn into a sandbox itself; its own remedy is in Details.
+  E_SANDBOX_PLACEMENT: said('This soul runs in a sandbox, which a confirmed spawn can’t reach yet. Nothing was created. Spawn it with oats spawn in a terminal, or from a schedule.', 'details'),
   // Wherever nothing is above the sentence and Details hold no kernel text: the whole of it is shared.
   [UNMATCHED]: said('This machine’s launch preferences name a soul this workspace doesn’t offer, so OATS won’t choose a launch for this soul. To spawn now, pick a harness or a launch configuration for this spawn. To fix it for every spawn, correct the preference.'),
 };
