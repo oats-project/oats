@@ -830,8 +830,10 @@ its own because a kernel reads it:
   `self`. The sandbox reaches the in-sandbox kernel as `--sandbox <S>` on both the
   remote preview and the apply (Identities, step 2); a request carrying a seat option (a
   routed request) without `--sandbox` is refused with `E_SANDBOX_PLACEMENT`,
-  `wrong-sandbox`, and `D` binds the selector. A local spawn inside the sandbox carries no seat
-  option and is judged by `not-placed-here` alone. One that names another sandbox is refused with `E_SANDBOX_PLACEMENT`,
+  `wrong-sandbox`, and `D` binds the selector. An ordinary local spawn without a host-delivered
+  seat is not subject to the routed selector check. It remains subject to the placement
+  check and to the host-delivered-seat requirement (Lifecycle calls made inside a
+  sandbox, `spawn-from-host`). One that names another sandbox is refused with `E_SANDBOX_PLACEMENT`,
   reason `wrong-sandbox`, even when the soul is eligible in both. Its remedy says the
   host routed it to the wrong registration, and to check the host's `sandbox-<name>`
   server entry (C7). Nothing is spawned. `D`
@@ -1222,7 +1224,7 @@ The refusals belong to the acts:
 | No provider, or more than one (r1) | every sandbox act | `E_SANDBOX_PROVIDER`, `none` or `ambiguous` |
 | A placed soul whose selected sandbox this host does not list or run | `oats spawn`, a schedule's spawn | `E_SANDBOX_NOT_HERE` |
 | A soul this sandbox doesn't list, inside it (r5) | the in-sandbox `oats spawn` | `E_SANDBOX_PLACEMENT`, `not-placed-here` |
-| A routed request naming another sandbox, or none, inside it (r5) | the in-sandbox remote preview, before any mint | `E_SANDBOX_PLACEMENT`, `wrong-sandbox` |
+| A routed request naming another sandbox, or none, inside it (r5) | the in-sandbox remote preview and apply; on the normal host route the preview detects it, before any mint | `E_SANDBOX_PLACEMENT`, `wrong-sandbox` |
 | Several eligible sandboxes and no `--sandbox` or schedule `sandbox:` (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-ambiguous` |
 | A named target that isn't declared, or doesn't list the soul (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-unknown` or `sandbox-not-eligible` |
 | A soul reference no member or package offers (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `soul-unknown` |
