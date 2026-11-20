@@ -10,7 +10,10 @@
   <origin>`, the host setting `settings.oats.aweb.registry` that admits a
   private registry. The skill still never sets `AWID_REGISTRY_URL`. That
   branch needs oats.aweb 1.43.0 or later, the first release with
-  `--registry`; the public registry keeps 1.42.1. If the computer account
-  already runs a wake broker for another registry
-  (`E_WAKE_REGISTRY_CONFLICT`), the skill stops and leaves the choice to the
-  person.
+  `--registry`; the public registry keeps 1.42.1. On a private registry,
+  when the setup expert needs the host wake broker, the skill first checks the install read-only
+  (`oats aweb wake install --plan`). It stops, and leaves the choice to the
+  person, when the computer account already runs a broker for another
+  registry (`E_WAKE_REGISTRY_CONFLICT`), and on a machine with no service
+  manager, where a plain `aw wake run` would not carry the registry; there
+  it offers a Claude or pi setup expert instead.

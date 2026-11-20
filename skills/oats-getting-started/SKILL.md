@@ -1256,8 +1256,35 @@ readiness still reports a problem.
    `delivery: session`: its own channel wakes it (step 4). Any other setup
    expert is woken only by the host wake broker, and oats.aweb refuses to
    spawn or start it while no broker runs (`wake-daemon-not-running`). The
-   broker is the person's own user service, so it is theirs to start. Open
-   their own terminal ("How to work") running this, with `D` filled in:
+   broker is the person's own user service, so it is theirs to start.
+
+   **On a private registry (step 1), first check the install yourself,**
+   read-only: the broker must carry `RG`, and the status check below can't
+   see which registry a running broker serves.
+
+   ```bash
+   cd "D" && oats aweb wake install --plan --json
+   ```
+
+   It changes nothing. Its answer's `error.code`, when it has one, decides:
+   - **`E_WAKE_REGISTRY_CONFLICT`:** this computer account already runs a
+     wake broker for another registry, or for none, most likely for
+     another deployment, and one account's broker serves one registry.
+     Stop, spawn nothing, and tell the person in plain words; the choice is
+     theirs: run this deployment under another computer account, or move
+     the other one, as the message says. Never uninstall the broker or
+     deregister another deployment's homes yourself.
+   - **`E_WAKE_UNSUPPORTED`** (a container, or a machine with neither
+     launchd nor systemd): there is no service to install, and the plain
+     `aw wake run` below would not carry `RG`. Stop and spawn nothing.
+     Tell the person in one sentence, and offer a Claude or pi setup
+     expert instead, which its own channel wakes: with that harness, this
+     item is skipped.
+   - **Anything else,** `"ok": true` included: go on. Their own install
+     decides.
+
+   Open their own terminal ("How to work") running this, with `D` filled
+   in:
 
    ```text
    cd "D" && oats aweb wake install
@@ -1265,7 +1292,8 @@ readiness still reports a problem.
 
    In a container, or on a machine with neither launchd nor systemd (the
    command answers `E_WAKE_UNSUPPORTED`), there is no service to install:
-   the line is `aw wake run`, kept running as a supervised process.
+   on the public registry, the line is `aw wake run`, kept running as a
+   supervised process.
 
    Then check it yourself:
 
@@ -1276,14 +1304,6 @@ readiness still reports a problem.
    Go on to step 10 only when it reports `"daemon": { "running": true }`.
    Otherwise stop, spawn nothing, and tell the person what the status
    shows.
-
-   **`E_WAKE_REGISTRY_CONFLICT`** in their terminal: this computer account
-   already runs a wake broker for another registry, or for none, most
-   likely for another deployment, and one account's broker serves one
-   registry. Nothing was changed. Stop, spawn nothing, and tell the person
-   in plain words; the choice is theirs: run this deployment under another
-   computer account, or move the other one, as the message says. Never
-   uninstall the broker or deregister another deployment's homes yourself.
 
 The setup expert does the rest of this machine's messaging
 (`/oats-host-delivery`).

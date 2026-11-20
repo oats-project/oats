@@ -206,13 +206,32 @@ test("step 9's own-server form checks the prerequisites read-only, then creates 
   assert.ok(!ownServer.includes("default:"), "no hosted team on the own-server form");
 });
 
-test("item 6 sends E_WAKE_REGISTRY_CONFLICT to the person and changes nothing", () => {
-  assert.ok(read("mirrors/oats-aweb/lib/wake-service.mjs").includes('fail("E_WAKE_REGISTRY_CONFLICT",'), "the code the skill reads");
+test("item 6 on a private registry: a read-only install plan catches a broker that can't carry RG before the person's install", () => {
+  const wake = read("mirrors/oats-aweb/lib/wake-service.mjs");
+  // The plan runs every refusal the install would, the registry pin included, and changes nothing.
+  assert.ok(wake.includes("/** Everything install decides before it changes anything: every refusal, the\n *  unit text and the actions. Runs read-only commands only. */\nasync function prepareInstall(opts, ctx) {"));
+  assert.ok(wake.includes('fail("E_WAKE_REGISTRY_CONFLICT",'), "the conflict the plan raises");
+  assert.ok(wake.includes('if (!manager) fail("E_WAKE_UNSUPPORTED",'), "no service manager");
+  assert.ok(wake.includes("if (opts.plan) return { ok: true, plan: true,"), "a plan writes nothing");
+  assert.ok(wake.includes('if (json) print(1, JSON.stringify({ ok: false, ...(opts?.plan ? { plan: true } : {}), error: { code, message } }) + "\\n");'), "the error.code the skill reads");
+  // The status the go-on gate reads does not report which registry a running broker serves.
+  const status = wake.slice(wake.indexOf("export async function wakeStatus("), wake.indexOf("const lines = (warnings)"));
+  assert.ok(status.length > 0 && !/registry/i.test(status), "wake status can't see the pin, so the plan is the check");
+
   const item6 = section("6. **Codex, or `delivery: session`: the wake broker runs before the spawn.**", "The setup expert does the rest");
-  const conflict = item6.replace(/\s+/g, " ");
-  assert.ok(conflict.includes("**`E_WAKE_REGISTRY_CONFLICT`** in their terminal:"));
-  assert.ok(conflict.includes("Stop, spawn nothing, and tell the person in plain words; the choice is theirs"));
-  assert.ok(conflict.includes("Never uninstall the broker or deregister another deployment's homes yourself."));
+  const flat6 = item6.replace(/\s+/g, " ");
+  const plan = item6.indexOf('cd "D" && oats aweb wake install --plan --json\n');
+  const install = item6.indexOf('cd "D" && oats aweb wake install\n');
+  assert.ok(plan !== -1 && install !== -1 && plan < install, "the plan runs before the person's install");
+  assert.ok(flat6.includes("**On a private registry (step 1), first check the install yourself,** read-only"));
+  assert.ok(flat6.includes("- **`E_WAKE_REGISTRY_CONFLICT`:** this computer account already runs a wake broker for another registry, or for none"));
+  assert.ok(flat6.includes("Stop, spawn nothing, and tell the person in plain words; the choice is theirs"), "the conflict goes to the person");
+  assert.ok(flat6.includes("Never uninstall the broker or deregister another deployment's homes yourself."));
+  // A plain `aw wake run` carries no registry pin: it is the public registry's fallback only.
+  assert.ok(flat6.includes("- **`E_WAKE_UNSUPPORTED`** (a container, or a machine with neither launchd nor systemd): there is no service to install, and the plain `aw wake run` below would not carry `RG`. Stop and spawn nothing."));
+  assert.ok(flat6.includes("offer a Claude or pi setup expert instead, which its own channel wakes"));
+  assert.ok(flat6.includes("on the public registry, the line is `aw wake run`, kept running as a supervised process."));
+  assert.ok(!/AWID_REGISTRY_URL/.test(item6), "no ambient registry for the broker either");
 });
 
 test("the hand-over and Never carry the own-server branch", () => {
