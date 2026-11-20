@@ -21,7 +21,9 @@ recorded planned has no session; one recorded stopped has none but the one
 its record names, and not that one either once a stop of it was confirmed.
 (3) No home is left that no verb can act on: every verb answers a kernel
 code, and a retire takes the home. (4) No input is delivered after a stop
-was confirmed.
+was confirmed. (5) A home whose start, restart or resume was answered, or
+whose input was submitted, has the session its record names running: nothing
+a kernel left behind stops it afterwards.
 
 A provider runs the session; **OATS decides what state the home is in, from
 its own records alone**. The provider is asked only what a record cannot say
@@ -115,7 +117,7 @@ before its home can be acted on):
 | 3 | If launched before: stop the session at `E`. A restart of *running* whose session is there records `stoppedAt` and the stop receipt first (the stop rule). A start or a restart of *stopped* asks the provider's `stop {endpoint: E}` again; not confirmed is `E_SESSION_STOP_FAILED`, nothing started. (*Running* whose session is gone: step 4) | receipt, stop receipt (a restart of a session that is there) | stopped, or running-and-gone |
 | 4 | **Mark**: receipt `launchSent: t` (and `launched: true` from planned), then the record's `launched: true` from planned. Then, for *running* whose session is gone, the provider's `stop {endpoint: E}`, and nothing is recorded of it (so a stop that is not confirmed leaves a lost home lost, not stopped as by an operator): not confirmed is `E_SESSION_STOP_FAILED`, the mark taken back (6b), nothing started. After the mark, because an input holds no claim: see the crossings | receipt, then record | sent or resent |
 | 5 | The provider's `launch` | none | sent or resent |
-| 6a | It answered `E'`: receipt `endpoint: E'`, `stoppedAt: null`, **`launchSent` kept**; then the record (`launched: true`, `endpoint: E'`, new `startId`); then the receipt's `launchSent` removed (a spawn removes it after its own last write of the record, so that no input is admitted to a home whose spawn may still be undone) | receipt, record, receipt | running at `E'` |
+| 6a | It answered `E'`: receipt `endpoint: E'`, `stoppedAt: null`, **`launchSent` kept**; then the record (`launched: true`, `endpoint: E'`, new `startId`); then the receipt's `launchSent` removed (a spawn removes it at its end, after its lineage is committed, so that no input is admitted to a home whose spawn may still be undone; and only then does a keyed spawn's record say it completed, so a same-key retry never replays an unsettled home as finished) | receipt, record, receipt | running at `E'` |
 | 6b | It refused (nothing was started): **unmark**: record, then receipt | record, then receipt | as before step 4 |
 | 6c | Its answer was lost: settle | see Settling | planned or stopped; or unchanged when the stop is not confirmed |
 
@@ -125,8 +127,13 @@ which the receipt names a session the record contradicts, or at which a
 session runs that the receipt does not account for with either an endpoint
 or `launchSent`.
 
-A spawn that fails after step 4 undoes itself: 6b or 6c (it drains first, as
-every stop does), then the home is removed. A home it keeps for another debt after a stop that was confirmed (a
+A spawn writes its home's receipt, as planned, BEFORE it publishes the
+record, and again after it; so a spawn that ends between the two leaves a
+planned home, never a record without a receipt, and a spawn that reuses the
+name of a retired home (whose receipt a retire keeps, by its path) is never
+paired with that one. A spawn that fails after step 4 undoes itself: 6b or
+6c (its fence first: the launch's mark, written again if it was gone
+already; then the drain, as for every stop), then the home is removed. A home it keeps for another debt after a stop that was confirmed (a
 hook's cleanup is owed) is left planned, record and receipt alike, with its
 rollback marker. When the stop of 6c is not confirmed the home is retained,
 unsettled, with its rollback marker. A retire of a retained provider home
@@ -154,7 +161,9 @@ provider, whatever the verb, is made by one function, in this order:
    earlier stop's receipt is removed (one a resume that died left names this
    same start, and would make this stop the host's), then receipt
    `stoppedAt: t`, then the stop receipt. For a launch: its mark. A home
-   that is stopped or unsettled already has its fence.
+   that is stopped or unsettled already has its fence. A fence that cannot
+   be written refuses the verb before the provider is asked, a retire too:
+   without it an input is still admitted.
 2. The **drain** of the provider calls recorded for the home (see "A
    provider's command outlives the kernel that ran it"): an input that is
    being sent is waited for, at most an input's timeout and a margin (about
@@ -188,7 +197,7 @@ more (the crossing check, below).
 **A verb arrives while another holds the claim.** Stop, start, restart,
 resume and retire take the claim; a second one is refused as busy
 (`E_LIFECYCLE_BUSY`, `E_SESSION_START_BUSY`, …) before any effect. A spawn
-holds the claim from before its home is *planned* on disk until its last
+of a provider home, launched or not, holds the claim from before its home is *planned* on disk until its last
 write of the home's record (after its launch is recorded) or until its
 launch is undone, so the home is never acted on while it launches, and no
 verb's record is overwritten by the spawn's.
@@ -202,8 +211,7 @@ one that has it started at another time (the id was reused), or it is a
 zombie; a holder whose liveness cannot be read is not gone, and the verb is
 refused as busy. The next verb takes over a gone holder's claim. The records
 are in one of the states above whatever the point of death, by the write
-orders of "A launch" and of the stop rule, with one exception, a spawn that
-dies before its home has a receipt (the row below):
+orders of "A launch" and of the stop rule:
 
 | Died | State left | The next verb |
 |---|---|---|
@@ -215,7 +223,7 @@ dies before its home has a receipt (the row below):
 | during a launch the provider refused, between the record and the receipt of its unmarking | sent | settles (there is nothing to stop) |
 | during a spawn, after its launch's outcome and before its last write of the record | resent (the mark is kept to that write) | settles: `stop {E}`, then the launch's; the home is stopped |
 | during a spawn's rollback, between its record and its receipt | unsettled: the launch still marked, the record already planned (not compared) | settles |
-| during a spawn, between the planned record and the receipt | a directory home: planned (its early receipt names the provider). A worktree home: a planned record and **no receipt**, which is no state of the table: no verb runs on it but a retire | a retire takes it as never launched, after its scan: the mark of a launch is written to the receipt first, so a home with no receipt was never sent one. (A receipt that is there and cannot be used says nothing, and refuses) |
+| during a spawn, between the planned record and its last receipt | planned (the receipt was written before the record) | acts on it |
 | during a resume of a home stopped with the host, after its notice | stopped with the host; its session may run again | the sweep sends the notice again; a stop or a start asks `stop {E}` |
 | during that resume, after `stoppedAt` was cleared | running, with the host's stop receipt left | acts on a running home; a later loss of that start is a loss like any other, counted (a stop receipt says the host's stop only beside a receipt that says stopped), and a later stop removes that receipt before it records its own |
 
@@ -260,15 +268,18 @@ is ended too (a retire then says so, naming the input's process).
 every command of a provider in a process group of its own. A kernel that is
 killed while it waits for one leaves that command running: a launch that
 creates its session later, an input that restarts one, a stop that stops a
-session resumed since. So a launch, an input and a stop the kernel relies on
-are recorded while they run (the table at the top: the kernel that made the
+session resumed since. So a launch, an input and EVERY stop the kernel sends
+(one function sends them all: a verb's, a spawn's rollback, an input's own
+after a crossing) are recorded while they run (the table at the top: the kernel that made the
 call, and the group its command runs in, written by the group's leader
 before the provider runs), and the record is removed when the call returns.
 
 A record whose kernel is gone is a call that may still act. The kernel
 **ends** it: the group is killed (SIGKILL) and seen empty. A call whose
 group had not recorded itself yet is made void: the kernel creates the
-group's file itself, removes the call's record, then that file; a leader
+group's file itself, removes the call's record, then that file (both the
+leader and the kernel publish that file whole, by an exclusive link from a
+file of their own, so neither ever finds it half written); a leader
 that comes late finds the file, or finds its call's record gone, and runs
 nothing. A group that cannot be ended (its leader is gone and members are
 left, or they survive) refuses the verb: `E_SESSION_STOP_FAILED` for a stop,

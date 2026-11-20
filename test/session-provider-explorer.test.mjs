@@ -13,7 +13,9 @@
 //      the next stop, start or retire, and no input reaches it meanwhile);
 //   3. no home is left that no verb can act on: every verb answers a kernel code, never a record
 //      it cannot read, and a retire takes the home, after which nothing of it runs;
-//   4. no input is delivered after a stop was confirmed.
+//   4. no input is delivered after a stop was confirmed;
+//   5. a home whose start, restart or resume was answered, or whose input was submitted, has the
+//      session its record names running: nothing a kernel left behind stops it afterwards.
 //
 // Deterministic: the schedules are enumerated, shuffled by a seed and cut to a sample, so a run
 // in the suite takes seconds. EVERY schedule runs with `npm run test:provider-lifecycle`, which
@@ -21,6 +23,8 @@
 // schedule's steps.
 //   OATS_EXPLORER_SEED=<n>    another sample           OATS_EXPLORER_COUNT=<n>|all   its size
 //   OATS_EXPLORER_ONLY="<a> | <seam> | <b>"            one schedule, as a failure prints it
+// What it does NOT enumerate, and the tables pin instead: two LIVE commands side by side (a verb
+// that runs while another is paused, not ended), and a write that fails without its process ending.
 //   OATS_EXPLORER_VERBOSE=1   a refusal's message beside its code, in a failure's steps
 //   OATS_EXPLORER_WORKERS=<n> how many schedules run side by side (6)
 import test from "node:test";
@@ -36,8 +40,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, "..", "bin", "oats.mjs");
 const VERB = join(HERE, "helpers", "session-provider-verb.mjs");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-/** How long a provider's command sleeps before it acts, when its kernel dies during it. */
-const LATE_MS = 400;
+/** How long a provider's command sleeps before it acts, when its kernel dies during it: long
+ *  enough that the next verb has answered by then, so what the command does comes AFTER it. */
+const LATE_MS = 1500;
 
 // ------------------------------------------------------------------ the schedules
 const CALL = (verb) => [`call:${verb}:before`, `call:${verb}:during`, `call:${verb}:after`];
@@ -47,6 +52,9 @@ const STOP_RULE = ["stop:stoppedAt-written", "stop:receipt-written", ...CALL("st
  *  here must kill it (the explorer says so when it does not), so the list cannot rot. */
 const KILLED = [
   { a: "spawn", from: "none", verb: "spawn", seams: ["spawn:record-written", ...MARK, "spawn:recorded", "spawn:published"] },
+  { a: "spawn without a launch", from: "none", verb: "spawn planned", seams: ["spawn:record-written"] },
+  // (A retire keeps the receipt of the home it removed, by its path: the spawn must not be paired with it.)
+  { a: "spawn over the name of a retired home", from: "retired", verb: "spawn again", seams: ["spawn:record-written", "mark:receipt-written", "outcome:record-written"] },
   { a: "spawn, its launch lost", from: "none", verb: "spawn", provider: { launch: { exit: 1 } }, seams: [...CALL("stop"), "rollback:record-written"] },
   { a: "start of planned", from: "planned", verb: "start", seams: MARK },
   { a: "start of planned, refused", from: "planned", verb: "start", provider: { launch: { error: { code: "E_BACKEND_NOT_READY", message: "down" } } }, seams: ["unmark:record-written"] },
@@ -94,8 +102,10 @@ function run(fx, argv, env = {}) {
 const lastJson = (out) => { for (const text of [out, out.trim().split("\n").pop()]) { try { return JSON.parse(text); } catch { /* the other form */ } } return null; };
 /** One verb on a home → `{ signal }` when it was killed, else `{ ok, code }` (`code` null: a defect). */
 async function verb(fx, what, name, home, env) {
-  if (what === "spawn" || what === "spawn planned") {
-    const r = await run(fx, [CLI, "spawn", "dev", "--name", name, "--backend", "fake", "--launch-config", "claude", ...(what === "spawn planned" ? ["--no-launch"] : []), "--json"], env);
+  if (what.startsWith("spawn")) {
+    // "spawn in a worktree", then "spawn again" over its name once it is retired, on a branch of its own.
+    const more = { "spawn planned": ["--no-launch"], "spawn in a worktree": ["--work", "worktree"], "spawn again": ["--work", "worktree", "--branch", `agents/${name}-again`] }[what] ?? [];
+    const r = await run(fx, [CLI, "spawn", "dev", "--name", name, "--backend", "fake", "--launch-config", "claude", ...more, "--json"], env);
     const said = lastJson(r.out);
     return r.signal ? { signal: r.signal } : { ok: said?.ok !== false && said !== null, code: said?.error?.code ?? null, message: r.out.slice(0, 400) };
   }
@@ -121,6 +131,7 @@ function stateOf(home) {
 async function prepare(fx, from, name, home) {
   const must = async (what, env) => { const r = await verb(fx, what, name, home, env); if (r.ok !== true && !(env && r.signal)) throw Object.assign(new Error(`setting up "${from}": ${what} answered ${JSON.stringify(r)}`), { setup: true }); };
   if (from === "none") return;
+  if (from === "retired") { await must("spawn in a worktree"); return must("retire"); }
   if (from === "planned") return must("spawn planned");
   if (from === "sent") return must("spawn", { OATS_TEST_PROVIDER_DIE_AT: "mark:receipt-written" });
   await must("spawn");
@@ -141,53 +152,62 @@ async function explore(fx, setControl, n, { a, from, verb: killed, provider = {}
   await prepare(fx, from, name, home);
   // The provider's commands act late, so that one whose kernel died during it would act after the next verb.
   const lateFor = (v) => (provider[v] ? {} : { [v]: { sleepMs: LATE_MS } });
-  setControl(name, seam.endsWith(":during") ? { ...provider, ...lateFor("launch"), ...lateFor("input"), ...lateFor("stop") } : provider);
+  const late = seam.endsWith(":during");
+  setControl(name, late ? { ...provider, ...lateFor("launch"), ...lateFor("input"), ...lateFor("stop") } : provider);
   const died = await verb(fx, killed, name, home, { OATS_TEST_PROVIDER_DIE_AT: seam });
   setControl(name, null);
   if (died.signal !== "SIGKILL") return { name, steps, broken: [`"${a}" does not pass the seam ${seam} (it answered ${JSON.stringify(died).slice(0, 200)}): fix the explorer's list`] };
   steps.push(`left: ${stateOf(home)}`);
-  // The next verb, then an input.
+  const mine = () => [...sessionsOf(fx.events())].filter(([, s]) => s.home === name);
+  /** Invariants 1, 2, 4 and 5, as the records and the provider's sessions stand now. */
+  const check = (when, { stoppedAt, launched }) => {
+    const state = stateOf(home);
+    steps.push(`${when}: ${state}`);
+    const running = mine().filter(([, s]) => s.running).map(([thread]) => thread);
+    const named = receiptOf(home)?.endpoint?.threadId ?? null;
+    // 1 and 2. (An unsettled home is unknown to the kernel, which says so to every read: what runs
+    // for it is settled by the next verb, and by the retire below.)
+    if (state === "running") { for (const thread of running) if (thread !== named) broken.push(`${when}: a session runs that no record names: ${thread} (the home's record names ${named})`); }
+    else if (state === "planned" || state === "gone") { if (running.length) broken.push(`${when}: the home is ${state}, and a session of it runs: ${running.join(", ")}`); }
+    else if (state === "stopped") {
+      // The fence comes first: a kernel that ended after `stoppedAt` and before the provider
+      // confirmed leaves the home stopped and its RECORDED session running, which no input
+      // reaches, until a stop, a start or a retire asks again (the page, "The holder died"). Once
+      // a stop is confirmed nothing runs; and a session the record does not name never does.
+      for (const thread of running) {
+        if (thread !== named) broken.push(`${when}: the home is stopped, and a session runs that its record does not name: ${thread}`);
+        else if (stoppedAt !== null) broken.push(`${when}: the ${b} was confirmed, and the session it stopped runs: ${thread}`);
+      }
+    }
+    else if (state === "no receipt") broken.push(`${when}: the home has a record and no receipt`);
+    // 4.
+    if (stoppedAt !== null && (state === "stopped" || state === "gone")) {
+      const threads = new Set(mine().map(([thread]) => thread));
+      const delivered = fx.events().filter((e) => e.ev === "input" && threads.has(e.thread) && e.at > stoppedAt);
+      if (delivered.length) broken.push(`${when}: an input was delivered after the ${b} was confirmed (${delivered.length})`);
+    }
+    // 5.
+    if (launched && !(state === "running" && named !== null && running.includes(named))) broken.push(`${when}: ${launched} was answered, and the home is ${state} with ${running.includes(named) ? "its" : "no"} named session running`);
+  };
+  // The next verb. Then everything a kernel left behind has the time to act, and the invariants
+  // are checked BEFORE the input, which would restart a session that something had stopped.
   const next = existsSync(home) ? answered(b, await verb(fx, b, name, home)) : null;
   // A stop that was confirmed: a retire's, an operator's stop (which asks the provider also of a
   // home that is stopped already), and the host's stop when it says it stopped a session (of a
   // home that is stopped already it asks nothing, and says so).
   const stoppedAt = next?.ok && (b === "stop" || b === "retire" || (b === "host stop" && next.stopped)) ? Date.now() : null;
+  await sleep(late ? LATE_MS + 300 : 100);
+  check(`after ${b}`, { stoppedAt, launched: next?.ok && ["start", "restart", "resume", "input"].includes(b) ? b : null });
+  // Then an input, and the same again.
   const input = b !== "input" && existsSync(home) ? answered("input", await verb(fx, "input", name, home)) : null;
-  // Everything a killed kernel left behind has acted by now, if it was going to.
-  await sleep(2 * LATE_MS + 300);
-  const state = stateOf(home);
-  steps.push(`settled: ${state}`);
-  const events = fx.events();
-  const mine = () => [...sessionsOf(fx.events())].filter(([, s]) => s.home === name);
-  const running = mine().filter(([, s]) => s.running).map(([thread]) => thread);
-  const named = receiptOf(home)?.endpoint?.threadId ?? null;
-  // 1 and 2. (An unsettled home is unknown to the kernel, which says so to every read: what runs
-  // for it is settled by the next verb, and by the retire below.)
-  if (state === "running") { for (const thread of running) if (thread !== named) broken.push(`a session runs that no record names: ${thread} (the home's record names ${named})`); }
-  else if (state === "planned" || state === "gone") { if (running.length) broken.push(`the home is ${state}, and a session of it runs: ${running.join(", ")}`); }
-  else if (state === "stopped") {
-    // The fence comes first: a kernel killed after `stoppedAt` and before the provider confirmed
-    // leaves the home stopped and its RECORDED session running, which no input reaches, until a
-    // stop, a start or a retire asks again (the page, "The holder died"). Once a stop is confirmed
-    // nothing runs; and a session the record does not name never does.
-    for (const thread of running) {
-      if (thread !== named) broken.push(`the home is stopped, and a session runs that its record does not name: ${thread}`);
-      else if (stoppedAt !== null) broken.push(`the ${b} was confirmed, and the session it stopped runs: ${thread}`);
-    }
-  }
-  else if (state === "no receipt") broken.push("the home has a record and no receipt");
-  // 4.
-  if (stoppedAt !== null && (state === "stopped" || state === "gone")) {
-    const threads = new Set(mine().map(([thread]) => thread));
-    const delivered = events.filter((e) => e.ev === "input" && threads.has(e.thread) && e.at > stoppedAt);
-    if (delivered.length) broken.push(`an input was delivered after the ${b} was confirmed (${delivered.length})`);
-  }
-  if (input?.ok && state !== "running") broken.push(`an input was answered as submitted to a home that is ${state}`);
+  await sleep(100);
+  check("after the input", { stoppedAt, launched: input?.ok ? "the input" : null });
+  if (input?.ok && stateOf(home) !== "running") broken.push(`an input was answered as submitted to a home that is ${stateOf(home)}`);
   // 3. A retire takes the home, whatever is left of it, and nothing of it runs afterwards.
   if (existsSync(home)) {
     const retired = answered("retire", await verb(fx, "retire", name, home));
     if (!retired.ok) broken.push(`a retire does not take the home (${retired.code}): ${String(retired.message).slice(0, 300)}`);
-    await sleep(LATE_MS);
+    await sleep(100);
   }
   const left = mine().filter(([, s]) => s.running).map(([thread]) => thread);
   if (left.length && !existsSync(home)) broken.push(`the home is gone, and a session of it runs: ${left.join(", ")}`);

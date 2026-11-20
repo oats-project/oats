@@ -10,7 +10,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inputInstanceSession, inspectInstanceSession, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
@@ -426,14 +426,14 @@ const SPAWN_DEATHS = [
   ["outcome:record-written", [], ["launch"], "resent", "retire", ["stop:E", "stop:null"], "gone"],
   // A spawn keeps the mark to its last write of the record: until then no input is admitted.
   ["spawn:recorded", ["--idempotency-key", "kept-1"], ["launch"], "resent", "stop", ["stop:E", "stop:null"], "stopped"],
-  // Between the planned record and the receipt nothing was sent. A directory home has its early
-  // receipt, which names the provider: planned. A worktree home has none: a retire takes it.
+  // Between the planned record and the spawn's last receipt nothing was sent, and the home is
+  // planned: its receipt was written before its record, in every work mode.
   ["spawn:record-written", ["--work", "directory"], [], "planned", "start", ["launch"], "running"],
   ["spawn:record-written", ["--work", "directory", "--no-launch"], [], "planned", "retire", [], "gone"],
-  ["spawn:record-written", ["--work", "worktree"], [], "no receipt", "retire", [], "gone"],
-  ["spawn:record-written", ["--work", "worktree", "--no-launch"], [], "no receipt", "retire --force", [], "gone"],
+  ["spawn:record-written", ["--work", "worktree"], [], "planned", "start", ["launch"], "running"],
+  ["spawn:record-written", ["--work", "worktree", "--no-launch"], [], "planned", "retire", [], "gone"],
 ];
-test("a spawn dying between two of its writes leaves a state of the page, or a planned home without its receipt that a retire takes", async (t) => {
+test("a spawn dying between two of its writes leaves a state of the page", async (t) => {
   const fx = providerDeployment(t);
   let n = 0;
   for (const [point, args, asked, left, next, then, after] of SPAWN_DEATHS) {
@@ -444,11 +444,6 @@ test("a spawn dying between two of its writes leaves a state of the page, or a p
       assert.equal(died.signal, "SIGKILL", `the spawn died at the point: ${died.stdout}${died.stderr}`);
       const home = JSON.parse(fx.cli(["status", "--json"]).stdout).agents.flatMap((a) => a.instances).find((r) => r.instance === name).home;
       assert.deepEqual([callsOf(fx, home).filter((call) => call !== "inspect"), existsSync(receiptPath(home)) ? stateOf(home) : "no receipt"], [asked, left]);
-      if (left === "no receipt") {
-        // Not a home a verb can run: its session's receipt is missing. A retire removes it.
-        assert.deepEqual([recordOf(home).launched, recordOf(home).session], [false, { provider: FAKE_CAPABILITY, endpoint: null }]);
-        assert.equal(await answerOf(fx, "start", home), "E_RUNTIME_ENDPOINT_UNKNOWN");
-      }
       fx.clearCalls();
       if (next.startsWith("retire")) {
         const retired = JSON.parse(fx.cli(["retire", name, ...next.split(" ").slice(1), "--json"]).stdout);
@@ -749,4 +744,60 @@ test("a spawn's rollback killed between its two writes leaves the launch marked:
   fx.clearCalls();
   assert.equal(await answerOf(fx, "retire", home), "retired");
   assert.deepEqual([callsOf(fx, home), stateOf(home)], [["stop:null"], "gone"]);
+});
+
+test("a provider home's spawn holds the home's claim from before its record, launched or not", async (t) => {
+  const fx = providerDeployment(t);
+  const died = spawnSync(process.execPath, [CLI, "spawn", "dev", "--name", "scaffold", "--backend", "fake", "--launch-config", "claude", "--no-launch", "--work", "directory", "--json"], { cwd: fx.dep, env: { ...fx.env, OATS_TEST_PROVIDER_DIE_AT: "spawn:record-written" }, encoding: "utf8" });
+  assert.equal(died.signal, "SIGKILL", `${died.stdout}${died.stderr}`);
+  const home = homeOf(fx, "scaffold");
+  // The record is published, and the claim was the spawn's: no start could run beside it.
+  assert.deepEqual([recordOf(home).launched, readJson(join(dirname(home), ".oats-retirement", "claims", "scaffold.lock")).action], [false, "start"]);
+});
+
+test("a spawn that reuses the name of a retired home is never paired with that home's receipt: ended right after its record, it is a planned home", async (t) => {
+  const fx = providerDeployment(t);
+  const first = await fx.launch("twice", { work: "worktree" });
+  assert.equal(JSON.parse(fx.cli(["retire", "twice", "--json"]).stdout).retired, "twice");
+  assert.equal(existsSync(receiptPath(first.home)), true, "the retire keeps the receipt of the home it removed");
+  const died = spawnSync(process.execPath, [CLI, ...SPAWN("twice").slice(0, -1), "--work", "worktree", "--branch", "agents/twice-again", "--json"], { cwd: fx.dep, env: { ...fx.env, OATS_TEST_PROVIDER_DIE_AT: "spawn:record-written" }, encoding: "utf8" });
+  assert.equal(died.signal, "SIGKILL", `${died.stdout}${died.stderr}`);
+  // The receipt is the new spawn's own, written before its record: planned, not the launched one of the home before.
+  assert.deepEqual([stateOf(first.home), runtimeOf(first.home), recordOf(first.home).launched], ["planned", { launched: false, backend: "fake", provider: FAKE_CAPABILITY }, false]);
+  fx.clearCalls();
+  assert.equal(await answerOf(fx, "start", first.home), "launched");
+  assert.deepEqual([callsOf(fx, first.home), stateOf(first.home)], [["launch"], "running"]);
+});
+
+test("a call's records are published whole: a writer that ended before its record's name was made leaves nothing a verb waits on", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("whole");
+  const calls = join(dirname(home), ".oats-retirement", "provider-calls", "whole");
+  // A call of a kernel that is gone, and the file of a leader that ended before it published its group.
+  mkdirSync(calls, { recursive: true });
+  writeFileSync(join(calls, "launch-999999-00000000-0000-4000-8000-000000000000.json"), JSON.stringify({ verb: "launch", pid: 999999, processStart: "never", startedAt: SENT_AT }));
+  writeFileSync(join(calls, "launch-999999-00000000-0000-4000-8000-000000000000.json.group.999998.tmp"), "");
+  fx.clearCalls();
+  assert.equal(await answerOf(fx, "stop", home), "stopped");
+  assert.deepEqual([callsOf(fx, home), readdirSync(calls).filter((name) => !name.endsWith(".tmp"))], [["stop:E"], []]);
+});
+
+test("a retire that cannot record its stop does not ask the provider, and retires nothing", { skip: typeof process.getuid === "function" && process.getuid() === 0 ? "root writes where a mode forbids it" : false }, async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("unfenced");
+  const receipts = dirname(receiptPath(home));
+  chmodSync(receipts, 0o500);
+  t.after(() => chmodSync(receipts, 0o700));
+  fx.clearCalls();
+  const refused = JSON.parse(fx.cli(["retire", "unfenced", "--json"]).stdout);
+  chmodSync(receipts, 0o700);
+  assert.deepEqual([refused.error?.code, existsSync(home), callsOf(fx, home).filter((c) => c.startsWith("stop")), stateOf(home)], ["E_RUNTIME_QUIESCE_FAILED", true, [], "running"], JSON.stringify(refused).slice(0, 400));
+});
+
+test("a spawn's record says it completed only after its launch's mark is gone: ended one write earlier, it is not a spawn a same-key retry replays", async (t) => {
+  const fx = providerDeployment(t);
+  const died = spawnSync(process.execPath, [CLI, ...SPAWN("keyed").slice(0, -1), "--idempotency-key", "keyed-1", "--json"], { cwd: fx.dep, env: { ...fx.env, OATS_TEST_PROVIDER_DIE_AT: "spawn:recorded" }, encoding: "utf8" });
+  assert.equal(died.signal, "SIGKILL", `${died.stdout}${died.stderr}`);
+  const home = homeOf(fx, "keyed");
+  assert.deepEqual([stateOf(home), recordOf(home).spawnCompleted], ["resent", false]);
 });
