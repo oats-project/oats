@@ -2655,8 +2655,10 @@ async function capabilityShowCmd(bail) {
   if (doc.sandboxDomains !== undefined) {
     // As declared, made safe to print: the settings whose hosts a session provider's sandbox may be widened by.
     const { safeText } = await import("../lib/refused-text.mjs");
-    const lines = Array.isArray(doc.sandboxDomains) ? doc.sandboxDomains.map((l) => (typeof l?.setting === "string" ? safeText(l.setting, 80) : "?")) : null;
-    console.log(`  sandbox domains: ${lines ? `the host of ${lines.length === 1 ? "setting" : "settings"} ${lines.join(", ")}` : "(malformed — see sandbox domain problems)"}`);
+    // A `{ setting }` line: the setting's host. A `{ settingFile, urls }` line: the hosts in the file the setting names.
+    const lines = Array.isArray(doc.sandboxDomains) ? doc.sandboxDomains.map((l) => (typeof l?.setting === "string" ? `the host of setting ${safeText(l.setting, 80)}${l.optional === true ? " (optional)" : ""}`
+      : typeof l?.settingFile === "string" ? `the hosts in the file of setting ${safeText(l.settingFile, 80)} at ${safeText(String(l.urls ?? "?"), 200)}` : "?")) : null;
+    console.log(`  sandbox domains: ${lines ? lines.join("; ") : "(malformed — see sandbox domain problems)"}`);
     for (const p of doc.sandboxDomainProblems ?? []) console.log(`  sandbox domain problem: ${safeText(p, 300)}`);
   }
   for (const p of doc.problems) console.log(`  problem: ${p.code}${p.path ? ` ${p.path}` : ""} — ${p.message}`);
@@ -2846,7 +2848,7 @@ function printSandboxAllowances(sb, indent = "") {
   console.log(`${indent}sandbox allowances:`);
   for (const d of sb.domains) console.log(`${indent}  host ${terminalText(d.host)}  asked by ${terminalText(d.capability)} (setting ${terminalText(d.setting)}${d.team ? `, for team ${terminalText(d.team)}, which this instance may join` : ""})`);
   for (const w of sb.write) console.log(`${indent}  path ${terminalText(w.path)}  asked by the kernel (${terminalText(w.reason)})`);
-  for (const m of sb.missing) console.log(`${indent}  missing${m.optional ? " (optional)" : ""}: ${terminalText(m.capability)} setting ${terminalText(m.setting)}${m.team === null ? " has no value" : ` has no entry for team ${terminalText(m.team)}`}`);
+  for (const m of sb.missing) console.log(`${indent}  missing${m.optional ? " (optional)" : ""}: ${terminalText(m.capability)} setting ${terminalText(m.setting)}${m.team === null ? " has no value" : ` has no entry for team ${terminalText(m.team)}${m.defaultTeam ? " (the default team)" : ""}`}`);
   for (const k of sb.skipped ?? []) console.log(`${indent}  left out: ${terminalText(k.capability)}: ${terminalText(k.reason)}`);
   for (const u of sb.unread ?? []) console.log(`${indent}  not read: ${terminalText(u.capability)} setting ${terminalText(u.setting)}: ${terminalText(u.reason)}`);
 }

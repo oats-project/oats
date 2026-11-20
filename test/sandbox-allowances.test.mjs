@@ -42,7 +42,7 @@ test("each slot's provider may ask; hosts are deduplicated, the first to ask is 
     { host: "registry.example.org:8443", capability: "acme.msg", setting: "registry" },
     { host: "10.0.0.7", capability: "acme.tasks", setting: "api" },
   ]);
-  assert.deepEqual(allowed.missing, [{ capability: "acme.msg", setting: "unset", team: null }], "named, for the provider to judge: the kernel refuses nothing on it");
+  assert.deepEqual(allowed.missing, [{ capability: "acme.msg", setting: "unset", team: null, defaultTeam: true }], "named, for the provider to judge: the kernel refuses nothing on it");
 });
 
 test("a map from team id to URL gives the hosts of the instance's own teams only", () => {
@@ -62,10 +62,20 @@ test("a map from team id to URL gives the hosts of the instance's own teams only
   assert.deepEqual(of([]).map((d) => d.host), ["registry.example.org"]);
   // A team of the instance that the map does not hold is `missing`, with its id.
   const partly = sandboxAllowances({ modules: [messaging([{ setting: "services" }])], slots: { messaging: "acme.msg" }, payloads: { "acme.msg": { services } }, teams: ["default:acme.example", "unlisted:acme.example"], eventsDir: EVENTS });
-  assert.deepEqual([partly.domains.map((d) => d.host), partly.missing], [["aweb.example.org"], [{ capability: "acme.msg", setting: "services", team: "unlisted:acme.example" }]]);
+  assert.deepEqual([partly.domains.map((d) => d.host), partly.missing], [["aweb.example.org"], [{ capability: "acme.msg", setting: "services", team: "unlisted:acme.example", defaultTeam: false }]]);
+  // `defaultTeam` says which missing row is the soul's default team's: the one a provider refuses a
+  // sandboxed launch on. A row with no team at all (the setting has no value) is one too.
+  const rowsFor = (defaultTeam, payload) => sandboxAllowances({ modules: [messaging([{ setting: "services" }, { setting: "registryHost", optional: true }])], slots: { messaging: "acme.msg" }, payloads: { "acme.msg": payload }, teams: ["default:acme.example", "unlisted:acme.example", "other:acme.example"], defaultTeam, eventsDir: EVENTS }).missing;
+  assert.deepEqual(rowsFor("unlisted:acme.example", { services }), [
+    { capability: "acme.msg", setting: "services", team: "unlisted:acme.example", defaultTeam: true },
+    { capability: "acme.msg", setting: "services", team: "other:acme.example", defaultTeam: false },
+    { capability: "acme.msg", setting: "registryHost", team: null, defaultTeam: true, optional: true },
+  ]);
+  assert.deepEqual(rowsFor("default:acme.example", { services }).map((r) => [r.team, r.defaultTeam]), [["unlisted:acme.example", false], ["other:acme.example", false], [null, true]]);
+  assert.deepEqual(rowsFor("default:acme.example", {}).map((r) => [r.setting, r.team, r.defaultTeam]), [["services", null, true], ["registryHost", null, true]], "a deployment that never set the map up");
   // A line declared optional marks its missing rows: no reason for a provider to refuse.
   const optional = sandboxAllowances({ modules: [messaging([{ setting: "services" }, { setting: "registryHost", optional: true }])], slots: { messaging: "acme.msg" }, payloads: { "acme.msg": { services } }, teams: ["default:acme.example"], eventsDir: EVENTS });
-  assert.deepEqual([optional.domains.map((d) => d.host), optional.missing], [["aweb.example.org"], [{ capability: "acme.msg", setting: "registryHost", team: null, optional: true }]]);
+  assert.deepEqual([optional.domains.map((d) => d.host), optional.missing], [["aweb.example.org"], [{ capability: "acme.msg", setting: "registryHost", team: null, defaultTeam: true, optional: true }]]);
   // An entry of the instance's team that gives no host is refused, naming the team.
   const refused = refusal(() => of(["other:else.example"]));
   assert.deepEqual([refused.code, refused.details], ["E_BACKEND_SANDBOX_HOST", { capability: "acme.msg", setting: "services", host: null, team: "other:else.example" }]);

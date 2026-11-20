@@ -7459,7 +7459,7 @@ before anything is created (a preview answers them too):
 | `E_BACKEND_HARNESS` | `{backend, capability, harness, harnesses}` |
 | `E_BACKEND_LAUNCH_ARG` | `{backend, launchConfig, field: "executable"}` |
 | `E_BACKEND_WIRE` | `{backend, capability, wire: {provider, kernel}}`: the provider's declared wire version (null: none) and this kernel's. Also from a start, a restart and a `--resume`, before anything is read or stopped |
-| `E_BACKEND_SANDBOX_HOST` | `{capability, setting, host, team?}`: a capability's `sandboxDomains` line that may not add a host; `setting` and `host` are null where there is none to name. Also from a start or a restart, before anything is stopped |
+| `E_BACKEND_SANDBOX_HOST` | `{capability, setting, host, team?, path?}`: a capability's `sandboxDomains` line that may not add a host; `setting` and `host` are null where there is none to name. With `path` (and `capability: null`): a path the kernel itself would allow the session to write that is reached through a symbolic link, or is no directory. Also from a start or a restart, before anything is stopped |
 | `E_BACKEND_NOT_READY`, any other `E_BACKEND_*` | the provider's readiness, or its own refusal of the launch: `{backend, capability}`; the spawn is rolled back |
 
 A launch that fails otherwise is `E_SESSION_START_FAILED`.
@@ -7585,13 +7585,14 @@ as the kernel computes it from the deployment's configuration. One key,
 
 - a spawn preview (`oats spawn … --backend <name> --preview --json`):
   `sandbox: {domains: [{host, capability, setting, team?}], write: [{path, reason}],
-  missing: [{capability, setting, team, optional?}], unread?: [{capability,
+  missing: [{capability, setting, team, defaultTeam, optional?}], unread?: [{capability,
   setting, reason}]}`. `domains`: each host with the capability and the
   setting that asked for it, and `team` (a team id) on a host taken from a
   map: a team the instance may join, not one it is known to have joined. `write`: each path with its reason (the
   kernel's own). `missing`: what a capability's line names and the
   deployment does not hold (`team`: a team id, or null for a setting with no
-  value; `optional: true` only on a row of an optional line). `unread`, only
+  value; `defaultTeam`: true for the soul's default team's row and for a row
+  with no team; `optional: true` only on a row of an optional line). `unread`, only
   when there is one: a `settingFile` line's file that gave no host, or
   values in it that were skipped.
 - a start's and a restart's answer: the same object, with `skipped?:

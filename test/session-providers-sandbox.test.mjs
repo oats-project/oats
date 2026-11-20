@@ -103,7 +103,7 @@ test("a setting with no value asks for nothing: the launch goes on without that 
   const fx = deployment(t, { settings: {} });
   await fx.launch("quiet");
   const { sandbox } = fx.verbs("launch")[0].request.input;
-  assert.deepEqual([sandbox.domains, sandbox.missing], [[], [{ capability: MSG, setting: "server", team: null }]], "named as missing: the provider's to judge");
+  assert.deepEqual([sandbox.domains, sandbox.missing], [[], [{ capability: MSG, setting: "server", team: null, defaultTeam: true }]], "named as missing: the provider's to judge");
 });
 
 test("oats capabilities show lists the line as declared, and what is wrong with it", (t) => {
@@ -121,7 +121,10 @@ test("oats capabilities show lists the line as declared, and what is wrong with 
   ]);
   assert.equal(Object.hasOwn(fx.cli(["capabilities", "show", FAKE_CAPABILITY, "--json"]).json().result, "sandboxDomains"), false, "absent where nothing is declared");
   const text = fx.cli(["capabilities", "show", "acme.bad"]).stdout;
-  assert.match(text, /^ {2}sandbox domains: the host of settings server, \?$/m);
+  assert.match(text, /^ {2}sandbox domains: the host of setting server; \?$/m);
+  // A file line reads as what it is.
+  const filed = providerDeployment(t, { capabilities: { "acme.kb": { manifest: { layer: "knowledge", sandboxDomains: [{ settingFile: "bindings-file", urls: "/bases/*/repository" }, { setting: "mirror", optional: true }] }, files: {} } } });
+  assert.match(filed.cli(["capabilities", "show", "acme.kb"]).stdout, /^ {2}sandbox domains: the hosts in the file of setting bindings-file at \/bases\/\*\/repository; the host of setting mirror \(optional\)$/m);
   assert.match(text, /^ {2}sandbox domain problem: sandboxDomains\[1\] must be /m);
 });
 
@@ -284,14 +287,16 @@ test("the events directory handed as writable is a real directory at its own pat
   const refused = fx.cli(["spawn", "dev", "--name", "nope", "--backend", "fake", "--launch-config", "claude", "--json"]).json();
   assert.deepEqual([refused.ok, refused.error.code], [false, "E_BACKEND_SANDBOX_HOST"], JSON.stringify(refused));
   assert.match(refused.error.message, /the session's sandbox may not be allowed to write .+\/\.agents\/events: it is reached through a symbolic link, or is no directory/);
-  assert.deepEqual(fx.verbs("launch"), [], "the provider was never asked to launch");
-  assert.equal(existsSync(join(fx.root, "dev", "instances", "nope")), false, "and the spawn was rolled back");
+  assert.deepEqual(fx.calls(), [], "before anything was created: no hook ran, and the provider was never called");
+  assert.equal(existsSync(join(fx.root, "dev", "instances", "nope")), false);
+  // A preview creates nothing, and says nothing of it.
+  assert.equal(fx.cli(["spawn", "dev", "--backend", "fake", "--launch-config", "claude", "--preview", "--json"]).json().ok, true);
 });
 
 test("the deployment's own oats-local.yaml is read as it is now, and a repository this host's cache does not hold is named", async (t) => {
   const fx = deployment(t, { settings: {} });
   const { home } = await fx.launch("one");
-  assert.deepEqual(fx.verbs("launch")[0].request.input.sandbox.missing, [{ capability: MSG, setting: "server", team: null }]);
+  assert.deepEqual(fx.verbs("launch")[0].request.input.sandbox.missing, [{ capability: MSG, setting: "server", team: null, defaultTeam: true }]);
   assert.equal(readWorkspace(fx).json().ok, true, "this host has read the workspace, as any CLI command does");
   // What a setup command writes to the deployment's own file reaches the home at its next launch,
   // with no read of any remote in between.
@@ -307,6 +312,7 @@ test("the deployment's own oats-local.yaml is read as it is now, and a repositor
   const source = await fx.inEnv(() => homeSandboxSource(home, { remoteOptions: fx.remoteOptions }));
   assert.deepEqual(Object.keys(source), ["unavailable"]);
   assert.match(source.unavailable, /^E_REMOTE_UNREADABLE: cannot read .+ws\.git without reaching it: this host has not observed it yet\. Any oats command that reads the workspace/);
+  assert.match(source.unavailable, /If this host cannot read that repository at all, name the member as the deployment's own source \(standalone: <member repository> in oats-local\.yaml\)/, "and the way out for a host that can never read it");
   const left = existsSync(fx.env.OATS_REMOTE_CACHE) ? readdirSync(fx.env.OATS_REMOTE_CACHE) : [];
   assert.deepEqual(left.filter((entry) => !entry.startsWith(".")), [], "no repository was fetched into the cache");
   // And a start says so in its launch input.

@@ -2240,7 +2240,7 @@ configuration, and handed to the provider with every launch:
 ```json
 "sandbox": { "domains": [ { "host": "app.example.org", "capability": "oats.aweb", "setting": "services" } ],
              "write":   [ { "path": "/abs/deployment/.agents/events", "reason": "oats events" } ],
-             "missing": [ { "capability": "oats.aweb", "setting": "services", "team": "ops:acme.example" } ] }
+             "missing": [ { "capability": "oats.aweb", "setting": "services", "team": "ops:acme.example", "defaultTeam": false } ] }
 ```
 
 - **`domains`** are exact hosts (`host` or `host:port`, lower case; never a
@@ -2284,8 +2284,10 @@ configuration, and handed to the provider with every launch:
 - **`missing`** is always there, `[]` when nothing is missing: what a line
   names and the deployment's configuration does not hold. `team` is the id
   of a team of the instance with no entry in a map, or `null` for a setting
-  with no value at all; a row of an optional line carries `"optional":
-  true`. The kernel adds no host for these and refuses nothing.
+  with no value at all. `defaultTeam` is `true` on the row of the soul's
+  default team and on a row with `team: null`, `false` on another team's.
+  A row of an optional line carries `"optional": true`. The kernel adds no
+  host for these and refuses nothing.
 
 **Nothing else adds a host or a path:** not hook output, not an environment
 variable, not a launch argument, not a task. A setting given to one spawn
@@ -2300,7 +2302,9 @@ the instance home**, which a sandboxed agent can write.
 **What the provider does with it** is its own rule, because only it knows
 whether it sandboxes this launch: widen the sandbox by exactly `domains` and
 `write`; **refuse a launch you would sandbox** when `missing` holds a row
-that is not optional, or when `sandbox` is `{ "unavailable": "<why>" }`
+that is not optional and whose `defaultTeam` is `true` (the other rows are
+for your readiness: say what the agent cannot reach), or when `sandbox` is
+`{ "unavailable": "<why>" }`
 (below), with an `E_BACKEND_*` code; write nothing for a launch you do not
 sandbox. Answer those refusals in `check` too, which is handed the planned
 launch (`"launch": { "harness", "yolo", "args", "sandbox" }`, absent on a
