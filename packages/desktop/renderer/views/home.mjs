@@ -64,7 +64,7 @@ export function firstRunCopy(chord, nouns = DESKTOP_NOUNS) {
     keys: [
       { label: `New ${nouns.instance}`, ...key("app.quickOpenSouls", `the sidebar's New ${nouns.instance}`) },
       { label: "Command palette", ...key("app.palette", "not bound") },
-      { label: "Home", ...key("stage.home", "View: Home in the palette") },
+      { label: "Home", ...key("stage.home", "Home in the palette") },
     ],
   };
 }
