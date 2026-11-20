@@ -830,7 +830,7 @@ its own because a kernel reads it:
   `self`. The sandbox reaches the in-sandbox kernel as `--sandbox <S>` on both the
   remote preview and the apply (Identities, step 2); a request carrying a seat option (a
   routed request) without `--sandbox` is refused with `E_SANDBOX_PLACEMENT`,
-  `wrong-sandbox`, and `D` binds it. A local spawn inside the sandbox carries no seat
+  `wrong-sandbox`, and `D` binds the selector. A local spawn inside the sandbox carries no seat
   option and is judged by `not-placed-here` alone. One that names another sandbox is refused with `E_SANDBOX_PLACEMENT`,
   reason `wrong-sandbox`, even when the soul is eligible in both. Its remedy says the
   host routed it to the wrong registration, and to check the host's `sandbox-<name>`
