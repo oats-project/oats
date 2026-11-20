@@ -181,7 +181,7 @@ see the [official catalog](official-catalog.md) for current pins.
 | `spawn-apply-suggest-name` | `--suggest-name` on a spawn apply, without `--preview`: the apply names the instance as a preview's `--suggest-name` would, on the machine that spawns, and its result carries `naming` ([On an apply](#on-an-apply-feature-spawn-apply-suggest-name)). Routed, the host needs the feature (`E_REMOTE_INCOMPATIBLE`, nothing sent): gate on the host's `probe.features` and don't send the flag to a host without it | |
 | `instance-background` | background instances (awebai/oats#1579): `soul.yaml` `background:`; `oats spawn … --background\|--no-background`, whose preview and result carry `background` and `backgroundFrom`; `oats instance background <instance> on\|off`, local and `--server`; `background: true` on `oats status --json` instance rows, `oats server roster --json` rows, `oats inspect --home` `instance` and `oats souls --json` soul rows, absent otherwise ([Background instances](#background-instances-oats-instance-background)). Gate on the probe, locally or in the host's `probe.features`: an older kernel refuses the flags and the verb, and its rows have no `background`. A routed spawn with either flag needs the host's feature (`E_REMOTE_INCOMPATIBLE`, nothing sent) | `instanceBackgroundApi: 1` (payload only) |
 | `instance-pin` | pinned instances: `oats instance pin <instance> on\|off`, local and `--server`; `pinned: true` on `oats status --json` instance rows, `oats server roster --json` rows and `oats inspect --home` `instance`, absent otherwise ([Pinned instances](#pinned-instances-oats-instance-pin)). The pin is the home's, so it is shared by every client of that machine. Gate on the probe, locally or in the host's `probe.features`: an older kernel refuses the verb, and its rows have no `pinned` | `instancePinApi: 1` (payload only) |
-| `session-resume` | sessions come back after a shutdown, OATS 0.69 (#1559): `sessionEnd` on `oats status --json` instance rows ([`sessionEnd`](#row-session-end)); `oats session start --resume --home <abs>` and its `resume` answer ([Resume a lost session](#resume-a-lost-session---resume)); the machine sweep `oats session resume [--deployment <dir>] [--plan] --json` ([`oats session resume`](#the-machine-sweep-oats-session-resume)); `E_RESUME_BUSY`, `E_RESUME_NOT_LOST`. Local only: `--server` is `E_BAD_ARGS`. Gate a client's resume-on-open on the probe: a kernel without it has no `session resume` | |
+| `session-resume` | sessions come back after a shutdown, OATS 0.69 (#1559): `sessionEnd` on `oats status --json` instance rows ([`sessionEnd`](#row-session-end)); `oats session start --resume --home <abs>` and its `resume` answer ([Resume a lost session](#resume-a-lost-session---resume)); the machine sweep `oats session resume [--deployment <dir>] [--plan [--without-provider-inspect]] --json` ([`oats session resume`](#the-machine-sweep-oats-session-resume)); `E_RESUME_BUSY`, `E_RESUME_NOT_LOST`. Local only: `--server` is `E_BAD_ARGS`. Gate a client's resume-on-open on the probe: a kernel without it has no `session resume` | |
 | `warm-reader` | `oats reader --stdio`, the warm reader: a child process a client starts, which answers `oats status --json` and `oats workspace status --json` on its stdin and stdout, many times, with the CLI's own answers ([The warm reader](#the-warm-reader)). Gate on the probe, never by trying: a kernel without it has no `oats reader` | `readerApi: 1` |
 | `status-liveness` | the local liveness on `oats status --json` instance rows is complete: `running` and `runtimeState` are read live at every call, from the row's recorded tmux server under the pane and shell-descendant rule, with `false` for a shell only on positive evidence and `null` when the reading is inconclusive ([The roster](#the-roster-oats-status---json)). A client needs no liveness probe of its own beside the roster where the probe lists it, whether the read goes through the warm reader or the CLI. Independent of `warm-reader` | |
 | `wake-hold` | a scheduled wake sends no key while the home has a live `permission`, `question` or unknown-reason claim, or a claims read that can't be trusted: the run is `skipped`, `reason: "waiting-on-you"`, `pending: true`, with `held` ([A held wake](schedules.md#a-held-wake)); the `wake-held` event ([the event kinds](#events)); `wakeHold` on every successful `session inspect --json` ([Inspect, input and attach](execution-targets.md#inspect-input-and-attach)), from the hook answer `dialogClaims` ([Commands and hooks](capabilities.md#commands-and-hooks)). Gate on the feature, then on `wakeHold`: the feature says this kernel holds, `wakeHold` whether this home's dialogs become claims, and `unknown` is not covered | |
@@ -7505,7 +7505,8 @@ null` without asking the provider. A provider that cannot be asked is
 `E_SESSION_UNAVAILABLE`.
 
 **Input.** `oats session input --home <abs>` answers `{home, backend,
-submitted: true, verified, session}`. `E_SESSION_NOT_RUNNING` for a home OATS
+submitted: true, verified}` (no `session`: the endpoint is inspect's, a
+spawn's and a start's). `E_SESSION_NOT_RUNNING` for a home OATS
 stopped (nothing was sent, the provider was not called), and for a lost
 session at its resume cap or with a process of its last run still in the
 home; `E_SESSION_PROMPT_OPEN` and `E_SESSION_INPUT_QUEUED` from the provider
@@ -7612,7 +7613,7 @@ harness receipt. See [execution targets](execution-targets.md).
 oats session start --home <abs> [--launch-config <name>|none] [--harness pi|claude|codex] [--model <id>] [--yolo|--no-yolo] [--server <id>] --json
 oats session start --resume --home <abs> --json
 oats session restart --home <abs> [the same options] [--stop-grace <1-300 s>] --json
-oats session resume [--deployment <dir>] [--plan] --json
+oats session resume [--deployment <dir>] [--plan [--without-provider-inspect]] --json
 ```
 
 Features `session-start`, `session-restart`, and `launch-config` for the
@@ -7780,7 +7781,7 @@ answer is the ordinary start answer plus one object:
 
 ### The machine sweep (`oats session resume`)
 
-`oats session resume [--deployment <dir>] [--plan] --json` (feature
+`oats session resume [--deployment <dir>] [--plan [--without-provider-inspect]] --json` (feature
 `session-resume`, OATS 0.69) starts with `--resume` every home of this
 machine's deployments whose session was lost. A client runs it once when it
 opens. It reads this computer's list of deployments without writing it

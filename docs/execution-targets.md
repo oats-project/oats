@@ -1110,7 +1110,7 @@ saved route that records `herdrPath` still loads; the field is ignored.
 | `oats spawn <soul> [--no-launch]` | Creates the home and launches the harness. `--no-launch` creates the home only. |
 | `oats session start --home <abs>` | Starts a stopped or never-launched instance again in its existing home. |
 | `oats session start --resume --home <abs>` | Starts an instance whose session was lost again, in its own last conversation ([Resume after a shutdown](#resume-after-a-shutdown)). |
-| `oats session resume [--deployment <dir>] [--plan]` | Resumes every lost session of this machine's deployments ([Resume after a shutdown](#resume-after-a-shutdown)). |
+| `oats session resume [--deployment <dir>] [--plan [--without-provider-inspect]]` | Resumes every lost session of this machine's deployments ([Resume after a shutdown](#resume-after-a-shutdown)). |
 | `oats session restart --home <abs>` | Stops the running harness and starts it again in place. |
 | `oats instance stop <instance> --plan` / `--apply` | Stops the harness and keeps home, work and launch recipe. |
 | `oats retire <instance>` | Ends the session and retires the instance ([souls-and-instances.md](souls-and-instances.md#retire)). |

@@ -2232,7 +2232,9 @@ the feature.
   each against the home's cap before it calls `input` (at most 3 in an hour,
   within one boot), refuses at the cap with `E_SESSION_NOT_RUNNING` without
   calling you, and first waits (a resume) or refuses (an input) while a
-  process still works in the home. So an `inspect` precedes every `input`.
+  process still works in the home. So an `inspect` precedes every `input` to
+  a home OATS did not stop (the resume of a home stopped with the host sends
+  its notice without one).
   An input you refuse (`ok: false`: nothing was sent) is not counted. One
   whose call fails or answers outside the rules stays counted: you may have
   restarted the session on it.

@@ -14,8 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachInstanceSession, inputInstanceSession, inspectInstanceSession, listInstances, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
 import { setWaiting } from "../lib/instance-events.mjs";
-import { PROVIDER_RESUME_NOTICE } from "../lib/core.mjs";
-import { RESUME_LIMIT } from "../lib/provider-resume.mjs";
+import { PROVIDER_RESUME_NOTICE, RESUME_LIMIT } from "../lib/provider-resume.mjs";
 import { parseRemoteEnvelope, rosterGroups, writeServers } from "../lib/servers.mjs";
 import { FAKE_CAPABILITY, FAKE_SERVER, LOST, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
@@ -276,7 +275,7 @@ test("T5: input relays submitted:true, and the provider's E_SESSION_PROMPT_OPEN 
   fx.control({ input: { result: { submitted: true, verified: false } } });
   const sent = input();
   assert.equal(sent.status, 0);
-  assert.deepEqual(sent.json(), { schemaVersion: 1, ok: true, result: { home, backend: "fake", submitted: true, verified: false, session: { provider: FAKE_CAPABILITY, endpoint: endpointOf("listener", 1) } } });
+  assert.deepEqual(sent.json(), { schemaVersion: 1, ok: true, result: { home, backend: "fake", submitted: true, verified: false } }, "and no endpoint: that is inspect's, a spawn's and a start's");
   // The session is read first (a session that is gone makes the input a resume, counted), then the input.
   assert.deepEqual(fx.verbs().map((c) => [c.verb, c.request.input]), [["inspect", { home, endpoint: endpointOf("listener", 1) }], ["input", { home, endpoint: endpointOf("listener", 1), text: "line one\nline two\n" }]]);
 
