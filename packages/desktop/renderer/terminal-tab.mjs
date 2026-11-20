@@ -344,7 +344,7 @@ export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap,
     offExit = desk.onTermExit(h, result => exited(h, result, leaseGate));
     if (!wired) {
       wired = true;
-      subscriptions.push(term.onData(data => { write(data); try { onInput(data); } catch { /* the board's observer only */ } }));
+      subscriptions.push(term.onData(data => { write(data); try { onInput(data); } catch (e) { console.error(e); /* the board's observer only: never the typing */ } }));
       term.attachCustomKeyEventHandler?.(event => {
         // While the reconnect strip shows, input is inert: Tab moves focus on to Reconnect now.
         if (stripEl && event.key === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey) return false;
