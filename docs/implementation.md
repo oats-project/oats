@@ -976,7 +976,18 @@ inherits it (awebai/oats#816):
   names on the real one and gives the saved one back with
   `setProcessEnvironment` when it ends; everything else goes through
   `fx.inEnv`. `test/fixture-real-environment.test.mjs` refuses an assignment
-  to `process.env` in any test script. The fixture's
+  to `process.env` in any test script. **A test writes an executable only
+  inside its fixture** (#2042): a harness stand-in, or a home's recorded
+  `launch.executable`, is written with
+  `writeFixtureExecutable(fx.base, path, content)`, which refuses a path
+  outside the fixture's base, one reached through a link, and a symbolic or
+  hard link at the path, with nothing written. `fx.inEnv` keeps the PATH of
+  the process that runs the tests, so an in-process spawn records the
+  harness it finds there, which on a machine with the harness installed is
+  the person's own binary: a spawn whose recorded executable a test will
+  rewrite runs with the fixture's PATH (`process.env.PATH = fx.env.PATH`,
+  put back afterwards; its inert `pi`, `claude` and `codex` come first), and
+  asserts `insideFixture(fx.base, launch.executable)`. The fixture's
   environment sets `HOME` and the XDG base directories under the base, and
   `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null` and
   `GIT_TERMINAL_PROMPT=0`, so no host git

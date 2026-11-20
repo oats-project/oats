@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import YAML from 'yaml';
-import { v2Deployment } from './helpers/v2-deployment.mjs';
+import { v2Deployment, writeFixtureExecutable } from './helpers/v2-deployment.mjs';
 import { startInstanceSession } from '../lib/core.mjs';
 import { readEvents } from '../lib/instance-events.mjs';
 
@@ -16,8 +16,7 @@ function setup(t, name, options = {}) {
   const fx = v2Deployment(options);
   t.after(() => fx.cleanup());
   const executable = join(fx.base, 'stub');
-  writeFileSync(executable, `#!${process.execPath}\nconsole.log('SYNTHETIC unexpected frame');\nsetInterval(() => {}, 1000);\n`);
-  chmodSync(executable, 0o755);
+  writeFixtureExecutable(fx.base, executable, `#!${process.execPath}\nconsole.log('SYNTHETIC unexpected frame');\nsetInterval(() => {}, 1000);\n`);
   const home = join(fx.root, 'dev', 'instances', name);
   const configFile = join(fx.dep, 'oats-local.yaml');
   const config = YAML.parse(readFileSync(configFile, 'utf8'));

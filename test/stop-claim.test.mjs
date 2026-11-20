@@ -35,7 +35,7 @@ import { basename, dirname, join } from "node:path";
 import YAML from "yaml";
 import { retireClaimPath, retirePendingMarkerPath } from "../lib/core.mjs";
 import { processStartToken } from "../lib/worktree-hooks.mjs";
-import { CLI, v2Deployment } from "./helpers/v2-deployment.mjs";
+import { CLI, v2Deployment, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 import { waitUntil } from "./helpers/host-fixture.mjs";
 import { startGated } from "./helpers/fs-gate-preload.mjs";
 
@@ -186,7 +186,7 @@ function deployment(t) {
   });
   const pids = join(fx.base, "harness-pids"), executable = join(fx.base, "harness-stand-in"), localFile = join(fx.dep, "oats-local.yaml");
   mkdirSync(pids);
-  writeFileSync(executable, `#!/bin/sh\necho $$ > '${pids}'/"$OATS_INSTANCE"\nexec sleep 600\n`, { mode: 0o755 });
+  writeFixtureExecutable(fx.base, executable, `#!/bin/sh\necho $$ > '${pids}'/"$OATS_INSTANCE"\nexec sleep 600\n`);
   writeFileSync(localFile, YAML.stringify({ ...YAML.parse(readFileSync(localFile, "utf8")), "launch-configs": { "stand-in": { harness: "pi", executable } } }, { lineWidth: 0 }));
   let gated = 0;
   const d = {

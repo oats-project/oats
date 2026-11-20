@@ -7,7 +7,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileS
 import { execFileSync, spawnSync } from "node:child_process";
 import { killAndReap, oatsSocket } from "./helpers/host-fixture.mjs";
 import { join } from "node:path";
-import { CLI, v2Deployment, git } from "./helpers/v2-deployment.mjs";
+import { CLI, v2Deployment, git, insideFixture, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 import { runFaulted, startGated } from "./helpers/fs-gate-preload.mjs";
 import { recordLaunch } from "./helpers/recorded-tmux-server.mjs";
 import { contentDigest } from "../lib/remote.mjs";
@@ -67,7 +67,14 @@ async function fixture(t, { names = ["acme.one"], oldMode = "adopt", nextMode = 
   });
   fx.commit({ "oats-workspace.yaml": { yaml: { schemaVersion: 2, name: "fixture", members: [fx.ref], defaults: { knowledge: "none", messaging: "none", tasks: "none" }, packages: { "acme.pkg": `git:${fx.key}@main` } } } });
   const old = lock(fx, "1.0.0");
-  const { home } = await fx.spawn("dev", { name: "seat", noLaunch: true });
+  // The in-process spawn looks the harness up on this process's PATH: the fixture's, whose inert
+  // `pi` comes first, so the home records a harness inside the fixture, never one of this machine.
+  const hostPath = process.env.PATH;
+  process.env.PATH = fx.env.PATH;
+  let home;
+  try { ({ home } = await fx.spawn("dev", { name: "seat", noLaunch: true })); } finally { process.env.PATH = hostPath; }
+  const recorded = json(join(home, "instance.json")).launch.executable;
+  assert.ok(insideFixture(fx.base, recorded), `the home's recorded harness (${recorded}) is a file of the fixture (${fx.base}), never one of this machine`);
   fx.commit(pkg("2.0.0", nextMode, names, nextLaunch));
   const next = lock(fx, "2.0.0");
   return { fx, home, old, next,
@@ -491,8 +498,9 @@ test("package upgrade acceptance: committed cleanup failure retries cleanup alon
   // This is the actual committed home left by the failed process. A start
   // may use it before cleanup, and the same-key cleanup can run while its harness runs.
   execFileSync("tmux", ["-S", oatsSocket(fx.env.TMUX_TMPDIR), "new-session", "-d", "-s", fx.env.OATS_TMUX_SESSION, "-n", "hq", "-c", fx.base], { env: fx.env, stdio: "ignore" });
+  // The home's recorded harness is the fixture's inert `pi` (fixture, above): made one that stays up.
   const executable = json(join(home, "instance.json")).launch.executable;
-  writeFileSync(executable, "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'pi fixture'; exit 0; fi\nexec sleep 600\n", { mode: 0o755 });
+  writeFixtureExecutable(fx.base, executable, "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'pi fixture'; exit 0; fi\nexec sleep 600\n");
   const started = fx.cli(["session", "start", "--home", home, "--json"]);
   assert.equal(started.status, 0, started.stdout + started.stderr);
   assert.ok(started.json().result.warnings.some(w=>w.includes("staging cleanup remains")&&w.includes(key)));

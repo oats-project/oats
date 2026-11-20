@@ -32,7 +32,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { join } from "node:path";
 import YAML from "yaml";
 import { stopClosingLine } from "../lib/instance-lifecycle.mjs";
-import { CLI, v2Deployment } from "./helpers/v2-deployment.mjs";
+import { CLI, v2Deployment, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 import { waitUntil } from "./helpers/host-fixture.mjs";
 import { runFaulted } from "./helpers/fs-gate-preload.mjs";
 
@@ -71,8 +71,8 @@ function deployment(t) {
   const fx = v2Deployment({ t, souls: { worker: { soul: { work: "directory" } } } });
   const pids = join(fx.base, "harness-pids"), executable = join(fx.base, "harness-stand-in"), stubborn = join(fx.base, "harness-stubborn"), localFile = join(fx.dep, "oats-local.yaml");
   mkdirSync(pids);
-  writeFileSync(executable, `#!/bin/sh\necho $$ > '${pids}'/"$OATS_INSTANCE"\nexec sleep 600\n`, { mode: 0o755 });
-  writeFileSync(stubborn, `#!${process.execPath}\nprocess.on("SIGTERM", () => {});\nrequire("node:fs").writeFileSync(${JSON.stringify(pids)} + "/" + process.env.OATS_INSTANCE, String(process.pid));\nsetInterval(() => {}, 1000);\n`, { mode: 0o755 });
+  writeFixtureExecutable(fx.base, executable, `#!/bin/sh\necho $$ > '${pids}'/"$OATS_INSTANCE"\nexec sleep 600\n`);
+  writeFixtureExecutable(fx.base, stubborn, `#!${process.execPath}\nprocess.on("SIGTERM", () => {});\nrequire("node:fs").writeFileSync(${JSON.stringify(pids)} + "/" + process.env.OATS_INSTANCE, String(process.pid));\nsetInterval(() => {}, 1000);\n`);
   writeFileSync(localFile, YAML.stringify({ ...YAML.parse(readFileSync(localFile, "utf8")), "launch-configs": { "stand-in": { harness: "pi", executable }, stubborn: { harness: "pi", executable: stubborn } } }, { lineWidth: 0 }));
   const unending = [];
   fx.beforeCleanup(() => { for (const pid of unending) if (alive(pid)) process.kill(pid, "SIGKILL"); });

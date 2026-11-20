@@ -44,7 +44,7 @@ import { CLAIM_UNWRITABLE_CODES } from "../lib/claim.mjs";
 import { retireClaimPath } from "../lib/core.mjs";
 import { readStartExited } from "../lib/session-end.mjs";
 import { processStartToken } from "../lib/worktree-hooks.mjs";
-import { CLI, v2Deployment } from "./helpers/v2-deployment.mjs";
+import { CLI, v2Deployment, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 import { waitUntil } from "./helpers/host-fixture.mjs";
 import { runFaulted, startGated } from "./helpers/fs-gate-preload.mjs";
 
@@ -157,7 +157,7 @@ function deployment(t) {
   });
   const pids = join(fx.base, "harness-pids"), executable = join(fx.base, "harness-stand-in"), localFile = join(fx.dep, "oats-local.yaml");
   mkdirSync(pids);
-  writeFileSync(executable, `#!/bin/sh\necho $$ > '${pids}'/"$OATS_INSTANCE"\nexec sleep 600\n`, { mode: 0o755 });
+  writeFixtureExecutable(fx.base, executable, `#!/bin/sh\necho $$ > '${pids}'/"$OATS_INSTANCE"\nexec sleep 600\n`);
   writeFileSync(localFile, YAML.stringify({ ...YAML.parse(readFileSync(localFile, "utf8")), "launch-configs": { "stand-in": { harness: "pi", executable } } }, { lineWidth: 0 }));
   const taken = [];
   /** Give back every mode a test took away, the last one first. */
