@@ -115,13 +115,19 @@ test('oats okf propose from an instance home: plan, check and apply push a creat
   f.retire(fresh.instance); f.retire(f.source.instance);
 });
 
-test('propose --check refuses a peer-node edit before anything leaves the host; ownership is enforced, not left uncommitted', t => {
+// oats.okf 6.3.0 (oats-project/oats-okf#164): a peer-node edit no longer
+// refuses at --check; it is a W_SCOPE row (it was E_OWNER) that the knowledge
+// maintainer resolves before merging, and --check still sends nothing.
+test('propose --check reports a peer-node edit as W_SCOPE [was E_OWNER] and sends nothing; the maintainer resolves it', t => {
   const f = fixture(t, { git: true }), gh = github(f), git = (...a) => f.git('-C', f.accepted, ...a);
   const head = git('rev-parse', 'HEAD'), refs = git('for-each-ref', '--format=%(refname)');
   const staged = stage(f, 'peer-edit');
   fs.appendFileSync(join(staged.base, 'peer/log.md'), 'Unowned fixture edit.\n');
-  const error = refused(f.okfPropose(['--check', '--slug', 'peer-edit']), 'E_OWNER');
-  assert.match(error.message, /peer/);
+  const result = ok(f.okfPropose(['--check', '--slug', 'peer-edit']));
+  const row = result.warnings.find(w => w.startsWith('W_SCOPE [was E_OWNER]: '));
+  assert.ok(row, JSON.stringify(result.warnings));
+  assert.match(row, /peer/);
+  assert.match(result.prBody, /## Check warnings[\s\S]*W_SCOPE \[was E_OWNER\]/, 'the row reaches the PR body for the maintainer');
   assert.deepEqual(gh.writes(), [], 'nothing published');
   assert.equal(git('rev-parse', 'HEAD'), head);
   assert.equal(git('for-each-ref', '--format=%(refname)'), refs, 'no branch pushed');

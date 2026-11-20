@@ -140,6 +140,8 @@ export function deriveHostTokens(colors, mode, base = () => undefined) {
   if (!hold("graph-edge", mixHex(background, foreground, 0.4))) return null;
   // The sidebar's dotted sibling link is the only mark on its column (#1312): a meaningful graphic too.
   if (!hold("tree-link", mixHex(background, foreground, 0.4))) return null;
+  // Its solid lines are drawn for related work only, so they are the sign of it: a meaningful graphic as well.
+  if (!hold("tree-stroke", mixHex(background, foreground, 0.4))) return null;
   // An instance's colour on its dot (#1421): the base theme's (its soul's -fg), moved until it holds on every fill a
   // dot is drawn on. The soul pairs themselves stay calibrated. Without a base value (no stylesheet) it is left alone.
   for (const tone of SOUL_TONES) {

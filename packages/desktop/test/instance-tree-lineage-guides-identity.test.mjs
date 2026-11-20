@@ -2,9 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { instanceId, visibleClusters } from "../../client/instance-tree.mjs";
 import { treeGuideSegments } from "../renderer/instance-tree-view.mjs";
+import { RELATED_WORK_FEATURE } from "../../client/related-work.mjs";
 
+// Every row of a host that declares instance-related-work, related to its parent, so every lineage guide the identity
+// rules allow is drawn (related-work.mjs: no flag, no line; related-work-lines.test.mjs pins the unflagged cases).
+const RELATED = { relatedWorkKnown: RELATED_WORK_FEATURE, relatedWork: true };
 const row = (instance, root, extra = {}) => ({
-  instance, agentsRoot: `/${root}/agents`, home: `/${root}/${instance}`, ...extra,
+  instance, agentsRoot: `/${root}/agents`, home: `/${root}/${instance}`, ...RELATED, ...extra,
 });
 const guides = (items, original, full = items) => {
   // Clustering annotates copies; resolve the displayed row by identity.
@@ -117,7 +121,7 @@ test("lineage guides project continuation onto visible siblings, retaining the t
     { instance: "child-a", parentInstance: "root" },
     { instance: "grandchild", parentInstance: "child-a" },
     { instance: "child-b", parentInstance: "root" },
-  ];
+  ].map((r) => ({ ...r, ...RELATED }));
   // Existing callers passing the actual displayed object keep their API.
   assert.deepEqual(treeGuideSegments(full, full[1]), ["branch"]);
   assert.deepEqual(treeGuideSegments(full, full[2]), ["continue", "end"]);

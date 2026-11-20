@@ -79,6 +79,14 @@ log a `**Removal**` or `**Deprecation**` entry saying why.
 in listings match the concept's frontmatter `description`. Indexes are
 navigation, not content — keep them to listings.
 
+**When you propose** (`oats okf propose`, oats.okf 6.3): the index and log
+entries, the links, and the `title` and `description` are good practice,
+not a gate. Write them when you can; when one is missing, the check warns
+(`W_LINT`) and the knowledge maintainer completes it at review. A claim
+needs no `Evidence:` line of its own: the proposal's provenance names you,
+the date and your notes. Cite the checkable source a claim rests on in its
+body (`# Citations`) when it has one.
+
 ## Consuming a bundle (answering from knowledge)
 
 1. **Index-first, always.** Start at the root `index.md`; follow only links
@@ -190,9 +198,11 @@ ignored, with a warning naming it.
 
 ## External bases and native tools
 
-A proposing instance edits only its owned nodes and the base root
-`index.md`, in the clone `oats okf propose --plan` made of the accepted base.
-A maintainer amends a PR branch in its own checkout. Either way,
-validate the WHOLE base with `--strict`, not an isolated node: absolute
-Markdown links can cross node boundaries. Publish nothing that has errors or
-producer warnings.
+A proposing instance edits the clone `oats okf propose --plan` made of the
+accepted base: its owned nodes and the base root `index.md`, or, with a
+warning (`W_SCOPE`) for the maintainer, the node a claim belongs in. A
+maintainer amends a PR branch in its own checkout. Either way, the WHOLE
+base is validated with `--strict`, not an isolated node: absolute Markdown
+links can cross node boundaries. A conformance error refuses the proposal;
+producer warnings reach the maintainer as `W_LINT` rows. The maintainer
+merges nothing that has errors or producer warnings.

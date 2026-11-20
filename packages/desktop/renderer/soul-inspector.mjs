@@ -41,7 +41,8 @@ import { composedSupported, routedComposedSupported, skillsSupported, routedSkil
 import { warningsOf } from '../../client/capability-warnings-contract.mjs';
 import { createWarningsList, WARNINGS_COPY } from './capability-warnings.mjs';
 import { DESKTOP_TERMS, DESKTOP_NOUNS } from './desktop-terms.mjs';
-import { capabilityLine, capabilityLines, capabilityLineCSS } from './capability-row.mjs';
+import { capabilityRow, capabilityRowElement, roveRows, catalogCSS } from './workspace-catalog.mjs';
+import { capabilityOrigin } from '../../client/capability-origin.mjs';
 
 const record = v => !!v && typeof v === 'object' && !Array.isArray(v);
 /** Why a stale inspector's mutations wait (the sidebar roster's rule, instance-tree-view.mjs ROSTER_STALE_TITLE). */
@@ -122,9 +123,9 @@ ${soulTeamsHereCSS}
 .soul-ready-problems p { margin:0; }
 .soul-ready-checks .readiness-view { margin:8px 0 0; }
 .soul-teams-details { flex-basis:100%; }
-.soul-capabilities .cap-lines { margin-top:4px; }
+.soul-capabilities .cap-list { margin-top:4px; }
 .soul-capabilities-note { margin:8px 0 0; color:var(--muted); font-size:12px; }
-${capabilityLineCSS}
+${catalogCSS}
 /* The readiness title reads as a section title, like every other card's. */
 .soul-inspector .readiness-view h2 { font-size:10.5px; font-weight:650; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 var(--title-gap); }
 .inspector-head { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
@@ -749,15 +750,25 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
     const section = pageSection(doc, 'Capabilities', shown.length ? `${shown.length} · core first` : '');
     section.classList.add('soul-capabilities');
     const id = subject, gen = selectionGen;
-    const lines = shown.map(({ entry, cap, name, core }) => {
-      const said = cap ? describeCapability(cap) : {};
+    // The Capabilities page's row (workspace-catalog.mjs capabilityRowElement, slice 3b): the same name, tags, origin
+    // (the official rule, capability-origin.mjs) and one line. A soul's rows carry no "default" tag (`default: null`).
+    // The list's one tab stop is its first row that opens (a core slot named without its capability is a plain line).
+    const firstOpen = typeof openCapability === 'function' ? shown.findIndex(({ cap }) => !!cap) : -1;
+    const lines = shown.map(({ entry, cap, name, core }, i) => {
+      const said = describeCapability(cap, name);
       const why = entry.why ? whyTag(entry)[1] : null;
-      return capabilityLine(doc, { name, by: said.by ?? null, description: said.description ?? null, core, focusKey: `capability:${name}`,
-        title: [name, core ? `core: ${layerLabel(entry.slot)}` : null, why].filter(Boolean).join(' · '),
-        onOpen: cap && typeof openCapability === 'function' ? () => { if (ownsSubject(id, gen)) openCapability(cap, selection.agent, entry); } : null });
+      const opens = cap && typeof openCapability === 'function' ? () => { if (ownsSubject(id, gen)) openCapability(cap, selection.agent, entry); } : null;
+      const el = capabilityRowElement(doc, { row: said.row, core: core ? entry.slot : null, default: null, origin: said.origin }, { onOpen: opens, tabStop: i === firstOpen });
+      el.dataset.focusKey = `capability:${name}`;
+      el.title = [name, core ? `core: ${layerLabel(entry.slot)}` : null, why].filter(Boolean).join(' · ');
+      return el;
     });
-    capabilityWords = JSON.stringify(shown.map(({ cap }) => cap ? describeCapability(cap) : null));
-    if (lines.length) section.append(capabilityLines(doc, lines, { label: `Capabilities of ${selection.agent?.name ?? soul.name}` }));
+    capabilityWords = JSON.stringify(shown.map(({ cap, name }) => wordsOf(describeCapability(cap, name))));
+    if (lines.length) {
+      const list = node('ul', null, 'cap-list'); list.setAttribute('aria-label', `Capabilities of ${selection.agent?.name ?? soul.name}`);
+      for (const el of lines) { const item = node('li'); item.append(el); list.append(item); }
+      roveRows(list); section.append(list);
+    }
     else section.append(node('p', 'No capabilities resolved.', 'page-note'));
     const off = entries.filter(entry => entry.why === 'off').map(entry => entry.name);
     const empty = coreRows.filter(entry => !entry.id && entry.reported).map(entry => `no ${entry.slot} capability`);
@@ -766,15 +777,17 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
     // Its two prompts, as two tabs, and its skills (soul-instructions.mjs), from this inspection (no read of its own).
     if (instructionsSection) { instructionsSection.update(soul); content.append(instructionsSection.element); }
   }
-  /** A capability's "by <source>" and one line of what it does: the host's (the workspace's catalog, its member
-   * names), else where the inspection says it comes from and no line. */
-  function describeCapability(cap) {
-    if (typeof capabilityFacts === 'function') { const said = capabilityFacts(cap); if (said) return said; }
-    const from = record(cap?.from) ? cap.from : {};
-    const by = typeof from.package === 'string' && from.package ? from.package
-      : typeof from.repoKey === 'string' && from.repoKey ? from.repoKey.split('/').filter(Boolean).at(-1) : null;
-    return { by, description: null };
+  /** A capability's row (catalog shape, with the catalog's one line of what it does) and its origin (official or "by
+   * <source>"): the host's (the workspace's catalog and status), else from the inspection alone (no status: nothing is
+   * called official) and no line. */
+  function describeCapability(cap, name) {
+    if (cap && typeof capabilityFacts === 'function') { const said = capabilityFacts(cap); if (said) return said; }
+    if (!cap) return { row: { name, kind: 'external' }, origin: null }; // a core slot's id without its capability: no source to say
+    const row = capabilityRow(cap);
+    return { row, origin: capabilityOrigin(row, null) };
   }
+  /** What a row says, for the repaint check (the row's words, not its resolved object). */
+  const wordsOf = said => [said.row.name, said.row.description ?? null, said.origin?.official ?? null, said.origin?.by ?? null, said.origin?.reason ?? null];
   /** The teams a roster row names (team model v2 rows, the default first; 0.29's labels), in words; null when none. */
   function rosterTeams(agent) {
     const v2 = Array.isArray(agent?.teams) && agent.teams.every(t => typeof t?.label === 'string' && t.label) ? agent.teams : null;
@@ -969,8 +982,8 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
     const soul = shownInspection.souls[0]; if (!soul) return;
     const coreRows = coreEntries(shownInspection, { layersFrom: layersFrom(), facts: desktopFacts(cliStatus()) });
     const entries = compositionEntries(shownInspection, soul, { facts: desktopFacts(cliStatus()) });
-    const caps = [...coreRows.filter(e => e.id).map(e => e.cap), ...entries.filter(e => e.why !== 'off' && e.cap).map(e => e.cap)];
-    if (JSON.stringify(caps.map(cap => cap ? describeCapability(cap) : null)) === capabilityWords) return;
+    const caps = [...coreRows.filter(e => e.id).map(e => ({ cap: e.cap, name: e.id })), ...entries.filter(e => e.why !== 'off' && e.cap).map(e => ({ cap: e.cap, name: e.cap.id }))];
+    if (JSON.stringify(caps.map(({ cap, name }) => wordsOf(describeCapability(cap, name)))) === capabilityWords) return;
     // Hidden, nothing in it holds focus: repaint without moving any.
     if (container.hidden) { render(shownInspection); return; }
     const restore = captureFocusState(content, { scroller: container, fallback: refreshControl });

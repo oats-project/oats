@@ -6,13 +6,13 @@
 import { createSoulInspector, inspectorCSS } from "../soul-inspector.mjs";
 import { createWorkspaceDiscovery, discoveryCSS, workspaceTabs } from "../workspace-discovery.mjs";
 import { capabilityRow } from "../workspace-catalog.mjs";
+import { capabilityOrigin } from "../../../client/capability-origin.mjs";
 import { renderCapabilityPage, capabilityPageCSS, pageCardCSS, soulCapabilitiesCSS, catalogNotice, catalogNoticeKind, updateCatalogNotice } from "../capability-page.mjs";
 import { sameRepo } from "../../../client/repo-moves.mjs";
 import { spawnRefusal, cantSpawnLine, soulMatches, desktopFacts, soulFacts } from "../../../client/soul-facts.mjs";
 import { soulRole, compareSoulsByRole, SOUL_ROLE_WORDS } from "../../../client/soul-role.mjs";
 import { createCapabilityContents, capabilityContentsCSS } from "../capability-contents.mjs";
 import { sourceQuoteCSS } from "../source-quote.mjs";
-import { sourceText } from "../source-chip.mjs";
 import { memberNames } from "../../../client/capability-rows.mjs";
 import { soulInstructionsCSS } from "../soul-instructions.mjs";
 import { capabilitySelector, sameSelector } from "../../../client/capability-show-contract.mjs";
@@ -169,9 +169,10 @@ function ownsSelection(s, ref) {
 }
 /** The shell's navigation to a Workspace tab (⌘1 on Machines, app.chooseSoul's chord on Souls, the leader's 3
  * on Capabilities, the palette's) is an inspection intent, never a launch. */
-export function preselectWorkspaceTab(name) {
+export function preselectWorkspaceTab(name, { machinesView = null } = {}) {
   if (!workspaceTabs.includes(name)) return false;
-  pendingWorkspaceTab = { name, ...nextSelectionIntent() };
+  // `machinesView` ('list' | 'map'): the Machines tab's view to land on (slice 3b); none keeps the one last chosen.
+  pendingWorkspaceTab = { name, ...(name === "machines" && machinesView ? { machinesView } : {}), ...nextSelectionIntent() };
   if (state?.alive) applyWorkspaceTab(state);
   return true;
 }
@@ -186,7 +187,7 @@ function applyWorkspaceTab(s) {
   // The handoff's own tab change is not a newer choice: minting one here would supersede the soul or home
   // this same handoff carries (Go to soul from the Machines tab turned the page and opened nothing).
   s.handoffTab = true;
-  try { s.discovery?.setTab(intent.name); } finally { s.handoffTab = false; }
+  try { if (intent.machinesView) s.discovery?.setMachinesView(intent.machinesView); s.discovery?.setTab(intent.name); } finally { s.handoffTab = false; }
 }
 export function preselectHome(instance) {
   const intent = nextSelectionIntent();
@@ -320,17 +321,15 @@ function applyCapability(s) {
   openCapability(s, matches[0], null);
 }
 
-/** What a soul page's capability row says besides its name: "by <source>" (the source chip's words: a package, a
- * member repository by its name; nothing for the workspace's own repository) and the one line of the catalog's row of
- * that name, when exactly one is listed. */
+/** A soul page's capability row as the Capabilities page draws it (slice 3b's capabilityRowElement): the resolved
+ * capability in the catalog's row shape, with the one line of the catalog's row of that name when exactly one is listed,
+ * and its origin by the official rule (capability-origin.mjs: official, or "by <source>", the host repository named too). */
 function soulCapabilityFacts(s, cap) {
   const { catalog, status } = s.discovery?.context() ?? {};
   const row = capabilityRow(cap);
   const listed = Array.isArray(catalog) ? catalog.filter(r => r?.name === row.name) : [];
-  const description = listed.length === 1 && typeof listed[0].description === "string" && listed[0].description ? listed[0].description : null;
-  // Until a rule establishes "official" (slice 3b), the workspace's own repository goes unsaid and every other source is named.
-  const own = row.kind === "member" && !!row.repoKey && sameRepo(row.repoKey, hostKey(s));
-  return { by: own ? null : sourceText(row, memberNames(status)).name || null, description };
+  if (listed.length === 1 && typeof listed[0].description === "string" && listed[0].description) row.description = listed[0].description;
+  return { row, origin: capabilityOrigin(row, status, memberNames(status)) };
 }
 
 /** A page (a soul's, a capability's or a team's) replaces the list it was opened from
@@ -346,14 +345,15 @@ function showPage(s, mode) {
   s.q("souls-bar").hidden = !!mode || !souls;
   s.q("souls-notice").hidden = !!mode || !souls; // the grid's stale line belongs to the grid
   s.q("souls-lede").hidden = !!mode || !souls;
-  const machines = s.discovery?.tab === "machines";
+  // Machines' Map is the Deployments view's panel; its List is the discovery's (slice 3b).
+  const machines = s.discovery?.tab === "machines" && s.discovery?.machinesView === "map";
   s.q("workspace-machines-panel").hidden = !!mode || !machines;
   s.q("workspace-discovery").hidden = !!mode || souls || machines;
 }
-/** The Machines tab's view (views/hierarchy.mjs, the Deployments page of before): mounted while the tab is shown and
- * unmounted when another tab is chosen or the view leaves, so it reads nothing in the background. */
+/** The Machines tab's view (views/hierarchy.mjs, the Deployments page of before): mounted while the tab's Map is shown and
+ * unmounted when its List or another tab is chosen or the view leaves, so it reads nothing in the background. */
 function syncMachines(s) {
-  const shown = s.alive && s.discovery?.tab === "machines";
+  const shown = s.alive && s.discovery?.tab === "machines" && s.discovery?.machinesView === "map";
   // Its "Workspace" (s, Go to soul's page) is this page: the Souls tab, not a stage switch to the page already shown.
   // Already on Souls (Go to soul's handoff turned the page and opened the soul), it does nothing: setTab would show
   // the grid again under the soul's page.
@@ -453,6 +453,7 @@ function paintCapabilityPage(s) {
     open.signature = signature; open.noticeSignature = null;
     const restore = captureFocusState(host, { fallback: () => host.querySelector(".page-back") }), keep = open.contents.hold();
     renderCapabilityPage(host, { row: shown, ...context, catalogPending, contents: open.contents.element, triggerSources: open.contents.triggerSources,
+      skills: open.contents.skills, skillView: open.contents.skillView,
       openExternal: url => s.ctx.openExternal?.(url),
       backLabel: from ? from.name : "Capabilities", from: from ? { label: from.name, why } : null,
       onBack: () => closeCapability(s, { restoreFocus: true }),
@@ -653,6 +654,7 @@ ${spawnDialogCSS}</style>
     onOpenCapability: row => openCapability(s, row, null),
     onTeamMember: (action, member) => void teamMemberAction(s, action, member),
     onOpenTeam: label => openTeam(s, label),
+    onMachinesView: () => syncMachines(s), // Map mounts the Deployments view, List unmounts it (it reads no more)
     onTab: tab => {
       s.spawnOp++; closeSpawnModal(s); s.inspector.close(); closeCapability(s); closeTeam(s); s.page.close();
       s.q("souls-bar").hidden = tab !== "souls"; s.q("souls-notice").hidden = tab !== "souls"; s.q("souls-lede").hidden = tab !== "souls";

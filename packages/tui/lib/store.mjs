@@ -1494,6 +1494,13 @@ function led(state, does, event, keymap) {
   const stay = { state, effect: null }, t = state.terminal;
   const inTerminal = t?.focus === "terminal" && state.view === "instances";
   if (does === "list") return toList(state);
+  // The shared table's `b` (the Desktop's sidebar; the Desktop UI rework, slice 4): the list is the TUI's sidebar. With
+  // a terminal shown, it takes the whole screen with the focus (as zoom does), and zoomed, the list comes back with the
+  // focus (as Esc does). With none shown the list is all there is: nothing.
+  if (does === "sidebar") {
+    if (t === null || state.view !== "instances") return stay;
+    return t.zoom ? toList(state) : { state: terminalWith(state, { focus: "terminal", zoom: true }), effect: null };
+  }
   if (does === "palette") return { state: paletteOpened(state, event, inTerminal ? "terminal" : "list"), effect: null };
   if (does === "zoom" || does === "close-terminal") {
     if (t === null) return stay;

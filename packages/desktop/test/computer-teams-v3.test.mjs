@@ -47,7 +47,7 @@ test('closed (the default): no Add anywhere, no Make default; the workspace defa
   const local = u.q('[data-section=local]');
   assert.match(local.textContent, /oats-workspace\.yaml does not allow local teams \(localTeams: true\)/);
   // Said as a sentence in the section's place, not as an empty card.
-  assert.equal(local.querySelector('p.ct-dashed').textContent, `No local teams: ${LOCAL_TEAMS_CLOSED}.`);
+  assert.equal(local.querySelector('p.ct-dashed').textContent, `No teams of this computer: ${LOCAL_TEAMS_CLOSED}.`);
   assert.equal(local.querySelector('.ct-empty'), null);
   assert.equal(local.querySelector('button'), null, 'no Add a local team link');
 });
@@ -133,7 +133,7 @@ test('who may join: a "*" entry is a fallback, never "every soul" (a more specif
 test('no souls: entries: a soul may join its default, and this deployment\'s local teams where they are allowed', async (t) => {
   const open = () => { const d = teams('teams-after'); d.souls = {}; return d; };
   const u = await mount(t, open);
-  assert.equal(u.q('[data-section=souls] .ct-empty').textContent, "No souls: entries: a soul may join its default team and this deployment's local teams.");
+  assert.equal(u.q('[data-section=souls] .ct-empty').textContent, "No souls: entries: a soul may join its default team and this computer's teams.");
   const closed = () => { const d = teams('teams-closed'); d.souls = {}; return d; };
   const v = await mount(t, closed);
   assert.equal(v.q('[data-section=souls] .ct-empty').textContent, 'No souls: entries: a soul may join its default team only.');

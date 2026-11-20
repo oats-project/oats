@@ -2,11 +2,16 @@
 // layout (spec 2026-11-10-subject-layer-in-oats-okf.md §3), over the proposal's
 // clone of the accepted base. The rule is advisory where the tool applies it
 // (propose runs with the proposer's own push rights); the maintainer's review
-// at merge is the gate.
+// at merge is the gate. oats.okf 6.3 (#164): only what protects the base
+// itself refuses (E_SCOPE: okf-base.json, a non-Markdown file under claims/
+// or subjects/, a hand-edited generated index); every other out-of-surface
+// change is returned for the proposer's W_SCOPE warning, which the
+// maintainer resolves at review.
 //
 //   version 1 soul: its owned nodes and the root index.md, as before; on a
 //     bridged base every new claim gets `about:` from the subject whose
-//     `legacy-nodes` names its node (E_SUBJECT when none does).
+//     `legacy-nodes` names its node (a warning when none does: the
+//     maintainer assigns the subject).
 //   version 2 soul (a bridged base): add or change files under claims/**, add
 //     Markdown files under subjects/system/** and subjects/project/** (never
 //     a reserved index.md or log.md), set
@@ -69,38 +74,38 @@ export function setAbout(text, refs) {
  *  checks: a version-1 soul's new claims get `about:` from `legacy-nodes`,
  *  then every generated index is regenerated. `changes`: [{path, status}]
  *  with status A (added), M (modified) or D (deleted), base paths.
- *  → { about: [paths], regenerated: [paths] } (nothing on a plain base). */
+ *  → { about: [paths], regenerated: [paths], warnings: [{ path, text: '<path>: <why>' }] }
+ *  (nothing on a plain base). 6.3: a claim no subject can be found for is
+ *  left as written, with a warning (it was E_SUBJECT). */
 export function prepareSubjectProposal({ root, decl, ownedNodes, changes }) {
-  if (!isBridged(root)) return { about: [], regenerated: [] };
+  if (!isBridged(root)) return { about: [], regenerated: [], warnings: [] };
   // Nothing is read or written through a symlink or a hardlink (E_PATH).
   assertSafeTree(root);
-  const about = [];
+  const about = [], warnings = [];
   if (decl.version !== 2) {
     const map = legacyMap(root);
     for (const c of changes.filter(c => c.status === 'A' && c.path.endsWith('.md') && !isReservedFile(c.path))) {
       const node = Object.entries(ownedNodes).find(([, path]) => under(c.path, path))?.[0];
       if (!node) continue; // outside the owned nodes: the scope check names it
-      // Every new claim: its node's subject first (E_SUBJECT when none absorbs
-      // the node), whatever `about:` the proposer wrote.
+      // Every new claim: its node's subject first, whatever `about:` the
+      // proposer wrote. When no subject absorbs the node, or `about:` is not a
+      // list to complete, the claim is left as written for the maintainer.
       const ref = map.get(node);
-      if (!ref) fail('E_SUBJECT', `${c.path}: no subject on this base names node ${node} in its legacy-nodes, so the claim has no subject; ask the knowledge maintainer to add ${node} to a subject's legacy-nodes, or move this soul to okf.json version 2`);
+      if (!ref) { warnings.push({ path: c.path, text: `${c.path}: no subject on this base names node ${node} in its legacy-nodes, so about: is left as written; the maintainer assigns its subject` }); continue; }
       const text = read(root, c.path), fm = parseFrontmatter(text ?? '');
       if (!fm.parsed) continue; // the validator refuses it
       if (fm.meta.about === undefined) writeInBase(root, c.path, addAbout(text, ref));
       else if (Array.isArray(fm.meta.about)) { if (fm.meta.about.includes(ref)) continue; writeInBase(root, c.path, setAbout(text, [ref, ...fm.meta.about])); }
-      else fail('E_SUBJECT', `${c.path}: about must be a flow list [<kind>/<slug>, ...]; it is completed with ${ref}, the subject of node ${node}`);
+      else { warnings.push({ path: c.path, text: `${c.path}: about is not a flow list [<kind>/<slug>, ...], so it is left as written (the subject of node ${node} is ${ref}); the maintainer assigns its subject` }); continue; }
       about.push(c.path);
     }
   }
   const concepts = readConcepts(root), expected = generate(concepts, read(root, 'index.md') ?? ''), regenerated = [];
   for (const [p, text] of expected) if (read(root, p) !== text) { writeInBase(root, p, text); regenerated.push(p); }
   for (const p of orphanViews(root, concepts)) { fs.rmSync(join(root, p)); regenerated.push(p); }
-  return { about, regenerated };
+  return { about, regenerated, warnings };
 }
 
-/** The write-surface rule over the proposal's changes (after preparation).
- *  `before(path)` reads the accepted text. Every violation is collected and
- *  refused together: E_SCOPE, naming each path and its rule. */
 /** What the proposal's own claims supersede: the base paths and ids in the
  *  `supersedes:` lists of the claims it adds or changes. */
 function superseded(root, changes) {
@@ -115,8 +120,15 @@ function superseded(root, changes) {
   }
   return out;
 }
+/** The write-surface rule over the proposal's changes (after preparation).
+ *  `before(path)` reads the accepted text. What would harm the base itself is
+ *  refused together, E_SCOPE naming each path and its rule: okf-base.json, a
+ *  non-Markdown file under claims/ or subjects/, and a generated index that
+ *  differs from the regenerator's output. → every other out-of-surface change
+ *  (oats.okf 6.3, #164), one '<path>: <rule>; <what the maintainer does>'
+ *  each, for the proposer's W_SCOPE warning. */
 export function checkWriteSurface({ root, decl, ownedNodes, changes, before }) {
-  const bridgedBase = isBridged(root), owned = Object.values(ownedNodes), problems = [];
+  const bridgedBase = isBridged(root), owned = Object.values(ownedNodes), hard = [], soft = [];
   const supersedes = bridgedBase ? superseded(root, changes) : new Set();
   const v1Rule = `a version-1 soul writes only its owned nodes (${owned.map(p => `${p}/`).join(', ') || 'none'}) and the root index.md`;
   for (const { path: p, status } of changes) {
@@ -125,45 +137,47 @@ export function checkWriteSurface({ root, decl, ownedNodes, changes, before }) {
     if (bridgedBase && (generatedPath(p) || p === 'index.md' && decl.version === 2)) {
       if (p === 'index.md') {
         const old = before(p);
-        if (after !== old && after !== withSubjectsSection(old ?? '')) problems.push(`${p}: a version-2 proposal changes the root index.md only through the regenerator's Subjects section`);
+        if (after !== old && after !== withSubjectsSection(old ?? '')) soft.push(`${p}: a version-2 proposal changes the root index.md only through the regenerator's Subjects section; the maintainer judges the edit`);
       }
       continue; // content checked against the regenerator below
     }
+    // What would harm every reader of the base: refused, whoever proposes.
+    if (p === 'okf-base.json') { hard.push(`${p}: a proposal never changes okf-base.json`); continue; }
+    if (under(p, 'claims') && !p.endsWith('.md')) { hard.push(`${p}: claims/ holds Markdown concepts only`); continue; }
+    if (under(p, 'subjects') && !p.endsWith('.md')) { hard.push(`${p}: ${under(p, 'subjects/workstream') ? 'subjects/workstream/' : 'subjects/system/ and subjects/project/'} hold Markdown subject files only`); continue; }
     if (decl.version !== 2) {
       if (p === 'index.md' || owned.some(n => under(p, n))) continue;
-      problems.push(`${p}: ${v1Rule}`);
+      soft.push(`${p}: ${v1Rule}; the maintainer chooses its home`);
       continue;
     }
-    if (!bridgedBase) { problems.push(`${p}: a version-2 soul proposes only to a base with the subject layout`); continue; }
-    if (status === 'D') { problems.push(`${p}: a proposal deletes nothing; supersede a concept with status: superseded`); continue; }
-    if (under(p, 'claims')) { if (!p.endsWith('.md')) problems.push(`${p}: claims/ holds Markdown concepts only`); continue; }
+    if (!bridgedBase) { soft.push(`${p}: a version-2 soul proposes only to a base with the subject layout; the maintainer judges it`); continue; }
+    if (status === 'D') { soft.push(`${p}: a proposal deletes nothing (it supersedes a concept with status: superseded); the maintainer merges a delete only with a stated reason`); continue; }
+    if (under(p, 'claims')) continue;
     if (under(p, 'subjects/system') || under(p, 'subjects/project')) {
-      // As claims/: Markdown only; and a reserved name (a node's index.md or
-      // log.md) is never a subject, at any depth (the generated views were
-      // judged above).
-      if (!p.endsWith('.md')) problems.push(`${p}: subjects/system/ and subjects/project/ hold Markdown subject files only`);
-      else if (isReservedFile(p)) problems.push(`${p}: ${p.split('/').pop()} is a reserved name; a proposal adds subject files subjects/<system|project>/<slug>.md`);
-      else if (status !== 'A') problems.push(`${p}: a proposal adds system and project subjects; it never changes an existing one`);
+      // A reserved name (a node's index.md or log.md) is never a subject, at
+      // any depth (the generated views were judged above).
+      if (isReservedFile(p)) soft.push(`${p}: ${p.split('/').pop()} is a reserved name; a proposal adds subject files subjects/<system|project>/<slug>.md; the maintainer moves or removes it`);
+      else if (status !== 'A') soft.push(`${p}: a proposal adds system and project subjects; it never changes an existing one; the maintainer judges the change`);
       continue;
     }
-    if (under(p, 'verdicts')) { problems.push(`${p}: only the knowledge maintainer writes verdicts/`); continue; }
-    if (under(p, 'subjects/workstream')) { problems.push(`${p}: workstreams change only on a person's cited acceptance, by the knowledge maintainer`); continue; }
-    if (p === 'okf-base.json') { problems.push(`${p}: a proposal never changes okf-base.json`); continue; }
+    if (under(p, 'verdicts')) { soft.push(`${p}: only the knowledge maintainer writes verdicts/; the maintainer removes or rewrites it before merging`); continue; }
+    if (under(p, 'subjects/workstream')) { soft.push(`${p}: workstreams change only on a person's cited acceptance, by the knowledge maintainer; the maintainer removes it unless the PR carries that acceptance`); continue; }
     // A concept only: a node's reserved index.md/log.md is never superseded.
     if (status === 'M' && place(p) === 'claim' && !isReservedFile(p) && onlySupersedes(before(p), after)) {
       // Only a concept one of the proposal's own claims supersedes, by path or id.
       const id = parseFrontmatter(after).meta.id;
       if (supersedes.has(textKey(p)) || (typeof id === 'string' && id && supersedes.has(textKey(id)))) continue;
-      problems.push(`${p}: status: superseded only on a concept a claim of this proposal supersedes (supersedes: [/${p}] or its id)`);
+      soft.push(`${p}: status: superseded only on a concept a claim of this proposal supersedes (supersedes: [/${p}] or its id); the maintainer merges the supersession only with a stated reason`);
       continue;
     }
-    problems.push(`${p}: outside the write surface (claims/**, new subjects/system/** and subjects/project/** files, status: superseded on a concept it supersedes)`);
+    soft.push(`${p}: outside the write surface (claims/**, new subjects/system/** and subjects/project/** files, status: superseded on a concept it supersedes); the maintainer judges the edit or moves it`);
   }
   if (bridgedBase) {
     const expected = generate(readConcepts(root), read(root, 'index.md') ?? '');
-    for (const [p, text] of expected) if (read(root, p) !== text) problems.push(`${p}: a generated index differs from okf-reindex.mjs's output; regenerate, never edit it`);
+    for (const [p, text] of expected) if (read(root, p) !== text) hard.push(`${p}: a generated index differs from okf-reindex.mjs's output; regenerate, never edit it`);
   }
-  if (problems.length) fail('E_SCOPE', problems.join('; '));
+  if (hard.length) fail('E_SCOPE', hard.join('; '));
+  return soft;
 }
 
 /** The validator's findings a proposal may carry: a claim it adds or changes
@@ -173,9 +187,22 @@ export function proposalFindings(findings, changes) {
   return findings.filter(f => { const m = /^(.+): missing 'id' \(stamped by the maintainer at acceptance\)$/.exec(f); return !(m && mine.has(m[1])); });
 }
 
+/** The validator's `about:` errors on the proposal's own added or changed
+ *  files (oats.okf 6.3, #164): tolerated like a missing id, for the
+ *  maintainer to assign the subject. → { subject: [{ path, text }], rest: [findings] }. */
+export function subjectFindings(findings, changes) {
+  const mine = new Set(changes.filter(c => c.status !== 'D').map(c => c.path)), subject = [], rest = [];
+  for (const f of findings) {
+    const m = /^(.+?): (?:'about' must list one or more subjects, as \[<kind>\/<slug>, \.\.\.\]|about names .*, which has no subject file subjects\/.*\.md)$/s.exec(f);
+    if (m && mine.has(m[1])) subject.push({ path: m[1], text: f }); else rest.push(f);
+  }
+  return { subject, rest };
+}
+
 /** Verdict lanes 1 and 2 for every claim the proposal adds or changes, read
- *  from the clone (the accepted verdict record). Refuses E_VERDICT on the first
- *  rejected id without `reconsiders:`; → [{ path, ...lanes }] with candidates. */
+ *  from the clone (the accepted verdict record). → [{ path, ...lanes }] with
+ *  candidates; a rejected id without `reconsiders:` carries its `refusal`
+ *  text, which oats.okf 6.3 (#164) reports as a warning (it was E_VERDICT). */
 export function proposalVerdicts(root, changes) {
   if (!isBridged(root)) return [];
   const index = read(root, 'verdicts/index.md') ?? '', out = [];
@@ -184,7 +211,6 @@ export function proposalVerdicts(root, changes) {
     const fm = parseFrontmatter(read(root, p) ?? '');
     if (!fm.parsed) continue;
     const lanes = verdictLanes(fm.meta, index, id => read(root, `verdicts/${id}.md`));
-    if (lanes.refusal) throw Object.assign(new Error(`${p}: ${lanes.refusal}`), { code: 'E_VERDICT', result: { path: p, ...lanes } });
     out.push({ path: p, ...lanes });
   }
   return out;
@@ -192,7 +218,7 @@ export function proposalVerdicts(root, changes) {
 /** The PR body's section for title-hash candidates and reconsiderations. */
 export function verdictSection(reports) {
   const rows = reports.flatMap(r => [
-    ...(r.identity ? [`- \`${r.path}\` reconsiders \`${r.identity.id}\` (${r.identity.verdict})${r.identity.reason ? `: ${r.identity.reason}` : ''}`] : []),
+    ...(r.identity ? [`- \`${r.path}\` ${r.refusal ? 'names the rejected id' : 'reconsiders'} \`${r.identity.id}\` (${r.identity.verdict})${r.refusal ? ' with no `reconsiders:` line' : ''}${r.identity.reason ? `: ${r.identity.reason}` : ''}`] : []),
     ...r.candidates.map(c => `- \`${r.path}\`: title-hash candidate \`${c.id}\` (${c.verdict}, ${c.claimType}) "${c.title}"`)
   ]);
   return rows.length ? `## Verdict candidates\n\n${rows.join('\n')}\n\nThe proposer says for each whether its claim is the same, a reconsideration or different; the reviewer resolves them to canonical ids.\n` : '';

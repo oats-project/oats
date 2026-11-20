@@ -12,25 +12,25 @@
     "mirrors/oats-okf-harvest",
     "mirrors/oats-okf-maintenance"
   ],
-  "version": "6.2.0",
+  "version": "6.3.0",
   "source": {
     "repository": "https://github.com/awebai/oats-okf.git",
     "branch": "HEAD",
-    "head": "92c630606db81f55c3e31002cb51d0e603dc7902",
+    "head": "29dfd3403d06ec1f14136f81f4dfae63dafcbd9f",
     "dirty": false,
     "workingTreeStatus": []
   },
   "release": {
     "status": "published",
-    "finalMergedCommit": "92c630606db81f55c3e31002cb51d0e603dc7902",
-    "plannedTag": "v6.2.0",
-    "finalTag": "v6.2.0",
+    "finalMergedCommit": "29dfd3403d06ec1f14136f81f4dfae63dafcbd9f",
+    "plannedTag": "v6.3.0",
+    "finalTag": "v6.3.0",
     "published": true,
     "remote": "origin",
-    "tagObject": "ace81dc2984b00e76a3a503de873988a84c8fd1c"
+    "tagObject": "899ed7def2091668bb999ee3313cbee090520ab8"
   },
-  "distributionManifestText": "{\n  \"package\": \"oats.okf\",\n  \"version\": \"6.2.0\",\n  \"description\": \"Official OATS knowledge operations on Open Knowledge Format bases: the working-soul knowledge slot (consultation, instance knowledge and proposing knowledge by PR with `oats okf propose`), the knowledge maintainer capability and package soul that gates every merge, the proposal-review trigger template (and, through 6.x, harvest-review for 5.x okf-harvest PRs), and, until 7.0, the removed knowledge harvester's stub soul and capability, whose spawn always refuses with E_REMOVED naming the fix.\",\n  \"compatibility\": {\n    \"oats\": \">=0.69.2\"\n  },\n  \"capabilities\": [\n    \"capabilities/oats-okf\",\n    \"capabilities/oats-okf-harvest\",\n    \"capabilities/oats-okf-maintenance\"\n  ],\n  \"souls\": [\n    \"souls/knowledge-harvester\",\n    \"souls/knowledge-maintainer\"\n  ],\n  \"triggers\": [\n    { \"id\": \"proposal-review\", \"file\": \"triggers/proposal-review.json\" },\n    { \"id\": \"harvest-review\", \"file\": \"triggers/harvest-review.json\" }\n  ]\n}\n",
-  "distributionManifestSha256": "ca870a195777fdf8a62c8dfe2be54ac46f451e17babcef6b32042793e921aefd",
+  "distributionManifestText": "{\n  \"package\": \"oats.okf\",\n  \"version\": \"6.3.0\",\n  \"description\": \"Official OATS knowledge operations on Open Knowledge Format bases: the working-soul knowledge slot (consultation, instance knowledge and proposing knowledge by PR with `oats okf propose`), the knowledge maintainer capability and package soul that gates every merge, the proposal-review trigger template (and, through 6.x, harvest-review for 5.x okf-harvest PRs), and, until 7.0, the removed knowledge harvester's stub soul and capability, whose spawn always refuses with E_REMOVED naming the fix.\",\n  \"compatibility\": {\n    \"oats\": \">=0.69.2\"\n  },\n  \"capabilities\": [\n    \"capabilities/oats-okf\",\n    \"capabilities/oats-okf-harvest\",\n    \"capabilities/oats-okf-maintenance\"\n  ],\n  \"souls\": [\n    \"souls/knowledge-harvester\",\n    \"souls/knowledge-maintainer\"\n  ],\n  \"triggers\": [\n    { \"id\": \"proposal-review\", \"file\": \"triggers/proposal-review.json\" },\n    { \"id\": \"harvest-review\", \"file\": \"triggers/harvest-review.json\" }\n  ]\n}\n",
+  "distributionManifestSha256": "ed160e48eab17613b5c00a53cbf4542c839c93e87e9bad9036a6c6ba67b3001e",
   "distributionLicenseText": "MIT License\n\nCopyright (c) 2026 OATS Framework\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
   "distributionLicenseSha256": "549762a3949c109455d73fabcd2340e98bd32ecbb6fea0fcac9ba7f5d41e52fd",
   "entries": [
@@ -58,7 +58,7 @@
       "type": "file",
       "mode": "100644",
       "size": 764,
-      "sha256": "a8b214306f5d6243ac510bfac3241b7dcddedbb7512707aa1d529e38c0a66fe2"
+      "sha256": "5f0f112898ccf746633f7b041410e5ea89eb0e877f5c172f73a642b429b97110"
     },
     {
       "path": "capabilities/oats-okf-maintenance",
@@ -102,7 +102,7 @@
       "type": "file",
       "mode": "100644",
       "size": 982,
-      "sha256": "6dd7d408b4f03b09ed630c642b2be74f2640885d77d43c8896c20af02edc0592"
+      "sha256": "9581ef0b6ca452bd57d7562e7738a3700822db200d205ee3657ce14551778dbe"
     },
     {
       "path": "capabilities/oats-okf-maintenance/skills",
@@ -116,8 +116,8 @@
       "path": "capabilities/oats-okf-maintenance/skills/knowledge-review/SKILL.md",
       "type": "file",
       "mode": "100644",
-      "size": 23797,
-      "sha256": "95118a6053c893479b96242ddf3638211e9c879b58d86ac3768a4bf48836a2cd"
+      "size": 26388,
+      "sha256": "e9056b5fca22eefbe0a417a27d41cf26516f4466f10f4f6c72cb028d5b81a434"
     },
     {
       "path": "capabilities/oats-okf-maintenance/skills/knowledge-theory",
@@ -127,8 +127,8 @@
       "path": "capabilities/oats-okf-maintenance/skills/knowledge-theory/SKILL.md",
       "type": "file",
       "mode": "100644",
-      "size": 12595,
-      "sha256": "2f6e439d0919c1fcd9e6f8a8a07f1f504a53c8947f07b6b79b39039f352fde87"
+      "size": 12738,
+      "sha256": "c63fe1dcc1c678181f6cd7ed842bd0444ee91b793e45690c19b13b48c24add11"
     },
     {
       "path": "capabilities/oats-okf-maintenance/skills/okf-authoring",
@@ -138,8 +138,8 @@
       "path": "capabilities/oats-okf-maintenance/skills/okf-authoring/SKILL.md",
       "type": "file",
       "mode": "100644",
-      "size": 10511,
-      "sha256": "f81986b9f2a8ebdaa0e5a2bafe30d3bfbb549f9d5ebda81c4c64cfecf34249da"
+      "size": 11183,
+      "sha256": "90efc1b31d691eae008d6032c3ef09cbdd944f02f6de5cabd37450fd9d20eb17"
     },
     {
       "path": "capabilities/oats-okf-maintenance/skills/okf-authoring/references",
@@ -210,8 +210,8 @@
       "path": "capabilities/oats-okf/bin/oats-okf.mjs",
       "type": "file",
       "mode": "100755",
-      "size": 14469,
-      "sha256": "086d5647226cb0778b66567f16e37ddcf087158a66e50ec8bae3a5fc85c4e21d"
+      "size": 14547,
+      "sha256": "bb54aa7b9d688428d90b24e41d1fe7e84e788a57c6d11d3b664aee3d91d25a6e"
     },
     {
       "path": "capabilities/oats-okf/injects",
@@ -221,8 +221,8 @@
       "path": "capabilities/oats-okf/injects/okf.md",
       "type": "file",
       "mode": "100644",
-      "size": 3333,
-      "sha256": "d20752499e84a744c7604fb209f81cfc8b95f0db087fed927c40199651fb9729"
+      "size": 3397,
+      "sha256": "73df941780d808abef8f7ae6bf315163afaf944eb73aa66a4ae9cd77a2371ffc"
     },
     {
       "path": "capabilities/oats-okf/lib",
@@ -323,8 +323,8 @@
       "path": "capabilities/oats-okf/lib/propose.mjs",
       "type": "file",
       "mode": "100644",
-      "size": 68590,
-      "sha256": "3e15bf4219f58808cf9432302459a507b9183f6155942854a0a56c8143170ac7"
+      "size": 82502,
+      "sha256": "978ff6ed9e7513440bb7393ad914db8d0348366f0023108570fd377e2b7456db"
     },
     {
       "path": "capabilities/oats-okf/lib/setup-check.mjs",
@@ -351,8 +351,8 @@
       "path": "capabilities/oats-okf/lib/stores.mjs",
       "type": "file",
       "mode": "100644",
-      "size": 46744,
-      "sha256": "455d18f29664bb97cd97ea73303f0fe926e2fc160092c40ea6cb6cc384dd0d7e"
+      "size": 47121,
+      "sha256": "bea24e161a767e91c151f1264e0f647ee50b0be136604714843736f57f80c5c2"
     },
     {
       "path": "capabilities/oats-okf/lib/upgrade.mjs",
@@ -372,15 +372,15 @@
       "path": "capabilities/oats-okf/lib/write-surface.mjs",
       "type": "file",
       "mode": "100644",
-      "size": 12974,
-      "sha256": "73f879767fb77a1975ae0bc4ae3839f6efad828a4de11cfff86ab3d6f8a9382f"
+      "size": 15253,
+      "sha256": "e837e8c5a89c47eee9ad696a077e498343eee15478ea66043015400bae8b2736"
     },
     {
       "path": "capabilities/oats-okf/oats.json",
       "type": "file",
       "mode": "100644",
       "size": 6511,
-      "sha256": "26d58d68e27713901249912fe6ba9f53fb06f017d4c24d52160e547eb5a4f435"
+      "sha256": "0fee043bc12419cf77a585c21e8ae66d77012637d6bb34f8dc556e5ee4a675ab"
     },
     {
       "path": "capabilities/oats-okf/schemas",
@@ -433,8 +433,8 @@
       "path": "capabilities/oats-okf/skills/knowledge-theory/SKILL.md",
       "type": "file",
       "mode": "100644",
-      "size": 12595,
-      "sha256": "2f6e439d0919c1fcd9e6f8a8a07f1f504a53c8947f07b6b79b39039f352fde87"
+      "size": 12738,
+      "sha256": "c63fe1dcc1c678181f6cd7ed842bd0444ee91b793e45690c19b13b48c24add11"
     },
     {
       "path": "capabilities/oats-okf/skills/okf-authoring",
@@ -444,8 +444,8 @@
       "path": "capabilities/oats-okf/skills/okf-authoring/SKILL.md",
       "type": "file",
       "mode": "100644",
-      "size": 10511,
-      "sha256": "f81986b9f2a8ebdaa0e5a2bafe30d3bfbb549f9d5ebda81c4c64cfecf34249da"
+      "size": 11183,
+      "sha256": "90efc1b31d691eae008d6032c3ef09cbdd944f02f6de5cabd37450fd9d20eb17"
     },
     {
       "path": "capabilities/oats-okf/skills/okf-authoring/references",
@@ -520,8 +520,8 @@
       "path": "capabilities/oats-okf/skills/okf-instance-knowledge/SKILL.md",
       "type": "file",
       "mode": "100644",
-      "size": 6236,
-      "sha256": "c07c62a89b8308fc8690f91f4f238d76ed81db6e32a1d219f2abf696b25dd46a"
+      "size": 6271,
+      "sha256": "d664256ef566d85cb38f3148519a2cdfd279bd1c545ee1c914d2442228576d3b"
     },
     {
       "path": "capabilities/oats-okf/skills/okf-propose",
@@ -531,8 +531,8 @@
       "path": "capabilities/oats-okf/skills/okf-propose/SKILL.md",
       "type": "file",
       "mode": "100644",
-      "size": 14353,
-      "sha256": "b509c50d1383634caacaae53bfb5ffae6d3e1304166f113f47e0da65a9d37e6b"
+      "size": 11564,
+      "sha256": "2057b0d4ba1bcfe7edd7361dd670a37cc920b16a75d44be3dbf0d8e3ad0877e0"
     }
   ],
   "distributionFiles": [
@@ -579,7 +579,7 @@
       "text": "{\n  \"parameters\": {\n    \"repo\": { \"path\": \"on.repo\", \"required\": true, \"description\": \"the knowledge-base repository, github.com/<owner>/<repo>\" },\n    \"base\": { \"path\": \"on.base\", \"default\": \"main\", \"description\": \"the knowledge base's accepted branch\" },\n    \"harness\": { \"path\": \"spawn.harness\", \"default\": \"claude\", \"description\": \"the maintainer's harness: pi, claude or codex\" },\n    \"model\": { \"path\": \"spawn.model\", \"default\": \"opus\", \"description\": \"the maintainer's model\" }\n  },\n  \"definition\": {\n    \"id\": \"okf-proposal-review\",\n    \"enabled\": true,\n    \"kind\": \"trigger\",\n    \"on\": {\n      \"source\": \"github.pull_request\",\n      \"events\": [\"opened\", \"reopened\", \"ready_for_review\"],\n      \"labels\": [\"okf-proposal\"],\n      \"poll\": \"2m\"\n    },\n    \"spawn\": {\n      \"soul\": \"oats.okf/knowledge-maintainer\",\n      \"purpose\": \"review-pr-{number}\",\n      \"task\": \"Review knowledge-base PR {repo}#{number} ({url}) and gate its merge. Load the knowledge-review skill first.\"\n    },\n    \"concurrency\": { \"max\": 2, \"perKey\": 1 }\n  }\n}\n"
     }
   ],
-  "snapshotSha256": "0843d24ecf6ed674641ca918c659cdd487f8273e14495739923a5cd6c9601598",
+  "snapshotSha256": "7c7bf337c0e8ed88d92cecd460a87b60766b5c28097a1852f5a50d58fdb1d515",
   "distributionManifestMode": "100644",
   "distributionLicenseMode": "100644"
 }

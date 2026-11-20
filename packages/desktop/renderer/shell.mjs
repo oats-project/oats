@@ -23,12 +23,11 @@ import { deploymentUnavailableText, keptFailure } from "../../client/deployment-
 import { panelErrorCause } from "../../client/deployment-contract.mjs";
 import {
   initTheme, toggleTheme, setTheme, currentTheme, refreshHostTheme, THEMES, xtermTheme, terminalFontWeight, onThemeChange,
-  terminalTypography, setTerminalFontSize, setTerminalFontFamily, resetTerminalTypography, onTerminalTypographyChange,
+  terminalTypography, setTerminalFontSize, setTerminalFontFamily, resetTerminalTypography, onTerminalTypographyChange, terminalFamilyChosen,
   initFont, setFont, currentFont, onFontChange, fontChoices, fontFallsBack,
 } from "./theme.mjs";
 import { createPalette } from "./palette.mjs";
 import { createInstanceRecency, recencyIdFromTerminalKey } from "./instance-recency.mjs";
-import { createQuickOpen } from "./quick-open.mjs";
 import { takePickerFocusReturn } from "./overlay-picker.mjs";
 import { createSurfaceReturn } from "./surface-return.mjs";
 import { createFocusRegions, firstTabbable, isShown } from "./focus-regions.mjs";
@@ -37,25 +36,27 @@ import { createFileOpener } from "./open-file.mjs";
 import {
   registerAction, setActiveContexts, getBinding, onKeymapChange, formatChord, handleKeydown, matchEvent, runAction, keymapConflicts, pickerCycleDirection,
   paletteGroupDirection, paletteGroupHint,
-  listActions, readKeyboardLayout, SIDEBAR_KEYS, setChordFamily,
+  listActions, readKeyboardLayout, SIDEBAR_KEYS, SIDEBAR_DELETE, DESKTOP_LEADER, LEADER_CHOICES, setChordFamily,
 } from "./keybindings.mjs";
 import { createChordFamily } from "./chord-family.mjs";
 import { createLeader } from "./leader.mjs";
-import { createLeaderHint } from "./leader-hint.mjs";
+import { createLeaderHint, leaderHelpEnabled, setLeaderHelpEnabled } from "./leader-hint.mjs";
 import { createLeaderDispatch } from "./leader-dispatch.mjs";
-import { leaderApplies, leaderLabel } from "./leader-keys.mjs";
+import { leaderApplies, leaderLabel, supportedLeaderRows, rowKeysText } from "./leader-keys.mjs";
 import { LEADER_TABLE } from "../../client/keymap.mjs";
 import { createKeybindingsEditor } from "./keybindings-editor.mjs";
 import { createConnections, connectionsCSS } from "./connections.mjs";
 import { createTerminalSettings, settingsTerminalCSS } from "./settings-terminal.mjs";
 import { createLifecycleDialog, lifecycleCSS } from './lifecycle-dialog.mjs';
+import { createStatusLine, statusLineCSS } from "./status-line.mjs";
+import { sheetCSS } from "./sheet.mjs";
 import { createForgetDialog, forgetSuccessor } from './forget-dialog.mjs';
 import { createInstanceColorDialog, instanceColorCSS } from './instance-color-dialog.mjs';
 import { createInstanceBackgroundMenu } from './instance-background-menu.mjs';
 import { createInstancePinMenu, PIN_LABELS } from './instance-pin-menu.mjs';
 import { desktopActs } from './desktop-acts.mjs';
 import { successorRow } from "./focus-return.mjs";
-import { createThemePicker, createFontPicker, themePickerCSS } from './theme-picker.mjs';
+import { createAppearanceSheet, themePickerCSS } from './theme-picker.mjs';
 import { rosterKeyAction, moveTarget } from "./roster-keys.mjs";
 import { createViewLifecycle } from "./view-lifecycle.mjs";
 import { reserveKey, whenKeyFree } from "./tab-keys.mjs";
@@ -95,10 +96,11 @@ import { rosterRowFacts } from "../../client/roster-row-facts.mjs";
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../client/waiting-on-you.mjs";
 import { syncWaitingRow } from "./waiting-row.mjs";
 import { createPanelOwner } from "./panel-owner.mjs";
-import { collapseKey, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE, instanceSiblings, rowPinned, PIN_FEATURE } from "../../client/instance-tree.mjs";
-import { withParentGate } from "../../client/same-work.mjs";
+import { collapseKey, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE, instanceSiblings, relatedSiblings, rowPinned, PIN_FEATURE } from "../../client/instance-tree.mjs";
+import { withParentGate, drawsParentLine } from "../../client/related-work.mjs";
 import { createRetiresInFlight, retiringRows } from "../../client/retire-in-flight.mjs";
-import { captureTreeRenderState, relationSpan, stateSpan, rosterResponseOwns, clusterSeparator, renderRosterCount,
+import { createRetireGhosts } from "./retire-ghosts.mjs";
+import { treeConnectors, treeGuides, captureTreeRenderState, relationSpan, stateSpan, rosterResponseOwns, clusterSeparator, renderRosterCount,
   terminalKey, resolveTerminalOpen, createRosterLoading, rosterSignature, ROSTER_STALE_TITLE, rosterName, pinnedMark } from "./instance-tree-view.mjs";
 import {
   tabVisibleInContext, canActivateTab,
@@ -147,7 +149,7 @@ hostTheme.start();
 window.addEventListener("pagehide", () => hostTheme.dispose(), { once: true });
 mountShellIcons(document);
 const identityStyle = document.createElement("style");
-identityStyle.textContent = identityCSS + contextPanelCSS + teamsCSS + instanceSoulCSS + instanceGitCSS + notificationCSS + connectionsCSS + settingsTerminalCSS + lifecycleCSS + instanceColorCSS + themePickerCSS; document.head.append(identityStyle);
+identityStyle.textContent = identityCSS + contextPanelCSS + teamsCSS + instanceSoulCSS + instanceGitCSS + notificationCSS + statusLineCSS + sheetCSS + connectionsCSS + settingsTerminalCSS + lifecycleCSS + instanceColorCSS + themePickerCSS; document.head.append(identityStyle);
 // The sidebar's foot (slice 1): its count of the rows that need you, painted with the roster; its button focuses the
 // first of them (focusFirstNeedingYou).
 const sidebarFoot = createSidebarFoot(document, { nouns: DESKTOP_NOUNS, onNeedYou: () => focusFirstNeedingYou() });
@@ -260,6 +262,12 @@ const ctx = {
   subscribeRetires: (fn) => { retireListeners.add(fn); return () => retireListeners.delete(fn); },
 };
 const openInstanceStart = createInstanceStarter(document, ctx);
+// The status line (status-line.mjs; the Desktop UI rework, slice 4): one line at the bottom of the window, after the
+// app, with the three most useful keys for where the focus is (statusKeys) and one-line messages. Its y/n questions
+// for Stop, Start and Restart were taken out of this slice (the lead, after five review rounds): those keep their
+// dialogs, and the line may ask in a later slice with a design of its own.
+const statusLine = createStatusLine({ doc: document, host: document.body, before: document.getElementById("ws-modal"), keysFor: () => statusKeys() });
+window.addEventListener('pagehide', () => statusLine.dispose(), { once: true });
 
 // Background spawns (Spec C): a confirmed press in the spawn dialog is handed here and the dialog
 // closes; the store runs the transaction, owns the roster's pending rows and the outcome
@@ -594,7 +602,18 @@ let judgedAnswer = null;
 // and settles each; a row is held as retiring (Retiring…, its Retire secondary) from the send until an
 // observed roster read begun after the answer lands (refreshContextRoster's `landed`), or at once released
 // by a refusal. Its mark is the roster's read generation. Every surface draws rows through `shownRows`.
-const retires = createRetiresInFlight({ mark: () => contextRosterGen, onChange: () => retiresChanged() });
+const retiresHeld = createRetiresInFlight({ mark: () => contextRosterGen, onChange: () => retiresChanged() });
+// The retired row's ghost (retire-ghosts.mjs; the Desktop UI rework, slice 4): a retire of this window that answered
+// complete leaves a dim ✕ row where it was for 10 s once the roster no longer lists it. Every retire apply goes
+// through `retires.begin` (the shared confirmation), so its answer's kind is read here, whichever dialog sent it.
+const retireGhosts = createRetireGhosts({ onExpire: () => { if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } });
+const retires = { ...retiresHeld, begin(target) {
+  const held = retiresHeld.begin(target), ws = contextWorkspace || currentWorkspace();
+  const row = contextInstances.find(i => instanceId(i) === instanceId(target)) ?? null;
+  // Any answer that ran something (complete, or accepted and still running: pending) may leave the row gone; the ghost
+  // shows only once the roster no longer lists it, so a retire that did not finish never draws one.
+  return { settle(kind) { held.settle(kind); if (!["refused", "stale", "invalid"].includes(kind) && row) retireGhosts.add(row, ws); } };
+} };
 const retireListeners = new Set();
 // The roster's loading state (desktop/loading-states): the controller owns the
 // pending skeleton, "Refreshing…", the stale line and Retry; shell owns the
@@ -683,7 +702,8 @@ const workspaceLabel = createWorkspaceSwitcher({
   // After the kernel onboarded and the add selected the new deployment: land
   // on its Workspace view.
   onboarded: () => {
-    notifications.notify("Workspace onboarded. The lock is written.");
+    // A confirmation of what was done: the status line's (slice 4), not a card.
+    statusLine.say("Workspace onboarded. The lock is written.");
     void showStage("spawn");
   },
 });
@@ -1022,6 +1042,21 @@ function needsInputMark(below) {
   return mark;
 }
 
+/** A retired row's ghost (retire-ghosts.mjs): "✕ name · retired", dim (the muted ink, never opacity), in its row's
+ * place and indent; not a control and not a tab stop, so nothing acts on it. */
+function retiredGhostRow(i) {
+  const wrap = document.createElement("div");
+  wrap.className = "ctx-tree-row ctx-ghost";
+  wrap.style.setProperty("--depth", String(i.depth || 0));
+  const line = document.createElement("span"); line.className = "ctx-ghost-line";
+  // The mark is Lucide's x (the renderer draws icons, never the text glyph: lucide-icons.test.mjs).
+  const mark = document.createElement("span"); mark.className = "ctx-ghost-mark"; mark.setAttribute("aria-hidden", "true");
+  mark.append(iconElement(document, "close", { size: 12 }));
+  const name = document.createElement("span"); name.className = "ctx-ghost-name"; name.textContent = i.instance;
+  line.append(mark, name, " · retired");
+  wrap.append(line);
+  return wrap;
+}
 /** The roster's rows as this window draws them and offers acts on them (#1247): each row of a retire this
  * window has in flight held as retiring (`retireInFlight`), whatever the row says. */
 function shownRows(rows) {
@@ -1094,14 +1129,17 @@ function renderContextRoster(instances) {
   const reported = new Set(instances.map(instanceId));
   if (inFlight.size) instances = instances.map((i) => inFlight.has(instanceId(i)) && !i.rollbackIncomplete
     ? { ...i, pendingSpawn: inFlight.get(instanceId(i)), reportedSpawn: true } : i);
+  // A retired row's ghost stands where the row was, for 10 s (retire-ghosts.mjs): drawn, never counted or acted on.
+  const ghosts = retireGhosts.rows(instances, ws);
   const spawning = decided.filter((p) => !reported.has(instanceId(p)));
   if (spawning.length) {
-    // #1577: a pending row is this window's own, so the panel stamped no same-work gate on it: it takes its parent's
-    // (same-work.mjs `withParentGate`). This Desktop's spawn never passes --same-work, so on a host that declares
-    // the feature it draws no parent line, as its reported row will not.
+    // A pending row is this window's own, so the panel stamped no related-work gate on it: it takes its parent's
+    // (related-work.mjs `withParentGate`). It carries no flag (this Desktop's spawn records no related work), so it
+    // draws no line of its own, as its reported row will not.
     const all = [...instances, ...spawning], byId = new Map(all.map((i) => [instanceId(i), i]));
     instances = [...instances, ...spawning.map((p) => withParentGate(p, byId.get(rosterParentId(all, instanceId(p))) ?? null))];
   }
+  if (ghosts.length) instances = [...instances, ...ghosts];
   // "since <local time>" on a row setting up its worktree: the start of a job of this window for its home, if any.
   const spawnStart = (i) => {
     const job = i.pendingSpawn || jobs.find((p) => p.home === i.home && p.agentsRoot === i.agentsRoot);
@@ -1173,20 +1211,34 @@ function renderContextRoster(instances) {
   // one part's: no stem, elbow or sibling link reaches a row of the other part.
   const partGroups = (sections, level) => sections.flatMap((section) => section.groups.map((group, at) => ({ ...group, heading: at === 0 && section.deployment ? section : null, level })));
   const groups = [...partGroups(main, 3), ...(background ? [{ background }, ...partGroups(background.sections, 4)] : [])];
-  // The relations in words (slice 1, D26: the roster draws no lineage or sibling lines; indentation and the gap
-  // between bundles show the tree): "under <parent>" for a row indented under its parent and "sibling of …" for an
-  // explicit sibling link, resolved per deployment over its full roster as the command palette's are, said after
-  // the row's lines to assistive technology. Its siblings are listed pinned first with the feature (instance-pin), as
-  // the palette and the TUI list them.
+  // The lines, for related work only (no flag, no line; packages/client/related-work.mjs), as the sidebar drew them
+  // before the Desktop UI rework's D26 and as the command palette draws them, with the same builder
+  // (treeConnectors, treeGuides) over the cluster's drawn rows, so a collapsed parent draws no line into rows it
+  // hides: the solid elbow and stem to a child related to its parent, and the dotted link through the dots of
+  // top-level rows a related sibling link joins. Any other child is indented with no line; a top-level row no
+  // related link joins, and its rows, are a gap in the dotted line. A row with no line carries no guides at all.
+  const rowGuides = (items, i) => {
+    const connectors = treeConnectors(items, i, instances);
+    return connectors.length ? treeGuides(document, connectors) : null;
+  };
+  // The relations in words, said after the row's lines to assistive technology (the lines are aria-hidden):
+  // "under <parent>" for a row indented under its parent and "sibling of …" for an explicit sibling link, resolved
+  // per deployment over its full roster as the command palette's are, each with "related work" where its host
+  // reports it (the line's meaning, said at both ends of a sibling link). Its siblings are listed pinned first with
+  // the feature (instance-pin), as the palette and the TUI list them; the related ones before the rest.
   const ownRows = isMultiDeployment(contextDeployments) ? splitByDeployment(contextDeployments)(instances) : null;
   const siblingPins = { pins: pinsShown() };
-  const siblingsOf = new Map(ownRows ? [...ownRows.values()].flatMap((list) => [...instanceSiblings(list, siblingPins)]) : instanceSiblings(instances, siblingPins));
-  // A child its host reports doing its parent's work (#1577: `sameWork` where the host declares the feature, the
-  // flag the drawn line said before D26) says so too: "same work"; a child the host reports not doing it, or one
-  // whose host doesn't report the flag, says nothing more.
+  const perDeployment = (read) => new Map(ownRows ? [...ownRows.values()].flatMap((list) => [...read(list)]) : read(instances));
+  const siblingsOf = perDeployment((list) => instanceSiblings(list, siblingPins));
+  const relatedSiblingsOf = perDeployment(relatedSiblings);
   const underWords = (i) => (i.depth || 0) > 0 && i.parentInstance
-    ? `under ${i.parentInstance}${i.sameWorkKnown === true && i.sameWork === true ? ", same work" : ""}` : null;
-  const relationWords = (i) => [underWords(i), siblingText(siblingsOf.get(instanceId(i)))].filter(Boolean).join(", ");
+    ? `under ${i.parentInstance}${drawsParentLine(i) ? ", related work" : ""}` : null;
+  const siblingWords = (i) => {
+    const all = siblingsOf.get(instanceId(i)) || [], related = relatedSiblingsOf.get(instanceId(i));
+    const joined = all.filter((s) => related?.has(instanceId(s))), rest = all.filter((s) => !related?.has(instanceId(s)));
+    return [joined.length ? `${siblingText(joined)}, related work` : null, siblingText(rest)].filter(Boolean).join(", ");
+  };
+  const relationWords = (i) => [underWords(i), siblingWords(i)].filter(Boolean).join(", ");
   for (const group of groups) {
     if (group.background) {
       const head = backgroundHeading(document, group.background), toggle = head.querySelector(".ctx-background-toggle");
@@ -1212,10 +1264,11 @@ function renderContextRoster(instances) {
         listEl.append(gap);
       }
       for (const i of items) {
+        if (i.retiredGhost) { listEl.append(retiredGhostRow(i)); continue; }
         // #802: a home the roster reports setting up its worktree (spawned here or anywhere) wears the pending row's treatment too.
         const held = heldHome(i);
         if (i.pendingSpawn || held?.kind === "spawning") {
-          listEl.append(pendingSpawnRow(i, spawnStart(i), relationWords(i))); continue;
+          listEl.append(pendingSpawnRow(i, spawnStart(i), relationWords(i), rowGuides(items, i))); continue;
         }
         const rowWrap = document.createElement("div");
         rowWrap.className = "ctx-tree-row";
@@ -1315,16 +1368,17 @@ function renderContextRoster(instances) {
         if (attn) { meta.className = "ctx-meta ctx-attn-line"; meta.replaceChildren(attn); }
         const isNew = !!spawnJobs.isNew?.(ws, i);
         // The disclosure (the product owner, 2026-11-19): a row with children here wears a chevron and the count
-        // of the rows under it before its name, clear of the row tools at its end; a click on it opens or closes the
-        // row (below). Its words follow the name.
+        // of the rows under it right after its name (the product owner, 2026-11-20: "so that all instance names look
+        // aligned on the left"; an instance row has no tools over its end since slice 1); a click on it opens or
+        // closes the row (below). Its words follow the name.
         const told = hasChildren ? rowDisclosure(document, { count: rowsUnder(childrenHere, instanceId(i)) }) : null;
         const disclosure = told?.mark ?? null;
         // A pinned row's mark (feature instance-pin): beside the name, before New, so a pin is seen, not inferred.
         const pinned = rowPinned(i, pinsShown());
         if (isNew || disclosure || pinned) {
           const line = document.createElement("span"); line.className = "ctx-name-line";
-          if (disclosure) line.append(disclosure);
           line.append(name);
+          if (disclosure) line.append(disclosure);
           if (pinned) line.append(pinnedMark(document));
           if (told) line.append(told.spoken);
           if (isNew) {
@@ -1368,7 +1422,7 @@ function renderContextRoster(instances) {
         row.dataset.rosterCollapsed = collapsed ? "1" : "0";
         row.tabIndex = -1;
         row.addEventListener("keydown", onRosterRowKey);
-        rowWrap.append(row);
+        rowWrap.append(...[rowGuides(items, i), row].filter(Boolean));
         // Slice 1: no tools overlay. Its acts (Open pull request…, Start…) are the context menu's, for every row.
         const actionTarget = instanceActionTarget(ws, i), menuConnection = connectionGeneration;
         const menuOwner = () => currentWorkspace() === ws && workspaceGeneration() === rosterGeneration && connectionGeneration === menuConnection
@@ -1462,7 +1516,7 @@ function renderContextRoster(instances) {
    made anywhere) reads "Setting up worktree…" in the same treatment, with no tools, and "since <local
    time>" when a job of this window knows its start (`startedAt`). Its sentence is its title and description
    (slice 1: no hover card). */
-function pendingSpawnRow(i, startedAt = null, relation = "") {
+function pendingSpawnRow(i, startedAt = null, relation = "", guides = null) {
   const p = i.pendingSpawn ?? null, held = heldHome(i), settingUp = held?.kind === "spawning";
   const unknown = !settingUp && !!p && p.pending !== "spawning", checking = unknown && p.pending === "checking";
   const reported = !p || !!i.reportedSpawn;
@@ -1500,7 +1554,7 @@ function pendingSpawnRow(i, startedAt = null, relation = "") {
   row.append(mark, copy);
   row.tabIndex = -1;
   row.addEventListener("keydown", onRosterRowKey);
-  rowWrap.append(row);
+  rowWrap.append(...[guides, row].filter(Boolean));
   if (unknown) {
     const tools = document.createElement("span");
     tools.className = "ctx-row-tools ctx-spawn-tools";
@@ -2533,6 +2587,13 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
       && canActivateTab(tabs.get(made.id), currentWorkspace())
       && tabOpenIntents.ownsFocus(made.id),
     focusInput: () => tabOpenIntents.applyFocus(() => term.focus()),
+    // The Desktop UI rework, slice 4 (the lead, 2026-11-19): when the terminal in front drops or reconnects, the status
+    // line says so in one plain line, no question (it retries by itself; the pane's strip keeps its countdown and its
+    // Reconnect now).
+    onLink: ({ state, server }) => {
+      if (!(tabLayerVisible && activeTab === made.id && canActivateTab(tabs.get(made.id), currentWorkspace()))) return;
+      statusLine.say(state === "disconnected" ? `Disconnected from ${server}; reconnecting (the pane's Reconnect now tries at once).` : `Reconnected to ${server}.`);
+    },
     fit: () => fitTerminal(term, fit),
     // Terminal-allowlisted shortcuts (engine policy: TERMINAL_ALLOWLIST, e.g.
     // app.palette, tabs.next/prev/close, split.*, focus.leaveTerminal) must be
@@ -2625,7 +2686,7 @@ for (const button of document.querySelectorAll("#nav-foot [data-action]")) {
 // This is a chooser entry, not a launch or an inspection preselection. Capture
 // workspace visit + selection before import, and contain stale rejections too.
 // The leader's 3 opens the same way on Capabilities (`tab`), and stage.hierarchy on Machines.
-const WORKSPACE_TAB_NAMES = { machines: "Machines", souls: "Souls", capabilities: "Capabilities" };
+const WORKSPACE_TAB_NAMES = { machines: "Machines", souls: "Souls", capabilities: "Capabilities", teams: "Teams", sources: "Setup" };
 /** Home's overview opens a Workspace tab from the keyboard (slice 2): the page, on that tab, and the focus on its
  * tab control, where it was a Home button the switch removed; so Esc, the page's way back to Home, is heard at once
  * (stageHost's listener). Only while the page that open showed is still the stage, and only when focus has no place
@@ -2682,19 +2743,34 @@ const palette = createPalette({
   // app.chooseSoul and roster.openNext / openPrevious; the footer names them.
   groupKey: (e) => paletteGroupDirection(e, isMac),
   footer: paletteGroupHint(isMac),
+  // The souls group (slice 4): "New agent: <soul>", from the Spawn view's roster of souls; a pick opens the New agent
+  // form on that soul (openNewAgent).
+  loadSouls: async () => {
+    if (windowState() === "choosing") return { agents: [] }; // no workspace: nothing to read (#481)
+    const ws = currentWorkspace();
+    return api(`/api/agents${ws ? `?ws=${encodeURIComponent(ws)}` : ""}`);
+  },
+  onSoul: (soul) => openNewAgent(soul),
+  // The sections group (slice 4): the pages, from the nav manifest so a new rail destination can never be
+  // palette-invisible (review 8441961 nit), then each tab of the Workspace page, then Connections.
+  sections: () => [
+    ...[...NAV, ...NAV_TABS].map((v) => ({ label: v.label, detail: chordDetail(`stage.${v.name}`), run: () => showStageFocused(v.name) })),
+    ...["souls", "capabilities", "teams", "sources"].map((tab) => ({ label: `Workspace › ${WORKSPACE_TAB_NAMES[tab]}`, run: () => openWorkspaceSouls(tab) })),
+    { label: "Connections", detail: "GitHub CLI accounts on this machine", run: () => openConnections() },
+  ],
   commands: [
-    // View commands derive from the nav manifest so a new rail destination
-    // can never be palette-invisible (review 8441961 nit).
-    ...[...NAV, ...NAV_TABS].map((v) => ({ label: `View: ${v.label}`, detail: chordDetail(`stage.${v.name}`), run: () => showStageFocused(v.name) })),
     { label: "Souls: choose a soul to spawn (Workspace › Souls)", detail: chordDetail("app.chooseSoul"), run: () => runAction("app.chooseSoul") },
-    { label: "Souls: quick open…", detail: chordDetail("app.quickOpenSouls"), run: () => runAction("app.quickOpenSouls") },
     { label: "File: open read-only…", detail: chordDetail("app.openFile"), run: () => runAction("app.openFile") },
+    // The Appearance sheet (slice 4), by its name and by what it holds: Theme: choose… and Font: choose… open it there.
+    { label: "Appearance…", detail: chordDetail("app.themePicker"), run: () => runAction("app.themePicker") },
     { label: "Theme: choose…", detail: chordDetail("app.themePicker"), run: () => runAction("app.themePicker") },
-    { label: "Theme: cycle White / Solarized / Dark / This computer", detail: chordDetail("app.themeToggle"), run: () => toggleTheme() },
+    { label: "Theme: cycle Light / Solarized / Dark / System", detail: chordDetail("app.themeToggle"), run: () => toggleTheme() },
     ...THEMES.map(({ id, label }) => ({ label: `Theme: ${label}`, detail: chordDetail(`app.theme.${id}`), run: () => runAction(`app.theme.${id}`) })),
     { label: "Font: choose…", detail: chordDetail("app.fontPicker"), run: () => runAction("app.fontPicker") },
-    { label: "Shortcuts: edit keyboard shortcuts…", detail: chordDetail("app.shortcuts"), run: () => openShortcutsEditor() },
-    { label: "Settings: Connections…", detail: "GitHub CLI accounts on this machine", run: () => openConnections() },
+    { label: "Keyboard shortcuts…", detail: chordDetail("app.shortcuts"), run: () => openShortcutsEditor() },
+    { label: "Keyboard: show the help sheet when the leader is pressed (on / off)", run: () => {
+      const on = !leaderHelpEnabled(); setLeaderHelpEnabled(on); statusLine.say(on ? "The help sheet shows when the leader is pressed." : "The help sheet no longer shows when the leader is pressed; the leader then ? still pins it.");
+    } },
     { label: "Workspace: switch…", detail: chordDetail("app.workspaces"), run: () => focusWorkspaceList() },
     // One window per workspace (#481): on macOS also File → New Window ⌘⇧N; elsewhere no default chord.
     ...(typeof desktopBridge.windowOpenWorkspace === "function" ? [{ label: "Window: new window",
@@ -2706,7 +2782,8 @@ const palette = createPalette({
     { label: "Instance: name and colour…", detail: chordDetail("instance.edit"),
       run: () => { takePickerFocusReturn(document)?.restore(); openInstanceEdit(paletteTargetId); } },
     // Pin to top / Unpin (feature instance-pin): listed only where the leader's target offers it, as its row menu does.
-    ...Object.entries(PIN_LABELS).map(([action, label]) => ({ label: `Instance: ${label}`,
+    // Named with D3's noun ("Agent: Pin to top"), from DESKTOP_NOUNS, as the slice 4 palette's own rows are.
+    ...Object.entries(PIN_LABELS).map(([action, label]) => ({ label: `${DESKTOP_NOUNS.instance[0].toUpperCase()}${DESKTOP_NOUNS.instance.slice(1)}: ${label}`,
       when: () => pinTargetOffer(paletteTargetId) === action,
       run: () => { takePickerFocusReturn(document)?.restore(); runPinCommand(paletteTargetId, action); } })),
     { label: "Sidebar: toggle (hide/show)", detail: chordDetail("sidebar.toggle"), run: () => toggleSidebar() },
@@ -2720,31 +2797,22 @@ const palette = createPalette({
     { label: "Terminal: focus the active terminal input", detail: chordDetail("terminal.focusActive"), run: () => focusActiveTerminal() },
     { label: "Terminal: increase font size", detail: chordDetail("terminal.fontBigger"), run: () => setTerminalFontSize(terminalTypography().fontSize + 1) },
     { label: "Terminal: decrease font size", detail: chordDetail("terminal.fontSmaller"), run: () => setTerminalFontSize(terminalTypography().fontSize - 1) },
-    { label: "Terminal: set font family…", run: () => {
-      const current = terminalTypography().fontFamily;
-      const next = window.prompt("Terminal font family (CSS font-family value)", current);
-      if (next !== null) setTerminalFontFamily(next);
-    } },
+    // Electron has no window.prompt: the Appearance sheet's family field (slice 4).
+    { label: "Terminal: set font family…", run: () => appearance.open({ focus: "family" }) },
     { label: "Terminal: reset typography", detail: chordDetail("terminal.fontReset"), run: () => resetTerminalTypography() },
   ],
 });
 
-// ── Quick Open for souls (⌘P / Ctrl+Alt+P): find a soul, open its spawn dialog ──
-// Selection hands off to Workspace (preselectSpawn — consumed by the view's
-// next roster paint): the spawn dialog scoped to that soul, exactly as its
-// card's Spawn opens it. A soul that can't be spawned here (attached only,
-// refused, no verified CLI) opens its page instead, which says why.
-// Dismissing the dialog returns to where the operator was before Quick Open
-// (surface-return.mjs). Terminal policy (documented): app.quickOpenSouls is
-// terminal-allowlisted — ⌘P on macOS, Alt+P on Linux/Windows (ESC P: Esc, then P), or
+// ── Quick Open, folded into the palette (the Desktop UI rework, slice 4): its souls group ("New agent: <soul>") and
+// Alt+P (app.quickOpenSouls, which opens the palette on its souls, "+").
+// Picking a soul opens the New agent form on it: today the spawn dialog for that soul (soulSpawn below), scoped as its
+// card's Spawn opens it; slice 5's form takes this one call (openNewAgent). Terminal policy (documented):
+// app.quickOpenSouls is terminal-allowlisted — ⌘P on macOS, Alt+P on Linux/Windows (ESC P: Esc, then P), or
 // Ctrl+Alt+P (ESC Ctrl+P) in that family; plain Ctrl+P stays the shell's history.
-const quickOpen = createQuickOpen({
-  loadSouls: async () => {
-    const ws = currentWorkspace();
-    return api(`/api/agents${ws ? `?ws=${encodeURIComponent(ws)}` : ""}`);
-  },
-  onPick: (soul) => soulSpawn.open(soul),
-});
+// The palette's command for the souls, named with the agent noun (DESKTOP_NOUNS), after the list it joins.
+palette.commands.push({ label: `New ${DESKTOP_NOUNS.instance}: choose a soul…`, detail: chordDetail("app.quickOpenSouls"), run: () => runAction("app.quickOpenSouls") });
+/** Open the New agent form on `soul` ({ name, agentsRoot, server? }). The one place slice 5's form plugs in. */
+function openNewAgent(soul) { return soulSpawn.open(soul); }
 /** Quick Open's pick path: the spawn dialog for `soul`, scoped as its card's Spawn opens it (a soul
  * that can't be spawned here opens its page, which says why); dismissing it returns to where the
  * operator was. The leader's N takes it for the target instance's soul (`onMiss`: no such soul). */
@@ -2770,7 +2838,6 @@ const soulSpawn = {
 // Both pickers contain workspace-scoped references. Close synchronously on
 // every workspace visit; their own lifetimes discard late lists and row clicks.
 onWorkspaceChange(() => {
-  quickOpen.close();
   palette.close();
 });
 
@@ -2824,13 +2891,14 @@ const connections = createConnections({ doc: document, desk,
 });
 function openConnections(choice = {}) { tabOpenIntents.invalidate(); lifecycleDialog.close(); shortcutsEditor.close(); connections.open(choice); }
 window.addEventListener('pagehide', () => connections.dispose(), { once: true });
+const lifecycleRequest = async (workspace, body) => {
+  const response = await desk.api(`/api/instance-lifecycle?ws=${encodeURIComponent(workspace)}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  return response.body; // retain typed unknown outcomes even on proxy transport failures
+};
 const lifecycleDialog = createLifecycleDialog({ doc: document,
-  request: async (workspace, body) => {
-    const response = await desk.api(`/api/instance-lifecycle?ws=${encodeURIComponent(workspace)}`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-    });
-    return response.body; // retain typed unknown outcomes even on proxy transport failures
-  },
+  request: lifecycleRequest,
   gitRequest: (workspace, body) => api(`/api/instance-git?ws=${encodeURIComponent(workspace)}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   }),
@@ -2857,6 +2925,7 @@ function lifecycleFallbackFocus() {
   for (const r of listEl.querySelectorAll('.ctx-inst[tabindex="0"], .ctx-background-toggle[tabindex="0"]')) r.tabIndex = -1;
   row.tabIndex = 0; return row;
 }
+/** Stop or Retire `instance`: its plan-backed dialog, a sheet. */
 function openLifecycleDialog(operation, instance, workspace) {
   // Above the tested bound (#1879) Stop and Remove are held back: every path that would open the dialog (the
   // controls, the menu, a key) says the notice instead, and nothing is planned. The backend refuses it too.
@@ -2950,19 +3019,24 @@ function openInstanceEdit(id) {
   instanceColorDialog.open(instance, { held: held ? heldLine(held) : null });
 }
 window.addEventListener('pagehide', () => instanceColorDialog.dispose(), { once: true });
-// The settings cog's Theme…, the palette and the chord (app.themePicker) open it; a choice goes through setTheme,
-// so it is stored as a palette choice is.
-const themePicker = createThemePicker({ doc: document, themes: THEMES, current: currentTheme, choose: setTheme,
-  subscribe: onThemeChange, onIntent: () => tabOpenIntents.invalidate(), applyFocus: fn => tabOpenIntents.applyFocus(fn) });
-window.addEventListener('pagehide', () => themePicker.dispose(), { once: true });
-// The font picker (app.fontPicker, the palette's Font: choose…): the same picker over this platform's
-// fonts; a choice goes through setFont, stored per computer and applied in place (open terminals
-// switch family and refit through onTerminalTypographyChange, keeping their state).
-// Its rows are read at each open and on each font notification, so the Omarchy row's fallback note follows
-// the latest fontDraws verdict (fontFallsBack), not the one at start.
-const fontPicker = createFontPicker({ doc: document, fonts: () => fontChoices(navigator.platform.includes("Mac"), fontFallsBack()), current: currentFont, choose: setFont,
-  subscribe: onFontChange, onIntent: () => tabOpenIntents.invalidate(), applyFocus: fn => tabOpenIntents.applyFocus(fn) });
-window.addEventListener('pagehide', () => fontPicker.dispose(), { once: true });
+// The Appearance sheet (theme-picker.mjs; the Desktop UI rework, slice 4): the theme, the terminals' font and their
+// size in one sheet, from the palette, app.themePicker (on Theme) and app.fontPicker (on Font). A choice goes through
+// setTheme or setFont, stored per computer and applied in place (open terminals switch family and refit through
+// onTerminalTypographyChange, keeping their state). The font rows are read at each open and on each font
+// notification, so the monospace row's fallback note follows the latest fontDraws verdict (fontFallsBack).
+const appearance = createAppearanceSheet({ doc: document, themes: THEMES, currentTheme, chooseTheme: setTheme,
+  // A named font clears a family chosen by name first (it would win over it), the size untouched; while such a family
+  // is in effect, no named font is marked Current (customFamily).
+  fonts: () => fontChoices(navigator.platform.includes("Mac"), fontFallsBack()), currentFont, chooseFont: (id) => { setTerminalFontFamily(""); setFont(id); },
+  customFamily: () => terminalFamilyChosen(),
+  subscribe: fn => { const offs = [onThemeChange(fn), onFontChange(fn), onTerminalTypographyChange(fn)]; return () => offs.forEach(off => off()); },
+  terminalSize: () => createTerminalSettings({ doc: document, chords: { bigger: chordDetail("terminal.fontBigger")(),
+    smaller: chordDetail("terminal.fontSmaller")(), reset: chordDetail("terminal.fontReset")() } }),
+  // Choose…: a field of the sheet (Electron has no window.prompt); the palette's "Terminal: set font family…" opens it.
+  chooseFamily: (family) => setTerminalFontFamily(family),
+  currentFamily: () => terminalTypography().fontFamily,
+  onIntent: () => tabOpenIntents.invalidate() });
+window.addEventListener('pagehide', () => appearance.dispose(), { once: true });
 
 /** The sidebar's way into the instances, never nothing (the roster's filter was that once): the roster's current
  * row (the roving stop), else its first row, else a control the roster shows (Retry, after a failed read), else, on
@@ -3319,7 +3393,15 @@ for (const [id, action, label] of [['instance.openSplit', 'open-split', 'Instanc
 /** The leader's target (leaderTargetId) where the palette was opened from: its instance entries act on it. */
 let paletteTargetId = null;
 registerAction({ id: "app.palette", label: "Open the command palette", context: "global", run: () => { tabOpenIntents.invalidate(); if (!palette.isOpen()) paletteTargetId = leaderTargetId(document.activeElement); palette.toggle(); } });
-registerAction({ id: "app.quickOpenSouls", label: "Quick open a soul to spawn", context: "global", run: () => { tabOpenIntents.invalidate(); quickOpen.toggle(); } });
+// New agent (Alt+N, the Desktop UI rework's key; decided 2026-11-19): what the foot's New agent and Alt+P do.
+registerAction({ id: "app.newAgent", label: `New ${DESKTOP_NOUNS.instance}`, context: "global", run: () => openPaletteOnSouls() });
+// New agent (slice 4): the palette on its souls ("+"); pressed again while it is open, it closes it.
+registerAction({ id: "app.quickOpenSouls", label: `New ${DESKTOP_NOUNS.instance}: choose a soul`, context: "global", run: () => openPaletteOnSouls() });
+function openPaletteOnSouls() {
+  tabOpenIntents.invalidate();
+  if (palette.isOpen()) { palette.close(); return; }
+  paletteTargetId = leaderTargetId(document.activeElement); void palette.open({ query: "+" });
+}
 registerAction({ id: "app.chooseSoul", label: "Souls: choose a soul to spawn (Workspace › Souls)", context: "global", run: () => openWorkspaceSouls() });
 registerAction({ id: "app.shortcuts", label: "Edit keyboard shortcuts", context: "global", run: () => openShortcutsEditor() });
 registerAction({ id: "app.connections", label: "Settings: Connections…", context: "global", run: () => openConnections() });
@@ -3336,9 +3418,9 @@ window.addEventListener("pagehide", () => { tabOpenIntents.invalidate(); unregis
   run: () => showStageFocused(v.name),
 }));
 // A held chord (key repeat) does nothing: it never opens and closes the picker over and over.
-registerAction({ id: "app.themePicker", label: "Choose a theme…", context: "global", run: (e) => { if (!e?.repeat) themePicker.toggle(); } });
-registerAction({ id: "app.fontPicker", label: "Font: choose…", context: "global", run: (e) => { if (!e?.repeat) fontPicker.toggle(); } });
-registerAction({ id: "app.themeToggle", label: "Cycle White / Solarized / Dark / This computer theme", context: "global", run: () => toggleTheme() });
+registerAction({ id: "app.themePicker", label: "Appearance…", context: "global", run: (e) => { if (!e?.repeat) appearance.toggle({ focus: "theme" }); } });
+registerAction({ id: "app.fontPicker", label: "Appearance: font…", context: "global", run: (e) => { if (!e?.repeat) appearance.toggle({ focus: "font" }); } });
+registerAction({ id: "app.themeToggle", label: "Cycle Light / Solarized / Dark / System theme", context: "global", run: () => toggleTheme() });
 // Explicit theme choices are rebindable, but add no default keyboard chords.
 THEMES.forEach(({ id, label }) => registerAction({
   id: `app.theme.${id}`, label: `Theme: ${label}`, context: "global", run: () => setTheme(id),
@@ -3431,6 +3513,30 @@ function sayInHint(line) {
 }
 for (const type of ["keydown", "pointerdown", "focusin", "focusout"]) {
   window.addEventListener(type, () => { if (hintLineArmed && leaderHint.mode() === "line") { hintLineArmed = false; leaderHint.hide(); } }, true);
+}
+/** The status line's three keys for where the focus is (the Desktop UI rework, slice 4; guide v6 tour step 46: "The
+ * status line always keeps the three most useful keys"), from the live keymap: a key that is unbound is left out. */
+function statusKeys() {
+  const key = id => { const chord = getBinding(id, isMac); return chord ? formatChord(chord, isMac) : null; };
+  const region = focusRegions?.regionOfFocus?.() ?? null;
+  const inTerminal = !!document.activeElement?.closest?.(".xterm");
+  const rows = region === "roster" ? [["Enter", "open"], [key("sidebar.key.stop"), "stop"], [key("app.palette"), "palette"]]
+    : region === "workspaces" ? [["Enter", "show"], ["↑↓", "move"], [key("app.palette"), "palette"]]
+    : inTerminal ? [[key("app.leader"), "prefix"], [key("tabs.close"), "close tab"], [key("app.palette"), "palette"]]
+    : [[key("app.palette"), "palette"], [key("app.leader"), "prefix"], [key("app.quickOpenSouls"), `new ${DESKTOP_NOUNS.instance}`]];
+  return rows.filter(([keys]) => keys).map(([keys, label]) => ({ keys, label }));
+}
+onKeymapChange(() => statusLine.refresh());
+/** The help sheet's title and rows (leader-hint.mjs showHelp): the leader's keys that apply where you are now. */
+function leaderHelp() {
+  const chord = getBinding("app.leader", isMac);
+  const state = leaderState();
+  const rows = supportedLeaderRows().filter(row => leaderApplies(row, state))
+    .map(row => ({ keys: rowKeysText(row, isMac), label: leaderLabel(row.does, actionLabel) }));
+  // D18: an input method may take Ctrl+Space before the window sees it; the Keyboard sheet switches the leader.
+  const shortcuts = getBinding("app.shortcuts", isMac);
+  const note = chord === DESKTOP_LEADER ? `If an input method takes ${formatChord(chord, isMac)}, choose ${formatChord(LEADER_CHOICES[1], isMac)} on Keyboard shortcuts${shortcuts ? ` (${formatChord(shortcuts, isMac)})` : ""}.` : "";
+  return { title: chord ? `After ${formatChord(chord, isMac)}` : "After the leader", rows, note };
 }
 /** What the window shows now, for the rows that apply (leader-keys.mjs leaderApplies). */
 function leaderState() {
@@ -3535,24 +3641,29 @@ const leaderDispatch = createLeaderDispatch({
   // A step made from the list of workspaces leaves the focus there (the operator is browsing workspaces with
   // the moves); from anywhere else, the workspace shown puts it back where it was there (focusArrival).
   workspaceStep: delta => workspaceLabel.step(delta, { focusPlace: focusRegions.regionOfFocus() !== "workspaces" }),
-  help: () => runAction("app.shortcuts"),
+  // The leader then ? pins the help sheet until Esc (D15); the Keyboard shortcuts sheet is Ctrl+, and the palette's.
+  help: () => leaderHint.showHelp({ ...leaderHelp(), pinned: true }),
   list: () => {
     if (sidebarHidden() || contextPanel.isFocusMode()) runAction("sidebar.toggle");
     tabOpenIntents.invalidate();
     focusRegions.focusRegion("roster");
   },
   refresh: () => { void refreshContextRoster({ user: true }); },
+  sidebar: () => runAction("sidebar.toggle"),
 });
 const leader = createLeader({ win: window, isMac, modalOpen,
   // A key the Desktop has no operation for (m) cancels, as one outside the table does. A key whose row
   // does not apply now (nothing to split, no terminal) settles, and its line says why.
   supports: does => leaderDispatch.supports(does),
-  onOpen: () => leaderHint.announce(),
-  onClose: () => { if (leaderHint.mode() === "wait") leaderHint.hide(); },
+  onOpen: () => { leaderHint.announce(); if (leaderHelpEnabled() && leaderHint.helpMode() !== "pinned") leaderHint.showHelp(leaderHelp()); },
+  onClose: () => { if (leaderHint.mode() === "wait") leaderHint.hide(); if (leaderHint.helpMode() === "wait") leaderHint.hideHelp(); },
   // The target is read at the key, not when the leader was pressed: whatever moved focus meanwhile is what the user sees.
   onSettle: does => { const why = notApplicable(does); if (why) sayInHint(why); else leaderDispatch.run(does, leaderOrigin(document.activeElement)); },
 });
 window.addEventListener("pagehide", () => leader.dispose(), { once: true });
+// A pinned help sheet stays until Esc, pressed anywhere (not under a modal, nor while the leader waits).
+const offHelpEscape = leaderHint.closeOnEscape(window, () => modalOpen() || leader.isWaiting());
+window.addEventListener("pagehide", () => offHelpEscape(), { once: true });
 // The chord, from every focus, a terminal's and an editable field's included. Under a modal dialog
 // or the palette it is not there at all (`when`): the key goes where it goes without it.
 registerAction({ id: "app.leader", label: "Leader: the commands that follow one key", context: "global", when: () => !modalOpen(),
@@ -3566,7 +3677,7 @@ function runAsLeaderKey(does, e) {
 }
 // The sidebar's plain keys (the TUI's, shared PLAIN_KEYS): one action per key, the same `does` as
 // the leader's, acting on the focused roster row (on a nav or heading control: the selected row).
-for (const { id, does } of SIDEBAR_KEYS) {
+for (const { id, does } of [...SIDEBAR_KEYS, SIDEBAR_DELETE]) {
   registerAction({ id, label: leaderLabel(does, actionLabel), context: "sidebar", run: (e) => runAsLeaderKey(does, e) });
 }
 // The previous / next instance, the previous / next workspace and the leader's z on chords (the shared

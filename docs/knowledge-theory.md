@@ -226,7 +226,7 @@ A knowledge capability is more than a storage adapter under a kernel-owned judge
 4. A `knowledge-maintainer` instance reviews that pull request and merges, amends, requests changes, closes, or escalates to a human.
 5. Accepted learning becomes available to later consultation; it is not automatically in every instance's active context.
 
-The reference doctrine's independent harvester ([judgment](knowledge-reference/harvester.md)) remains a pattern a capability may choose. `oats.okf` 6 chose differently: the instance proposes its own claims, and the maintainer's review of each pull request is where independence lives.
+This is the reference doctrine's [judgment and proposal](knowledge-reference/proposal.md) pattern: the instance proposes its own claims, and the maintainer's review of each pull request is where independence lives. An independent harvester, which judges a source's evidence in a separate worker, remains an [option](knowledge-reference/adoption.md#an-option-an-independent-harvester) a capability may choose, with obligations of its own; `oats.okf` 6 replaced it.
 
 Directory bases use their own recoverable publication mechanism. Receipts state what actually happened: capture, judgment, delivery and acceptance are different facts, and directory publication does not prove human review. The [operational guide](knowledge.md) describes commands and constraints.
 

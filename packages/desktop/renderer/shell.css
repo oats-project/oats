@@ -8,6 +8,9 @@ html, body, #app { height: 100%; margin: 0; }
    hidden, which still allows programmatic scrolling, so the body is what leaves nothing to scroll. */
 html { overflow: clip; }
 body { position: relative; overflow: clip; }
+/* The window is the app above the status line (status-line.mjs), one line at the bottom across its width. */
+body { display: flex; flex-direction: column; }
+body > #app { flex: 1 1 auto; height: auto; min-height: 0; }
 body {
   background: var(--bg);
   color: var(--fg);
@@ -274,22 +277,26 @@ body {
 /* Two columns per level, so the sibling cue and parentage never merge (#1312). The dotted sibling
    link sits on the dot's column (10px inset + 4px radius), --tree-link-shift left of its centre
    (the sidebar's 2px, so the two columns are 7px apart; still inside the dot, so it reads as
-   joining it; the palette's rows, unset, stay on the centre), and joins the depth-0 dots of one
-   group, passing beside their children. The solid lineage (a parent's stem, pass-throughs for open
-   branches, rounded elbows into children) runs --tree-branch-offset right of the centre: the stem leaves
+   joining it; the palette's rows, unset, stay on the centre), and joins the dots of the top-level rows
+   a related sibling link joins, passing beside their children. The solid lineage (a parent's stem,
+   pass-throughs for open branches, rounded elbows into children) reaches only a child related to its
+   parent, and runs --tree-branch-offset right of the centre: the stem leaves
    the parent's dot at its lower right, under the ring, and each elbow ends under the child dot's
    ring. Dots paint above every line with a ring in the row's own solid colour (--row-solid:
    surface, hover surface-2, selected sel), so every line appears to leave the dot itself and a
    running dot stays solid on the tint instead of reading hollow inside a white halo. */
-/* The guides span the row's transparent borders too, so lines cross the gap between rows. */
+/* Lines are drawn for related work only (packages/client/related-work.mjs): no flag, no line, so each line is
+   the sign of it, and both strokes hold 3:1 on every row fill (contrast-inventory.mjs: --tree-stroke solid,
+   --tree-link dotted). The sidebar's rows and the command palette's tree rows share these rules.
+   The guides span the row's transparent borders too, so lines cross the gap between rows. */
 .ctx-guides { position: absolute; inset: calc(-1 * var(--row-gap)) auto calc(-1 * var(--row-gap)) 0; width: 100%; pointer-events: none; }
 .ctx-guide { position: absolute; box-sizing: border-box; width: 0;
              left: calc(13.25px + var(--tree-branch-offset) + var(--guide-level) * var(--tree-step));
-             border-left: 1.5px solid var(--tree-line); }
+             border-left: 1.5px solid var(--tree-stroke); }
 .ctx-guide.line { top: 0; bottom: 0; }
 /* From the offset column to 1px inside the next level's dot ring (ring: 6px around the dot centre). */
 .ctx-guide.elbow { top: -2px; height: calc(50% + 2px); width: calc(var(--tree-step) - var(--tree-branch-offset) - 4.25px);
-                   border-bottom: 1.5px solid var(--tree-line); border-bottom-left-radius: 5px; }
+                   border-bottom: 1.5px solid var(--tree-stroke); border-bottom-left-radius: 5px; }
 .ctx-guide.down { top: 50%; bottom: 0; }
 .ctx-guide.link-in, .ctx-guide.link-out, .ctx-guide.link-through { left: calc(13.25px - var(--tree-link-shift, 0px) + var(--guide-level) * var(--tree-step));
                                                                    border-left: 1.5px dotted var(--tree-link); }
@@ -333,7 +340,7 @@ body {
    meets AA on every row fill, never opacity. */
 .ctx-held-hint { color: var(--muted); font-size: 11.5px; line-height: normal; }
 .ctx-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
-/* An instance's name: 12.5px, or the font choice's --name-size (12px in Omarchy's font; theme.mjs fontStacks). */
+/* An instance's name: 12.5px (--name-size, which the font choice no longer sets since D2). */
 .ctx-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--name-size, 12.5px); font-weight: 600; line-height: 15px; }
 .ctx-meta { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Spec E: "New" on a just-spawned row the operator was not taken to: text and a dot, until it is first opened. */
@@ -348,8 +355,9 @@ body {
 .ctx-new { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 10.5px; font-weight: 600; line-height: 15px; }
 .ctx-new-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--accent); }
 /* The disclosure (the product owner, 2026-11-19; roster-disclosure.mjs): a parent's chevron and the count of the rows
-   under it, first on the name line, before the name: the row tools that overlay the row's end on hover never cover
-   it (review round 3). In the meta line's muted ink. The chevron points right while the row is
+   under it, on the name line right after the name (the product owner, 2026-11-20), so every name starts on its
+   level's column; a long name ellipsizes before it, and an instance row has no tools over its end (slice 1) to cover
+   it. In the meta line's muted ink. The chevron points right while the row is
    collapsed and down while it is open; nothing animates. A click on the mark opens or closes the row: it lifts to
    the text colour with a border ring on hover, and its 1px padding sits in a -1px margin, so the 15px name line
    never grows. */
@@ -485,6 +493,11 @@ body {
 .leader-hint:not([data-mode="line"]) { width: 1px; height: 1px; left: 0; right: auto; bottom: 0; padding: 0; margin: -1px;
                                        border: 0; overflow: hidden; clip-path: inset(50%); box-shadow: none; }
 .leader-hint-line { margin: 0; color: var(--fg); }
+/* The Desktop UI rework, slice 4: the hint's line is said on the status line (status-line.mjs): drawn over it, the
+   window's bottom line, in its place and its type, for as long as it stays (the next key, click or focus change). */
+.leader-hint[data-mode="line"] { position: fixed; left: 0; right: 0; bottom: 0; z-index: 46; max-height: none; min-height: 26px;
+  padding: 3px 12px; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none;
+  background: var(--surface-2); font-size: 11.5px; line-height: 1.4; }
 #show-sidebar { left: 6px; }
 #show-panel { right: 6px; }
 .main-edge-control:hover { color: var(--fg); background: var(--surface-2); }
@@ -846,3 +859,27 @@ body {
   .kb-marks { width: auto; margin-left: auto; }
   .kb-chord-cell { width: auto; }
 }
+/* The leader's help sheet (leader-hint.mjs; the Desktop UI rework, slice 4, D15): small, at the window's bottom right
+   above the status line, while the leader waits (and pinned with the leader then ?). It never takes the pointer. */
+.leader-help { position: fixed; right: 16px; bottom: 38px; z-index: 45; width: min(300px, calc(100vw - 32px)); max-height: 60vh;
+               overflow: auto; box-sizing: border-box; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
+               background: var(--surface); color: var(--fg); box-shadow: var(--shadow-popover); font-size: 12px; line-height: 1.5;
+               pointer-events: none; animation: sheet-in 150ms ease both; }
+.leader-help[hidden] { display: none; }
+.leader-help-title { margin: 0 0 6px; color: var(--muted); font-weight: 600; }
+.leader-help-keys { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 0; }
+.leader-help-keys dt { margin: 0; }
+.leader-help-keys dd { margin: 0; color: var(--fg); overflow-wrap: anywhere; }
+.leader-help-keys kbd { font: inherit; font-family: var(--mono); color: var(--accent); }
+.leader-help-foot { margin: 8px 0 0; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .leader-help { animation: none; } }
+/* The keyboard shortcuts sheet's help setting (keybindings-editor.mjs): one checkbox line under the head. */
+.kb-help-setting { display: flex; gap: 8px; align-items: center; padding: 8px 16px 0; color: var(--fg); font-size: 12px; }
+.kb-help-setting input { accent-color: var(--accent); }
+/* A retired row's ghost (retire-ghosts.mjs; the Desktop UI rework, slice 4): dim by the muted ink, never opacity. */
+.ctx-tree-row.ctx-ghost { display: flex; align-items: center; color: var(--muted); font-size: 12.5px; }
+.ctx-ghost-line { display: inline-flex; gap: 6px; align-items: baseline; min-width: 0; padding-left: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-ghost-mark { color: var(--muted); display: inline-flex; align-self: center; }
+/* The Keyboard shortcuts sheet's leader choice (keybindings-editor.mjs; D18): the family choice's own rules, and its notes. */
+.kb-leader { margin: 0; padding: 8px 16px 0; border: 0; }
+.kb-leader-note, .kb-leader-own { margin: 4px 0 0; color: var(--muted); font-size: 12px; }

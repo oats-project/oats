@@ -7,7 +7,7 @@
 // shared home's rule for a kept failure (deployment-facts.mjs keptFailure), are pure and shared the same way.
 // #1247: the window's retires in flight. A suite about other behaviour holds none: rows are drawn as the roster
 // says (`shownRows` the identity) and a read lets nothing go; a suite about them passes the shipped ones.
-// A workspace switch's focus place (focus-place.mjs) is inert the same way.
+// A workspace switch's focus place (focus-place.mjs) is inert the same way, and so is slice 4's retired-row ghost.
 // #1579: the Background section's placement, section key and heading are pure and shared the same way; a suite
 // about other behaviour runs without the kernel's feature (`backgroundShown`), so nothing moves, and its sections
 // are closed (`backgroundOpen`). background-sidebar.test.mjs turns the feature on.
@@ -16,10 +16,10 @@
 // its own `collapsedInstances` still closes rows; roster-disclosure-shell.test.mjs runs the default with a plain Set.
 // Slice 1 of the Desktop UI rework: a row's two lines (packages/client roster-row-facts.mjs) are pure and shared the
 // same way; the foot's count is inert (`sidebarFoot`, sidebar-foot-shell.test.mjs drives the shipped one), and the empty
-// roster's line is the shipped words with no chord bound. The relations in words (D26: no drawn lines) are pure too.
+// roster's line is the shipped words with no chord bound. The relations in words and the related-work lines are pure too.
 // Feature instance-pin: the pin's order and mark are pure and shared the same way; a suite about other behaviour runs
 // without the feature (`pinsShown`), so nothing moves and no mark is drawn, and its row menu offers no pin item.
-// instance-pin-menu.test.mjs turns the feature on. The palette's Instance: Pin to top / Unpin carry their real labels
+// instance-pin-menu.test.mjs turns the feature on. The palette's Agent: Pin to top / Unpin carry their real labels
 // (PIN_LABELS) and offer themselves for no target here (pinTargetOffer, asked of the palette's own target, which is
 // none: paletteTargetId), so a suite that builds the palette lists neither.
 import { deploymentState, rosterSections, rowStale, splitByDeployment, rosterSectionKey, sidebarSections, isMultiDeployment } from "../../../client/roster-sections.mjs";
@@ -33,8 +33,9 @@ import { rowFactsTitle } from "../../renderer/row-facts-title.mjs";
 import { deploymentHeading, notePanel, panelDeployments } from "../../renderer/view-deployments.mjs";
 import { createViewMembership, rehomeMap } from "../../renderer/workspace-rehome.mjs";
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../../client/waiting-on-you.mjs";
-import { waitingRollup, backgroundPlacement, rowPinned } from "../../../client/instance-tree.mjs";
-import { pinnedMark } from "../../renderer/instance-tree-view.mjs";
+import { waitingRollup, backgroundPlacement, rowPinned, relatedSiblings } from "../../../client/instance-tree.mjs";
+import { pinnedMark, treeConnectors, treeGuides } from "../../renderer/instance-tree-view.mjs";
+import { drawsParentLine, withParentGate } from "../../../client/related-work.mjs";
 import { PIN_LABELS } from "../../renderer/instance-pin-menu.mjs";
 import { rowReasonLine, runtimeErrorLine, unsupportedLine, speakerLine, keptFailureLine, heldLine } from "../../renderer/speaker-line.mjs";
 import { keptFailure } from "../../../client/deployment-facts.mjs";
@@ -55,6 +56,8 @@ export const viewContext = () => ({
   // #1421 §2: an instance's colour on its dots (instance-dot.mjs), pure, read by the roster paint, the tab sync and a tab's open.
   dotColor, paintDotColor,
   shownRows: rows => rows, retires: { landed() {}, ids: () => new Set() },
+  // Slice 4: a retired row's ghost (retire-ghosts.mjs). A suite about other behaviour holds none; slice4-overlays drives it.
+  retireGhosts: { rows: () => [], add() {}, clear() {} }, retiredGhostRow: () => { throw new Error("no ghost is drawn here"); },
   // A launch's --instance (launch-focus.mjs): a suite about other behaviour has no request pending; an observed read
   // tells it nothing. launch-focus.test.mjs drives the shipped one.
   launchFocus: { observe() {}, pending: () => false },
@@ -81,6 +84,9 @@ export const viewContext = () => ({
   // behaviour reads nothing. automations-failure.test.mjs drives the shipped reader.
   automationsFailure: { refresh: async () => {} },
   rowPinned, pinnedMark, pinsShown: () => false,
+  // The related-work lines and words (related-work.mjs, instance-tree-view.mjs): every roster paint draws a row's
+  // lines with the shared builder and says "related work" by the shared rule; a suite's own imports may repeat them.
+  treeConnectors, treeGuides, drawsParentLine, withParentGate, relatedSiblings,
   pinMenu: { items: () => [], handles: () => false, run: async () => {} },
   PIN_LABELS, paletteTargetId: null, pinTargetOffer: () => null, runPinCommand: async () => {},
 });

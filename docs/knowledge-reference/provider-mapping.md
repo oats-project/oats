@@ -18,14 +18,14 @@ another model. A soul may own nodes in several bases. `project/desktop-expert`
 and `team/desktop-expert` are different nodes; leaf names are not identity.
 Stable owner identity distinguishes same-named souls from different repositories.
 
-Ownership assigns responsibility and harvest routing; `reads` selects initial
+Ownership assigns responsibility and proposal routing; `reads` selects initial
 context. Neither is an ACL. Configured workspace/team bases are discoverable,
 and native user accounts govern access. There is no new public/private system.
 Access to a repository does not automatically bind it as a knowledge base.
 
 ## Resolve without guessing
 
-Record an unambiguous resolved destination and owner before reads or harvest.
+Record an unambiguous resolved destination and owner before reads or proposals.
 Do not derive custody from the source's cwd, feature branch, writable checkout,
 work mode or the soul's location. Relative locators resolve from their declaring
 scope with containment checks. For OKF specifically,
@@ -35,8 +35,8 @@ is an implementation choice, not generic OATS YAML or a graph-provider schema.
 
 Missing bindings, owner mismatches and access failures are visible errors.
 Reads never scaffold missing nodes. Creation and ownership changes are explicit
-writes. Pending inputs retain frozen destination identity and binding provenance;
-subsequent config edits must not reroute them. Provider migration is explicit.
+writes. A planned proposal retains its frozen destination identity and binding
+provenance; subsequent config edits must not reroute it. Provider migration is explicit.
 
 ## Native contract worksheet
 
@@ -45,19 +45,19 @@ subsequent config edits must not reroute them. Provider migration is explicit.
 | Resolve | Actual locator, stable base/node/owner identity, declaring scope, containment |
 | Discover/read | Accepted-state entry point, selective retrieval, credentials source, freshness signal |
 | Capture | Source identity, note versions/hashes, bounded record content and provenance |
-| Prepare harvest | Independent worker input, frozen destinations, claim/idempotency key, durable input custody |
+| Propose | Checkpoint input, frozen destinations, write surface, content screen before anything leaves the host, a second delivery of the same proposal refused |
 | Judge/write | Native read and author tools; allowed targets; supersession and duplicate prevention |
 | Validate | Representation validator and semantic checks; whole-base/link namespace where relevant |
-| Deliver | Durable proposal, applied update, no-change, failure and uncertainty signals |
+| Deliver and review | Durable proposal, the reviewer's accept/reject/amend, applied update, no-change, failure and uncertainty signals |
 | Inspect/refresh | What readers see, accepted versus pending, retry/recovery and receipts |
 
 ## Concrete custody distinctions
 
 | Store | Read baseline | Writer and acceptance |
 |---|---|---|
-| Embedded Git OKF | Accepted ref plus contained bundle root | Independent accepted-baseline checkout; knowledge-only PR |
+| Embedded Git OKF | Accepted ref plus contained bundle root | Accepted-baseline clone apart from the feature branch; knowledge-only PR the reviewer merges |
 | Dedicated Git OKF | Accepted ref of knowledge repository | Same PR-only rule; separate repository does not make it non-Git |
-| Directory OKF | Configured directory's confirmed current contents | Independent staging, baseline checks, coordinated/crash-recoverable native publication |
+| Directory OKF | Configured directory's confirmed current contents | Staging, baseline checks, coordinated/crash-recoverable native publication; no review phase, so `oats.okf` 6 delivers no proposals to it |
 | Native CLI graph | Verified native query and consistency behavior | Verified native authoring/confirmation; unknown until investigated |
 
 For Git, a PR opened is delivered judgment, not merged knowledge. A failed PR
@@ -70,5 +70,5 @@ subdirectories. A graph uses its own representation validator, not an OKF check.
 Omnigraph is a motivating scenario, not a verified integration: obtain a graph
 provider's actual command help and guarantees before proposing any command.
 
-See [harvester instructions](harvester.md) and [acceptance cases](acceptance.md)
-for source-independent execution and delivery/failure probes.
+See [judgment and proposal](proposal.md) and [acceptance cases](acceptance.md)
+for checkpoint execution and delivery/failure probes.

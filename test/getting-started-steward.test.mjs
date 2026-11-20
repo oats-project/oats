@@ -36,14 +36,15 @@ const NO_ROOT_ROUTE_YET = "None is released yet: until one is, take the fallback
 const AW_ROOT_ROUTE = "1.36.48";
 const mirrorHasRootRoute = residentSource.includes('route: "root"');
 
-test("the catalog lists oats.machine at v0.1.1, and oats.machine-care resolves to it", () => {
-  assert.deepEqual(catalog.packages["oats.machine"], { url: "https://github.com/awebai/oats-machine.git", ref: "v0.1.1", path: "oats-package" });
+test("the catalog lists the machine publisher, and oats.machine-care resolves to it", () => {
+  const { url, path, ref } = catalog.packages["oats.machine"];
+  assert.deepEqual({ url, path }, { url: "https://github.com/awebai/oats-machine.git", path: "oats-package" });
+  assert.match(ref, /^v\d+\.\d+\.\d+$/);
   assert.equal(catalog.capabilities["oats.machine-care"], "oats.machine");
-  assert.match(read("docs/official-catalog.md"), /^\| `oats\.machine` \| `v0\.1\.1` \| `oats\.machine-care` \| `steward`, `technician` \|$/m);
+  assert.ok(read("docs/official-catalog.md").includes(`| \`oats.machine\` | \`${ref}\` | \`oats.machine-care\` | \`steward\`, \`technician\` |`));
 });
 
 test("on a machine found-list the workspace pins the catalog's oats.machine by bare version", () => {
-  assert.match(skill, /^  oats\.machine: v0\.1\.1\b/m);
   assert.equal(`v${skill.match(/^  oats\.machine: v(\S+)/m)[1]}`, catalog.packages["oats.machine"].ref);
   assert.doesNotMatch(skill, /git:github\.com\/awebai\/oats-machine/, "an official package is pinned by bare version, never by Git");
   assert.match(skill, /`machine\.platform`/, "the step applies only to a machine found-list");
@@ -457,6 +458,20 @@ test("getting-started: a monorepo host's two setup files are on the one yes, and
   assert.ok(flat.includes("When others can push to the repository (`gh api repos/<owner>/<repo>/collaborators --jq length` prints more than 1, or fails), its default branch `<branch>` is protected (`gh api repos/<owner>/<repo>/branches/<branch> --jq .protected` prints `true`, `gh api repos/<owner>/<repo>/rules/branches/<branch> --jq length` prints more than 0, or either fails), or the push is refused: push a branch instead, open a pull request, tell them, and stop until it is merged."));
   assert.ok(flat.includes("skeleton committed (pushed | merged from <url>)"));
   assert.ok(!flat.includes("in pull request <url>"), "the spawn never waits on an open pull request");
+});
+
+test("getting-started: a free plan's upgrade 403 on the rules read counts as no rules, as oats-workspace-config's check does", () => {
+  const flat = skill.replace(/\s+/g, " ");
+  // A private repository on a free plan answers the rules read with 403 "Upgrade to GitHub Pro": the plan has no rulesets, so nothing guards the branch.
+  assert.ok(flat.includes("A 403 from the rules read saying the feature needs an upgrade (\"Upgrade to GitHub Pro or make this repository public\") is not a failure: the repository's plan has no rulesets, so it counts as 0."));
+  const config = readFileSync(new URL("../oats-package/capabilities/oats-setup/skills/oats-workspace-config/SKILL.md", import.meta.url), "utf8").replace(/\s+/g, " ");
+  assert.ok(config.includes("A 403 there saying the feature needs an upgrade means the plan has no rulesets, which counts as `0`."), "the two skills keep one rule for the plan's 403");
+});
+
+test("getting-started: a new workspace's default name is the repository's, the folder's only without one", () => {
+  const flat = skill.replace(/\s+/g, " ");
+  assert.ok(flat.includes("Default: their project's name: its repository's name when it has one, else its folder's (the repository's wins when they differ)"));
+  assert.ok(!flat.includes("(its repository's, or its folder's)"), "no default that leaves the choice open");
 });
 
 test("getting-started: the hand-off is in plain words; what the person may want later goes to the hand-over file", () => {

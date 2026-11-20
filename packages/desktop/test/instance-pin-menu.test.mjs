@@ -1,7 +1,7 @@
 // Pinned instances (feature instance-pin), the Desktop's acts and marks: the row menu's Pin to top / Unpin
 // (renderer/instance-pin-menu.mjs in instance-actions.mjs; its gate is instance-record-gate.mjs), the route's roster
 // re-read through the shipped HTTP handler (oats-web.mjs, as workspace-views-fixture.mjs loads it), the palette's
-// "Instance: Pin to top" / "Instance: Unpin" and its pinned order, and the sidebar's shipped paint (shell.mjs
+// "Agent: Pin to top" / "Agent: Unpin" and its pinned order, and the sidebar's shipped paint (shell.mjs
 // renderContextRoster): the order and the pin mark on the name line, only while this computer's CLI lists the feature.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,12 +12,13 @@ import { createInstancePinMenu, pinOffer, pinFailure, PIN_LABELS, PIN_UNAVAILABL
 import { rereadsRoster } from '../server/instance-record.mjs';
 import { instanceActions } from '../renderer/instance-actions.mjs';
 import { paletteRows } from '../renderer/palette.mjs';
+import { DESKTOP_NOUNS } from '../renderer/desktop-terms.mjs';
 import { pinnedMark } from '../renderer/instance-tree-view.mjs';
 import { loadServer, alexState, A } from './helpers/workspace-views-fixture.mjs';
 import { viewContext } from './helpers/view-context.mjs';
 import * as treeShared from '../../client/instance-tree.mjs';
 import * as treeView from '../renderer/instance-tree-view.mjs';
-import * as sameWork from '../../client/same-work.mjs';
+import * as relatedWork from '../../client/related-work.mjs';
 import { captureInstanceActionMenu } from '../renderer/instance-actions.mjs';
 import { instanceActionTarget } from '../renderer/instance-action-target.mjs';
 import { instanceSplitPlan } from '../renderer/instance-split.mjs';
@@ -219,16 +220,16 @@ test('the palette lists the pin command only where the leader\'s target offers i
   const entries = shell.match(/^( {4}\.\.\.Object\.entries\(PIN_LABELS\)[^]*?\} \}\)\),)$/m)?.[1];
   assert.ok(entries, 'the shipped palette entries');
   const ran = [];
-  const commands = runInNewContext(`[${entries}]`, { PIN_LABELS, paletteTargetId: 'T', pinTargetOffer: () => offers.current,
+  const commands = runInNewContext(`[${entries}]`, { PIN_LABELS, DESKTOP_NOUNS, paletteTargetId: 'T', pinTargetOffer: () => offers.current,
     takePickerFocusReturn: () => null, document: {}, runPinCommand: (id, action) => ran.push([id, action]) });
   const listed = raw => paletteRows([], commands, raw).map(r => r.label);
   assert.deepEqual(listed('>'), []);
   offers.current = 'pin-on';
-  assert.deepEqual(listed('>'), ['Instance: Pin to top']);
+  assert.deepEqual(listed('>'), ['Agent: Pin to top'], "D3's noun, from DESKTOP_NOUNS");
   assert.deepEqual(listed('>unpin'), []);
   offers.current = 'pin-off';
-  assert.deepEqual(listed('>'), ['Instance: Unpin']);
-  paletteRows([], commands, '>').find(r => r.label === 'Instance: Unpin').run();
+  assert.deepEqual(listed('>'), ['Agent: Unpin']);
+  paletteRows([], commands, '>').find(r => r.label === 'Agent: Unpin').run();
   assert.deepEqual(ran, [['T', 'pin-off']]);
   // Its instance rows: pinned first while this computer's CLI lists the feature, the roster's order without.
   const rows = [{ instance: 'new', home: '/w/new', agentsRoot: '/w', createdAt: '2026-11-19T10:00:00.000Z' },
@@ -256,7 +257,7 @@ test('the palette\'s target offer follows the row menu: no row, a stale or held 
 
 // ── the sidebar's paint ────────────────────────────────────────────────────────────────────────────────
 
-const tree = { ...treeShared, ...treeView, ...sameWork };
+const tree = { ...treeShared, ...treeView, ...relatedWork };
 const html = readFileSync(new URL('../renderer/index.html', import.meta.url), 'utf8');
 const fn = name => shell.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`))?.[0];
 const source = ['renderContextRoster', 'needsInputMark', 'setBackgroundOpen', 'onRosterRowKey', 'setRovingRow']

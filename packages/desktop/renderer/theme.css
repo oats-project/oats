@@ -17,10 +17,9 @@
   font-weight: 200 900; font-stretch: 50% 200%; font-style: normal; font-display: block;
 }
 :root { --mono: "Inconsolata", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-/* --ui-font, the UI's face, is set only by the font choice (theme.mjs fontStacks: Omarchy's font, the
-   default), inline on the root with --mono and, on Linux and Windows, --term-font-family. Every UI
-   font rule reads it as var(--ui-font, <its own stack>), so System font, which sets none of them, is
-   each rule's own stack exactly as before. */
+/* The chrome is the system sans (D2, the Desktop UI rework): nothing sets --ui-font any more, so every UI font rule,
+   which reads var(--ui-font, <its own stack>), is its own system stack. The font choice sets only the terminals'
+   --term-font-family (theme.mjs fontStacks). */
 
 :root, [data-theme="dark"] {
   color-scheme: dark;     /* native lists, scrollbars and pickers follow the theme */
@@ -28,7 +27,8 @@
   --surface: #161b22;     /* cards, sidebar */
   --surface-2: #1c2129;   /* hover / raised */
   --border: #2d333c;
-  --tree-line: #3d444d; --tree-link: #6e7681; /* sidebar tree: solid elbows / dotted sibling links */
+  --tree-line: #3d444d; --tree-link: #6e7681; /* decorative tree edges / the dotted sibling link */
+  --tree-stroke: #6e7681; /* the sidebar's solid lines for related work: 3:1 on surface, surface-2, sel */
   --fg: #e6edf3;          /* primary text  (13.9:1 on bg) */
   --muted: #9aa4b2;       /* secondary text (5.6:1 on surface) */
   --faint: #8b949e;       /* tertiary/disabled; AA where also used as metadata */
@@ -96,6 +96,7 @@
   --surface-2: #f8f8f6;
   --border: #e3e3df;
   --tree-line: #cfcfca; --tree-link: #858580; /* tree connectors; the dotted link holds 3:1 on surface, surface-2, sel (#1312) */
+  --tree-stroke: #858580; /* the solid related-work lines hold 3:1 on surface, surface-2, sel */
   --fg: #1a1a18;
   --muted: #5f5f5a;
   --faint: #686862;
@@ -150,6 +151,7 @@
   --surface-2: #f0e9d2;
   --border: #ddd4bc;
   --tree-line: #cfc6ab; --tree-link: #728384; /* the dotted link holds 3:1 on surface, surface-2, sel (#1312) */
+  --tree-stroke: #728384; /* the solid related-work lines hold 3:1 on surface, surface-2, sel */
   --fg: #37424a;
   --muted: #56676d;
   --faint: #55666b;

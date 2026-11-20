@@ -278,16 +278,16 @@ agents; and, over a line, the foot, one bar: at its left **N need you**, the
 number of this workspace's agents that need input (hidden when none does;
 it takes you to the first of them, in the roster's order, expanding a collapsed
 parent or opening the Background section to show it), and at its right
-**New agent**, which opens Quick Open (⌘P / Alt+P, named in its tooltip) to
-pick a soul and then the spawn dialog, and **?**, which opens the keyboard
-shortcuts. The foot has no mark, no Hide sidebar button and no settings menu:
-⌘B / Ctrl+Shift+B and the palette's **Sidebar: toggle (hide/show)** hide the
-sidebar, and the palette's **Theme: choose…**, **Font: choose…** and
-**Shortcuts: edit keyboard shortcuts…** open the theme, the font and the
-shortcuts. A window opens on **Home**: at launch, and after you choose a
-workspace for it. Connections is in the
-command palette (**Settings: Connections…**), and the palette opens with its
-shortcut or Ctrl+X then `k`.
+**New agent**, which opens the command palette on its souls (⌘P / Alt+P,
+named in its tooltip) to pick a soul and then the spawn dialog, and **?**,
+which opens the keyboard shortcuts. The foot has no mark, no Hide sidebar
+button and no settings menu: ⌘B / Ctrl+Shift+B and the palette's **Sidebar:
+toggle (hide/show)** hide the sidebar, and the palette's **Appearance…** and
+**Keyboard shortcuts…** open the two sheets for the theme and the fonts, and
+for the keys. A window opens on **Home**: at launch, and after you choose a workspace
+for it. Connections is in the
+command palette (**Connections**, among its sections), and the palette opens with its
+shortcut or the leader (Ctrl+Space) then `k`.
 **Home** answers two questions on one page: what needs you, and what you
 have.
 
@@ -310,9 +310,31 @@ have.
 - **A workspace with no agents yet** shows what OATS does in two lines and
   three keys (New agent, the command palette, Home), then the overview.
 
-Home has no key of its own yet: the palette's **View: Home** opens it. The
+Home has no key of its own yet: the palette's **Home** (among its sections)
+opens it. The
 board never changes the roster's order: urgency is sorted on Home only.
 
+**The command palette** (⌘K / Alt+K) is the one place to reach everything.
+It lists, in order: the agents that need you (the newest first), your recent
+agents (the sidebar's tree, the one you used last on top), the sections
+(Home, Workspace overview and its tabs, Automations, Connections), the commands,
+and one **New agent: <soul>** row per soul. Type to narrow it; `>` keeps only
+the commands and `+` only the souls.
+
+**The status line** runs along the bottom of the window. It shows the three
+keys most useful where you are (in the roster: Enter, Stop and the palette;
+in a terminal: the leader, close tab and the palette), says in one line why a
+key could not act (the leader's line is drawn there), says what was just done
+("Workspace onboarded. The lock is written."), says when the terminal in front
+loses its server and when it is back (the pane keeps its countdown and its
+**Reconnect now**). It asks nothing: Stop, Start and Restart keep their
+dialogs.
+
+**The help sheet.** Press the leader (Ctrl+Space; Ctrl+X if you chose it) and a small sheet at the
+bottom right lists the keys it takes where you are; the next key does its job
+and the sheet goes. The leader then `?` keeps it open until Esc. To turn the
+sheet off, untick **Show the help sheet when the leader is pressed** on the
+Keyboard shortcuts sheet.
 The instances have no search field: to find one by name, type it in the
 command palette, which opens its terminal. ⌘F / Alt+F (**Focus the
 instance roster**) and `/` in the sidebar go to the roster's current row;
@@ -331,45 +353,49 @@ hidden; a window too narrow for it shows it narrower, and gives it back when
 the window grows again. The terminals refit as it moves, and their programs
 hear the new size once, when you let go.
 
-**Theme and font.** The palette's **Theme: choose…** and
-⇧⌘Space / Ctrl+Shift+Space open the theme picker (White, Solarized, Dark, or
-This computer, which follows the computer's own theme). The font has a picker
-of its own, **Font: choose…** in the palette (no
-shortcut unless you give it one in the shortcuts editor), with two choices:
+**Appearance.** The palette's **Appearance…** and ⇧⌘Space / Ctrl+Shift+Space
+open the Appearance sheet, with three parts. **Theme**: System (Omarchy's theme on a computer that runs Omarchy, else
+the system's light or dark setting; it was "This computer"), Dark, Light, and
+More themes… (Solarized). **Font**, the terminals' font (the window's own
+text is always the system's interface font):
 
-- **Omarchy's font**, the default on a computer that runs Omarchy. On Linux the whole window and its
-  terminals use the computer's monospace font, the one `omarchy font current`
-  names and `omarchy font set` changes (fontconfig's `monospace`, on any
-  Linux). A font changed that way shows when Desktop next starts, at the
-  latest. On Windows it is the system's monospace font, for the window and the
-  terminals. On macOS the choice is named **JetBrains Mono**, Omarchy's default
-  face: the window uses it (or the system's monospace font where it is not
-  installed), and the terminals keep Inconsolata. On every platform, instance
-  names in the sidebar and on tabs are a little smaller in it (12px, from
-  12.5px), since a monospace face runs wider.
-- **System font**, the faces Desktop had before: the system's interface font
-  for the window and Inconsolata in the terminals. It is the default on every
+- **This computer's monospace**, the default on a computer that runs Omarchy
+  (it was "Omarchy's font"). On Linux the terminals use the computer's
+  monospace font, the one `omarchy font current` names and `omarchy font set`
+  changes (fontconfig's `monospace`, on any Linux); a font changed that way
+  shows when Desktop next starts, at the latest. On Windows it is the system's
+  monospace font. It is not offered on macOS, where the terminals keep
+  Inconsolata.
+- **System**: Inconsolata in the terminals. It is the default on every
   computer that doesn't run Omarchy (other Linux, macOS and Windows).
+- **Choose…**: a font family by name, as the palette's **Terminal: set font
+  family…**.
+
+And **Terminal font size**, the same size as ⌘= / Ctrl+= change. A choice
+applies at once and the sheet stays open; Esc closes it.
+
+Changed in the next release: the window's own text no longer follows the font
+choice. Before, Omarchy's font made the whole window monospace; now only the
+terminals use it (D2 of the Desktop UI rework).
 
 Desktop knows a computer runs Omarchy when Omarchy's theme directory
-(`~/.local/state/omarchy/current`) is there, the same one the **This computer**
+(`~/.local/state/omarchy/current`) is there, the same one the **System**
 theme reads. A font you chose always wins over the default.
 
 The terminal's size belongs to the face its terminals are in, since the same
-size looks larger in a wider face. Omarchy's font in the terminals defaults to
+size looks larger in a wider face. The computer's monospace in the terminals defaults to
 13px (JetBrains Mono, Omarchy's default face, at 13px), and Inconsolata, with
-System font, on macOS or when Omarchy's font shows System font's faces, to
+System, on macOS or when the monospace shows Inconsolata, to
 15px, on every computer. A size you set is kept for that face only, and a
 font change never carries it to the other. Resetting the size or the zoom
 goes back to the default of the face in use.
 
 The computer's monospace font is used only once it draws at a fixed width.
-Desktop checks it at start and on each choice in the picker. Where the
+Desktop checks it at start and on each choice in the sheet. Where the
 computer has no monospace font, or `monospace` names a bitmap font (which the
-window cannot draw), **Omarchy's font** shows System font's faces, and its row
-in the picker says **No monospace font on this computer: showing System
-font**. The choice stays Omarchy's font, so the computer's font is used once
-it draws.
+terminals cannot draw), **This computer's monospace** shows Inconsolata, and its row
+says **No monospace font on this computer: showing System**. The choice stays,
+so the computer's font is used once it draws.
 
 The choice is kept on this computer, like the theme, and applies at once:
 open terminals switch font and take that face's size in place, and keep what
@@ -417,7 +443,7 @@ a choice saved for it is ignored.)
   deployment that isn't live (stale, not reached, its last read failed) and
   an oats without `waiting-on-you`. The mark never moves a row: the order
   stays the same whoever waits.
-- **Picking a row** (a click, Enter, or the leader's ↑ / ↓, Ctrl+X then ↑ /
+- **Picking a row** (a click, Enter, or the leader's ↑ / ↓, Ctrl+Space then ↑ /
   ↓, which are also ⌥↑ / ⌥↓ on macOS and Alt+↑ / Alt+↓ on Linux and Windows
   in the Alt family, the default) shows that workspace in this window, with its own tabs, layout and
   selection; one another window shows moves here ([A workspace another window
@@ -432,7 +458,7 @@ a choice saved for it is ignored.)
   Windows does it from the keyboard. It opens the workspace in its own window,
   or brings the window that shows it to the front.
 - **Keyboard.** The list is one Tab stop, Up/Down/Home/End move in it, and
-  `w` in the sidebar, Ctrl+X then `o`, ⌥⌘O / Alt+O and the palette's
+  `w` in the sidebar, Ctrl+Space then `o`, ⌥⌘O / Alt+O and the palette's
   **Workspace: switch…** focus it. The full keys are in [the keyboard
   reference](../packages/desktop/docs/desktop-keyboard.md#the-list-of-workspaces).
 
@@ -480,40 +506,61 @@ other window.
 
 ## Capabilities and spawning
 
-**Workspace › Capabilities** is in two parts, each with its title:
-**Workspace defaults** (below), then **All capabilities**, what the
-workspace offers. Under the **All capabilities** title, a row of segments
-jumps to its three sections: **Workspace owned** (from the member repos, for every soul),
-**Repo owned** (only for souls of the same repo) and **Packages** (pinned
-versions). Workspace owned and Repo owned are grouped by the repository
-that defines each capability. The groups are headed like the Souls tab:
-repo name, then "member repo · host · N capabilities". The host repository
-comes first, then the others by name; capabilities from outside the member
-repos come last, under **external**. At the top right of Workspace owned,
-pills (**All**, then one per repository, each with its count) show one
-repository at a time; "N of M shown" appears while a pill or the search
-narrows the list.
+**Workspace › Capabilities** lists every capability of the workspace as one
+list of rows. Core capabilities (knowledge, messaging and tasks) come first,
+in that order, each with a dim **core** tag; every other capability follows by
+name. There are no sections, repository groups or colour marks. Each row
+shows:
 
-Above All capabilities, **Workspace defaults** shows what every soul of the
-workspace starts with, unless it turns one off. It is one panel with two
-groups. **Core capabilities** (at most one of each per soul) is always
-**Knowledge**, **Messaging** and **Tasks**. **Additional capabilities** (any
-number per soul) lists the other capabilities the workspace gives every soul,
-or says there are none. Each default is shown the same way: its tile, the
-capability and its source (a package and its pinned version, or a repository
-and "latest"). Click it to open the capability's page. An empty core slot
-shows **None**: there is no workspace default, and each soul chooses its
-own. A core capability the workspace names among its other defaults, rather
-than in its slot, is shown under Core, in that slot, as the kernel fills the
-slot with it. An additional default the workspace turned off is struck through and
-says "turned off by the workspace". A workspace that sets no defaults, a
-standalone deployment for example, shows one line saying so. The search and
-the repository pills never narrow or hide this section. It is read from
-`oats workspace status --json`: an OATS that does not report the defaults
-shows no such part, and the Desktop does not guess them from the souls. The
-defaults have no segment of their own: the segments are All capabilities'.
-Teams add no capabilities (removed in 0.30), so there are no team defaults
-to show.
+- the capability's name;
+- who made it: a small ✓ in a circle for an official one (its tooltip says
+  which fact made it official: **Official: in the OATS catalog** or **Official:
+  from the OATS repository**), or **by** its source (a member repository's
+  name, or a git package's repository);
+- one line of what it does (the manifest's description, cut to one line);
+- its tags: **core**, **default** for one the workspace gives every soul,
+  **default · off** for one the workspace turns off, and **repo only** for one
+  only its own repository's souls can use.
+
+A capability is official by a rule of the Desktop over what the kernel
+already reports: a package the workspace pins from the catalog
+(`oats workspace status` reports its source as `catalog:<id>`), or a
+capability of the OATS repository itself. Its name proves nothing. The mark
+says only that: it is not a trust claim, since being listed is not being
+trusted. Its limit: `OATS_PACKAGE_CATALOG` can point the kernel at another
+catalog file, and workspace status doesn't say which catalog was read, so an
+operator who points it elsewhere sees that catalog's packages marked official.
+A kernel fact for "official" is
+[oats-project/oats#1981](https://github.com/oats-project/oats/issues/1981). A package's
+name and version are not on this list: **Setup**'s Packages box shows them,
+and so does the capability's page.
+
+One sentence above the list says what defaults are: the capabilities the
+workspace gives every soul, so its agents share one way of working. A soul
+can turn a default off and choose its own instead. The sentence also says
+which core slot no default fills, and names a declared default the list can't
+show as a row. A workspace that sets no defaults (a standalone deployment, for
+example) says so in that sentence. The search never narrows it. It is read
+from `oats workspace status --json`: an OATS that doesn't report the defaults
+shows no sentence and no tag, and the Desktop doesn't guess them from the
+souls. The defaults are declared in the workspace file; the page only shows
+them. Teams add no capabilities (removed in 0.30).
+
+↑ and ↓ move along the rows, and Enter opens a capability's page. The page
+reads top to bottom:
+
+- its name, its tags, and one line on where it comes from (who made it, then
+  the package and its pinned version, or the repository at its latest);
+- **what it does**, as one paragraph;
+- **Skills**: each skill's name and one line. Enter opens the whole skill in
+  the pane, read-only: its front matter as a table, then its text, with its
+  other files a press away. Esc returns to the capability;
+- then, folded, each only when there is something to show: **Commands**,
+  **Settings** and the soul's **As <soul> resolves it** (opened from a soul),
+  **Triggers**, **Hooks**, **Used by**, **Comes from** (the commit,
+  fingerprint, path and manifest file) and **Files** (the injected
+  instructions and every skill file, in a tree with a reader). Enter or Space
+  unfolds one, and a fold stays open while the page refreshes.
 
 The round **i** button in the toolbar, beside the search (**About capabilities**), opens
 **What capabilities are**: what a capability gives a soul's instances (skills,
@@ -692,6 +739,13 @@ same themed look, and its open list follows the light or dark theme.
 
 ## Stopping and retiring
 
+Stop and Retire open a centred sheet with what Desktop has read they will
+do: Stop's children, and for Retire what goes (the home, the worktree and its
+uncommitted work, the branch and pull request it leaves alone). After you
+confirm a retire, the row reads Retiring…, then a dim "✕ name · retired" row
+stays in its place for ten seconds. Start and Restart open their dialog, with
+the harness, permissions and model.
+
 The Desktop runs one stop or retire at a time for its own requests. Another
 program using OATS at the same time, such as the `oats` command or the
 terminal client, is held off by OATS itself: from OATS 0.52.0, a stop and a
@@ -863,14 +917,21 @@ the CLI, cron semantics, observed outcomes and recovery commands.
 
 ## A workspace's teams and setup
 
-The Workspace › **Teams** tab has one card per team. Under its description,
+The Workspace › **Teams** tab has two sections. **Workspace teams** are the
+teams the workspace declares in `oats-workspace.yaml`: everyone who opens the
+workspace sees them. **This computer's teams** are the teams declared only on
+this computer, in its `oats-local.yaml` (the kernel's local teams), not
+shared with the workspace. Each section says so in one sentence, and a team's
+page lists **your agents** on it, on this computer and the machines added to
+this workspace, never the team's whole membership. The Teams tab has one card per team. Under its description,
 **Default for** says whose default the team is: all souls of a repository, a
 single soul, or every soul without its own default for the default team. **May
 join** says who else may join it. Both are read from the workspace's committed
 `souls:`; a team nobody may join yet says so. The address (the team on the
 messaging provider) and the members running in it follow.
 
-The **Setup** tab's List view is one column. Under the workspace's name, one
+The **Setup** tab is one list, in one column (its graph view went in the
+Desktop UI rework). Under the workspace's name, one
 line counts its members (and those that need attention), its packages and the
 state of the lock. The next line says where the workspace is declared. An
 **Overview** says that the workspace's **host**, the repository that holds
@@ -878,9 +939,12 @@ state of the lock. The next line says where the workspace is declared. An
 packages. **For developers** (folded) explains how a repository becomes a
 member and what each member state means. Then **Shared through Git** lists
 what the workspace declares (Members, with the host first and tagged
-**Host**, Packages and Defaults). **This computer** lists what is not shared:
-this deployment's settings, lock, CLI and instances, the member clones, and
-the machines that run the workspace (**Registered machines**).
+**Host**, Packages and Defaults). Each member's **Details** (or **Why?**, when
+its handshake needs attention) opens its panel under its row: both sides of
+the handshake, what it means now, its capabilities by name and the kernel's
+own detail. **This computer** lists what is not shared: this deployment's
+settings, lock, CLI and agents, and the member clones. The machines that run
+the workspace are the **Machines** tab's.
 
 ## A workspace's machines
 
@@ -888,12 +952,17 @@ A window offers only the machines that run its workspace: those whose
 registration reports the same workspace key as the window's deployment on this
 computer (OATS CLI with `servers-per-workspace` and `server-connect`). The
 spawn dialog's **Where to run** lists "This computer" and those machines; the
-Workspace › Setup tab's **Registered machines** lists them with their OATS version and whether they can
-be reached, with **Check** and **Remove**. Registrations whose key is not known
-yet are checked once in the background after the Desktop starts.
+Workspace › **Machines** tab lists the computers the workspace runs on: this
+computer first (where the view has a deployment here: "reading…" or "not read"
+until it is read), then each of those machines, with whether it can be reached
+and its OATS version. A remote-only view lists its machines' deployments
+instead. The Map and the roster show where agents run; the list counts none.
+Enter on a machine opens it: its name, ssh host and folder,
+**Check** and **Remove**. Registrations whose key is not known yet are checked
+once in the background after the Desktop starts.
 
 **Add a machine to this workspace…** (the last entry of Where to run, and a
-button in Setup) takes an ssh host alias, a name, the folder on that machine
+button on the Machines tab) takes an ssh host alias, a name, the folder on that machine
 and whether to install OATS there, and runs `oats server connect` from this
 deployment; when the workspace uses oats.aweb for messaging, it then runs `oats
 aweb connect` to join that machine to the workspace's team. Each step shows as
@@ -1044,16 +1113,48 @@ error in the terminal. Each drop/paste accepts up to 16 files totaling 25 MB.
 
 The sidebar lists a workspace's instances as a tree: a child sits one step
 right of its parent, and related instances are grouped together, with a little
-space before the next group. The sidebar draws no lines between them: the
-indent and that space show the tree. A screen reader hears each row's state ("running", "stopped" or "status
-unknown") after its two lines, then each child "under"
-its parent, with "same work" when its host reports it doing its parent's work,
-and each instance linked as a sibling "sibling of" the other, after the row's
-two lines.
+space before the next group. The indent and that space show the tree.
+
+The sidebar draws a line only for related work: an instance its host reports
+doing work related to its parent's, or to a sibling's. No flag, no line, on
+every host. Where it draws one, it looks as it did before the Desktop's
+redesign:
+
+- **A solid line** joins a parent to a child whose work is related to its
+  parent's: the parent's line leaves its dot and ends in a rounded elbow at
+  the child's. Any other child keeps its indent with no line, and its
+  parent's line doesn't reach it.
+- **A dotted line** joins the dots of two top-level instances of one group
+  when the one linked as a sibling of the other reports related work. The
+  links are pairs: S may be linked to R and T to S, and the line then runs
+  through all three dots, passing beside the children between them. A
+  top-level instance whose work isn't related breaks the dotted line: its
+  row, and its children's, carry none, so nothing touches its dot. The order
+  doesn't change for the lines.
+
+The same lines show whether a group is open or closed: closed, the dotted
+line joins the top-level dots; open, it runs on beside the children, whose
+own lines are drawn. Both lines hold 3:1 contrast on every row fill.
+
+The flag comes from the instances' OATS ([Related work](desktop-cli-api.md#same-work-as-the-parent-oats-instance-same-work)).
+An OATS with `instance-related-work` reports it for a child and for a
+sibling. An older OATS, with `instance-same-work` only, reports it for a
+child only (set with `--same-work`), so its siblings get no dotted line. An
+OATS with neither reports none, and no line is drawn. For another machine's
+instances, its host must report the feature too, through an installed OATS
+with `server-probe-features`; a host whose features are not known (its last
+read failed) gets no line. A spawn from the Desktop never sets the flag.
+
+A screen reader hears each row's state ("running", "stopped" or "status
+unknown") after its two lines, then each child "under" its parent, with
+"related work" when the line joins them, and each instance linked as a
+sibling "sibling of" the other, with "related work" at both ends of a joined
+pair. The lines themselves are hidden from assistive technology.
 
 The sidebar shows the top-level instances only until you open one. An
-instance with children has a chevron before its name, with the number of
-instances under it at every depth. Click the chevron to show its group as
+instance with children has a chevron right after its name, with the number
+of instances under it at every depth, so every name at a level starts at the
+same place. Click the chevron to show its group as
 it was drawn before, and click it again to hide the group. A click anywhere
 else on the row still opens its terminal. From the keyboard, Right opens the
 focused row and Left closes it. Every instance at the top of the tree, the
@@ -1079,17 +1180,11 @@ are in name order, and an instance whose spawn time can't be read comes after
 every one whose time can. Pinned instances come before all of these, at every
 level ([Pinned instances](#pinned-instances)).
 
-Children that do their parent's work come first under it. When the instances'
-OATS has the `instance-same-work` feature, a child the kernel reports as doing
-its parent's work (`sameWork: true` in its row, set with `oats spawn …
---same-work` or `oats instance same-work <instance> on`) is listed before its
-parent's other children, each part newest first. The command palette still
-draws lines: there a parent's line joins only those children (siblings by a
-dotted line through their dots), in its own recency order inside each part.
-For another machine's instances, its host must report the feature too, through
-an installed OATS with `server-probe-features`. A host without the feature, or
-one whose features are not known (its last read failed), lists every child as
-doing its parent's work. A spawn from the Desktop never sets the flag.
+Children whose work is related to their parent's come first under it, each
+part newest first, so a parent's line ends at its last joined child and never
+passes one it doesn't join. Top-level instances keep their order whatever
+their flag. The command palette draws the same lines by the same rule, in its
+own recency order inside each part.
 
 A row shows the instance's name as words: each `-` is a space, and the first
 letter is a capital, so `oats-expert-maintainer-lanes` reads "Oats expert
@@ -1220,8 +1315,8 @@ starts, opens, takes input and retires as any other.
 - **Pinning.** A row's context menu offers **Pin to top**, or **Unpin** on a
   pinned instance, which runs `oats instance pin <name> on|off`. Each is an
   act at once, with no dialog. The row moves when the roster is next read,
-  right after the change. The command palette offers **Instance: Pin to
-  top** or **Instance: Unpin** for the instance the leader keys act on. An
+  right after the change. The command palette offers **Agent: Pin to
+  top** or **Agent: Unpin** for the instance the leader keys act on. An
   instance that is held (spawning, or being retired) offers neither.
 - **Shared.** The pin is kept in the instance's home, so everyone who views
   that machine sees the same pins, in the Desktop, the TUI and another

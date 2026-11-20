@@ -191,6 +191,26 @@ test("the roster is the Desktop's: the rows of its instance-tree test keep paren
   assert.deepEqual(drawnOrder(state), sharedOrder(state));
 });
 
+test("under one parent the related children come first, by name within each part, when the CLI declares instance-related-work", () => {
+  const rows = [
+    ["lead", {}], ["a-dev", { parentInstance: "lead" }], ["b-dev", { parentInstance: "lead", relatedWork: true }],
+    ["c-dev", { parentInstance: "lead", relatedWork: "true" }], ["d-dev", { parentInstance: "lead", relatedWork: true }],
+    ["d-rev", { parentInstance: "d-dev", relatedWork: true }], ["e-dev", { parentInstance: "lead", sameWork: true }],
+    ["solo", { relatedWork: true }],
+  ].map(([name, extra]) => instanceRow("dev", name, extra));
+  const cli = { ...CLI, features: Object.freeze([...CLI.features, "instance-related-work"]) };
+  const order = (state) => roster(state).items.map((item) => item && [item.row.instance, item.depth]);
+  const declared = stateOf(observed(rows, { cli }), { cli });
+  assert.deepEqual(order(declared), [
+    ["lead", 0], ["b-dev", 1], ["d-dev", 1], ["d-rev", 2], ["a-dev", 1], ["c-dev", 1], ["e-dev", 1], null, ["solo", 0],
+  ], "related first (b, d), then the rest (a; c, whose \"true\" is no flag; e, whose sameWork the new feature does not read); a flagged root keeps its place");
+  assert.deepEqual(drawnOrder(declared), sharedOrder(declared), "the order is the shared rosterGroups'");
+  // Without either feature no child draws: the order is by name, as it was.
+  assert.deepEqual(order(stateOf(observed(rows))), [
+    ["lead", 0], ["a-dev", 1], ["b-dev", 1], ["c-dev", 1], ["d-dev", 1], ["d-rev", 2], ["e-dev", 1], null, ["solo", 0],
+  ]);
+});
+
 test("under one parent the flagged children come first, by name within each part, when the CLI declares instance-same-work (#1577)", () => {
   const rows = [
     ["lead", {}], ["a-dev", { parentInstance: "lead" }], ["b-dev", { parentInstance: "lead", sameWork: true }],
@@ -204,7 +224,7 @@ test("under one parent the flagged children come first, by name within each part
     ["lead", 0], ["b-dev", 1], ["d-dev", 1], ["d-rev", 2], ["a-dev", 1], ["c-dev", 1], null, ["solo", 0],
   ], "flagged first (b, d), then the rest (a, and c whose \"true\" is no flag); a flagged root keeps its place");
   assert.deepEqual(drawnOrder(declared), sharedOrder(declared), "the order is the shared rosterGroups'");
-  // Without the feature every child draws its line, as today: the order is today's, by name.
+  // Without the feature no child draws its line: the order is by name, as it was.
   assert.deepEqual(order(stateOf(observed(rows))), [
     ["lead", 0], ["a-dev", 1], ["b-dev", 1], ["c-dev", 1], ["d-dev", 1], ["d-rev", 2], null, ["solo", 0],
   ]);

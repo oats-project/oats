@@ -19,9 +19,9 @@ container is one trust group ([trust-model.md](trust-model.md)):
   rewrite the launch configurations in `/state/deploy` and the schedule
   registry in `/state/home`, rewrite the wake registrations under
   `/state/home/.config/aw/wake`, and stop sshd, `oats host run`, the wake
-  broker or its supervisor. With the optional bb server, each agent can also
-  read and drive every bb thread and read bb's database
-  ([A bb server for the team](#a-bb-server-for-the-team)).
+  broker or its supervisor. With an optional child, each agent can also
+  reach every loopback port the child holds
+  ([An optional child](#an-optional-child)).
 - **It holds one team, never several.** Agents that must not be able to read
   each other's identities or affect each other's work get separate
   containers. Nothing in OATS makes sharing one safe.
@@ -154,7 +154,7 @@ Supply these plain variables to the bundle's env file:
 | `AGENT_CA_FILE` | Optional absolute public PEM path from `agents.caFile`; selects `compose.agent.trust.yaml`. |
 | `AGENT_MIRRORS_DIR` | Optional absolute mirror directory from `agents.mirrorsDir`; selects `compose.agent.mirrors.yaml`. |
 | `AGENTS_NETWORK`, `AGENT_IP` | Installer-created external network and container address. |
-| `AGENT_BB` | Optional; exactly `1` when `compose.agent.bb.yaml` is included, for acceptance. `AGENT_IMAGE` is then an image built from `container/agent-bb`. |
+| `AGENT_CHILD` | Optional; the name of the declared child, when the derived image's fragment is included, for acceptance. `AGENT_IMAGE` is then that derived image. |
 
 The bundle owns the network, resolver, forwarder, firewall and their bypass
 checks. The agent service publishes no ports and sets no DNS or extra-hosts
@@ -184,10 +184,10 @@ start with the same approved anchors.
 A successful probe using an explicit CA does not establish that the
 real broker trusts it; prove that through the deployment's HTTPS registry.
 
-Include `compose.agent.bb.yaml` only for a team that runs a bb server. It sets
-exactly one fixed environment entry, `AGENT_BB: "1"`, and adds no mount, port,
-network or capability
-([A bb server for the team](#a-bb-server-for-the-team)).
+A derived image that declares a child ships a fragment of its own. Include it
+only for a team that runs that child. It sets exactly one fixed environment
+entry, `AGENT_CHILD: "<name>"`, and adds no mount, port, network or
+capability ([An optional child](#an-optional-child)).
 
 Include `compose.agent.mirrors.yaml` only when `agents.mirrorsDir` is configured.
 The operator provisions and refreshes the bare mirrors outside the container,
@@ -525,7 +525,7 @@ container may do. Give them an identity with the write role only on the
 knowledge repository, its token in a file named by
 `settings.oats.okf.github-token-file`, and keep the identity that merges to
 the accepted branch outside the container. oats.okf's
-[Bringing up a deployment's knowledge store](https://github.com/oats-project/oats-okf/blob/v6.2.0/README.md#bringing-up-a-deployments-knowledge-store)
+[Bringing up a deployment's knowledge store](https://github.com/oats-project/oats-okf/blob/v6.3.0/README.md#bringing-up-a-deployments-knowledge-store)
 (oats.okf 6.2 and later) has each step; run its
 `oats okf setup --check` in the container to check them.
 
@@ -603,9 +603,9 @@ What the image's files fix for that:
   run alone and keeps the wake broker alive until host run finishes stopping
   the agents. Then it stops sshd and the broker in parallel, allowing sshd three seconds
   and the broker six seconds before escalation. The broker budget preserves
-  its channel children's five-second delivery drain. With a bb server, bb is
-  stopped in that same step, with eight seconds, so it runs until host run
-  has stopped the agents. A broker or
+  its channel children's five-second delivery drain. A declared child is
+  stopped in that same step, with its declared `stopMs` (at most eight
+  seconds), so it runs until host run has stopped the agents. A broker or
   host-run exit is reported and drains the other children before a nonzero
   container exit, so
   the restart policy can restart it. The broker runs as the agent uid; its
@@ -655,222 +655,189 @@ or, in the container, `oats schedule host install --register-only --dir
 systemd user manager. The registry is in `/state/home`, so it persists
 across container runs.
 
-## A bb server for the team
+<!-- docs/release-notes/v0.69.22.md links here under this section's former
+     name, "A bb server for the team": the anchor keeps those links whole. -->
+<a id="a-bb-server-for-the-team"></a>
+## An optional child
 
-[bb](https://github.com/get-bb/bb) (npm `bb-app`, MIT) is a server that runs
-coding agents as threads and shows them in a web, desktop and phone app. A
-team can run one bb server in its container, supervised beside the wake
-broker, sshd and `oats host run`. It is opt-in: a container that does not
-ask for it runs exactly as before, and the team image holds no bb.
+A derived image can add one more supervised process to the team container:
+a server its agents use on loopback, say. The base image runs none. The
+mechanism has two halves, and they belong to different people:
 
-The server is unused until agents are spawned with the bb session provider,
-which arrives with a later kernel. Until then it starts, listens and holds
-no thread of OATS's.
+- **The declaration is the image's.** A derived image holds one file,
+  `/etc/agent-child.json`, that says what to run. It is root's file on the
+  read-only root, so only an image build can write it.
+- **The switch is the deployment's.** The Compose fragment that ships with
+  the derived image sets one fixed environment entry,
+  `AGENT_CHILD: "<name>"`. Without it nothing starts, and a declaration in
+  the image is inert: the supervisor reads no file and runs as it does on the
+  base image.
 
-**This is experimental.** The bb image (`container/agent-bb`),
-`compose.agent.bb.yaml` and the relay will move to the bb package repository
-once it exists. There is no compatibility promise on those paths, on
-`AGENT_BB` or on the image's recipe, so that move will not be a breaking
-change.
+One child, not a list: a second one is a new decision.
 
-### Turning it on
+The image that runs a [bb](https://github.com/get-bb/bb) server this way,
+its relay and its operator docs live in
+[oats-project/oats-bb](https://github.com/oats-project/oats-bb); this
+repository holds no product's image. bb, the optional child that oats-bb
+ships, is documented
+[there](https://github.com/oats-project/oats-bb/blob/main/container/README.md):
+the threads of one bb can write each other's storage, and bb's sandboxed
+modes are not a security boundary. `AGENT_BB`, `container/agent-bb`,
+`compose.agent.bb.yaml` and the relay shipped in 0.69.22 as experimental,
+with no compatibility promise, and are gone without an alias: a container
+that still sets `AGENT_BB` is refused at start with a line naming
+`AGENT_CHILD`.
 
-Two things, together:
+**A child's loopback ports are reachable by every agent in the container.**
+Whatever the child serves there, with whatever login it does or does not
+ask for, belongs to the container's one trust group
+([One team, one trust group](#one-team-one-trust-group)). The service still
+publishes no port.
 
-1. **The derived image.** `container/agent-bb/` builds on a team image and
-   adds only `bb-app`, at the one version its committed `package.json` and
-   `package-lock.json` pin, installed with `npm ci --ignore-scripts`: no
-   lifecycle script, no rebuild, no OS package. bb's native modules are the
-   prebuilt ones in its locked packages. It keeps the team image's
-   entrypoint, user, `HOME` and environment, and bb runs the Claude Code that
-   image already holds, `/usr/local/bin/claude`: the derived image adds no
-   second one. It is about 280 MB larger.
+### The declaration
 
-   ```sh
-   docker build --platform linux/amd64 \
-     --build-arg AGENT_IMAGE=oats-agent:reviewed \
-     -t oats-agent-bb:reviewed container/agent-bb
-   ```
+`/etc/agent-child.json` is JSON of at most 16 KiB, with a closed grammar:
+every key below is required unless marked, and an unknown key is refused.
 
-   Select it with `AGENT_IMAGE`. To change bb's version, change its one
-   dependency version, regenerate that directory's lock with npm 11 or later
-   (`npm install --package-lock-only --ignore-scripts`; npm 10 drops the
-   `libc` field of platform packages, and `npm ci` then also installs their
-   musl builds), review both files and build a new image.
-
-2. **The fragment.** Append `-f container/agent/compose.agent.bb.yaml` to
-   the Compose commands. It sets `AGENT_BB: "1"` and nothing else. Export
-   `AGENT_BB=1` with the other variables when you run acceptance.
-
-bb's version is pinned in this image's `container/agent-bb/package.json`.
-When the bb session provider arrives, its `version` setting in the
-deployment is a second pin, and its `E_BACKEND_VERSION` check, at readiness
-and at launch, is what keeps the two equal.
-
-The supervisor reads `AGENT_BB` once, at start. Unset or empty, it does
-what it did before. Any value but `1` is refused at start. Nothing else
-about bb is configurable: its arguments, its address and its environment
-are fixed in the image.
-
-### What runs
-
-After the broker is ready and before sshd and host run, the supervisor
-starts `bb-app --no-in-app-updates --server-bind-host 127.0.0.1`. Its
-environment is the supervisor's own plus two entries:
-
-- `BB_TELEMETRY=false`: telemetry is off.
-- `CLAUDE_CODE_OAUTH_TOKEN`, read from `/etc/agent-login/claude-token` when
-  that file exists, so bb's Claude threads use the team's inference token.
-  The supervisor reads the file once and gives the value to bb alone: never
-  to the broker, sshd or host run, never in an argument or a log line. With
-  no file, or an empty one, bb starts without the variable. The file must
-  hold the token on one line: a token with whitespace inside it (a space, a
-  tab, a line break) is refused at start, before any child, since bb would report ready while
-  every model call failed.
-
-bb reads its environment once, when it starts. After replacing the token,
-restart the container; restart the agents as
-[After changing a credential](#after-changing-a-credential) says.
-
-In a team container, spawn bb agents with `--yolo` (bb's full mode): the
-container is the boundary, as it is for tmux agents there. bb's sandboxed
-modes need bubblewrap, which the image does not carry; without it every
-command waits for a person in bb, so an agent cannot answer mail unattended.
-
-bb keeps its data in its default directory, `/state/home/.bb`. It needs no
-getbb.app account. At start it looks up `getbb.app` and
-`registry.npmjs.org`; the egress boundary refuses both and bb works without
-them, so neither needs an allowlist entry. A thread's model calls go through
-the egress boundary as an agent's do.
-
-Push notifications need a service outside the container. Keep them off:
-
-```sh
-ssh team-agent bb plugin disable push-notifications
+```json
+{ "name": "example",
+  "command": ["/usr/local/bin/example-server", "--bind", "127.0.0.1"],
+  "env": { "EXAMPLE_TELEMETRY": "false" },
+  "envFromFile": { "EXAMPLE_TOKEN": "/etc/agent-login/example-token" },
+  "ready": { "url": "http://127.0.0.1:39000/status", "field": "ready" },
+  "listen": [39000],
+  "version": { "command": ["/usr/local/bin/example", "--version"], "file": "/opt/agent-child/version" },
+  "stopMs": 5000 }
 ```
 
-### Trust
+| Key | Grammar | Meaning |
+| --- | --- | --- |
+| `name` | 1 to 20 lowercase letters, digits or dashes; not `broker`, `sshd`, `host-run`, `status` or `supervisor`, the base's own names in the log | What the supervisor's lines call the child, and the value `AGENT_CHILD` must have. |
+| `command` | A non-empty array of strings; `command[0]` an absolute path that exists and whose real path is outside `/state`, `/work`, `/tmp`, `/run`, `/outbox` and `/dev/shm` | The child's argv, exactly. No shell. The supervisor resolves `command[0]` once, at start, refuses a file inside a writable mount, and runs that resolved file under its declared name at the start and at every restart, so a link on the way that an agent could re-point is never followed again. |
+| `env` | An object of strings; names match `[A-Z_][A-Z0-9_]*` | Literal variables added to the child's environment. May be `{}`. |
+| `envFromFile` | Optional. An object of variable name to a file directly under `/etc/agent-login/`; names as for `env`, and no name in both | Variables whose value is the file's content, read once at start ([below](#envfromfile)). |
+| `ready.url` | `http://127.0.0.1:<port>/<path>`, the port one of `listen`; the path of letters, digits and `._~/?&=%-` | Where the supervisor asks whether the child is ready. |
+| `ready.field` | A letter or underscore, then letters, digits or underscores; at most 64 characters | The top-level field of the JSON answer that must be `true`. |
+| `listen` | A non-empty array of distinct ports from 1024 to 65535, without 2222 | The loopback TCP ports the child holds. Acceptance requires each. |
+| `version.command` | A non-empty array of strings; `command[0]` an absolute path | A command that prints the child's version. |
+| `version.file` | An absolute path | A file the image writes at build time with that same version: one printable line of at most 64 characters, in a file of at most 256 bytes. Acceptance compares the two, so it needs no checkout of the image's repository. |
+| `stopMs` | A whole number from 1000 to 8000 | How long the child gets after SIGTERM before SIGKILL. |
 
-bb's API has no login. It listens on the container's loopback only: on
-ports 38886 (the server) and 38887 (its host daemon), and on one more
-loopback port that bb picks at each start. The service publishes no port.
-Inside the container that changes what the trust group shares
-([One team, one trust group](#one-team-one-trust-group)):
+Neither `env` nor `envFromFile` may set `PATH`, `HOME`, `LD_PRELOAD`,
+`NSS_WRAPPER_PASSWD`, `NSS_WRAPPER_GROUP`, `NODE_OPTIONS` or `AGENT_CHILD`:
+the image, the entrypoint and the switch set those.
 
-- Any agent can read and drive every bb thread: read it, send it a message,
-  start one, stop one.
-- Any agent can read bb's database under `/state/home/.bb`. It holds every
-  conversation of every thread. It is on `/state`, so it outlives the
-  container and is in any copy of the volume, and OATS never trims it
-  ([Where conversations are stored](#where-conversations-are-stored)).
-- The token in bb's environment is the one every agent can already read.
-- Any agent, one in a sandboxed bb thread included, can write every other
-  thread's storage: the threads of one bb share bb's thread-storage
-  directory under `/state/home/.bb`, and bb's own sandbox settings leave
-  the whole thread-storage directory writable. (They keep bb's database and
-  auth files read-only to a sandboxed thread.)
-- bb's sandboxed permission modes (`auto`, `accept-edits`) are not a
-  security boundary. They limit accidents, not a determined agent: an agent
-  in such a mode can write its own instance home, which holds code that OATS
-  and the harness later run outside the sandbox. Treat an agent in a
-  sandboxed mode as able to do what any agent in the container can. OATS
-  counts no harness's sandbox as a boundary
-  ([What OATS does not promise](trust-model.md#what-oats-does-not-promise)).
+Nothing else is declarable. The order, the start timeout, the restart policy
+and the process group are the base image's
+([What the supervisor does](#what-the-supervisor-does)).
 
-One bb serves one container. Never share one across teams, and never point
-two containers at one `/state`.
+### envFromFile
 
-### Reaching it
+One rule for every entry. The supervisor reads each file once, before any
+child starts:
 
-bb listens only inside the container, and sshd's forwarding stays off. The
-operator reaches bb over the SSH route they already have
-([OATS over SSH](#oats-over-ssh)), with a small relay that runs on the
-operator's machine. It is in the checkout, never in an image, and needs only
-Node and `ssh`:
+- **No such file:** the child starts without that variable, even when the
+  supervisor's own environment holds one of that name: an `envFromFile`
+  name comes from its file or not at all.
+- **Empty after trimming:** the same, with one line that names the variable.
+- **Any other read error:** the start is refused.
+- **Whitespace or a NUL byte inside the trimmed value** (a second line, a
+  space, a tab, a file saved as UTF-16):
+  the start is refused with `the file for <VARIABLE> must hold its value on
+  one line`. A file with two lines is never passed on in part.
 
-```sh
-node container/agent-bb/relay.mjs --ssh team-agent --listen 48886
-```
+The value reaches the declared child's environment and nothing else: no
+line the supervisor writes, no argument, no other child. The child reads its
+environment when it starts, so after replacing a file under the login mount,
+restart the container ([After changing a credential](#after-changing-a-credential)).
+Every agent can already read the login mount.
 
-It listens on `127.0.0.1:48886` and nowhere else; it refuses any other
-address. Each connection becomes one SSH command channel to the container,
-whose command pipes to bb on `127.0.0.1:38886` there. The relay keeps up to
-nine channels on one SSH connection of its own (sshd allows ten sessions per
-connection) and opens a separate connection for each one beyond that. If that
-shared connection ends, it starts it again; meanwhile new connections work,
-each on a connection of its own. TERM or Ctrl+C closes the listener and
-every channel. Use one local port per team.
+### What the supervisor does
 
-- **Desktop app, on the same machine.** Server menu, Add Server,
-  `http://127.0.0.1:48886`. Add one server per team and name it. Nothing
-  is set in bb.
-- **Phone, or another machine.** Serve the relay's port under HTTPS on your
-  own tailnet, one port per team (Tailscale Serve:
-  `tailscale serve --bg --https=443 http://127.0.0.1:48886`). bb refuses a
-  name it was not told about, so set it once, over the SSH route:
+With `AGENT_CHILD` set, the supervisor reads the declaration once, before
+any child, and then:
 
-  ```sh
-  ssh team-agent bb-app config set BB_APP_URL 'https://<name>[:port]'
-  ```
+1. Starts the wake broker and waits for it, as on the base image.
+2. Asks `ready.url` once, for at most a second. Whatever accepts that
+   connection before the child exists is another process, whether it answers
+   ready, not ready or nothing, and refuses the start. A refused connection
+   is the only pass: an attempt that cannot tell whether anybody listens
+   refuses the start too.
+3. Starts the child: the resolved `command[0]` with argv exactly `command`,
+   the supervisor's own environment without the `envFromFile` names, plus
+   `env`, plus the `envFromFile` values that were read, in a process group
+   of its own.
+4. Asks `ready.url` until it answers 200 with JSON whose top-level
+   `ready.field` is `true` while the child it started is still alive, for up
+   to 30 seconds. It then writes `agent-supervisor: <name> ready (<field>:
+   true)`.
+5. Starts sshd and `oats host run`.
 
-  Then add one Direct profile per team in the app, with that URL.
+On SIGTERM, host run goes first, and the child keeps running while host run
+stops the agents. Then sshd, the broker and the child are stopped side by
+side; the child gets SIGTERM and `stopMs` before SIGKILL.
 
-**Whoever reaches the relay's port, or that name, runs commands in that
-team's container**: bb starts agents and terminals for anyone who can talk to
-it. So the operator's machine, and the tailnet's access rules for that name,
-become part of the team's boundary. Never use Tailscale Funnel or any public
-address for it, and never make the relay listen wider.
-
-The relay's `127.0.0.1` port, like bb's own in the container, has no
-login: every local user of the operator's machine can reach it, and so can
-run commands in the team's container. Run the relay only on a machine whose
-only user is the operator.
-
-### Limits
-
-bb counts toward the container's limits. Add to `AGENT_MEMORY` and
-`AGENT_PIDS` about 650 MB and 180 pids for bb itself, and about 200 MB and
-30 pids for each live thread.
+The stop budget holds for whatever an image declares, since `stopMs` is
+capped: at most 35 seconds for host run (10 + 5 + 20), then the slowest of
+sshd (3 seconds), the broker (6) and the child (at most 8), 43 seconds in
+all inside the 50-second stop grace. `test/agent-container.test.mjs` pins
+that sum against the supervisor's exported budgets, the cap and the Compose
+file, with 5 seconds to spare.
 
 ### When it fails
 
-- **`AGENT_BB=1` on an image without bb.** The supervisor refuses at start,
-  before any child: one line naming `container/agent-bb`, exit 1. Select the
-  derived image.
-- **bb is not ready.** The supervisor polls the host daemon's status
-  (`http://127.0.0.1:38887/status`) until it says `connected: true` and the
-  bb process it started is still alive, for up to 30 seconds. A bb that
-  exits first, a timeout, or a status that already answers before bb starts
+Each refusal at start is one fixed line on standard error, exit 1, before
+any child starts. A line names the key at fault and never a value from the
+file.
+
+- **`AGENT_CHILD` on an image without a declaration**, the base image
+  included: `AGENT_CHILD needs an image that declares a child in
+  /etc/agent-child.json`. Select the derived image with `AGENT_IMAGE`.
+- **A declaration that is not the image's own file:** a symlink, not a
+  regular file, not owned by uid 0, or writable by its group or by others.
+  Over 16 KiB, or not JSON, is refused too. The supervisor runs as the
+  agent, so the file must be readable by everyone (mode 0644 or 0444): one
+  it cannot open is refused with `/etc/agent-child.json could not be read
+  (<code>)`.
+- **A declaration outside the grammar:** `/etc/agent-child.json: <key>
+  <what it must be>`, for an unknown or missing key and for every value the
+  table above rules out.
+- **A `name` that differs from `AGENT_CHILD`.** The fragment and the image
+  must be the same product's.
+- **A command that does not exist, or resolves under a writable mount.**
+- **An `envFromFile` file that cannot be read, or holds whitespace inside
+  its value** ([above](#envfromfile)).
+- **`AGENT_BB` set to anything:** `AGENT_BB is gone: use an image that
+  declares its child and AGENT_CHILD (the bb image now lives in
+  oats-project/oats-bb)`.
+- **The child is not ready.** A child that exits before it is ready, 30
+  seconds without a ready answer (one that arrives later does not count), or
+  anything listening on `ready.url` before the child starts
   fails the container start: neither sshd nor host run starts, the exit is
-  nonzero and the restart policy starts the container again. An unreadable
-  token file, or one whose token has whitespace inside it, fails the start
-  too, before any child.
-- **bb ends later.** That is not a container failure. The supervisor
-  writes `agent-supervisor: bb exited (<code or signal>)`, removes what bb's
-  launcher left running, and starts bb again after 1 second, doubling to 60
-  seconds, and from 1 second again once a bb has stayed up five minutes.
-  sshd, the broker, host run and the agents keep running. A thread's
-  process ends with its bb, and the thread itself is kept: the next bb lists
-  it idle, and a message to it (`bb thread tell`) starts a new turn. bb's
-  own lookups of provider versions (`npm view`) are the one thing seen to
-  outlive a killed bb, until their own lookup fails or times out; they hold no
-  port.
-- **Stopping.** Host run goes first, as without bb, and bb keeps running
-  while it stops the agents. Then sshd, the broker and bb are stopped side by
-  side; bb gets SIGTERM and eight seconds before SIGKILL. A bb that had to be
-  killed, or that ended while host run was still stopping agents, makes the
-  stop a failed one. The whole order fits the 50-second stop grace: at most
-  35 seconds for host run and 8 for the slowest of the three.
+  nonzero and the restart policy starts the container again.
+- **The child ends later.** That is not a container failure. The supervisor
+  writes `agent-supervisor: <name> exited (<code or signal>)`, sends SIGKILL
+  to what is left of the child's process group, and starts the child again
+  after 1 second, doubling to 60 seconds, and from 1 second again once a
+  child has stayed up five minutes. sshd, the broker, host run and the
+  agents keep running.
+- **Stopping.** A child that had to be killed after `stopMs`, or that ended
+  while host run was still stopping agents, makes the stop a failed one. A
+  restart that was pending at SIGTERM starts no further child.
+
+### Limits
+
+The child counts toward the container's limits. A derived image's docs say
+what to add to `AGENT_MEMORY` and `AGENT_PIDS` for it.
 
 ### What was run
 
-Run on amd64, in the real image under the Compose flags: the build, bb ready
-at start, a bb restart after `kill` and after `kill -9`, each followed by a
-new turn in a thread made before it (on a mock model; after the `kill -9`
-the thread's Claude process was gone within a second), the ordered stop,
-acceptance with the fragment, and the relay with the real `ssh` (the bb web
-page and API through it). **NOT RUN:** arm64; a real Claude token or a real
-model; Tailscale Serve; the desktop and phone apps; push notifications.
+Run on amd64, in the base image and a fixture derived image
+(`test/fixtures/agent-child`) under the Compose flags: the build, the child
+ready at start between the broker and sshd, a restart after `kill` and after
+`kill -9`, the ordered `docker stop`, and acceptance with and without
+`AGENT_CHILD`. **NOT RUN:** arm64; any real product's image, which its own
+repository proves.
 
 ## Acceptance and evidence
 
@@ -904,12 +871,18 @@ variables. It resolves `AGENT_IMAGE` independently and requires that image's
 ID, reference and start command, and its complete environment (printing only
 names of differing variables). Other comparisons include supplementary
 groups, namespace overrides, sysctls, published ports, resolver overrides
-and the single network/address. With `AGENT_BB=1` exported it admits the bb
-fragment's one environment entry, reads the container's listening TCP
-sockets and requires every one to be on a loopback address except sshd's
-port 2222, with bb's two ports among them, and requires `bb --version` to
-equal `container/agent-bb`'s pin. Without it, a container that has `AGENT_BB`
-set is refused. The stop timeout must be 50 seconds and the
+and the single network/address. With `AGENT_CHILD=<name>` exported it admits
+that one environment entry and reads `/etc/agent-child.json` from the
+running container. It requires the file to be a regular file owned by root,
+not a symlink and not writable by its group, by others or by the agent, to
+pass the supervisor's grammar and to declare that name. It reads the
+container's listening TCP sockets and requires every declared `listen` port
+on loopback and nothing beyond loopback except sshd's port 2222. It runs
+`version.command` in the container, requires its output to equal the
+trimmed content of `version.file`, and reports that version. Without
+`AGENT_CHILD`, a container that has it set is refused. A container that has
+`AGENT_BB`, or an image that sets `AGENT_CHILD` itself, is refused either
+way. The stop timeout must be 50 seconds and the
 healthcheck the service file's, so a container made before either was set
 is refused until it is recreated. The OCI runtime must match the daemon's
 independently read default; shared memory stays at Docker's 64 MiB default,
@@ -1008,10 +981,15 @@ network and fixture paths on success or failure. This is image acceptance;
 it provisions no seat or inference token. The script's `NOT RUN` items
 remain outside this check.
 
-The same job then builds `container/agent-bb` from the image it just
-accepted, with no registry in between, and runs the same fixture and the
-same unmodified acceptance once more with `compose.agent.bb.yaml`. The bb
-image is not exported or published.
+The same job then proves the optional child with a fixture derived image,
+`test/fixtures/agent-child`: a dependency-free Node HTTP server on one
+loopback port, its declaration and its version file. It builds that image
+from the image it just accepted, with no registry in between, and runs the
+same fixture and the same unmodified acceptance once more with
+`AGENT_CHILD` set: alone, then with the inputs and the outbox fragments. It
+also requires acceptance without `AGENT_CHILD` to refuse that container.
+The fixture is outside `container/agent`, so it is never in the base
+image's build context, and it is not exported or published.
 
 The `publish-team-image` job in
 [Release](../.github/workflows/release.yml) waits for the existing `publish`

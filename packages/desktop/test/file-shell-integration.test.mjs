@@ -13,7 +13,6 @@ import { withShellWindowGlobals } from './helpers/shell-window-globals.mjs';
 import { JSDOM } from "jsdom";
 import { createFileOpener } from "../renderer/open-file.mjs";
 import { createPalette } from "../renderer/palette.mjs";
-import { createQuickOpen } from "../renderer/quick-open.mjs";
 import { createSelectionOwnership, wirePaneSelection } from "../renderer/selection-ownership.mjs";
 import { createIntentGate, prepareOwnedOpen } from "../renderer/open-intent.mjs";
 import { createViewLifecycle } from "../renderer/view-lifecycle.mjs";
@@ -32,9 +31,9 @@ import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
 import { THEMES } from "../renderer/theme.mjs";
 import { rosterKeyAction, moveTarget } from "../renderer/roster-keys.mjs";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/same-work.mjs";
+import * as relatedWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
-const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
+const tree = { ...treeShared, ...treeView, ...relatedWork }; // the renderer's client imports, shipped
 import * as layout from "../renderer/split-layout.mjs";
 import * as workspaceTabs from "../renderer/workspace-tabs.mjs";
 import * as markdown from "../renderer/views/markdown.mjs";
@@ -121,7 +120,8 @@ function shell(t, shellSource = source, platform = "MacIntel") {
       try { globalThis.document = document; return createPalette(options); }
       finally { globalThis.document = previous; }
     },
-    createQuickOpen: options => createQuickOpen({ ...options, doc: document }),
+    // Slice 4: the palette's sections and souls (Quick Open folded into it), and the agent noun of its New agent command.
+    DESKTOP_NOUNS: { instance: "agent", instances: "agents" }, WORKSPACE_TAB_NAMES: {}, openWorkspaceSouls() {}, leaderTargetId: () => null,
     createSelectionOwnership, wirePaneSelection, prepareOwnedOpen, createViewLifecycle,
     createTabChrome, tabKeyAction, focusAfterLastTab, tabNameTailStart, setTabTitle, reserveKey, whenKeyFree, projectSplitDom, splitControlsState,
     ...tree, ...layout, ...workspaceTabs, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, rosterKeyAction, moveTarget,
@@ -157,15 +157,17 @@ function shell(t, shellSource = source, platform = "MacIntel") {
   const fileComposition = block(shellSource, "let nextPickedFileId =", "// ── editor groups");
   const pickers = block(shellSource, 'const isMac = navigator.platform.includes("Mac");', "// ── shortcuts editor");
   const registration = shellSource.match(/const unregisterOpenFile = registerAction[^\n]+/)[0]
-    + "\nconst unregisterQuickOpen = " + shellSource.match(/registerAction\(\{ id: "app\.quickOpenSouls"[^\n]+/)[0];
+    + "\nconst unregisterQuickOpen = " + shellSource.match(/registerAction\(\{ id: "app\.quickOpenSouls"[^\n]+/)[0]
+    + "\n" + shellSource.match(/function openPaletteOnSouls\(\) \{[^]*?\n\}/)[0];
   const listener = shellSource.match(/window.addEventListener\("keydown", [^\n]+/)[0];
-  const s = runInNewContext(`${setup}\n${functions}\n${fileComposition}\n${pickers}\n${registration}\n${listener}\n({ ${names.join(", ")}, tabOpenIntents, fileOpener, palette, quickOpen, unregisterOpenFile, unregisterQuickOpen });`, withShellWindowGlobals(c));
+  const s = runInNewContext(`${setup}\n${functions}\n${fileComposition}\n${pickers}\n${registration}\n${listener}\n({ ${names.join(", ")}, tabOpenIntents, fileOpener, palette, quickOpen: { open: () => palette.open({ query: "+" }), close: () => palette.close() }, unregisterOpenFile, unregisterQuickOpen });`, withShellWindowGlobals(c));
   s.initContextRoster();
   t.after(() => { s.palette.close(); s.quickOpen.close(); s.fileOpener.dispose(); s.unregisterOpenFile(); s.unregisterQuickOpen(); markdown.unmount(); dom.window.close(); });
   const key = (value, modifiers = {}, target = document.activeElement) => {
     const event = new dom.window.KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true, ...modifiers });
     target.dispatchEvent(event); return event;
   };
+  const answer = from => { for (const request of requests.slice(from)) request.resolve(request.path.startsWith("/api/agents") ? { agents: [{ name: "reviewer" }] } : { instances: [] }); };
   const change = (input, files) => {
     Object.defineProperty(input, "files", { configurable: true, value: files });
     input.dispatchEvent(new dom.window.Event("change"));
@@ -183,8 +185,9 @@ function shell(t, shellSource = source, platform = "MacIntel") {
     },
     seed(title = "Existing terminal") { return s.addTab({ title, key: `term:${c.workspace}:${title}`, kind: "terminal" }).id; },
     switchTo(workspace) { c.workspace = workspace; c.generation++; listeners.forEach(listener => listener()); s.restoreWorkspaceTabs(); },
+    // The palette reads the roster and the souls side by side (slice 4): each request it made is answered.
     async picker(which = "palette") {
-      const done = s[which].open(); requests.at(-1).resolve(which === "palette" ? { instances: [] } : { agents: [{ name: "reviewer" }] }); await done;
+      const from = requests.length, done = s[which].open(); answer(from); await done;
     },
     command(query) {
       const input = document.querySelector(".palette-input");
@@ -192,6 +195,7 @@ function shell(t, shellSource = source, platform = "MacIntel") {
       const rows = document.querySelectorAll('[role="option"]'); assert.equal(rows.length, 1, `one command for ${query}`);
       return rows[0];
     },
+    answer,
     choose(file) { keys.runAction("app.openFile"); change(chooserInputs.at(-1), [file]); return opens.at(-1); },
     async pendingTerminal() {
       const inst = { instance: "pending", home: "/synthetic/pending", running: true, tmux: { session: "synthetic", window: "pending" } };
@@ -283,7 +287,7 @@ for (const picker of ["palette", "quickOpen", "palette→quickOpen"]) for (const
     const s = shell(t); s.roster(roster);
     const original = s.control(twin, control); original.focus();
     await s.picker(picker === "palette→quickOpen" ? "palette" : picker);
-    if (picker === "palette→quickOpen") { s.command("souls: quick").click(); s.requests.at(-1).resolve({ agents: [{ name: "reviewer" }] }); await tick(); }
+    if (picker === "palette→quickOpen") { const from = s.requests.length; s.command("new agent: choose").click(); s.answer(from); await tick(); await tick(); }
     s.roster([...roster].reverse());
     assert.equal(original.isConnected, false);
     const replacement = s.control(twin, control);

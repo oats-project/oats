@@ -6,7 +6,11 @@
  * workspace status. Nothing here is inferred — unreported facts are not shown. */
 import { createSoulMark } from './identity-marks.mjs';
 import { iconElement } from './shell-icons.mjs';
-import { capabilityRow, sourceChip } from './workspace-catalog.mjs';
+import { capabilityRow, sourceChip, sourceText, originElement } from './workspace-catalog.mjs';
+import { DEFAULTS_COPY } from './workspace-defaults.mjs';
+import { DESKTOP_NOUNS } from './desktop-terms.mjs';
+import { capabilityOrigin } from '../../client/capability-origin.mjs';
+import { defaultState } from '../../client/capability-list.mjs';
 import { memberNames, layerLabel, capabilityUsers } from '../../client/capability-rows.mjs';
 import { capabilityFacts, CAPABILITY_COPY } from '../../client/capability-facts.mjs';
 import { skeleton, noticeElement, updateNotice, failedElement, updateFailed, isOldObservation, ROSTER_STALE_TITLE, SOULS_STALE_TITLE } from './loading.mjs';
@@ -85,6 +89,38 @@ export const pageCardCSS = `
 `;
 
 export const capabilityPageCSS = `
+/* Slice 3b: one readable column, the page's name in the chrome's sans (D2). */
+.capability-page .page-body { grid-template-columns:minmax(0,1fr); max-width:860px; }
+.capability-page .page-body[hidden] { display:none; }
+.capability-page .page-main { gap:16px; }
+.cap-page-head { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.capability-page .page-title { font-family:var(--ui-font,system-ui); }
+.cap-page-origin { display:flex; flex-wrap:wrap; align-items:center; gap:2px 0; margin:0; color:var(--muted); font-size:12.5px; }
+.cap-page-origin .cap-origin { margin:0; padding:0; font-size:12.5px; }
+.cap-origin-words { color:var(--fg); }
+.cap-page-sep { white-space:pre; }
+.cap-page-where { color:var(--muted); }
+.capability-page .cap-page-what { color:var(--fg); font-size:14px; line-height:1.55; max-width:72ch; }
+/* A fold: a native disclosure, its summary a row with a turning chevron. */
+.cap-folds { display:flex; flex-direction:column; min-width:0; }
+.cap-folds:empty { display:none; }
+.cap-fold { min-width:0; border-top:1px solid var(--border); }
+.cap-fold:last-child { border-bottom:1px solid var(--border); }
+.cap-fold > summary { display:flex; align-items:center; gap:8px; min-height:40px; padding:0 4px; list-style:none; cursor:pointer; border-radius:6px; color:var(--fg); font-size:13.5px; font-weight:650; }
+.cap-fold > summary::-webkit-details-marker { display:none; }
+.cap-fold > summary:hover { background:var(--surface-2); }
+.cap-fold > summary:focus-visible { background:var(--sel); }
+.cap-fold > summary .shell-icon { flex:none; color:var(--muted); transition:transform .15s; }
+.cap-fold[open] > summary .shell-icon { transform:rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .cap-fold > summary .shell-icon { transition:none; } }
+.cap-fold-count { color:var(--muted); font-weight:normal; font-size:11.5px; }
+.cap-fold > :not(summary) { margin:4px 4px 16px; }
+.capability-page .cap-fold > .provides-items { display:flex; flex-wrap:wrap; gap:6px; }
+.capability-page .cap-fold-pre { margin-top:8px; }
+.cap-fold-facts { display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
+.cap-fold-facts .page-kv-list { align-self:stretch; }
+/* Files: the Contents card under its fold, its own title left to the fold's summary. */
+.cap-fold .cap-contents-section > .page-section-title > span:first-child { display:none; }
 .capability-page .used-row { grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); }
 .capability-page .used-soul { display:flex; align-items:center; gap:9px; min-width:0; }
 .capability-page .used-soul .identity-mark { width:24px; height:24px; border-radius:7px; font-size:11px; font-weight:700; }
@@ -225,63 +261,97 @@ function failedFacts({ cause = null, busy = false } = {}) {
 
 /** @param row a catalog row (or capabilityRow(resolved)); from: { label, why? } when opened from a soul page
  * (`why`: the soul page's core or composition entry for it, for the "Why" row).
- * `catalogPending`: opened from a soul before the catalog is read — its facts (the lede, Comes from) are
+ *
+ * The page (the Desktop UI rework, slice 3b; guide tour steps 35 and 36) reads top to bottom, one column: its name
+ * and tags, the origin line (who made it, ✓ or "by <source>", then where it comes from), what it does as one
+ * paragraph, then **Skills** (`skills`, the Contents controller's rows: Enter opens the whole skill in `skillView`,
+ * which the page places beside its body; the body is hidden while it is open), then the rest folded under native
+ * disclosures, each shown only when there is something to say: Commands, Settings, Triggers, Hooks, Used by,
+ * Source (the "Comes from" facts and the manifest file), "As <soul> resolves it" (from a soul) and Files (today's
+ * Contents card: the injected instructions and every skill file). Enter or Space unfolds one. Every fact the
+ * earlier page showed stays reachable. Folds the user opened stay open across a rebuild of the same capability.
+ *
+ * `catalogPending`: opened from a soul before the catalog is read — its facts (the paragraph, Source) are
  * skeletons the host fills in place when it arrives. The catalog's age line lives in `.page-notice`
  * under the bar: the host paints it (`catalogNotice` / `updateCatalogNotice`), optionally seeded here
  * with `observation` ({ state, settled, busy, observedAt, cause, onRetry }). `contents`: the Contents section's
- * element (createCapabilityContents), placed after Provides and before Used by. `triggerSources`: the same
- * controller's "Trigger sources" row (`contents.triggerSources`), the Provides card's last row while it has
- * content (alone when the page has no other row; empty: no row, and no card for it). */
-export function renderCapabilityPage(host, { row, status, instances, souls = [], composition = false, root, rosterState = 'ready', backLabel = 'Capabilities', onBack, openSoul = null, from = null, openExternal = null, catalogPending = false, observation = null, contents = null, triggerSources = null }) {
+ * element (createCapabilityContents); `triggerSources`: the same controller's "Trigger sources" row (its Triggers
+ * fold while it has content); `skills` / `skillView`: its Skills rows and whole-skill view. */
+export function renderCapabilityPage(host, { row, status, instances, souls = [], composition = false, root, rosterState = 'ready', backLabel = 'Capabilities', onBack, openSoul = null, from = null, openExternal = null, catalogPending = false, observation = null, contents = null, triggerSources = null, skills = null, skillView = null }) {
   const doc = host.ownerDocument;
   const node = (tag, value, cls) => el(doc, tag, value, cls);
+  // The folds the user opened on this capability stay open across the rebuild.
+  const previous = host.querySelector(':scope > .capability-page');
+  const unfolded = previous?.dataset.capability === row.name ? new Set([...previous.querySelectorAll('details.cap-fold[open]')].map(d => d.dataset.fold)) : new Set();
   host.replaceChildren();
-  const resolved = row.resolved;
+  const resolved = row.resolved, names = memberNames(status);
   const page = node('div', undefined, 'capability-page'); page.dataset.capability = row.name;
   if (catalogPending) page.dataset.catalogPending = 'true';
   const { bar } = pageBar(doc, { backLabel, crumbs: from ? ['Workspace', 'Souls', from.label] : ['Workspace', 'Capabilities'], current: row.name, onBack });
   const noticeHost = node('div', undefined, 'page-notice');
   const notice = observation ? catalogNotice(doc, observation) : null; if (notice) noticeHost.append(notice);
-  const body = node('div', undefined, 'page-body'), main = node('div', undefined, 'page-main'), side = node('div', undefined, 'page-side');
-  // Identity: its icon, name and core tag.
-  const identity = node('div', undefined, 'page-identity');
-  const glyph = node('span', undefined, 'page-glyph'); glyph.setAttribute('aria-hidden', 'true'); glyph.append(iconElement(doc, capabilityIcon(row), { size: 22 }));
-  const copy = node('div', undefined, 'page-identity-copy');
-  const title = node('h2', undefined, 'page-title mono'); title.append(node('span', row.name));
+  const body = node('div', undefined, 'page-body'), main = node('div', undefined, 'page-main');
+  // Its name, its tags, then the origin line ("Comes from" in one line; the Source fold keeps the details).
+  const head = node('div', undefined, 'cap-page-head');
+  const title = node('h2', undefined, 'page-title'); title.append(node('span', row.name));
   if (text(row.layer)) title.append(node('span', `Core · ${layerLabel(row.layer)}`, 'page-tag'));
-  copy.append(title);
+  const state = defaultState(status, row);
+  if (state) { const tag = node('span', state === 'on' ? DEFAULTS_COPY.tag : DEFAULTS_COPY.offTag, 'page-tag'); tag.title = state === 'on' ? DEFAULTS_COPY.tagTitle : DEFAULTS_COPY.offTitle; title.append(tag); }
+  head.append(title, originLine(doc, row, status, names));
   // #482: the page reads the view's primary deployment, without naming it (the product owner, 2026-10-23).
-  // Kernel #217: the manifest's description (a line-sized skeleton while the catalog is still being read).
-  if (text(row.description)) copy.append(node('p', row.description, 'page-lede'));
-  else if (catalogPending) { const lede = skeleton(doc, 'line', { width: '55%' }); lede.classList.add('page-lede'); copy.append(lede); }
-  identity.append(glyph, copy); main.append(identity);
+  // Kernel #217: the manifest's description, as the page's one paragraph (a line-sized skeleton while the catalog is read).
+  if (text(row.description)) head.append(node('p', row.description, 'page-lede cap-page-what'));
+  else if (catalogPending) { const lede = skeleton(doc, 'line', { width: '55%' }); lede.classList.add('page-lede'); head.append(lede); }
+  main.append(head);
+  // Skills (the Contents controller's rows, re-appended on every rebuild so a focused row survives a repaint).
+  if (skills) main.append(skills);
+  // The folds: one group of native disclosures, a rule between them.
+  const folds = node('div', undefined, 'cap-folds'); main.append(folds);
+  const fold = (id, label, count = null) => {
+    const d = node('details', undefined, 'cap-fold'); d.dataset.fold = id; d.open = unfolded.has(id);
+    const summary = node('summary'); summary.append(iconElement(doc, 'chevronRight', { size: 13 }), node('span', label, 'cap-fold-title'));
+    if (count !== null) summary.append(node('span', String(count), 'cap-fold-count'));
+    d.append(summary); folds.append(d); return d;
+  };
+  const names_ = (label, items) => {
+    const d = fold(label.toLowerCase(), label, Array.isArray(items) ? items.length : null);
+    const value = node('div', undefined, 'provides-items');
+    if (items === null) value.append(node('span', CAPABILITY_COPY.unlistable, 'page-note'));
+    else if (!items.length) value.append(node('span', CAPABILITY_COPY.none, 'page-note'));
+    else for (const item of items) value.append(node('code', item, 'provides-chip'));
+    d.append(value); return d;
+  };
   // What the catalog reports about it (capability-facts.mjs): Comes from, and what it provides.
   const reported = capabilityFacts(row, { status });
-  // Kernel #217: what it provides, by name (the manifest's skills, commands and hooks).
-  let kinds = reported.provides;
-  // Provides: the commands the resolved capability declares (inspect operations), when opened from a soul.
+  const provided = new Map(reported.provides);
+  // Commands and Settings: from a soul, what the resolved capability declares (inspect operations and declares);
+  // else the catalog's commands.
   if (from && resolved) {
     const commands = list(resolved.operations).map(op => list(op.argv).filter(part => typeof part === 'string' && part).join(' ') || op.name).filter(Boolean);
     const declared = list(resolved.declares);
-    kinds = [...(commands.length ? [['Commands', commands]] : []), ...(declared.length ? [['Settings', declared]] : [])];
+    if (commands.length) names_('Commands', commands);
+    const hasSettings = resolved.settings && typeof resolved.settings === 'object' && Object.keys(resolved.settings).length;
+    if (declared.length || hasSettings) {
+      const d = names_('Settings', declared);
+      if (hasSettings) d.append(node('pre', JSON.stringify(resolved.settings, null, 2), 'cap-fold-pre'));
+    }
+  } else if (provided.has('Commands')) names_('Commands', provided.get('Commands'));
+  // Triggers (feature `trigger-sources`): the host's long-lived row, only while it has content.
+  if (triggerSources?.childElementCount) {
+    const d = fold('triggers', 'Triggers'), card = node('dl', undefined, 'page-card provides-card'); card.append(triggerSources); d.append(card);
   }
-  // Trigger sources (feature `trigger-sources`): the host's long-lived row, in both forms, only while it has content.
-  const sources = triggerSources?.childElementCount ? triggerSources : null;
-  if (kinds.length || sources) main.append(providesSection(doc, kinds, sources));
-  // Contents (spec C): the host's long-lived section (capability-contents.mjs), re-appended on every rebuild so
-  // what is open in its reader survives a catalog repaint. In both forms: the catalog's and a soul's.
-  if (contents) main.append(contents);
+  if (!(from && resolved) && provided.has('Hooks')) names_('Hooks', provided.get('Hooks'));
   // Used by: with `composition` (souls-capabilities) the souls whose composition includes it, each with its live
   // instances carrying it; before, the souls whose instances carry it (roster module rows). capabilityUsers is the rule.
   const users = capabilityUsers(row, { souls, instances, composition });
   const staleTitle = composition ? SOULS_STALE_TITLE : ROSTER_STALE_TITLE;
   // "Used by" derives from the souls list and the roster (one read): with none, the claim needs a settled good read.
   const rosterGood = rosterState === 'ready' || rosterState === 'empty';
-  const used = pageSection(doc, CAPABILITY_COPY.usedBy, users.length || rosterGood ? CAPABILITY_COPY.souls(users.length) : '');
+  const used = fold('used-by', CAPABILITY_COPY.usedBy, users.length || rosterGood ? CAPABILITY_COPY.souls(users.length) : null);
   const table = node('div', undefined, 'page-table'); table.setAttribute('role', 'table'); table.setAttribute('aria-label', `Souls using ${row.name}`);
-  const head = node('div', undefined, 'page-table-row head used-row'); head.setAttribute('role', 'row');
-  for (const label of ['Soul', 'Instances']) { const cell = node('span', label); cell.setAttribute('role', 'columnheader'); head.append(cell); }
-  table.append(head);
+  const thead = node('div', undefined, 'page-table-row head used-row'); thead.setAttribute('role', 'row');
+  for (const label of ['Soul', capitalized(DESKTOP_NOUNS.instances)]) { const cell = node('span', label); cell.setAttribute('role', 'columnheader'); thead.append(cell); }
+  table.append(thead);
   if (!users.length) {
     if (rosterGood) table.append(node('p', composition ? CAPABILITY_COPY.noSoul : CAPABILITY_COPY.noInstance, 'page-note page-table-row'));
     else { const none = node('p', '—', 'page-note page-table-row used-unknown'); none.title = staleTitle; none.setAttribute('aria-description', staleTitle); none.dataset.rosterState = rosterState; table.append(none); }
@@ -295,71 +365,63 @@ export function renderCapabilityPage(host, { row, status, instances, souls = [],
     const meta = node('span', `${carrying.length}${behind ? ` · ${CAPABILITY_COPY.behind(behind)}` : ''}`, `used-meta${behind ? ' warn' : ''}`); meta.setAttribute('role', 'cell');
     line.append(who, meta); table.append(line);
   }
-  used.append(table); main.append(used);
-  // Comes from: what workspace status and the catalog report about its source.
-  const origin = pageCard(doc, CAPABILITY_COPY.comesFrom, { icon: row.kind === 'package' ? 'package' : 'repo' });
+  used.append(table);
+  // Source: what workspace status and the catalog report about where it comes from.
+  const origin = fold('source', CAPABILITY_COPY.comesFrom);
+  const facts = node('div', undefined, 'cap-fold-facts'); origin.append(facts);
   if (catalogPending && row.kind !== 'package') {
     // The catalog's facts (Latest, Path, Fingerprint, File) are not read yet: a facts-sized block, filled in place when they land.
-    const facts = node('div', undefined, 'page-facts-skeleton'); facts.setAttribute('aria-hidden', 'true'); facts.dataset.skeleton = 'facts';
-    for (let i = 0; i < 4; i++) facts.append(skeleton(doc, 'line'));
-    origin.card.append(facts);
-  } else origin.card.append(pageFacts(doc, reported.origin));
+    const block = node('div', undefined, 'page-facts-skeleton'); block.setAttribute('aria-hidden', 'true'); block.dataset.skeleton = 'facts';
+    for (let i = 0; i < 4; i++) block.append(skeleton(doc, 'line'));
+    facts.append(block);
+  } else facts.append(pageFacts(doc, reported.origin));
   // Kernel #217: its manifest file, as a web page when the repository has one, else its path.
   if (row.file && text(row.file.path) && !(catalogPending && row.kind !== 'package')) {
     const web = typeof row.file.url === 'string' && /^https:\/\//.test(row.file.url) ? row.file.url : null;
-    const facts = pageFacts(doc, [['File', row.file.path, row.file.path, 'wrap']]), dd = facts.querySelector('dd');
+    const file = pageFacts(doc, [['File', row.file.path, row.file.path, 'wrap']]), dd = file.querySelector('dd');
     // A path breaks after its slashes, never inside a name.
     if (dd) { dd.replaceChildren(); row.file.path.split('/').forEach((part, i, all) => { dd.append(node('span', i < all.length - 1 ? `${part}/` : part, 'path-part')); if (i < all.length - 1) dd.append(doc.createElement('wbr')); }); }
-    origin.card.append(facts);
+    facts.append(file);
     if (web && typeof openExternal === 'function') {
       const open = node('button', 'Open file', 'act'); open.type = 'button'; open.title = web; open.dataset.verb = 'file'; open.dataset.focusKey = 'file';
-      open.addEventListener('click', () => openExternal(web)); origin.card.append(open);
+      open.addEventListener('click', () => openExternal(web)); facts.append(open);
     }
   }
-  side.append(origin.card);
-  // As the soul it was opened from resolves it (inspect): version, requirements, settings.
+  // As the soul it was opened from resolves it (inspect): version, requirements, why it has it.
   if (from && resolved) {
     const missing = list(resolved.missingRequires);
-    const as = pageCard(doc, `As ${from.label} resolves it`);
-    const facts = pageFacts(doc, [['Version', text(resolved.version)], ['Missing', missing.length ? missing.join(', ') : 'None']]);
+    const as = fold('as-soul', `As ${from.label} resolves it`);
+    const asFacts = pageFacts(doc, [['Version', text(resolved.version)], ['Missing', missing.length ? missing.join(', ') : 'None']]);
     // Why the soul has it, in the soul page's words (`from.why`: its core or composition entry); no reported reason, no row.
     const reason = from.why ? whyFact(from.why, from.label) : null;
     if (reason) {
-      const row = node('div', undefined, 'page-kv why'), dd = node('dd'); row.dataset.fact = 'why';
+      const why = node('div', undefined, 'page-kv why'), dd = node('dd'); why.dataset.fact = 'why';
       dd.append(node('span', reason[0], 'page-why-label'), node('span', reason[1], 'page-why-note'));
-      row.append(node('dt', 'Why'), dd); facts.prepend(row);
+      why.append(node('dt', 'Why'), dd); asFacts.prepend(why);
     }
-    as.card.append(facts);
-    if (resolved.settings && typeof resolved.settings === 'object' && Object.keys(resolved.settings).length) {
-      const d = node('details'); d.append(node('summary', 'Settings'), node('pre', JSON.stringify(resolved.settings, null, 2))); as.card.append(d);
-    }
-    side.append(as.card);
+    as.append(asFacts);
   }
-  body.append(main, side); page.append(bar, noticeHost, body);
+  // Files (spec C): the host's long-lived Contents section (capability-contents.mjs), re-appended on every rebuild so
+  // what is open in its reader survives a catalog repaint. In both forms: the catalog's and a soul's.
+  if (contents) fold('files', 'Files').append(contents);
+  body.append(main); page.append(bar, noticeHost, body);
+  // The whole skill, in place of the body while it is open (the controller shows and hides both).
+  if (skillView) { if (!skillView.hidden) body.hidden = true; page.append(skillView); }
   host.append(page);
   return page;
 }
-/** "Provides": one compact card, a row per kind (its label and count, then every name as its own code chip,
- * wrapping), so a capability with many commands takes a few lines, not a column each. `kinds`: [[label, names]],
- * names null when not listable (a spawn of it would refuse) or [] for none. `last`: a row built elsewhere
- * (the Trigger sources row), appended after them. */
-function providesSection(doc, kinds, last = null) {
-  const section = pageSection(doc, CAPABILITY_COPY.provides);
-  const card = el(doc, 'dl', null, 'page-card provides-card');
-  for (const [label, names] of kinds) {
-    const row = el(doc, 'div', null, 'provides-row'); row.dataset.provides = label.toLowerCase();
-    const term = el(doc, 'dt', null, 'provides-kind'); term.append(el(doc, 'span', label));
-    if (Array.isArray(names)) term.append(el(doc, 'span', String(names.length), 'provides-count'));
-    const value = el(doc, 'dd', null, 'provides-items');
-    if (names === null) value.append(el(doc, 'span', CAPABILITY_COPY.unlistable, 'page-note'));
-    else if (!names.length) value.append(el(doc, 'span', CAPABILITY_COPY.none, 'page-note'));
-    else for (const name of names) value.append(el(doc, 'code', name, 'provides-chip'));
-    row.append(term, value); card.append(row);
-  }
-  if (last) card.append(last);
-  section.append(card);
-  return section;
+/** The origin line: who made it (the official mark with its words, or "by <source>"), then where it comes from. */
+function originLine(doc, row, status, names) {
+  const line = el(doc, 'p', null, 'cap-page-origin');
+  line.append(originElement(doc, capabilityOrigin(row, status, names), { words: true }));
+  const words = sourceText(row, names);
+  const where = row.kind === 'package' ? `package ${[words.name, words.version].filter(Boolean).join(' ')}`
+    : row.kind === 'member' ? `${words.name} repository, at its latest` : `${words.name}, outside the member repositories`;
+  line.append(el(doc, 'span', ' · ', 'cap-page-sep'), el(doc, 'span', where, 'cap-page-where'));
+  if (row.private === true) line.append(el(doc, 'span', ' · ', 'cap-page-sep'), el(doc, 'span', "only its repository's souls", 'cap-page-where'));
+  return line;
 }
+const capitalized = word => word.charAt(0).toUpperCase() + word.slice(1);
 /** The Desktop's own words in the Trigger sources row. */
 export const TRIGGER_SOURCES_COPY = Object.freeze({
   title: 'Trigger sources',

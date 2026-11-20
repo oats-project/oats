@@ -70,6 +70,9 @@ const TYPOS = (d) => [
   ["instance waiting set", ["instance", "waiting", "set", "--producer", "oats.core", "--reason", "permission", "--home", d.home, "--mesage", "x"], "--mesage"],
   ["instance waiting clear", ["instance", "waiting", "clear", "--producer", "oats.core", "--home", d.home, "--resaon", "permission"], "--resaon"],
   ["instance attention", ["instance", "attention", "--claer"], "--claer", d.inHome],
+  ["instance board set", ["instance", "board", "set", "k", "--lable", "l"], "--lable", d.inHome],
+  ["instance board unset", ["instance", "board", "unset", "k", "--forse"], "--forse", d.inHome],
+  ["instance board ask", ["instance", "board", "ask", "Q?", "--opton", "a"], "--opton", d.inHome],
   ["schedule add", ["schedule", "add", "nightly", "--fiel", d.missing], "--fiel"],
   ["schedule update", ["schedule", "update", "nightly", "--descripton=x"], "--descripton"],
   ["schedule tick", ["schedule", "tick", "--dry-rn"], "--dry-rn"],
@@ -147,6 +150,10 @@ test("each command's defined flags are read: one smoke case per command", async 
   assert.equal(ok(["instance", "waiting", "clear", "--producer", "oats.core", ...at]).waitingOnYou, null);
   assert.equal(ok(["instance", "attention", "--message", "look", "--json"], d.inHome).waitingOnYou.message, "look");
   assert.equal(ok(["instance", "attention", "--clear", "--json"], d.inHome).waitingOnYou, null);
+  assert.equal(ok(["instance", "board", "set", "k", "--label", "l", "--value", "v", "--unit", "u", "--link", "https://example.com/x", "--json"], d.inHome).changed, true);
+  assert.equal(ok(["instance", "board", "ask", "Q?", "--option", "a", "--option", "b", "--id", "x", "--context-file", d.text, "--json"], d.inHome).id, "x");
+  assert.equal(ok(["instance", "board", "ask", "--clear", "x", "--json"], d.inHome).changed, true);
+  assert.equal(ok(["instance", "board", "unset", "k", "--json"], d.inHome).changed, true);
   assert.match(own(["schedule", "add", "nightly", "--file", d.missing, "--description=d", "--dir", d.fx.dep, "--json"], "E_BAD_ARGS").message, /^spec file not found/);
   own(["schedule", "update", "nightly", "--description=d", "--dir", d.fx.dep, "--json"], "E_SCHEDULE_UNKNOWN");
   assert.ok(Array.isArray(ok(["schedule", "tick", "--dry-run", "--dir", d.fx.dep, "--json"]).considered));

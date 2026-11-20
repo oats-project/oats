@@ -10,7 +10,7 @@ import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import { viewContext } from "./helpers/view-context.mjs";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/same-work.mjs";
+import * as relatedWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget, sameInstanceActionTarget } from "../renderer/instance-action-target.mjs";
@@ -28,7 +28,7 @@ import { NAV, NAV_TABS, PINNED } from "../renderer/shell-nav.mjs";
 import { rosterRowFacts } from "../../client/roster-row-facts.mjs";
 import { THEMES } from "../renderer/theme.mjs";
 import { PIN_LABELS } from "../renderer/instance-pin-menu.mjs";
-const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
+const tree = { ...treeShared, ...treeView, ...relatedWork }; // the renderer's client imports, shipped
 
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
 const shell = read("shell.mjs"), html = read("index.html"), css = read("shell.css");
@@ -189,35 +189,54 @@ test("slice1 context menu keeps every action", t => {
   }
 });
 
-test("slice1 lines and order unchanged (Amendment 1, D26: no lines; the tree, the order and the needs-input marks unchanged)", t => {
+test("slice1 lines for related work only; the tree, the order and the needs-input marks unchanged", t => {
   const u = fixture(t);
-  // D26 (decided): the roster draws no lineage or sibling lines. The tree stays (indentation, the groups, the gap
-  // before the next bundle), its relations are said in words, and the order is spawn time, newest first
+  // The related-work lines (superseding in part D26's "no lines"): the roster draws the pre-D26 lines where its host
+  // reports related work, and no line elsewhere. The tree stays (indentation, the groups, the gap before the next
+  // bundle), its relations are said in words, and the order is spawn time, newest first
   // (rosters-order-by-spawn-time-newest-first): the shared order roster-order.test.mjs pins, untouched.
   const at = day => `2026-10-${String(day).padStart(2, "0")}T00:00:00.000Z`;
-  const rows = [local("p", { sameWorkKnown: true, createdAt: at(1) }), local("b", { parentInstance: "p", sameWorkKnown: true, createdAt: at(2) }),
-    local("c", { parentInstance: "p", sameWork: true, sameWorkKnown: true, createdAt: at(3) }), local("solo-old", { createdAt: at(4) }),
-    local("solo-new", { createdAt: at(9), siblingInstance: "solo-old" }), local("needs", { createdAt: at(5), waitingOnYou: claim() })];
+  const R = relatedWork.RELATED_WORK_FEATURE;
+  const rows = [local("p", { createdAt: at(1) }), local("b", { parentInstance: "p", createdAt: at(2) }),
+    local("c", { parentInstance: "p", relatedWork: true, createdAt: at(3) }), local("solo-old", { createdAt: at(4) }),
+    local("solo-mid", { createdAt: at(6), siblingInstance: "solo-old" }),
+    local("solo-new", { createdAt: at(9), siblingInstance: "solo-old", relatedWork: true }), local("needs", { createdAt: at(5), waitingOnYou: claim() })]
+    .map(r => ({ ...r, relatedWorkKnown: R }));
   u.render(rows);
   const drawn = [...u.list.querySelectorAll(".ctx-inst")].map(b => b.dataset.treeInstance);
   const order = tree.clusterInstances(rows).flatMap(c => c.instances);
   assert.deepEqual(drawn, order.map(tree.instanceId), "the shared cluster order: spawn time, newest first");
-  assert.deepEqual(order.map(i => i.instance), ["solo-new", "solo-old", "needs", "p", "c", "b"],
-    "newest bundle first (the sibling-linked pair is one bundle), a waiting row not moved up; the same-work child first under its parent");
-  assert.equal(u.list.querySelector(".ctx-guides, .ctx-guide"), null, "no lineage or sibling line anywhere in the roster");
+  assert.deepEqual(order.map(i => i.instance), ["solo-new", "solo-mid", "solo-old", "needs", "p", "c", "b"],
+    "newest bundle first (the sibling-linked rows are one bundle), a waiting row not moved up; the related child first under its parent");
+  const guides = name => [...u.row(name).closest(".ctx-tree-row").querySelectorAll(":scope > .ctx-guides > .ctx-guide")]
+    .map(g => `${g.className.replace("ctx-guide ", "")}@${g.style.getPropertyValue("--guide-level")}`);
+  assert.deepEqual(Object.fromEntries(order.map(i => [i.instance, guides(i.instance)])), {
+    "solo-new": ["link-out@0"], "solo-mid": [], "solo-old": ["link-in@0"], needs: [],
+    p: ["down@0"], c: ["elbow@0"], b: [],
+  }, "the related pair joined on the dot column, the unrelated sibling between them a gap; the related child's elbow, none to b");
+  for (const name of ["solo-mid", "needs", "b"]) assert.equal(u.row(name).closest(".ctx-tree-row").querySelector(".ctx-guides"), null, `${name}: no guides at all`);
+  assert.ok([...u.list.querySelectorAll(".ctx-guides")].every(g => g.getAttribute("aria-hidden") === "true"), "the lines are aria-hidden");
   // Indentation keeps the tree: a child one step in, its parent at the top level.
   const depth = name => u.row(name).closest(".ctx-tree-row").style.getPropertyValue("--depth");
   assert.deepEqual(["p", "c", "b", "needs"].map(depth), ["0", "1", "1", "0"]);
-  // The relations in words, after the name, for assistive technology only.
+  // The relations in words, after the name, for assistive technology only: "related work" where the line is drawn.
   const words = name => u.row(name).querySelector(".ctx-relation")?.textContent ?? null;
-  // Same work in words (the flag the drawn line said): the joined child says so, the other one doesn't.
-  assert.equal(words("c"), ", under p, same work"); assert.equal(words("b"), ", under p");
-  assert.equal(words("solo-new"), ", sibling of solo-old"); assert.equal(words("solo-old"), ", sibling of solo-new", "on both ends");
+  assert.equal(words("c"), ", under p, related work"); assert.equal(words("b"), ", under p");
+  assert.equal(words("solo-new"), ", sibling of solo-old, related work");
+  assert.equal(words("solo-old"), ", sibling of solo-new, related work, sibling of solo-mid", "on both ends; the unrelated sibling without it");
+  assert.equal(words("solo-mid"), ", sibling of solo-old");
   assert.equal(words("p"), null); assert.equal(words("needs"), null);
   assert.ok(u.row("c").querySelector(".ctx-relation").classList.contains("sr-only"));
-  // A host that doesn't report the flag: no child is said to do its parent's work, a flag on its row included.
-  u.render(rows.map(({ sameWorkKnown: _known, ...r }) => r));
+  assert.ok([...u.list.querySelectorAll(".ctx-relation")].every(el => !/same work/.test(el.textContent)), "\"same work\" is said nowhere");
+  // An older host (instance-same-work only): the child's line from its flag (here as a relaying CLI sends it), no sibling link.
+  u.render(rows.map(r => ({ ...r, relatedWorkKnown: relatedWork.SAME_WORK_FEATURE })));
+  assert.deepEqual(["solo-new", "solo-old", "p", "c"].map(guides), [[], [], ["down@0"], ["elbow@0"]]);
+  assert.equal(words("c"), ", under p, related work"); assert.equal(words("solo-new"), ", sibling of solo-old");
+  // A host that reports neither feature: no line, and no row is said to do related work, a flag on its row included.
+  u.render(rows.map(({ relatedWorkKnown: _known, ...r }) => r));
+  assert.equal(u.list.querySelector(".ctx-guides, .ctx-guide"), null, "no flag, no line anywhere in the roster");
   assert.equal(words("c"), ", under p", "an unknown feature says nothing of the flag");
+  assert.equal(words("solo-new"), ", sibling of solo-old");
   assert.ok(u.row("needs").querySelector(".ctx-dot.waiting"), "the yellow needs-input dot, as today");
   // The collapsed-parent roll-up, as today.
   u.context.collapsedInstances.add(tree.collapseKey("A", tree.instanceId(rows[0])));
@@ -228,7 +247,7 @@ test("slice1 lines and order unchanged (Amendment 1, D26: no lines; the tree, th
   u.render([local("x", { createdAt: at(1) }), local("y", { createdAt: at(2) })]);
   assert.deepEqual([...u.list.children].map(el => el.className.split(" ")[0]), ["ctx-group", "ctx-tree-row", "ctx-bundle-gap", "ctx-tree-row"]);
   assert.equal(u.list.querySelector(".ctx-bundle-gap").getAttribute("aria-hidden"), "true");
-  for (const file of ["same-work-lines.test.mjs", "roster-order.test.mjs"]) assert.ok(existsSync(new URL(file, import.meta.url)), `${file} still runs`);
+  for (const file of ["related-work-lines.test.mjs", "roster-order.test.mjs"]) assert.ok(existsSync(new URL(file, import.meta.url)), `${file} still runs`);
 });
 
 test("slice1 switcher head has no show-only-current, add workspace reachable", t => {
@@ -409,8 +428,8 @@ test("slice1 foot and palette", t => {
     desktopBridge: {}, takePickerFocusReturn: () => null, openInstanceEdit() {}, windowState: () => "bound", currentWorkspace: () => "A",
     instanceRecency: { snapshot: () => new Map() }, api: async () => ({}), panelDeployments: () => [], heldHome: () => null, shownRows: r => r, heldLine: () => null,
     openTerminalTab() {}, pickerCycleDirection: () => 0, paletteGroupDirection: () => 0, paletteGroupHint: () => "", paletteTargetId: null,
-    // Pinned instances: the palette's Instance: Pin to top / Unpin carry their real labels and offer themselves for no target.
-    PIN_LABELS, pinTargetOffer: () => null, runPinCommand: async () => {},
+    // Pinned instances: the palette's Agent: Pin to top / Unpin carry their real labels and offer themselves for no target.
+    PIN_LABELS, DESKTOP_NOUNS, pinTargetOffer: () => null, runPinCommand: async () => {},
   });
   for (const [label, action] of [[/^Theme: choose…$/, "app.themePicker"], [/^Font: choose…$/, "app.fontPicker"], [/keyboard shortcuts…$/i, "app.shortcuts"], [/^Sidebar: toggle \(hide\/show\)$/, "sidebar.toggle"]]) {
     const command = commands.find(c => label.test(c.label));

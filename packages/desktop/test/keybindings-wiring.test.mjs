@@ -88,8 +88,8 @@ test("the leader is wired as one rebindable global action, inert under a modal, 
   assert.match(src, /registerAction\(\{ id: "app\.leader", label: "Leader: the commands that follow one key", context: "global", when: \(\) => !modalOpen\(\),/);
   assert.match(src, /const leader = createLeader\(\{ win: window, isMac, modalOpen,/);
   assert.match(src, /onSettle: does => \{ const why = notApplicable\(does\); if \(why\) sayInHint\(why\); else leaderDispatch\.run\(does, leaderOrigin\(document\.activeElement\)\); \}/);
-  // The wait shows nothing: it is announced (leader-hint.mjs announce), and the keys are the shortcuts editor's.
-  assert.match(src, /onOpen: \(\) => leaderHint\.announce\(\),/);
+  // The wait is announced (leader-hint.mjs announce) and shows the help sheet unless it is turned off (slice 4, D15).
+  assert.match(src, /onOpen: \(\) => \{ leaderHint\.announce\(\); if \(leaderHelpEnabled\(\) && leaderHint\.helpMode\(\) !== "pinned"\) leaderHint\.showHelp\(leaderHelp\(\)\); \},/);
   assert.doesNotMatch(src, /showKeys|leaderRowsNow/);
   assert.match(src, /createLeaderHint\(\{ doc: document, host: document\.getElementById\("main"\), before: document\.getElementById\("show-panel"\) \}\)/);
   assert.match(src, /registerAction\(\{ id: "split\.focusNextGroup", label: "Focus the next editor group", context: "tabs",/);

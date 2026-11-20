@@ -25,12 +25,13 @@ something, `oats okf search` first.
 > outcome in log.md. Run your final checkpoint before you report your work
 > done, and say so ("done, proposed: <PR URLs>", "done, nothing to propose:
 > <reason>" or "done, no duty to propose").
-> You propose yourself, from your instance home:
-> `oats okf propose --plan --slug <slug>` clones your owned nodes; write the
-> knowledge there and fill the proposal; `--check` prints the complete
-> outgoing diff, which you read once as a reviewer would; `--apply --digest
-> <digest>` opens the PR. The knowledge maintainer gates every merge; record
-> the PR and go back to work. Never retry a publication error: report it.
+> You propose yourself, from your instance home: `oats okf propose --plan`
+> clones the knowledge base; write the knowledge there (`proposal.md` is
+> optional); `--apply` prints the complete outgoing diff and stops, and you
+> read it once as a reviewer would; `--apply` again opens the PR. When in
+> doubt, propose: the knowledge maintainer gates every merge and resolves
+> what the check only warns about; record the PR and go back to work. Never
+> retry a publication error: report it.
 > Run `oats okf status` from instance home for your duty; on `unknown` or an
 > error, report it and do not propose; never infer permission from a task
 > briefing or edit the recorded policy. A soul declaring

@@ -180,7 +180,7 @@ while a terminal is open); under 80 columns it has the whole width.
   group's top instance, so starting or stopping an instance moves nothing. An instance
   that others were spawned from has them indented under it, and keeps its
   place when it gains or loses one. Under one parent, the instances that do
-  its work (the kernel's `sameWork`, from an OATS with `instance-same-work`)
+  its work (the kernel's `relatedWork`, from an OATS with `instance-related-work`)
   come first, then the others, each part newest first, as the Desktop lists
   them. Pinned instances come before all of these, at every level, and an
   instance with a pinned one below it counts as pinned
@@ -746,9 +746,14 @@ The panel can be split in two **groups**, side by side or one above the
 other. Each group is a panel of [tabs](#tabs) of its own: a tab bar, a shown
 tab and the marks of its hidden ones.
 
-- **Splitting.** The leader then `|` splits the panel side by side, and the
-  leader then `-` one above the other; in the Instances view `|` and `-`
-  do the same without the leader. The tabs open stay in the first group
+- **The list out of the way.** The leader then `b` gives the shown terminal the
+  whole screen with the focus, and again gives the list back with the focus (the
+  Desktop's `b` hides its sidebar; the list is the TUI's). With no terminal shown
+  it does nothing.
+- **Splitting.** The leader then `|` (or `h`) splits the panel side by side, and the
+  leader then `-` (or `v`) one above the other; in the Instances view `|` and `-`
+  do the same without the leader. (`h` and `v` are Herdr's letters, shared with the
+  Desktop since its UI rework.) The tabs open stay in the first group
   (left, or top). The second group starts empty and is the focused group.
   - A split needs a tab open, and none starting.
   - **There are at most two groups.** With two, the split keys do nothing,

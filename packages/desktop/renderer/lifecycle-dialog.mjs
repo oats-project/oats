@@ -1,4 +1,5 @@
 import { takePickerFocusReturn } from './overlay-picker.mjs';
+import { SHEET, SHEET_BACKDROP } from './sheet.mjs';
 import { gitTarget, gitTargetKey } from '../../client/instance-git-contract.mjs';
 import { planReference, ownWorktreeOf } from '../../client/lifecycle-contract.mjs';
 import { createLifecycleConfirmation } from '../../client/lifecycle-confirmation.mjs';
@@ -302,8 +303,9 @@ export function createLifecycleDialog({ doc, request, gitRequest, forgeRequest, 
     onIntent(); restore = takePickerFocusReturn(doc); life++; operation = next;
     choices = next === 'stop' ? { recursive: true } : { discardWorktree: false };
     const id = `lifecycle-${++dialogs}`;
-    overlay = node('div', undefined, 'palette-overlay lifecycle-overlay');
-    const dialog = node('section', undefined, 'lifecycle-dialog'); dialog.dataset.operation = operation;
+    // A centred sheet over the scrim (the Desktop UI rework, slice 4, D10): Stop's and Retire's.
+    overlay = node('div', undefined, `palette-overlay lifecycle-overlay ${SHEET_BACKDROP}`);
+    const dialog = node('section', undefined, `lifecycle-dialog ${SHEET}`); dialog.dataset.operation = operation;
     dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', `${id}-title`);
     const heading = node('div', undefined, 'lifecycle-heading'), mark = node('span', undefined, 'lifecycle-mark'); mark.append(iconElement(doc, next === 'stop' ? 'stop' : 'remove', { size: 18 })); mark.setAttribute('aria-hidden', 'true');
     const h2 = node('h2'); h2.id = `${id}-title`;
