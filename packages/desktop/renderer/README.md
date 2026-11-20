@@ -2492,10 +2492,11 @@ doesn't read already:
   shown). The board is the shared `packages/client/home-board.mjs` (`homeBoard`: Needs you by the one claim gate,
   newest claim first, and the summary line's counts, each row counted once as running, needing you, stopped or
   unknown; `homeAgents`, pinned first where the roster shows pins (`ctx.homeRoster().pins`), then newest spawn first;
-  `startedBy`), so the TUI can draw the same Home. Nothing reorders the roster. Slice 2b (Pepe, 2026-11-20) dropped
-  slice 2's Running group: Home lists only what needs you (`NEEDS_YOU_SHOWN`, 8, then "Show all N", which expands in
+  `startedBy`), so the TUI can draw the same Home. Nothing reorders the roster. Slice 2b (Pepe, 2026-11-20) replaced
+  slice 2's full Running list: Home shows what needs you (`NEEDS_YOU_SHOWN`, 8, then "Show all N", which expands in
   place and focuses the first row it showed), then one summary line ("24 agents · 21 running · 3 need you · 0
-  stopped"), then the tiles.
+  stopped"), then the tiles, then a cropped Running group (`RUNNING_SHOWN`, 5, in the roster's order, then "Show all
+  N running" / "Show fewer"; no row says "running").
 - **Counts**: Souls from `GET /api/agents` (read by the Workspace page's rules: a `catalog.reason` is a failure; an
   empty list while the catalog is still reading, or with no catalog observed yet, is pending, "Counting…", and is
   asked again every 3 s on a timer Home owns (cleared on a switch and on disposal) for as long as it stays pending,
