@@ -3231,7 +3231,7 @@ test("capability instructions and package skills give the instance the proposal 
   const instructions = readFileSync(join(f.home, "AGENTS.md"), "utf8");
   assert.match(instructions, /IMPORTANT/);
   assert.match(instructions, /\*\*okf-propose\*\* skill is \*\*compulsory\*\*/);
-  assert.match(instructions, /oats okf propose --plan --slug <slug>/, "the instance proposes itself");
+  assert.match(instructions, /oats okf propose --plan/, "the instance proposes itself"); // oats.okf 6.3.0: --slug is optional
   assert.doesNotMatch(instructions, /knowledge-harvester/, "no harvester to launch");
   // 6.0 repeats the duty under its new name, publish.
   assert.deepEqual(f.cli(["okf", "status", "--json"], f.as(f.source)), { harvest: "on", reason: "default", publish: "on" });
