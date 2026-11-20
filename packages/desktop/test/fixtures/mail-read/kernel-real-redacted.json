@@ -10,9 +10,9 @@
    "aweb",
    "mail"
   ],
-  "cwd": "/home/joan/Work/oats/agents/oats-developer/instances/redesign-mail-read-developer/.scratch/tryout/deploy/agents/mail-tryout/instances/mail-read-tryout-probe",
+  "cwd": "/home/alex/oats/agents/mail-tryout/instances/mail-read-tryout-probe",
   "target": {
-   "home": "/home/joan/Work/oats/agents/oats-developer/instances/redesign-mail-read-developer/.scratch/tryout/deploy/agents/mail-tryout/instances/mail-read-tryout-probe",
+   "home": "/home/alex/oats/agents/mail-tryout/instances/mail-read-tryout-probe",
    "instance": "mail-read-tryout-probe"
   },
   "result": {
