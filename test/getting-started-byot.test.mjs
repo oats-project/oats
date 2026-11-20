@@ -231,6 +231,13 @@ test("item 6 on a private registry: a read-only install plan catches a broker th
   assert.ok(flat6.includes("- **`E_WAKE_UNSUPPORTED`** (a container, or a machine with neither launchd nor systemd): there is no service to install, and the plain `aw wake run` below would not carry `RG`. Stop and spawn nothing."));
   assert.ok(flat6.includes("offer a Claude or pi setup expert instead, which its own channel wakes"));
   assert.ok(flat6.includes("on the public registry, the line is `aw wake run`, kept running as a supervised process."));
+  // Only a plan that passes lets the private branch go on: any other refusal leaves a running broker that may not carry RG.
+  assert.ok(flat6.includes("Only `\"ok\": true` lets you go on to their install below"));
+  assert.ok(flat6.includes("- **Any other refusal** (for example a broker started by hand or by another supervisor, `E_WAKE_RUNNING_UNSUPERVISED`, or a service the install didn't write, `E_WAKE_UNIT_CONFLICT`): stop and spawn nothing."));
+  assert.ok(flat6.includes("Never stop, uninstall or deregister a broker yourself."));
+  assert.ok(!/go on\. Their own install decides/.test(flat6), "a refused plan is never a go-on");
+  const prepare = wake.slice(wake.indexOf("async function prepareInstall(opts, ctx) {"), wake.indexOf("if (opts.plan) return { ok: true, plan: true,"));
+  for (const code of ["E_WAKE_UNSUPPORTED", "E_WAKE_UNIT_CONFLICT", "E_WAKE_REGISTRY_CONFLICT", "E_WAKE_RUNNING_UNSUPERVISED"]) assert.ok(prepare.includes(code), `the plan refuses ${code} before any change`);
   assert.ok(!/AWID_REGISTRY_URL/.test(item6), "no ambient registry for the broker either");
 });
 

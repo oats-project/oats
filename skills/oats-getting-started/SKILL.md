@@ -1266,7 +1266,11 @@ readiness still reports a problem.
    cd "D" && oats aweb wake install --plan --json
    ```
 
-   It changes nothing. Its answer's `error.code`, when it has one, decides:
+   It changes nothing, and it refuses whatever the install would refuse.
+   Only `"ok": true` lets you go on to their install below: then no other
+   broker runs on this computer account, or the one that runs is the
+   install's own and already carries `RG`, so the status check below
+   proves the right broker. Otherwise its `error.code` decides:
    - **`E_WAKE_REGISTRY_CONFLICT`:** this computer account already runs a
      wake broker for another registry, or for none, most likely for
      another deployment, and one account's broker serves one registry.
@@ -1280,8 +1284,14 @@ readiness still reports a problem.
      Tell the person in one sentence, and offer a Claude or pi setup
      expert instead, which its own channel wakes: with that harness, this
      item is skipped.
-   - **Anything else,** `"ok": true` included: go on. Their own install
-     decides.
+   - **Any other refusal** (for example a broker started by hand or by
+     another supervisor, `E_WAKE_RUNNING_UNSUPERVISED`, or a service the
+     install didn't write, `E_WAKE_UNIT_CONFLICT`): stop and spawn nothing.
+     A broker that is running now would pass the status check without
+     carrying `RG`. Tell the person in plain words what its message says;
+     the fix is theirs, and the message names it. Once they say it's done,
+     run this check again. Never stop, uninstall or deregister a broker
+     yourself.
 
    Open their own terminal ("How to work") running this, with `D` filled
    in:
