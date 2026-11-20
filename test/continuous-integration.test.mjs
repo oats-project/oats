@@ -162,7 +162,9 @@ test("pull-request CI runs every schedule of the session-provider lifecycle for 
   // and process groups, the fixtures' deployment, and what decides and runs this.
   for (const file of ["bin/oats.mjs", "lib/instance-listing.mjs", "lib/claim.mjs", "lib/dir-lock.mjs", "lib/instance-events.mjs", "lib/write-through-private-file.mjs",
     "lib/worktree-hooks.mjs", "lib/process-group.mjs", "packages/record/lib/process-identity.mjs", "test/helpers/v2-deployment.mjs",
-    "scripts/provider-lifecycle-changed.mjs", ".github/workflows/provider-lifecycle-nightly.yml"]) {
+    "scripts/provider-lifecycle-changed.mjs", ".github/workflows/provider-lifecycle-nightly.yml",
+    // What a provider home may run (its receipt's record of it), and the receipt's own leaf.
+    "lib/home-integrity.mjs", "lib/session-receipt.mjs"]) {
     assert.equal(touchesLifecycle([file]), true, file);
   }
   for (const file of ["lib/servers.mjs", "lib/sessions.mjs", "lib/providers.mjs", "docs/capabilities.md", "packages/desktop/src/app.mjs", "test/session-restart.test.mjs", "test/helpers/fixtures.mjs", "lib/session-x/y.mjs"]) assert.equal(touchesLifecycle([file]), false, file);

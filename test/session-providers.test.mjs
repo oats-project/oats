@@ -928,6 +928,7 @@ test("retire when the provider cannot stop the session: it goes on only when no 
   // The provider's capability was removed by an upgrade: inspect is unavailable, the retire still works.
   const { home } = await fx.launch("orphaned");
   rmSync(join(home, ".oats", "modules", FAKE_CAPABILITY), { recursive: true });
+  fx.recordComposition(home); // (as that upgrade records it)
   const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
   assert.equal(inspected.error.code, "E_SESSION_UNAVAILABLE");
   assert.match(inspected.error.message, /capability acme\.fake, which supplies this home's session backend fake, is not among the home's modules/);
@@ -1080,6 +1081,7 @@ test("one wire version: a provider that declares another, or none, is refused by
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   delete manifest.sessionProviders.fake.wire;
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  fx.recordComposition(home); // (as the upgrade that brought that copy records it)
   fx.clearCalls();
   for (const verb of [["start"], ["restart"], ["start", "--resume"]]) {
     const refused = fx.cli(["session", ...verb, "--home", home, "--json"]).json();
@@ -1296,6 +1298,7 @@ test("E_BACKEND_AMBIGUOUS at a start: a home whose modules now hold two capabili
   writeFileSync(join(home, ".oats", "modules", "acme.twin", "oats.json"), JSON.stringify({ ...twin, capability: "acme.twin", hooks: undefined, environment: undefined }));
   const record = recordOf(home);
   writeFileSync(join(home, "instance.json"), JSON.stringify({ ...record, modules: { ...record.modules, "acme.twin": record.modules[FAKE_CAPABILITY] } }, null, 2) + "\n");
+  fx.recordComposition(home); // (as the upgrade that brought the module records it)
   fx.clearCalls();
   for (const start of [() => startInstanceSession(home, {}), () => restartInstanceSession(home, {})]) {
     await assert.rejects(fx.inEnv(start), (e) => e.code === "E_BACKEND_AMBIGUOUS" && JSON.stringify(e.details) === JSON.stringify({ backend: "fake", capabilities: [FAKE_CAPABILITY, "acme.twin"] }) && /nothing was stopped or started/.test(e.message));
