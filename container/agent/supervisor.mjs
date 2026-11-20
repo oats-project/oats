@@ -94,20 +94,21 @@ export function parseChildDeclaration(text) {
  * one fixed line and answers nothing when the start must be refused. */
 function admitChild(selected, fs, say) {
   const at = childDeclarationFile, code = (error) => error?.code || "error";
+  const notTheImagesFile = `${at} must be a regular file owned by root, not a symlink and not writable by its group or by others`;
   let text;
   try {
     // A symlink is refused, not followed; a pipe cannot hold the start.
     const fd = fs.openSync(at, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
     try {
       const stat = fs.fstatSync(fd);
-      if (!stat.isFile() || stat.uid !== 0 || (stat.mode & 0o022) !== 0) { say(`${at} must be a regular file owned by root, not a symlink and not writable by its group or by others`); return; }
+      if (!stat.isFile() || stat.uid !== 0 || (stat.mode & 0o022) !== 0) { say(notTheImagesFile); return; }
       const bytes = stat.size > childDeclarationMaxBytes ? null : fs.readFileSync(fd);
       if (!bytes || bytes.length > childDeclarationMaxBytes) { say(`${at} must be at most 16 KiB`); return; }
       text = bytes.toString("utf8");
     } finally { fs.closeSync(fd); }
   } catch (error) {
     if (code(error) === "ENOENT") say(`AGENT_CHILD needs an image that declares a child in ${at}`);
-    else if (code(error) === "ELOOP") say(`${at} must be a regular file owned by root, not a symlink and not writable by its group or by others`);
+    else if (code(error) === "ELOOP") say(notTheImagesFile);
     else say(`${at} could not be read (${code(error)})`);
     return;
   }

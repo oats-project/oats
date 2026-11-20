@@ -1260,8 +1260,13 @@ test("a declaration that is a symlink, not root-owned, group- or other-writable,
     await refusedBeforeAnyChild(fx, line, why);
     assert.ok(fx.fileCalls.every(([, path]) => path === declarationFile), why + ": nothing under the login mount is read");
   }
-  // The largest file that is still read, and the modes an image build gives.
-  for (const options of [{declarationMode: 0o444}, {declarationMode: 0o600}, {declaration: d => { d.env.PADDING = "x".repeat(15 * 1024); }}]) {
+  // An unreadable file is refused by its code: the supervisor runs as the agent, not as the file's owner.
+  if (process.getuid() !== 0) {
+    const unreadable = await supervisorFixture(t, {child: "extra", declarationMode: 0o000});
+    await refusedBeforeAnyChild(unreadable, "/etc/agent-child.json could not be read (EACCES)", "unreadable");
+  }
+  // The largest file that is still read, and a read-only file.
+  for (const options of [{declarationMode: 0o444}, {declaration: d => { d.env.PADDING = "x".repeat(15 * 1024); }}]) {
     const fx = await supervisorFixture(t, {child: "extra", ...options});
     await fx.until(() => fx.text().includes("host started"));
     fx.term();

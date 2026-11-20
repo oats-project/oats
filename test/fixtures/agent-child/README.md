@@ -6,8 +6,7 @@ without any real product in it. It is test data: never a base for a deployment,
 and never part of `container/agent`'s build context.
 
 - `child.mjs`: a dependency-free Node HTTP server on `127.0.0.1:39111`. It
-  answers `{"ok":true,"tokenPresent":<boolean>}`, and `--version` prints its
-  version.
+  answers `{"ok":true}`, and `--version` prints its version.
 - `agent-child.json`: its declaration, installed as `/etc/agent-child.json`.
 - `version`: what `child.mjs --version` must print; acceptance compares them.
 - `compose.agent.child.yaml`: the switch, `AGENT_CHILD: "fixture"`.

@@ -711,7 +711,7 @@ every key below is required unless marked, and an unknown key is refused.
 | `ready.field` | A letter or underscore, then letters, digits or underscores; at most 64 characters | The top-level field of the JSON answer that must be `true`. |
 | `listen` | A non-empty array of distinct ports from 1024 to 65535, without 2222 | The loopback TCP ports the child holds. Acceptance requires each. |
 | `version.command` | A non-empty array of strings; `command[0]` an absolute path | A command that prints the child's version. |
-| `version.file` | An absolute path | A file the image writes at build time with that same version. Acceptance compares the two, so it needs no checkout of the image's repository. |
+| `version.file` | An absolute path | A file the image writes at build time with that same version: one printable line of at most 64 characters, in a file of at most 256 bytes. Acceptance compares the two, so it needs no checkout of the image's repository. |
 | `stopMs` | A whole number from 1000 to 8000 | How long the child gets after SIGTERM before SIGKILL. |
 
 Neither `env` nor `envFromFile` may set `PATH`, `HOME`, `LD_PRELOAD`,
@@ -779,7 +779,10 @@ file.
   /etc/agent-child.json`. Select the derived image with `AGENT_IMAGE`.
 - **A declaration that is not the image's own file:** a symlink, not a
   regular file, not owned by uid 0, or writable by its group or by others.
-  Over 16 KiB, or not JSON, is refused too.
+  Over 16 KiB, or not JSON, is refused too. The supervisor runs as the
+  agent, so the file must be readable by everyone (mode 0644 or 0444): one
+  it cannot open is refused with `/etc/agent-child.json could not be read
+  (<code>)`.
 - **A declaration outside the grammar:** `/etc/agent-child.json: <key>
   <what it must be>`, for an unknown or missing key and for every value the
   table above rules out.

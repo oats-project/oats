@@ -10,11 +10,9 @@ if (process.argv[2] === "--version") {
     console.error("fixture child: started without its declared environment");
     process.exit(1);
   }
-  // Whether the envFromFile value arrived; the value itself is never answered.
-  const tokenPresent = typeof process.env.FIXTURE_CHILD_TOKEN === "string" && process.env.FIXTURE_CHILD_TOKEN.length > 0;
   const server = createServer((_request, response) => {
     response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify({ ok: true, tokenPresent }));
+    response.end(JSON.stringify({ ok: true }));
   });
   server.listen(39111, "127.0.0.1");
   process.on("SIGTERM", () => { server.close(() => process.exit(0)); server.closeAllConnections(); });
