@@ -94,7 +94,8 @@ function details(t, row, { stale = false } = {}) {
   const view = createDetails(el, { detailsRow: () => current, subscribeDetails: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     detailsStale: () => stale, detailsScope: () => ({ deployments: [], here: "falcon" }), detailsWorkspace: () => "A",
     createGitPanel: (host) => { host.append(Object.assign(doc.createElement("div"), { className: "git-double" })); return { update(u) { acts.push(["git", u.active]); }, dispose() {} }; },
-    createTeamsSection: () => ({ update() {}, dispose() {} }), createEventsView: () => ({ dispose() {} }),
+    createTeamsSection: () => ({ update() {}, dispose() {} }), createSoulSection: () => ({ update(u) { acts.push(["soul", u.active]); }, dispose() {} }),
+    createEventsView: (host) => ({ connected: host.isConnected, sync() { acts.push(["events-sync", host.isConnected]); }, dispose() {} }),
     detailsActs: { openTerminal: (r) => acts.push(["terminal", r.instance]), lifecycle: (verb, r) => acts.push([verb, r.instance]),
       openPullRequest: (r) => acts.push(["pr", r.instance]), openFiles: (r) => acts.push(["files", r.agent]) } }, { doc, now: () => Date.parse("2026-11-19T12:00:00.000Z") });
   t.after(() => { view.dispose(); dom.window.close(); });
@@ -152,9 +153,48 @@ test("slice6a details keeps every old panel fact", (t) => {
   assert.deepEqual(u.buttons().map(([key]) => key).filter((k) => k === "terminal" || k === "pr" || k === "files"), ["terminal", "pr", "files"], "the action row");
   // Folding Git open reads it; a retarget repaints for the new agent.
   u.el.querySelector('[data-details-section="git"]').open = true; u.el.querySelector('[data-details-section="git"]').dispatchEvent(new u.doc.defaultView.Event("toggle"));
-  assert.deepEqual(u.acts.at(-1), ["git", true]);
+  assert.ok(u.acts.some(([k, v]) => k === "git" && v === true), "unfolding Git reads it");
   u.retarget(stopped({ instance: "other", agent: "other-soul" }));
   assert.equal(u.fact("soul"), "other-soul");
+});
+
+test("slice6a details: the rest of the old panel's facts, a remote row's repository, the folds' reads and focus", (t) => {
+  // Review round 2: the as-spawned soul (capabilities, core first) folded; a remote row's repository is its own repo
+  // path's tail, never its server's label; a stopped row's last start; the agents root, the folder (shared when
+  // linked), the drift and reporting-gap notes, the identity fallback.
+  const u = details(t, stopped({ server: "build", repoName: "Build box", repo: "/srv/northwind/", running: false, startedAt: "2026-11-18T09:00:00.000Z",
+    work: "checkout", identity: { alias: "web-dev", domain: "oats.aweb.ai" }, soul: { status: "moved" } }));
+  assert.equal(u.fact("repository"), "northwind", "the remote row's own repository, not 'Build box'");
+  assert.ok(u.fact("startedAt"), "a stopped row's last start"); assert.match(u.el.querySelector('[data-details-fact="startedAt"]').previousElementSibling.textContent, /Last started/);
+  assert.equal(u.fact("agentsRoot"), "/w/agents");
+  assert.match(u.fact("workFolder"), /\/work \(shared: a link to a tree others share\)$/);
+  assert.match(u.el.textContent, /Its soul's repository has moved on since it was spawned\./, "the drift note");
+  assert.ok(u.el.querySelector('[data-details-section="soul"] > summary'), "the soul as spawned, folded");
+  const soul = u.el.querySelector('[data-details-section="soul"]'); soul.open = true; soul.dispatchEvent(new u.doc.defaultView.Event("toggle"));
+  assert.ok(u.acts.some(([k, v]) => k === "soul" && v === true), "unfolding it reads it");
+  // The events view is built connected and synced on each paint (its Load activity follows the row).
+  assert.ok(u.acts.some(([k, connected]) => k === "events-sync" && connected === true));
+  // A repaint keeps focus in a fold: the folds stay in place.
+  const summary = u.el.querySelector('[data-details-section="git"] > summary'); summary.tabIndex = 0; summary.focus();
+  u.view.refresh();
+  assert.equal(u.doc.activeElement, summary, "a roster change doesn't take focus out of Git");
+});
+
+test("slice6a details from every row: a held or blocked row's menu keeps Details", async () => {
+  const { instanceActions } = await import("../renderer/instance-actions.mjs");
+  const dom = new JSDOM("<!doctype html><body></body>"), doc = dom.window.document;
+  const row = doc.createElement("button"); doc.body.append(row);
+  const ran = [];
+  const extra = [{ action: "details", actionId: "panel.toggle", label: "Details", reason: "", always: true, secondary: true }];
+  const menu = instanceActions(doc, { instance: "far", server: "far", addressable: false, running: null, home: "/far/h" }, { row, extra, dispatch: (id) => ran.push(id), stale: null });
+  row.after(menu);
+  const details = [...menu.querySelectorAll("[role=menuitem]")].find((item) => item.dataset.action === "details");
+  assert.ok(details, "Details is listed on an unaddressable remote row");
+  assert.equal(details.disabled, false, "and usable: it only reads");
+  details.click();
+  assert.deepEqual(ran, ["panel.toggle"]);
+  assert.match(shell, /if \(reported\) row\.addEventListener\("keydown", \(e\) => \{\n    if \(e\.key !== "i"/, "a reported pending row takes i too");
+  dom.window.close();
 });
 
 test("slice6a rail", (t) => {
@@ -249,6 +289,9 @@ test("slice6a tab memory restores page tabs", async () => {
   // focused group (2).
   assert.deepEqual(JSON.parse(JSON.stringify(c.split.groups.map((g) => [g.tabs, g.activeTab]))), [[[1, 10], 10], [[11], 11]]);
   assert.equal(c.split.focusedGroup, 2);
-  assert.match(fn("restoreWorkspaceTabs"), /closePageTabs\(leaving, leavingPages\);/);
+  // The real entry point takes the active tab before hiding the tab layer (which clears it).
+  const restore = fn("restoreWorkspaceTabs");
+  assert.ok(restore.indexOf("leavingActive = activeTab") < restore.indexOf("showTabLayer(false)"), "the active tab is taken before the layer hides");
+  assert.match(restore, /closePageTabs\(leaving, leavingPages, leavingActive\);/);
   assert.match(fn("restoreWorkspaceTabs"), /void reopenPageTabs\(tabWorkspace\);/);
 });

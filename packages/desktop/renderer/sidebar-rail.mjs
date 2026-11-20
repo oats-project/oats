@@ -12,6 +12,8 @@ export const railCSS = `
 #sidebar-rail { display:none; flex:none; width:${RAIL_WIDTH}px; min-width:${RAIL_WIDTH}px; box-sizing:border-box; flex-direction:column;
   align-items:center; gap:4px; padding:8px 0; border-right:1px solid var(--border); background:var(--surface); overflow:hidden auto; }
 #app.sidebar-rail #sidebar-rail { display:flex; }
+/* Focus mode and a hidden sidebar hide the rail too (its full/rail preference is kept for their return). */
+#app.sidebar-rail.focus-mode #sidebar-rail, #app.sidebar-rail.sidebar-hidden #sidebar-rail { display:none; }
 #app.sidebar-rail #sidebar { display:none; }
 #sidebar-rail .rail-group { display:flex; flex-direction:column; align-items:center; gap:4px; width:100%; }
 #sidebar-rail .rail-line { width:24px; height:1px; margin:4px 0; background:var(--border); flex:none; }

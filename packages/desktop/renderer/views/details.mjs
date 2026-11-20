@@ -25,6 +25,9 @@ import { harnessName } from "../identity-marks.mjs";
 import { runtimeErrorLine } from "../speaker-line.mjs";
 import { desktopActs } from "../desktop-acts.mjs";
 import { iconElement } from "../shell-icons.mjs";
+import { driftText, workRepo, workFolder, LINKED } from "../context-panel.mjs";
+import { needsInputReportingGap } from "../../../client/needs-input-reporting-gap.mjs";
+import { servedIdentityText } from "../../../client/deployment-facts.mjs";
 
 export const detailsCSS = `
 .details { box-sizing:border-box; height:100%; overflow:auto; padding:24px 28px 32px; color:var(--fg); font-family:var(--ui-font, system-ui); }
@@ -46,7 +49,9 @@ export const detailsCSS = `
 .details-actions button:disabled { color:var(--muted); cursor:default; }
 .details-fold { border-top:1px solid var(--border); padding-top:8px; }
 .details-fold > summary { cursor:pointer; font-size:12.5px; font-weight:650; color:var(--fg); padding:4px 0; }
-.details-tech { margin:0; font-size:11.5px; color:var(--muted); font-family:var(--mono); overflow-wrap:anywhere; }
+.details-top { display:flex; flex-direction:column; gap:18px; }
+/* D2: the chrome is sans; monospace is the terminal's. */
+.details-tech { margin:0; font-size:11.5px; color:var(--muted); overflow-wrap:anywhere; }
 `;
 
 const STATE_WORDS = { running: "running", stopped: "stopped", unknown: "status unknown" };
@@ -71,7 +76,8 @@ export function detailsFacts(row, { deployments = [], here = null } = {}) {
     ["modelFrom", "Model from", model && MODEL_FROM[row?.modelFrom] ? MODEL_FROM[row.modelFrom] : null],
     ["work", "Work", WORK_WORDS[row?.work] ?? null],
     ["machine", "Machine", rowMachine(row, DESKTOP_TERMS, { deployments, here })],
-    ["repository", "Repository", text(row?.repoName)],
+    // A remote row's repoName is its server's label: its repository is its own repo path's tail (workRepo).
+    ["repository", "Repository", text(workRepo(row))],
     ["branch", "Branch", text(row?.branch)],
     ["startedBy", "Started by", startedBy(row)],
     ["parent", "Parent", parent ? instanceDisplayName(parent) || parent : null],
@@ -79,8 +85,10 @@ export function detailsFacts(row, { deployments = [], here = null } = {}) {
     ["sibling", "Sibling", text(row?.siblingInstance) ? instanceDisplayName(row.siblingInstance) || row.siblingInstance : null],
     ["session", "Session", text(row?.tmux?.session) ? `tmux · ${row.tmux.session}` : null],
     ["createdAt", "Created", text(row?.createdAt) ? new Date(row.createdAt).toLocaleString() : null],
-    ["startedAt", "Started", row?.running === true && text(row?.startedAt) ? new Date(row.startedAt).toLocaleString() : null],
-    ["identity", "Messaging", text(row?.identityAddress)],
+    ["startedAt", row?.running === true ? "Started" : "Last started", text(row?.startedAt) ? new Date(row.startedAt).toLocaleString() : null],
+    ["identity", "Messaging", text(row?.identityAddress) ?? text(servedIdentityText(row?.identity))],
+    ["agentsRoot", "Agents root", text(row?.agentsRoot)],
+    ["workFolder", "Folder", workFolder(row?.home) ? `${workFolder(row.home)}${LINKED.has(row?.work) ? " (shared: a link to a tree others share)" : ""}` : null],
   ];
   return facts.filter(([, , value]) => typeof value === "string" && value);
 }
@@ -107,9 +115,19 @@ export function createDetails(el, ctx, { doc = el.ownerDocument, now = () => Dat
   teams.append(node("summary", null, "Messaging & teams"));
   const teamsHost = node("div"); teams.append(teamsHost);
   const teamsSection = typeof ctx.createTeamsSection === "function" ? ctx.createTeamsSection(teamsHost) : null;
+  const soul = node("details", "details-fold"); soul.dataset.detailsSection = "soul";
+  soul.append(node("summary", null, "Soul as spawned"));
+  const soulHost = node("div"); soul.append(soulHost);
+  const soulSection = typeof ctx.createSoulSection === "function" ? ctx.createSoulSection(soulHost) : null;
   const events = node("details", "details-fold"); events.dataset.detailsSection = "events";
   events.append(node("summary", null, "Recent events"));
   const eventsHost = node("div"); events.append(eventsHost);
+  // The page: a part repainted with each roster change (its header, Needs input, facts, notes, actions), then the
+  // folds and the technical line, which stay in place: focus inside them, and their own reads, survive a repaint.
+  const top = node("div", "details-top"), tech = node("p", "details-tech");
+  inner.replaceChildren(top, soul, teams, git, events, tech);
+  // Built once its host is in the document (the view is mounted connected): the events view watches its own
+  // ancestors' visibility from there, and syncs on each paint and on its fold's toggle.
   const eventsView = typeof ctx.createEventsView === "function" ? ctx.createEventsView(eventsHost, () => ctx.detailsRow?.()) : null;
   let alive = true;
 
@@ -123,8 +141,8 @@ export function createDetails(el, ctx, { doc = el.ownerDocument, now = () => Dat
   function paint() {
     if (!alive) return;
     const row = ctx.detailsRow?.() ?? null;
-    const focusedKey = inner.contains(doc.activeElement) ? doc.activeElement.dataset.detailsKey ?? null : null;
-    if (!row) { inner.replaceChildren(node("p", "details-note", "This agent is no longer in the roster.")); return; }
+    const focusedKey = top.contains(doc.activeElement) ? doc.activeElement.dataset.detailsKey ?? null : null;
+    if (!row) { top.replaceChildren(node("p", "details-note", "This agent is no longer in the roster.")); return; }
     const state = runtimeState(row);
     const parts = [];
     const head = node("div", "details-head");
@@ -150,6 +168,10 @@ export function createDetails(el, ctx, { doc = el.ownerDocument, now = () => Dat
     parts.push(dl);
     const error = typeof row.runtimeError === "string" && row.runtimeError ? runtimeErrorLine(row) : null;
     if (error) parts.push(node("p", "details-note", error));
+    const drift = driftText(row);
+    if (drift) parts.push(node("p", "details-note", drift));
+    const gap = needsInputReportingGap(row);
+    if (gap) parts.push(node("p", "details-note", `This agent's Claude questions and permission requests don't show as needs input: its oats.core (oats.framework ${gap}) is older than 2.4.0. Upgrade or respawn it to report them.`));
     // The row of buttons: what the agent can do, as the row's own menu offers it (desktop-acts.mjs).
     const acts = ctx.detailsActs ?? {};
     const actions = node("div", "details-actions"); actions.setAttribute("role", "group"); actions.setAttribute("aria-label", "Actions");
@@ -163,20 +185,23 @@ export function createDetails(el, ctx, { doc = el.ownerDocument, now = () => Dat
     add("pr", button("Open pull request…", () => acts.openPullRequest?.(row), { disabled: !!(row.server || row.remote), title: row.server || row.remote ? "Remote PR inspection is unavailable here." : "" }));
     if (typeof row.agent === "string" && row.agent) add("files", button("Files", () => acts.openFiles?.(row)));
     parts.push(actions);
-    parts.push(teams, git, events);
-    parts.push(node("p", "details-tech", [row.instance, typeof row.home === "string" ? row.home : null, typeof row.identityAddress === "string" ? row.identityAddress : null].filter(Boolean).join(" · ")));
-    inner.replaceChildren(...parts);
+    top.replaceChildren(...parts);
+    tech.textContent = [row.instance, typeof row.home === "string" ? row.home : null, typeof row.identityAddress === "string" ? row.identityAddress : null].filter(Boolean).join(" · ");
     gitPanel?.update?.({ active: git.open, workspace: ctx.detailsWorkspace?.(row) ?? null, instance: row, key: null });
     teamsSection?.update?.({ active: teams.open, workspace: ctx.detailsWorkspace?.(row) ?? null, instance: row });
+    soulSection?.update?.({ active: soul.open, workspace: ctx.detailsWorkspace?.(row) ?? null, instance: row });
+    eventsView?.sync?.(); // connected now, and its row may have changed: Load activity follows (instance-events-view.mjs)
     if (focusedKey) [...actions.querySelectorAll("button")].find((b) => b.dataset.detailsKey === focusedKey)?.focus();
   }
   git.addEventListener("toggle", () => paint());
   teams.addEventListener("toggle", () => paint());
+  soul.addEventListener("toggle", () => paint());
+  events.addEventListener("toggle", () => eventsView?.sync?.());
   const unsubscribe = typeof ctx.subscribeDetails === "function" ? ctx.subscribeDetails(() => paint()) : () => {};
   paint();
   return {
     refresh: paint,
-    dispose() { alive = false; unsubscribe(); gitPanel?.dispose?.(); teamsSection?.dispose?.(); eventsView?.dispose?.(); },
+    dispose() { alive = false; unsubscribe(); gitPanel?.dispose?.(); teamsSection?.dispose?.(); soulSection?.dispose?.(); eventsView?.dispose?.(); },
   };
 }
 

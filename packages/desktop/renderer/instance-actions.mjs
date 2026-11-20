@@ -74,7 +74,9 @@ export function instanceActions(doc, instance, { row, invoke, openLifecycle, ope
     for (const item of items) {
       const reason = reasonFor(item.dataset.action), note = item.querySelector('small');
       // An act the shared home lists as not enabled stays so whatever its reason's text shows.
-      item.disabled = !!reason || descriptors.find(row => row.action === item.dataset.action)?.unavailable === true;
+      // On a held, blocked or stale row the acts wait (disabled); its `always` items (Details) stay usable.
+      item.disabled = !!reason || descriptors.find(row => row.action === item.dataset.action)?.unavailable === true
+        || (blocked() && !isAlways(item.dataset.action));
       if (note) { note.textContent = reason; note.hidden = !reason; }
       item.title = reason;
       item.autofocus = false;
@@ -93,6 +95,10 @@ export function instanceActions(doc, instance, { row, invoke, openLifecycle, ope
   const heldReason = () => offer.blocked && !forgets ? reasonLine(offer.blocked) || `${instance.instance} can't be used from here.`
     : pending.get(key)?.reason ?? stale ?? null;
   const blocked = () => heldReason() !== null;
+  // A read-only item the caller marks `always` (Details, slice 6a) stays usable on a held, blocked or stale row: only
+  // the acts wait. `hasAlways`: the menu has one, so it opens there with the acts disabled.
+  const isAlways = action => extra.some(row => row.action === action && row.always === true);
+  let hasAlways = false;
   const close = (restoreFocus = false) => {
     menu.hidePopover();
     if (restoreFocus && owns() && visible(row)) row.focus();
@@ -110,7 +116,7 @@ export function instanceActions(doc, instance, { row, invoke, openLifecycle, ope
     menu.style.top = `${Math.max(8, y + size.height + 8 <= win.innerHeight ? y : y - size.height - (at ? 0 : box.height))}px`;
   };
   const open = (action, place = null) => {
-    if (blocked() || !visible(row) || !owns()) return;
+    if ((blocked() && !hasAlways) || !visible(row) || !owns()) return;
     at = place;
     if (menu.dataset.instanceMenuOpen !== "true") menu.showPopover();
     position();
@@ -128,7 +134,7 @@ export function instanceActions(doc, instance, { row, invoke, openLifecycle, ope
     whenRightButtonReleased(event, () => {
       if (!owns() || !visible(row)) return;
       const why = heldReason();
-      if (why !== null) { say(why); return; }
+      if (why !== null && !hasAlways) { say(why); return; }
       open(undefined, place);
     });
   });
@@ -136,7 +142,7 @@ export function instanceActions(doc, instance, { row, invoke, openLifecycle, ope
   // Both native dismissal and explicit close update the menu's state.
   menu.addEventListener("beforetoggle", (event) => {
     const expanded = event.newState === "open";
-    if (expanded && (!owns() || blocked() || !visible(row))) { event.preventDefault(); return; }
+    if (expanded && (!owns() || (blocked() && !hasAlways) || !visible(row))) { event.preventDefault(); return; }
     if (expanded) syncOptions();
     menu.dataset.instanceMenuOpen = String(expanded);
     for (const item of items) {
@@ -168,7 +174,7 @@ export function instanceActions(doc, instance, { row, invoke, openLifecycle, ope
   });
   async function execute(action) {
     const item = items.find(row => row.dataset.action === action);
-    if (!item || !owns() || !visible(row) || !item.isConnected || blocked() || item.disabled || reasonFor(action) || pending.has(key)) return;
+    if (!item || !owns() || !visible(row) || !item.isConnected || (blocked() && !isAlways(action)) || item.disabled || reasonFor(action) || pending.has(key)) return;
     close(true);
     if (action === 'forget') { openForget(instance); return; } // the confirmation sends, never this menu
     if (action === 'stop' || action === 'retire') {
@@ -189,7 +195,7 @@ export function instanceActions(doc, instance, { row, invoke, openLifecycle, ope
   // retired, its Retire secondary) offers Retire alone, and the caller's items marked `always` (Details, slice 6a:
   // every row's, held included, a read of what the roster knows).
   // An act listed with a reason (Start on a row whose session backend is gone) stays visible, disabled, with it.
-  const descriptors = forgets ? [{ action: 'forget', label: LABELS.forget }] : [...(offer.blocked || offer.limited ? extra.filter(row => row.always === true) : extra),
+  const descriptors = forgets ? [...extra.filter(row => row.always === true), { action: 'forget', label: LABELS.forget }] : [...(offer.blocked || offer.limited ? extra.filter(row => row.always === true) : extra),
     ...offer.acts.map(({ verb, reason, secondary }) => ({ action: verb, label: LABELS[verb], ...(reason ? { reason: reasonLine(reason) ?? '', unavailable: true } : {}),
       ...(secondary ? { secondary: true } : {}) }))];
   for (const descriptor of descriptors) {
@@ -204,11 +210,12 @@ export function instanceActions(doc, instance, { row, invoke, openLifecycle, ope
     if (actionId) { const hint = doc.createElement('kbd'); hint.dataset.shortcut = actionId; hint.textContent = shortcut(actionId) || ''; hint.hidden = !hint.textContent; item.append(hint); }
     if (reason !== undefined) { const note = doc.createElement('small'); item.append(note); }
     item.addEventListener('click', () => {
-      if (!owns() || !item.isConnected || item.disabled || blocked()) return;
+      if (!owns() || !item.isConnected || item.disabled || (blocked() && !isAlways(action))) return;
       if (actionId && typeof dispatch === 'function') dispatch(actionId); else void execute(action);
     });
     items.push(item); menu.append(item);
   }
+  hasAlways = descriptors.some(row => isAlways(row.action));
   syncOptions();
   return menu;
 }

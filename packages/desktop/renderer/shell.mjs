@@ -1531,6 +1531,12 @@ function pendingSpawnRow(i, startedAt = null, relation = "") {
   if (since) { const line = document.createElement("span"); line.className = "ctx-meta ctx-held-hint ctx-spawn-since"; line.textContent = `since ${since}`; copy.append(line); }
   row.append(mark, copy);
   row.tabIndex = -1;
+  // i: Details for a row the roster reports (slice 6a: every row's way in; its facts moved from the tooltip there).
+  // A row only this window knows (no home reported yet) has no facts to show.
+  if (reported) row.addEventListener("keydown", (e) => {
+    if (e.key !== "i" || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault(); openDetailsTab(i);
+  });
   row.addEventListener("keydown", onRosterRowKey);
   rowWrap.append(row);
   if (unknown) {
@@ -1891,6 +1897,11 @@ function detailsContext(ws) {
     detailsScope: () => ({ deployments: contextDeployments, here: thisHostName }),
     detailsWorkspace: (r) => rowDeployment(r),
     createGitPanel: (host) => createDetailsGitPanel(host),
+    // The soul as this agent was spawned from it (its own `oats inspect --home` read: capabilities, core first).
+    createSoulSection: (host) => createInstanceSoulSection(host, { generation: workspaceGeneration,
+      request: (workspace, body) => api(`/api/capabilities?ws=${encodeURIComponent(workspace)}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      }) }),
     createTeamsSection: (host) => createInstanceTeamsSection(host, { generation: workspaceGeneration,
       request: (workspace, body) => api(`/api/capabilities?ws=${encodeURIComponent(workspace)}`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
@@ -1916,7 +1927,8 @@ function detailsContext(ws) {
 }
 /** The agent Details opens for: the roster's focused row, else the active terminal's agent, else the open Details'. */
 function detailsTarget() {
-  const focusedRow = document.activeElement?.closest?.(".ctx-inst")?.dataset.treeInstance;
+  // The leader's target: the row, one of its tools, or an item of its context menu beside it (leaderTargetId).
+  const focusedRow = leaderTargetId(document.activeElement);
   const rows = shownRows(contextInstances);
   if (focusedRow) { const row = rows.find((r) => instanceId(r) === focusedRow); if (row) return row; }
   const active = tabs.get(activeTab);
@@ -3948,7 +3960,8 @@ function restoreWorkspaceTabs() {
   tabOpenIntents.invalidate();
   workspaceLabel.reset(currentWorkspace());
   // Where the keyboard was in the workspace left (focus-place.mjs), taken before its tabs are hidden.
-  const leaving = tabWorkspace, leavingPages = takePageTabs(leaving);
+  // The active tab and the page tabs, taken before the tab layer hides (which clears the active tab).
+  const leaving = tabWorkspace, leavingPages = takePageTabs(leaving), leavingActive = activeTab;
   workspaceTabMemory.remember(tabWorkspace, { split, activeTab, sidebarMode, tabLayerVisible, place: focusPlaces.take(tabWorkspace) });
   // Hide synchronously and park ALL nodes before replacing group identities.
   // Workspace-local group ids can overlap; deleting old cells first would
@@ -3956,7 +3969,7 @@ function restoreWorkspaceTabs() {
   showTabLayer(false);
   // Its page tabs close (slice 6a: a page reads the current workspace, and the Workspace and Automations views hold
   // one module state); the memory keeps them, by page and group, and reopens them when the workspace comes back.
-  closePageTabs(leaving, leavingPages);
+  closePageTabs(leaving, leavingPages, leavingActive);
   renderSplit(false);
   tabWorkspace = currentWorkspace();
   const restored = workspaceTabMemory.recall(tabWorkspace, tabs);
@@ -3985,11 +3998,11 @@ function takePageTabs(ws) {
   return [...tabs].filter(([, t]) => t.kind === "page" && t.workspace === ws)
     .map(([id, t]) => ({ id, page: t.page, group: groupOfTab(split, id)?.id ?? null, active: id === activeTab }));
 }
-function closePageTabs(ws, pages) {
+function closePageTabs(ws, pages, active = activeTab) {
   if (!ws) return;
   const groups = split ? split.groups.map((g) => ({ id: g.id, tabs: [...g.tabs], active: g.activeTab })) : null;
   workspacePages.set(ws, { pages: pages.map(({ id, page, group, active }) => ({ id, page, group, active })), groups,
-    focused: split?.focusedGroup ?? null, active: activeTab });
+    focused: split?.focusedGroup ?? null, active });
   for (const { id } of pages) closeTab(id, false, { explicit: false, passive: true });
 }
 /** Reopen the page tabs a workspace had, each in its group; then every group's strip order and active member, the

@@ -504,12 +504,15 @@ repository, branch), who started it and when, whether it does its parent's
 work ("same work as …"), its session and its messaging address, and Needs
 input while it waits on you. One row of buttons opens its terminal, starts,
 restarts, stops or retires it with today's dialogs, opens its pull request,
-and opens its soul's files. Folded under them: **Messaging & teams**, **Git**
+and opens its soul's files. Folded under them: **Soul as spawned** (its
+capabilities, core first, as it was spawned), **Messaging & teams**, **Git**
 (its changes, its worktree and its pull request) and **Recent events** (its
 reported lifecycle activity, read when you ask; it was the Machines
 canvas's popup). Its kernel name, home and address close it, on one dim
 line. One Details tab per workspace follows the agent you asked for, titled
-by its name. A terminal tab no longer opens a panel beside it, and a row's
+by its name. Details is on every row's menu, a held or unreachable one's too
+(it only reads), and `i` works on a row still being spawned once OATS reports
+it. A terminal tab no longer opens a panel beside it, and a row's
 tooltip is its name and state: the keyboard and the mouse both read the rest
 in Details.
 

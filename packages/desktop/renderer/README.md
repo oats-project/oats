@@ -2475,10 +2475,13 @@ doesn't read already:
   group whose active tab doesn't move by its newest terminal.
 - **Details** (`views/details.mjs`, kind `"details"`, keyed per workspace): an agent's static facts for any row,
   from the roster model's current row (`detailsContext`: `detailsRow`, `subscribeDetails`, the stale rule, the
-  scope); its action row through today's dialogs; folded Messaging & teams (instance-teams.mjs), Git
+  scope); its action row through today's dialogs; folded Soul as spawned (instance-soul.mjs), Messaging & teams
+  (instance-teams.mjs), Git
   (instance-git.mjs, `createDetailsGitPanel`) and Recent events (instance-events-view.mjs). One per workspace,
-  retargeted by `openDetailsTab(row)` (`i` on a row, `panel.toggle`, the row's menu item, marked `always` and
-  `secondary`, and the palette, which reads its captured target). A terminal tab brings no instance panel.
+  retargeted by `openDetailsTab(row)` (`i` on a row, a reported pending row too, `panel.toggle`, the row's menu
+  item, marked `always`, usable on a held, blocked or stale row whose acts wait, and `secondary`, never the default,
+  and the palette, which reads its captured target). Its header, facts and actions repaint with each roster change;
+  its folds stay in place (focus and their reads survive), and the events view is built connected and synced. A terminal tab brings no instance panel.
 - **The row's act** (`activateRosterRow`): one model-level act, with the row's gates, for the row's click, Home
   (`ctx.openAgent`) and the rail; no sidebar DOM is read.
 - **Home's roster signal** (`rosterModelChanged`): each paint of the roster model tells Home, the rail and Details,

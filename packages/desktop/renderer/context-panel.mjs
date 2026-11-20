@@ -171,10 +171,10 @@ const WORK_MODES = Object.freeze({ __proto__: null,
   directory: { icon: 'folder', sentence: () => ['Has its own folder, not tied to one repository: free to work across repos as its task needs.'] },
   workspace: { icon: 'layers', sentence: () => ['Sees the whole workspace: reads across every member repository.'] } });
 /** Modes whose <home>/work is a link to a tree other instances share (the kernel symlinks it). */
-const LINKED = new Set(['checkout', 'attached', 'workspace']);
+export const LINKED = new Set(['checkout', 'attached', 'workspace']);
 /** The repository the Work sentence names: a local row's repoName; a remote row's own `repo` (a host
  * path, its last segment, for display only: a remote row's repoName is its server's label). */
-function workRepo(instance) {
+export function workRepo(instance) {
   if (!instance?.server) return instance?.repoName;
   return typeof instance.repo === 'string' ? instance.repo.replace(/\/+$/, '').split('/').pop() : null;
 }
@@ -193,7 +193,7 @@ export function remoteWorkNote(instance) {
 /** The folder an instance works in: <home>/work in every mode (a real folder for worktree and
  * directory, a link to the shared tree otherwise). Joined with the home's own separator, so a
  * Windows home stays a Windows path; null without a home. */
-function workFolder(home) {
+export function workFolder(home) {
   if (typeof home !== 'string' || !home) return null;
   const sep = home.includes('\\') && !home.includes('/') ? '\\' : '/';
   return `${home.replace(/[\\/]+$/, '')}${sep}work`;
