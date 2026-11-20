@@ -696,7 +696,7 @@ test('the palette keeps focus mode reachable without the bar and names the insta
   const start = source.indexOf('// ── command palette');
   const end = source.indexOf('// ── Quick Open', start);
   const commands = runInNewContext(`${source.slice(start, end)}\npalette.commands`, {
-    ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options, takePickerFocusReturn: () => null,
+    ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options, takePickerFocusReturn: () => null, paletteTargetId: null,
   });
   assert.equal(commands.some(item => /context panel/i.test(item.label)), false, 'the panel is the instance panel now');
   const panelCommand = commands.find(item => item.label === 'Agent: Details'); assert.ok(panelCommand, "slice 6a: panel.toggle is Agent: Details");
