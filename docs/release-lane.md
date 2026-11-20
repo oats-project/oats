@@ -516,10 +516,11 @@ When the diff is not empty:
    `oats-framework/v<version>` on its merge commit and push it. No workflow
    runs on this tag.
 3. **The pin**, in the kernel release-prep PR: `package-catalog.json`
-   (`ref`), `oats-workspace.yaml`, and the version literals in
-   `docs/official-catalog.md`, `docs/packages.md`, `docs/workspaces.md`,
-   `skills/oats-getting-started/SKILL.md` and
-   `test/release-packaging.test.mjs`. The pin does not ride the first PR:
+   (`ref`) and `oats-workspace.yaml`; update current documentation and skill
+   recommendations to match the catalog, then run
+   `node scripts/check-mirrors.mjs --verify` and `npm run validate`. Tests
+   read the catalog instead of carrying another release literal.
+   The pin does not ride the first PR:
    the tag needs the bumped manifest on `main` first, and CI reads the
    catalog's ref from the remote. Two tests in
    `test/hook-events-forward-tolerant.test.mjs` sync a deployment that takes

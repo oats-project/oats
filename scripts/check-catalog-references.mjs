@@ -1,5 +1,5 @@
 // Current package recommendations stay tied to package-catalog.json. Dated
-// design records, release notes and upgrade history intentionally retain old
+// design/plan records, release notes and upgrade history intentionally retain old
 // versions; version floors are compatibility requirements, not release pins.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -25,7 +25,7 @@ export function checkCatalogReferences(root) {
   function walk(dir) {
     if (!existsSync(dir)) return;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isDirectory() && !["design", "release-notes", "acceptance-runs"].includes(entry.name)) walk(join(dir, entry.name));
+      if (entry.isDirectory() && !["design", "plans", "release-notes", "acceptance-runs"].includes(entry.name)) walk(join(dir, entry.name));
       else if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "upgrading.md") files.push(join(dir, entry.name));
     }
   }
@@ -38,6 +38,9 @@ export function checkCatalogReferences(root) {
       const [, id, ref] = match;
       if (!catalog[id]) continue;
       assert.equal(ref, versionRef(id), `${file}: ${id} recommended pin differs from catalog`); examples++;
+    }
+    for (const [ref] of text.matchAll(/\boats-framework\/v\d+\.\d+\.\d+\b/g)) {
+      assert.equal(ref, catalog["oats.framework"]?.ref, `${file}: framework recommended pin differs from catalog`); examples++;
     }
     // The authoritative catalog table uses the complete ref (framework has a
     // tag prefix), rather than a bare workspace version.

@@ -11,6 +11,7 @@ import { isDeepStrictEqual } from "node:util";
 import { basename, dirname, isAbsolute, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkOkfMirror, payloadEntries } from "./check-okf-mirror.mjs";
+import { parseConfigData } from "../lib/config-data.mjs";
 import { currentRepoKey } from "../lib/repo-moves.mjs";
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -78,7 +79,7 @@ export function checkMirrors({ repoRoot = REPO_ROOT } = {}) {
     }
   }
   // Preserve the OKF gate's immutable-release, wrapper and soul/trigger checks.
-  if (existsSync(join(repoRoot, "scripts/okf-source-inventory.json"))) {
+  if (catalog["oats.okf"]) {
     const okf = checkOkfMirror({ repoRoot });
     assert.equal(catalog["oats.okf"]?.ref, `v${okf.version}`, "OKF catalog pin drift");
     assert.equal(okf.release.status, "published", "OKF mirror must come from the published catalog tag");
@@ -86,6 +87,12 @@ export function checkMirrors({ repoRoot = REPO_ROOT } = {}) {
     assert.equal(okf.distributionPath, catalog["oats.okf"].path);
     expected.push(...okf.mirrorPaths.map(path => basename(path))); packages["oats.okf"] = okf;
   }
+  // The framework lives in oats-package/. Every other package this workspace
+  // pins must have a mirror inventory; deleting its record and payload cannot
+  // silently remove the gate. Synthetic workspaces follow the same rule.
+  const workspace = parseConfigData(readFileSync(join(repoRoot, "oats-workspace.yaml"), "utf8")).value;
+  const mirroredPackages = Object.keys(workspace.packages ?? {}).filter(id => id !== "oats.framework");
+  assert.deepEqual(Object.keys(packages).sort(), mirroredPackages.sort(), "workspace package mirror inventory set differs");
   assert.equal(new Set(expected).size, expected.length, "two packages claim the same mirror");
   directory(join(repoRoot, "mirrors"));
   assert.deepEqual(readdirSync(join(repoRoot, "mirrors")).sort(), expected.sort(), "mirror directory set drift (unrecorded or missing mirror)");

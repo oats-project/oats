@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { checkCatalogReferences } from "../scripts/check-catalog-references.mjs";
 import { checkMirrors, generateMirror, INVENTORY_PATH, REPO_ROOT } from "../scripts/check-mirrors.mjs";
@@ -24,6 +24,7 @@ function fixture(t, { rootCapability = false } = {}) {
   symlinkSync("tool.mjs", join(source, capRoot, "alias.mjs"));
   git("add", "."); git("commit", "-qm", "fixture"); git("tag", "v1.0.0"); git("push", "-q", "origin", "refs/tags/v1.0.0");
   write(join(root, "package-catalog.json"), JSON.stringify({ packages: { "oats.fixture": { url: origin, ref: "v1.0.0", path: "oats-package" } } }));
+  write(join(root, "oats-workspace.yaml"), "packages:\n  oats.fixture: v1.0.0\n");
   mkdirSync(join(root, "mirrors")); mkdirSync(join(root, "scripts"));
   const object = (type, input, literal = false) => execFileSync("git", ["hash-object", "-w", "-t", type, ...(literal ? ["--literally"] : []), "--stdin"], { cwd: source, env, input, encoding: "utf8" }).trim();
   return { root, source, git, origin, object };
@@ -182,4 +183,46 @@ test("a git workspace pin must name the catalog repository as well as its ref", 
     write(workspace, `packages:\n  oats.fixture: git:github.com/${repo}@v1.0.0\n`);
     checkCatalogReferences(f.root);
   }
+});
+
+function verificationSnapshot(t) {
+  const root = mkdtempSync(join(REPO_ROOT, ".agents/mirror-snapshot-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  for (const path of ["package-catalog.json", "oats-workspace.yaml", "scripts/mirror-source-inventory.json", "scripts/okf-source-inventory.json", "mirrors"]) {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    cpSync(join(REPO_ROOT, path), join(root, path), { recursive: true, verbatimSymlinks: true });
+  }
+  return root;
+}
+
+test("offline verification requires OKF provenance even when all OKF mirrors are removed", t => {
+  const root = verificationSnapshot(t);
+  checkMirrors({ repoRoot: root });
+  const inventory = JSON.parse(readFileSync(join(root, "scripts/okf-source-inventory.json"), "utf8"));
+  rmSync(join(root, "scripts/okf-source-inventory.json"));
+  for (const path of inventory.mirrorPaths) rmSync(join(root, path), { recursive: true });
+  assert.throws(() => checkMirrors({ repoRoot: root }), /okf-source-inventory/);
+});
+
+test("offline verification requires every workspace-pinned mirror inventory", t => {
+  const root = verificationSnapshot(t), file = join(root, INVENTORY_PATH);
+  const inventory = JSON.parse(readFileSync(file, "utf8"));
+  delete inventory.packages["oats.jira"];
+  writeFileSync(file, JSON.stringify(inventory));
+  rmSync(join(root, "mirrors/oats-jira"), { recursive: true });
+  assert.throws(() => checkMirrors({ repoRoot: root }), /workspace.*mirror inventory/);
+});
+
+test("full framework tag references in prose match the catalog", t => {
+  const f = fixture(t), file = join(f.root, "package-catalog.json");
+  const catalog = JSON.parse(readFileSync(file, "utf8"));
+  catalog.packages["oats.framework"] = { url: "https://github.com/awebai/oats.git", ref: "oats-framework/v2.0.0", path: "oats-package" };
+  writeFileSync(file, JSON.stringify(catalog));
+  write(join(f.root, "oats-workspace.yaml"), "packages:\n  oats.fixture: v1.0.0\n");
+  const doc = join(f.root, "docs/example.md");
+  write(doc, "Use `oats-framework/v2.0.0`.\n");
+  write(join(f.root, "docs/plans/completed-release.md"), "Historical release: `oats-framework/v1.0.0`.\n");
+  checkCatalogReferences(f.root);
+  write(doc, "Use `oats-framework/v1.0.0`.\n");
+  assert.throws(() => checkCatalogReferences(f.root), /framework.*pin differs/);
 });
