@@ -209,6 +209,16 @@ the locked package versions with `oats instance upgrade`. Member modules and
 the soul body still require a new spawn. See
 [upgrading package modules](upgrading.md#moving-existing-homes-to-locked-package-versions).
 
+A home on a session provider carries, in its receipt outside the home, the
+record of what it was spawned with: the digest of each module copy and its
+capability rows (the receipt's `composition`). The kernel runs such a
+home's modules and reads their settings by that record, never by the home's
+own `instance.json`, and `oats instance upgrade` rewrites the record in the
+step that moves the copies. Such a home's upgrade is not undone (`--undo`)
+and an interrupted one is not resumed: both would rest on files in the
+home. See
+[What the kernel trusts in a provider home](capabilities.md#what-the-kernel-trusts-in-a-provider-home).
+
 ### The harness starts normally
 
 OATS is a skill contributor, not a skill sandbox. The harness (pi, Claude Code,

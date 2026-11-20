@@ -2108,7 +2108,8 @@ In:
   "args": ["--flag", "value"],
   "promptFile": "/abs/home/TASK.md",
   "previous": null,
-  "sandbox": { "domains": [], "write": [ { "path": "/abs/deployment/.agents/events", "reason": "oats events" } ], "missing": [] } }
+  "sandbox": { "domains": [], "write": [ { "path": "/abs/deployment/.agents/events", "reason": "oats events" } ], "missing": [] },
+  "trees": ["/abs/home/work", "/abs/home/.work-docs"] }
 ```
 
 - `env` is every variable the launch sets, in the order a tmux launch sets
@@ -2137,6 +2138,18 @@ In:
   it since may have had you restart it).
 - `sandbox` is what you may widen your harness's sandbox by, and nothing
   else: [Sandbox allowances](#sandbox-allowances-sandboxdomains-the-launch-inputs-sandbox).
+- `trees` is the home's trees, as absolute paths: `<home>/work`, always and
+  first, then every extra tree of the home (`oats worktree add`). An extra
+  tree is what Git itself says is one, a registered linked worktree of a
+  repository outside the home, read with the kernel's own hardened Git;
+  nothing in the home's `instance.json` names a tree. A provider that runs
+  its harness in a sandbox keeps each tree's `.git` pointer, and the
+  `config` and `hooks` of its Git directory and of its common directory,
+  unwritable from the session, and refuses a launch it would sandbox without
+  `trees`. One limit to know: the list of a repository's worktrees is in its
+  common Git directory, so a session that can write there can take a tree
+  off the list, and that tree is then no longer sent. `<home>/work` always
+  is.
 
 **A provider that cannot carry an env entry, an argument or `unset`
 refuses, naming it** (`E_BACKEND_LAUNCH_ENV`, `E_BACKEND_LAUNCH_ARG`). It
@@ -2226,8 +2239,8 @@ started by a killed spawn is ever stopped.
 
 The provider's readiness. In: `{ "home": "/abs/home" | null, "soul": "<name>" | null, "settings": { … } }`:
 a home, or, before any home exists, a soul; and, before a launch,
-`"launch": { "harness", "yolo", "args", "sandbox" }`, the launch that is
-planned: the harness, yolo and the allowances as its launch input will
+`"launch": { "harness", "yolo", "args", "sandbox", "trees" }`, the launch that is
+planned: the harness, yolo, the allowances and the trees as its launch input will
 carry them, and in `args` the launch configuration's own arguments. **The
 arguments a capability's hooks contribute are not in it**: the check runs
 before any hook, and those reach the launch input only. Out:
@@ -2247,6 +2260,80 @@ from, never print it.
   problems. A refused spawn runs no hook and leaves no home; a refused
   start or restart runs no hook and stops nothing. A check that fails or
   answers outside these words is not ready.
+
+### What the kernel trusts in a provider home
+
+A provider may run its harness in a sandbox that still lets the agent write
+its own home. The kernel that runs the home's hooks and your commands runs
+outside any sandbox, as the operator. So, for a home on a session provider,
+**nothing the kernel runs, and no capability setting it hands to what it
+runs, is taken from the home alone**:
+
+- **The receipt records the home's composition.** The home's receipt, which
+  the kernel keeps outside the home
+  (`<instances>/.oats-retirement/baselines/`), carries `composition`: the
+  digest of every module copy under `<home>/.oats/modules/` as the spawn
+  made it, with its size, and the capability rows the spawn resolved from
+  the deployment (each capability's settings, their origins, its hook
+  commands and its level). `oats instance upgrade` rewrites it in the step
+  that moves the copies.
+- **A module copy is run only when it digests to that record.** The copy is
+  hashed whole at every use, and nothing is remembered between two uses (a
+  file's time stamp can be set back): before each of your commands (when the
+  kernel binds the provider, and again right before the call), before each
+  lifecycle hook and each worktree hook, before a capability's readiness
+  check, and before a command or an operation dispatched in the home. A
+  launch checks every copy of the home first, since its plan reads all
+  their manifests. A file changed, added, removed or exchanged for a link
+  makes the copy another one. The read is bounded by the size the spawn
+  recorded, so a large file put in a home costs no more than the copy's own
+  size.
+- **A capability's settings and hook commands are the receipt's.**
+  `OATS_SETTINGS`, `OATS_SETTINGS_ORIGINS`, which hooks a capability has and
+  the command of each come from the receipt's rows, never from
+  `instance.json` (`capabilityRuntime`, `capabilities`, `providers`, the
+  recorded launch contributions) nor from a rollback marker. A capability
+  the home's record adds is no capability of the home.
+- **What a copy that differs does.** The call is refused with a sentence
+  that names the module. A read (`oats session inspect`, a status row, the
+  sweep's plan, readiness) then shows the home **unavailable**
+  (`E_SESSION_UNAVAILABLE`; `running: null`, `runtimeState: "unreachable"`),
+  never stopped. A start or a restart is refused before the check, any hook
+  and any stop. A hook that may not run counts as a failed required hook: a
+  retire stops the session through the provider when the provider's own
+  copy is the recorded one, runs the other capabilities' retire hooks,
+  names the one it did not run, and removes the home only with `--force`.
+  The remedy is to retire the instance and spawn it again.
+- **An upgrade** of such a home starts only from copies the receipt
+  records, and is neither undone (`--undo`) from the copies kept in the home
+  nor resumed from the journal in the home: both are where the agent can
+  write. An upgrade that was interrupted is finished by respawning.
+- **A home spawned before this record existed** (its receipt has no
+  `composition`) runs none of its capabilities and reads unavailable; its
+  message says to retire it and spawn it again.
+
+Your own part, if you sandbox: **keep `<instances>/.oats-retirement/`
+unwritable from the session**, by the harness's shell and by its file tools
+alike. It holds the receipts (the composition above, the session's
+endpoint), the lifecycle claims and the kernel's records of provider
+commands in flight. Every check above compares the home with its receipt,
+so a session that can write the receipt can make the kernel run anything.
+The kernel cannot check this for you: it does not run your sandbox.
+
+What this does not cover: other fields of `instance.json` still reach hooks
+and your commands (the recorded teams, the harness, the soul directory,
+`OATS_META`, the recorded launch). Nothing here makes a provider's sandboxed
+mode a security boundary between an agent and the operator's account.
+
+A tmux home is unchanged, and why: its agent already runs unsandboxed as
+the operator, and can do directly whatever a module it rewrote could. Its
+receipt gains no key and nothing of it is hashed.
+
+Every Git the kernel runs over a provider home's trees, or over their
+repository, runs with the repository's hooks and its file monitor off
+(`-c core.fsmonitor=false -c core.hooksPath=/dev/null`): the reads and a
+retire, as for every home, and also the spawn's `git worktree add`, its
+rollback, and `oats worktree add` and `remove`.
 
 ### Sandbox allowances (`sandboxDomains`, the launch input's `sandbox`)
 

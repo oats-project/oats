@@ -193,6 +193,13 @@ test("a provider home whose receipt records no composition runs none of its capa
   assert.deepEqual([rowOf(fx, "before").running, rowOf(fx, "before").runtimeState], [null, "unreachable"]);
   assert.equal(await codeOf(() => fx.inEnv(() => restartInstanceSession(home))), "E_SESSION_UNKNOWN");
   assert.deepEqual(fx.calls(), []);
+  // It can still be taken away: not without --force (its hooks cannot be identified), and with it.
+  const refused = fx.cli(["retire", "before", "--json"]);
+  assert.equal(existsSync(home), true, refused.stdout + refused.stderr);
+  const forced = fx.cli(["retire", "before", "--force", "--json"]);
+  assert.equal(JSON.parse(forced.stdout).retired, "before", forced.stdout + forced.stderr);
+  assert.equal(existsSync(home), false);
+  assert.deepEqual(fx.calls(), [], "and nothing of the home was run for it");
 });
 
 // (A tmux spawn needs a harness on this machine: this one runs where the tmux tests run.)
