@@ -1,8 +1,9 @@
 /* oats desktop — the sidebar roster's disclosure (the product owner, 2026-11-19).
 
    A row with children in its own section (the main tree or the Background section, and a deployment's part of
-   it) shows that it has them: a chevron and the count of the rows under it, first on its name line, before the
-   name, where the row tools overlaying the row's end on hover never cover it (review round 3). The chevron points
+   it) shows that it has them: a chevron and the count of the rows under it, on its name line right after the name
+   (the product owner, 2026-11-20: "so that all instance names look aligned on the left"; an instance row has had no
+   tools over its end since slice 1 of the Desktop UI rework). The chevron points
    right while the row is collapsed and down while it is open. A click on it opens or closes the row; a click on
    the rest of the row opens its terminal as before. The keys stay the tree's (roster-keys.mjs: Right opens,
    Left closes), and the row's own `aria-expanded` says the state, so the mark adds no tab stop.
@@ -83,7 +84,7 @@ export function rowsUnder(children, id) {
 }
 
 /** The mark on a parent's name line (`mark`, `span.ctx-disclosure`, aria-hidden): the chevron and the count of the
- * rows under it, which the shell puts before the name. It is not a control of its own: the shell's row click opens or
+ * rows under it, which the shell puts right after the name. It is not a control of its own: the shell's row click opens or
  * closes the row when the click lands on it. A screen reader hears the row's `aria-expanded` and `spoken`, the hidden
  * words ", N below", which the shell puts after the name so the name is still said first. */
 export function rowDisclosure(doc, { count }) {

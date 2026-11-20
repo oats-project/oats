@@ -348,8 +348,9 @@ body {
 .ctx-new { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 10.5px; font-weight: 600; line-height: 15px; }
 .ctx-new-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--accent); }
 /* The disclosure (the product owner, 2026-11-19; roster-disclosure.mjs): a parent's chevron and the count of the rows
-   under it, first on the name line, before the name: the row tools that overlay the row's end on hover never cover
-   it (review round 3). In the meta line's muted ink. The chevron points right while the row is
+   under it, on the name line right after the name (the product owner, 2026-11-20), so every name starts on its
+   level's column; a long name ellipsizes before it, and an instance row has no tools over its end (slice 1) to cover
+   it. In the meta line's muted ink. The chevron points right while the row is
    collapsed and down while it is open; nothing animates. A click on the mark opens or closes the row: it lifts to
    the text colour with a border ring on hover, and its 1px padding sits in a -1px margin, so the 15px name line
    never grows. */
