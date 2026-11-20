@@ -351,7 +351,7 @@ for `--no-recursive`) is never ignored.
 | `oats worktree remove` | none | `--purpose` | `--json` | `--server`, `--dir`, `--home` | none |
 | `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | `--native-record` | none |
 | `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--native-record`, `--resume` | none |
-| `oats session resume` | none | `--deployment` | `--plan`, `--json` | `--native-record`, `--server` | none |
+| `oats session resume` | none | `--deployment` | `--plan`, `--without-provider-inspect`, `--json` | `--native-record`, `--server` | none |
 | `oats session input` | none | `--home`, `--text-file` | `--json` | `--native-record` | none |
 | `oats session receive` | none | `--home`, `--name` | `--json` | `--native-record` | none |
 | `oats session upload` | none | `--file`, `--home`, `--instance`, `--server` | `--json` | `--native-record` | none |
@@ -7554,7 +7554,15 @@ required for a soul.
 (the home's resume cap; `code: "E_SESSION_NOT_RUNNING"`) or `start-refused`
 (the notice was not sent: a prompt or a claim is open, or it was queued),
 `skipped` with `unknown` (not readable, or a process of the last run still
-works in the home). A home an operator stopped has no row.
+works in the home). A home an operator stopped has no row. `--plan
+--without-provider-inspect` asks no session provider: every provider home
+OATS has not stopped is then `skipped`, `unknown`, with its `backend`
+(`E_BAD_ARGS` without `--plan`). `oats host run` lists with it at shutdown.
+
+**Launch preview.** `oats launch-config preview --home <abs> --json` of a
+provider home answers `command: null`, `argv: null` and `executable.path:
+null` (its launch is handed to the provider as data), `environment` by name,
+and a `backend` item in `preflight`.
 
 ### Input
 

@@ -7,7 +7,7 @@
 // (session-provider-older-kernel.test.mjs).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -91,7 +91,9 @@ test("T1: a spawn with --backend fake launches through the provider and records 
   fx.clearCalls();
   const started = fx.cli(["session", "start", "--home", home, "--json"]).json();
   assert.equal(started.ok, true, JSON.stringify(started));
-  assert.deepEqual(fx.calls().map((c) => [c.hook ?? c.verb, c.backend]), [["launch", "fake"], ["launch", "fake"]]);
+  // The launch hook, then the provider: its stop once more (a start never launches beside a session
+  // a stop did not finish), then its launch.
+  assert.deepEqual(fx.calls().map((c) => [c.hook ?? c.verb, c.backend]), [["launch", "fake"], ["stop", "fake"], ["launch", "fake"]]);
   assert.equal(fx.hooks("launch").length, 1);
   assert.deepEqual(fx.verbs("launch")[0].request.input.previous, endpoint, "the launch is handed the endpoint it replaces");
   assert.deepEqual([started.result.session, started.result.backend, started.result.target], [{ provider: FAKE_CAPABILITY, endpoint: endpointOf("one", 2) }, "fake", null], "a local start answers the endpoint, and `target: null`");
@@ -585,6 +587,101 @@ test("T11: a provider without inspectMany is asked per home; homes with differen
     ["inspectMany", ["default-a", "default-b"], {}],
     ["inspectMany", ["other-server"], { server: "http://127.0.0.1:10" }],
   ]);
+});
+
+test("T4: a stop that lands while an input runs still wins: the input is not delivered, and the session is stopped again", async (t) => {
+  // An input holds no claim, and a provider restarts a session on it. A stop that lands between
+  // the input's read of the receipt and its send, or during the send, must leave the home stopped.
+  const fx = providerDeployment(t);
+  const text = join(fx.base, "mail.txt");
+  writeFileSync(text, "aweb mail event received.\n");
+  const inputWhile = async (home, act) => {
+    const child = spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "oats.mjs"), "session", "input", "--home", home, "--text-file", text, "--json"], { cwd: fx.dep, env: fx.env, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    child.stdout.on("data", (d) => { out += d; });
+    const done = new Promise((resolve) => child.on("close", resolve));
+    await new Promise((r) => setTimeout(r, 900));
+    await act();
+    await done;
+    return JSON.parse(out.trim().split("\n").pop());
+  };
+  // 1. The stop lands while the input still reads the session (a slow inspect): nothing is sent.
+  const early = await fx.launch("early");
+  fx.control({ early: { inspect: { sleepMs: 2500 } } });
+  fx.clearCalls();
+  const refused = await inputWhile(early.home, () => fx.inEnv(() => stopInstanceSession(early.home, {})));
+  assert.deepEqual([refused.ok, refused.error.code], [false, "E_SESSION_NOT_RUNNING"]);
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspect", "stop"], "the stop was called; the input never was");
+  // 2. The stop lands while the provider is sending: the session it may have restarted is stopped again.
+  const late = await fx.launch("late");
+  fx.control({ late: { input: { sleepMs: 2500 } } });
+  fx.clearCalls();
+  const undelivered = await inputWhile(late.home, () => fx.inEnv(() => stopInstanceSession(late.home, {})));
+  assert.deepEqual([undelivered.ok, undelivered.error.code], [false, "E_SESSION_NOT_RUNNING"]);
+  assert.match(undelivered.error.message, /was stopped or restarted by OATS while this input was being sent; its fake session was asked to stop again, and the input is not delivered/);
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspect", "input", "stop", "stop"], "a second stop follows the input that crossed the first");
+  assert.equal(Number.isFinite(Date.parse(runtimeOf(late.home).stoppedAt)), true);
+  // 3. A restart lands while the input is sent: it went to the endpoint the restart replaced.
+  const moved = await fx.launch("moved");
+  fx.control({ moved: { input: { sleepMs: 2500 } } });
+  fx.clearCalls();
+  const stale = await inputWhile(moved.home, () => fx.inEnv(() => restartInstanceSession(moved.home, {})));
+  assert.deepEqual([stale.ok, stale.error.code], [false, "E_SESSION_NOT_RUNNING"]);
+  assert.deepEqual(fx.verbs("stop").map((c) => c.request.input.endpoint), [endpointOf("moved", 3), endpointOf("moved", 3)], "the replaced session is stopped by the restart, and again after the input that reached it");
+  assert.deepEqual(runtimeOf(moved.home).endpoint, endpointOf("moved", 4));
+});
+
+test("a start of a home whose last stop was not confirmed asks the provider to stop again before it launches", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("half");
+  fx.control({ stop: { exit: 1 } });
+  assert.equal(hostStop(fx, home).code, "E_SESSION_STOP_FAILED");
+  fx.clearCalls();
+  await assert.rejects(fx.inEnv(() => startInstanceSession(home, {})), (e) => e.code === "E_SESSION_STOP_FAILED" && /did not confirm that its last session stopped .*nothing was started/.test(e.message));
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["stop"], "no launch beside a session that may still run");
+  assert.deepEqual(runtimeOf(home).endpoint, endpointOf("half", 1), "the endpoint OATS can still address is kept");
+  fx.control({});
+  fx.clearCalls();
+  const started = await fx.inEnv(() => startInstanceSession(home, {}));
+  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.request.input.endpoint ?? c.request.input.previous]), [["stop", endpointOf("half", 1)], ["launch", endpointOf("half", 1)]]);
+  assert.deepEqual(started.session.endpoint, endpointOf("half", 2));
+});
+
+test("a listing bounds what it waits for a provider: the shutdown's plan asks none, and a batch that timed out is not asked again per home", async (t) => {
+  const fx = providerDeployment(t);
+  for (const name of ["slow-a", "slow-b"]) await fx.launch(name);
+  await fx.spawn("plain", { name: "on-tmux" });
+  // What `oats host run` lists with when the host stops: no provider is asked, so a provider that
+  // hangs (its server goes down with the host) cannot fail the listing, and every provider home
+  // OATS has not stopped still has its row, the one the run stops.
+  fx.control({ inspectMany: { sleepMs: 60_000 }, inspect: { sleepMs: 60_000 } });
+  fx.clearCalls();
+  const began = Date.now();
+  const plan = sweep(fx, "--plan", "--without-provider-inspect");
+  assert.equal(plan.ok, true, JSON.stringify(plan));
+  assert.ok(Date.now() - began < 5000, "it does not wait for a provider");
+  assert.deepEqual(plan.result.rows.map((r) => [r.instance, r.outcome, r.reason, r.backend]), [["slow-a", "skipped", "unknown", "fake"], ["slow-b", "skipped", "unknown", "fake"]]);
+  assert.deepEqual(fx.verbs(), [], "no provider was called");
+  const noPlan = sweep(fx, "--without-provider-inspect");
+  assert.deepEqual([noPlan.ok, noPlan.error.code], [false, "E_BAD_ARGS"], "only a plan: a sweep that asks no provider cannot tell a lost session");
+  // A status that asks: a batch that timed out is every row's answer; the homes are not asked again
+  // one by one, each for the same timeout.
+  fx.clearCalls();
+  const rows = JSON.parse(fx.cli(["status", "--json"], { env: { OATS_TEST_SESSION_PROVIDER_TIMEOUT_MS: "400" } }).stdout).agents.flatMap((a) => a.instances);
+  assert.deepEqual(rows.map((r) => [r.instance, r.running, r.runtimeState ?? null]), [["slow-a", null, "unreachable"], ["slow-b", null, "unreachable"], ["on-tmux", false, null]]);
+  assert.match(rows[0].runtimeError, /did not answer inspectMany within/);
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspectMany"]);
+});
+
+test("oats launch-config preview of a provider home answers no command line", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("previewed");
+  const preview = fx.cli(["launch-config", "preview", "--home", home, "--json"]).json();
+  assert.equal(preview.ok, true, JSON.stringify(preview));
+  assert.deepEqual([preview.result.command, preview.result.argv, preview.result.executable.path, preview.result.harness, preview.result.ok], [null, null, null, "claude", true]);
+  assert.deepEqual(preview.result.environment, [{ name: "ACME_FAKE_TOKEN_FILE", redacted: true }]);
+  assert.equal(preview.result.preflight.find((c) => c.check === "backend").ok, true);
+  assert.equal(JSON.stringify(preview).includes("'null'"), false);
 });
 
 // --------------------------------------------------------------------------------- the other verbs

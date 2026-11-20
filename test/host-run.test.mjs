@@ -212,7 +212,7 @@ test("oats schedule host install --register-only records the scope in the host r
 
 // ------------------------------------------------------------------ the loop
 
-const SWEEP = "session resume --json", TICK = "schedule tick --host --json", LIST = "session resume --plan --json";
+const SWEEP = "session resume --json", TICK = "schedule tick --host --json", LIST = "session resume --plan --without-provider-inspect --json";
 const settle = () => new Promise((done) => setImmediate(done));
 const ok = (result) => ({ schemaVersion: 1, ok: true, result });
 /** A host run on a clock the test moves: `calls` every `oats` child it started (its argv, the time,

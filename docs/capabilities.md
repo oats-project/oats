@@ -2098,8 +2098,11 @@ In:
   starts on.
 - `resume` is always `null`: a provider home is resumed through `input`,
   never relaunched.
-- `previous` is the endpoint of the session a start or a restart replaces,
-  which the kernel has already stopped; `null` for the home's first launch.
+- `previous` is the endpoint of the session a start or a restart replaces;
+  `null` for the home's first launch. The kernel has asked you to stop it
+  just before (a restart's stop, or once more for a home OATS had stopped),
+  except where you answered that session as gone: a lost session is launched
+  over without a stop.
 
 **A provider that cannot carry an env entry, an argument or `unset`
 refuses, naming it** (`E_BACKEND_LAUNCH_ENV`, `E_BACKEND_LAUNCH_ARG`). It
@@ -2233,9 +2236,13 @@ the feature.
   An input you refuse (`ok: false`: nothing was sent) is not counted. One
   whose call fails or answers outside the rules stays counted: you may have
   restarted the session on it.
-- **`stop` is idempotent.** An operator's stop of a home that is already
-  stopped calls it again, which is how a stop you did not confirm is
-  finished. Answer `stopped: true` for a session that is already stopped.
+- **`stop` is idempotent.** The kernel calls it again wherever it needs the
+  session gone: an operator's stop of a home that is already stopped (how a
+  stop you did not confirm is finished), a start of a stopped home before
+  its launch, and after an input that crossed a stop (an input holds no
+  claim: when a stop or a restart lands while one is being sent, the kernel
+  asks you to stop that session again and does not deliver the input).
+  Answer `stopped: true` for a session that is already stopped.
 - **Nothing of your endpoint leaves the host.** A status row carries the
   capability and, on its own host only, the endpoint's `threadId` when it
   is a string; the endpoint is on local inspect, spawn and start answers.

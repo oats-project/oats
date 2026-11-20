@@ -1176,8 +1176,11 @@ function launchPreview(bail) {
   let plan;
   try { plan = planLaunch({ home, instance, meta, contextDir: context, agentLike, selection: sel, resolvedCfg: r, preview: true, pane: () => previewPaneEnvironment(meta ? { home, meta } : { deployment: context }) }); } catch (e) { bail(e.code || "E_BAD_ARGS", e.message); }
   const { recipe } = plan;
-  const command = renderLaunchRecipe(recipe, { home, instance, redact: true, trustHome: plan.trustHome });
-  const d = describeLaunchCommand(command);
+  // A home on a session provider has no command line: its launch is handed to the provider as data
+  // (`command` and `argv` null, the executable's path null); its environment is listed by name.
+  const onProvider = plan.command === undefined;
+  const command = onProvider ? null : renderLaunchRecipe(recipe, { home, instance, redact: true, trustHome: plan.trustHome });
+  const d = onProvider ? { argv: null, environment: [...Object.keys(recipe.hooks?.env || {}).sort().map((name) => ({ name, redacted: true })), ...Object.keys(recipe.env || {}).sort().map((name) => (typeof recipe.env[name] === "string" ? { name, redacted: true } : { name, reference: true }))] } : describeLaunchCommand(command);
   const environment = d.environment.map((e) => e.reference && recipe.env[e.name] && typeof recipe.env[e.name] === "object" ? { name: e.name, ...recipe.env[e.name] } : e);
   jsonOk({ context, selected, ...(plan.warnings?.length ? { warnings: plan.warnings } : {}), selection: { source: plan.selectionSource, launchConfig: recipe.launchConfig, harness: sel.harness ?? null, model: sel.model ?? null, yolo: sel.yolo ?? null }, harness: plan.harness, model: recipe.model, modelSource: plan.modelSource, yolo: recipe.yolo ?? null, launchConfig: recipe.launchConfig, launchConfigSource: recipe.launchConfigSource, launchConfigDefault: recipe.launchConfigDefault === true, executable: { path: plan.executable.path, declared: plan.executable.declared ?? null, resolvedFrom: plan.executable.resolvedFrom }, argv: d.argv, environment, command, prompt: recipe.prompt, hooks: redactLaunchRecipe(recipe).hooks, preflight: plan.preflight, ok: plan.ok });
 }
@@ -3621,7 +3624,7 @@ async function sessionCmd() {
       const deployment = flag("deployment");
       if (deployment === true || (typeof deployment === "string" && !deployment.trim())) throw Object.assign(new Error(`--deployment needs a deployment directory\n${usage}`), { code: "E_BAD_ARGS" });
       const { resumeSessions } = await import("../lib/session-resume.mjs");
-      const answer = await resumeSessions({ deployment, plan: args.includes("--plan"), kernel: { execPath: process.execPath, bin: CLI_BIN } });
+      const answer = await resumeSessions({ deployment, plan: args.includes("--plan"), askProviders: !args.includes("--without-provider-inspect"), kernel: { execPath: process.execPath, bin: CLI_BIN } });
       if (JSON_MODE) { jsonOk(answer); return; }
       for (const d of answer.deployments) console.log(`${d.deployment}: ${d.swept ? "swept" : `not swept (${d.reason}${d.code ? `, ${d.code}` : ""})`}`);
       for (const r of answer.rows) console.log(`  ${r.instance}  ${answer.plan ? "would be " : ""}${r.outcome}${r.reason ? ` (${r.reason}${r.code ? `, ${r.code}` : ""})` : ""}${r.message ? `: ${terminalText(r.message)}` : ""}`);

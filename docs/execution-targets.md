@@ -984,7 +984,7 @@ otherwise, whose `details.fields` are `backend`, `session.provider` and
 | `session inspect` | the provider's `present`, `state` and `running`, with `backend`, `session` and `open` (`{label, url}` or `null`: what to show instead of a terminal); no `paneId`, no `size`. A provider that fails, is slow or answers outside the contract is `E_SESSION_UNAVAILABLE`, never "stopped" |
 | `session input` | the provider sends the text. `submitted: true` only when it was dispatched; `E_SESSION_PROMPT_OPEN` (a prompt is open in the session: nothing was sent) and `E_SESSION_INPUT_QUEUED` (the provider queued it and withdrew it) are the provider's refusals; anything else is `E_SESSION_INPUT_FAILED`. An input to a lost session is a resume ([below](#provider-homes-lost-sessions)) |
 | `instance stop` | records the stop, then asks the provider to stop the session (`E_SESSION_STOP_FAILED` when it does not confirm; the home stays recorded as stopped). A stop of a home that is already stopped asks the provider once more: run it again to finish a stop the provider did not confirm |
-| `session start` | launches a new session, a fresh conversation on `TASK.md`, and records its endpoint. Refused when a session is there that OATS did not stop: `E_SESSION_RUNNING` when it reads `running: true`, else `E_SESSION_UNKNOWN` |
+| `session start` | launches a new session, a fresh conversation on `TASK.md`, and records its endpoint. Refused when a session is there that OATS did not stop: `E_SESSION_RUNNING` when it reads `running: true`, else `E_SESSION_UNKNOWN`. For a home OATS stopped it first asks the provider to stop once more, and refuses `E_SESSION_STOP_FAILED` when that is not confirmed |
 | `session restart` | stop, then start, under one lifecycle claim |
 | `session start --resume` | sends the resume notice through the provider's input; nothing is launched ([below](#provider-homes-lost-sessions)) |
 | `session attach` | `E_SESSION_NO_TERMINAL`; the message carries inspect's `open` link when there is one |
@@ -996,7 +996,10 @@ shutdown), before it calls the provider, and a start clears it. While it is
 set, inspect answers stopped (`present: false`, `running: false`) without
 calling the provider, and every input is refused `E_SESSION_NOT_RUNNING`
 before any call: `oats session input`, a scheduled wake (which never starts
-a provider home), a client's input, the messaging broker's delivery. A
+a provider home), a client's input, the messaging broker's delivery. A stop
+that lands while an input is being sent still wins: OATS asks the provider
+to stop the session again and answers the input `E_SESSION_NOT_RUNNING`, so
+a mail stays unread and comes again. A
 session stopped in the provider's own interface sets nothing in OATS, and
 the provider may restart it on the next input: **stop an OATS agent with
 OATS**.
@@ -1013,7 +1016,8 @@ relayed** by `oats server roster` or `--server`, whose rows and answers carry
 `session: {provider}`. A tmux row carries `backend: "tmux"`; a row with no
 `backend` (an older kernel, an older routed host) is a tmux row. Status asks
 each provider once per group of homes where it can (`inspectMany`), falls
-back to one `inspect` per home when a batch is bad, and asks nothing about a
+back to one `inspect` per home when a batch is bad (never after one that
+timed out), gives all its providers 30 s together, and asks nothing about a
 home OATS stopped, which keeps its last endpoint until its next start.
 `waitingOnYou` is the producers' claim, as for tmux, read while the session
 is there and not in error.
@@ -1027,7 +1031,11 @@ host where the home lives. Two provider homes read `sessionEnd: "lost"`:
 - one stopped by **`oats host run`'s shutdown**. That stop records
   `stoppedAt` like any other, so input stays refused while the host or the
   container goes down, and the home's stop receipt says the host's shutdown
-  wrote it. An operator's stop after it withdraws that.
+  wrote it. An operator's stop after it withdraws that. The shutdown stops
+  every provider home OATS has not stopped, whatever its session reads, and
+  asks no provider to find them (`oats session resume --plan
+  --without-provider-inspect`), so a provider that goes down with the host
+  cannot hold it up.
 - one whose session is **gone while OATS did not stop it**: the provider
   answers `present: false`. A provider reads a session in error this way.
 

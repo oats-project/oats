@@ -202,6 +202,9 @@ test("two capabilities of one instance that declare the same provider name: E_BA
   assert.deepEqual([refused.ok, refused.error.code, refused.error.details], [false, "E_BACKEND_AMBIGUOUS", { backend: "fake", capabilities: [FAKE_CAPABILITY, "acme.twin"] }]);
   assert.equal(existsSync(join(fx.root, "twins", "instances", "which")), false);
   assert.deepEqual(fx.calls(), []);
+  // A spawn preview shows it too, before anything is applied.
+  const previewed = fx.cli(["spawn", "twins", "--backend", "fake", "--launch-config", "claude", "--preview", "--json"]).json();
+  assert.deepEqual([previewed.ok, previewed.error.code, previewed.error.details.capabilities], [false, "E_BACKEND_AMBIGUOUS", [FAKE_CAPABILITY, "acme.twin"]]);
   // On tmux the same soul spawns as before, and inspect lists the name under both.
   assert.equal(fx.cli(["spawn", "twins", "--name", "which", "--no-launch", "--json"]).json().ok, true);
   assert.deepEqual(fx.cli(["inspect", "--soul", "twins", "--json"]).json().result.sessionProviders.map((p) => [p.name, p.capability]), [["fake", FAKE_CAPABILITY], ["fake", "acme.twin"]]);
