@@ -8,8 +8,8 @@ import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import { createOverlayPicker } from "../renderer/overlay-picker.mjs";
 import { subsequenceScore } from "../../client/subsequence-score.mjs";
-import { quickOpenRows, createQuickOpen } from "../renderer/quick-open.mjs";
-import { paletteRows } from "../renderer/palette.mjs";
+import { quickOpenRows } from "../renderer/quick-open.mjs";
+import { paletteRows, createPalette } from "../renderer/palette.mjs";
 import { DEFAULT_KEYMAP, DEFAULT_KEYMAPS, TERMINAL_ALLOWLIST } from "../renderer/keybindings.mjs";
 
 const PKG = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -124,12 +124,26 @@ test("overlay picker: a load resolving after close must not paint (generation gu
   assert.equal(doc.querySelector(".palette-overlay"), null, "stale load did not resurrect the overlay");
 });
 
-test("createQuickOpen: a failing souls load renders an empty list, not a crash", async (t) => {
+test("the palette's souls: a failing souls load leaves the souls group empty, not a crash (slice 4: Quick Open folded in)", async (t) => {
   const { dom, doc } = pickerDom();
   t.after(() => dom.window.close());
-  const qo = createQuickOpen({ loadSouls: async () => { throw new Error("boom"); }, onPick: () => {}, doc });
-  await qo.open();
+  const palette = createPalette({ loadInstances: async () => ({ instances: [], deployments: [] }), loadSouls: async () => { throw new Error("boom"); },
+    onSoul: () => {}, openTerminal: () => {}, doc });
+  await palette.open({ query: "+" });
+  assert.equal(doc.querySelector(".palette-input").value, "+", "Alt+P opens the palette on its souls");
   assert.match(doc.querySelector(".palette-list").textContent, /No matches/);
+});
+
+test("the palette's souls: \"New agent: <soul>\" rows pick the soul for the New agent form", async (t) => {
+  const { dom, doc } = pickerDom();
+  t.after(() => dom.window.close());
+  const picked = [];
+  const palette = createPalette({ loadInstances: async () => ({ instances: [], deployments: [] }), loadSouls: async () => ({ agents: AGENTS }),
+    onSoul: (soul) => picked.push(soul.name), openTerminal: () => {}, doc });
+  await palette.open({ query: "+uxd" });
+  assert.deepEqual([...doc.querySelectorAll(".palette-item .plabel")].map((el) => el.textContent), ["New agent: ux-designer"]);
+  doc.querySelector(".palette-input").dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+  assert.deepEqual(picked, ["ux-designer"]);
 });
 
 // ── palette parity: paletteRows still behaves on the shared scorer ───────
@@ -156,22 +170,23 @@ test("app.quickOpenSouls defaults to ⌘P / Alt+P (Ctrl+Alt+P in that family) an
 
 // ── shell wiring pins (source-level, house style) ────────────────────────
 
-test("shell wires quick open: action registered, palette command present, spawn handoff", () => {
+test("shell wires the souls: action registered, palette command present, spawn handoff", () => {
   const src = read("renderer/shell.mjs");
   assert.match(src, /id: "app\.quickOpenSouls"/, "action registered");
-  assert.match(src, /Souls: quick open…/, "palette discoverability entry");
-  assert.match(src, /createQuickOpen\(/, "quick open constructed");
+  assert.match(src, /New \$\{DESKTOP_NOUNS\.instance\}: choose a soul…/, "palette discoverability entry");
+  assert.match(src, /void palette\.open\(\{ query: "\+" \}\)/, "Alt+P opens the palette on its souls");
+  assert.match(src, /onSoul: \(soul\) => openNewAgent\(soul\)/, "a soul row opens the New agent form");
   assert.match(src, /mod\.preselectSpawn\(/, "selection opens the soul's spawn dialog in Workspace");
   assert.match(src, /showStage\("spawn"\)/, "selection routes to the Spawn stage");
 });
 
-test("palette and quick open share the overlay-picker machinery (no duplicated chrome)", () => {
+test("the palette uses the overlay-picker machinery, and the souls' rows are quick-open.mjs's (no duplicated chrome)", () => {
   const palette = read("renderer/palette.mjs");
   const qo = read("renderer/quick-open.mjs");
-  for (const src of [palette, qo]) {
-    assert.match(src, /from "\.\/overlay-picker\.mjs"/);
-    assert.ok(!/palette-overlay/.test(src), "overlay DOM lives only in overlay-picker.mjs");
-  }
+  assert.match(palette, /from "\.\/overlay-picker\.mjs"/);
+  assert.match(palette, /import \{ quickOpenRows \} from "\.\/quick-open\.mjs"/);
+  for (const src of [palette, qo]) assert.ok(!/palette-overlay/.test(src), "overlay DOM lives only in overlay-picker.mjs");
+  assert.ok(!/createOverlayPicker/.test(qo), "Quick Open has no overlay of its own");
 });
 
 // ── Spawn view preselect handoff (jsdom) ─────────────────────────────────

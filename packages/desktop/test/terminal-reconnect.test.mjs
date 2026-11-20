@@ -37,7 +37,7 @@ const remote = { serverId: "build", instance: "dev", home: "/srv/agents/dev" };
 
 /** `opens` scripts each termOpen in turn: a numeric id opens that lease, a string is a failure
  * code, a promise is an open still in flight. */
-function rig({ opens = [1], local = false, ownsFocus = () => true, termReady } = {}) {
+function rig({ opens = [1], local = false, ownsFocus = () => true, termReady, onLink } = {}) {
   const dom = new JSDOM("<!doctype html><body><button id=elsewhere>elsewhere</button></body>");
   const doc = dom.window.document, wrap = doc.createElement("div");
   doc.body.append(wrap);
@@ -69,7 +69,7 @@ function rig({ opens = [1], local = false, ownsFocus = () => true, termReady } =
     attachCustomKeyEventHandler: handler => { keys = handler; },
   };
   const tab = createTerminalTab({
-    desk, term, wrap, clock, ownsFocus, isActive: () => true, fit: () => {}, observe: () => () => {},
+    desk, term, wrap, clock, ownsFocus, isActive: () => true, fit: () => {}, observe: () => () => {}, ...(onLink ? { onLink } : {}),
     ...(local ? { tmux: { session: "s", window: 1 } } : { remote, serverLabel: "Build box" }),
   });
   const exit = (id, extra = {}) => exits.get(id)({ terminalApi: 2, status: "ended", handle: handle(id),
@@ -379,5 +379,20 @@ test("a prepare timeout between no-answers neither resets nor counts toward the 
   await r.clock.advance(15000);
   assert.equal(r.opens(), 6);
   assert.equal(r.banner(), noAnswerFinal, "the fourth no-answer stops; the timeout did not reset the count");
+  await r.tab.close();
+});
+
+// The Desktop UI rework, slice 4: the shell says a drop and a reconnect on the status line (no question); the tab tells
+// it once per episode, and the strip in the pane keeps its countdown and Reconnect now.
+test("the link's drop is told once per episode and its reconnect once; the strip is unchanged", async () => {
+  const told = [];
+  const r = rig({ opens: [1, "E_TERM_REMOTE_UNREACHABLE", "E_TERM_REMOTE_UNREACHABLE", 2], onLink: event => told.push(event) });
+  await r.tab.start();
+  r.exit(1);
+  assert.deepEqual(told, [{ state: "disconnected", server: "Build box" }]);
+  assert.ok(r.strip(), "the strip shows, as before");
+  await r.clock.advance(1000 + 2000 + 4000);
+  assert.deepEqual(told, [{ state: "disconnected", server: "Build box" }, { state: "reconnected", server: "Build box" }], "failed attempts tell nothing more");
+  assert.equal(r.strip(), null);
   await r.tab.close();
 });

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { createPalette } from "../renderer/palette.mjs";
-import { createQuickOpen } from "../renderer/quick-open.mjs";
+import { createSoulPicker as createQuickOpen } from "./helpers/soul-picker.mjs";
 import { createKeybindingsEditor } from "../renderer/keybindings-editor.mjs";
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -75,8 +75,9 @@ test("shortcuts editor takes over an open picker and returns its logical opener"
   assert.equal(f.doc.querySelectorAll(".palette-overlay").length, 1);
   assert.equal(f.doc.querySelector(".palette-input"), null, "old picker and its trap are gone");
   assert.ok(dialog.contains(f.doc.activeElement));
-  const buttons = [...dialog.querySelectorAll("button:not([disabled])")];
-  buttons.at(-1).focus();
+  // The editor's last stop (a button, or the help-sheet setting's checkbox where no row is registered: slice 4).
+  const stops = [...dialog.querySelectorAll("input, button:not([disabled])")].filter(el => !el.closest("[hidden]") && el.tabIndex >= 0);
+  stops.at(-1).focus();
   f.key("Tab");
   assert.equal(f.doc.activeElement, dialog.querySelector(".kb-search"), "Tab wraps in the editor (to its search, the first stop), not the removed picker");
   f.key("Escape");

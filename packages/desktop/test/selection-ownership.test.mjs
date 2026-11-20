@@ -40,7 +40,7 @@ import { rosterKeyAction, moveTarget } from "../renderer/roster-keys.mjs";
 import { revealInStrip, revealInScrollport } from "../renderer/reveal-in-scrollport.mjs";
 import { createLeader } from "../renderer/leader.mjs";
 import { createLeaderDispatch } from "../renderer/leader-dispatch.mjs";
-import { leaderApplies, leaderLabel } from "../renderer/leader-keys.mjs";
+import { leaderApplies, leaderLabel, supportedLeaderRows, rowKeysText } from "../renderer/leader-keys.mjs";
 import { createLeaderHint, LEADER_ANNOUNCEMENT } from "../renderer/leader-hint.mjs";
 import { LEADER_TABLE } from "../../client/keymap.mjs";
 import { navTab } from "../renderer/shell-nav.mjs";
@@ -55,7 +55,7 @@ const names = [
 ];
 // The leader's part of the shell (shell.mjs "the leader"): what a key after it, or a chord that does
 // one's work, acts on, and the shipped dispatch and engine that run it.
-const leaderNames = ["leaderTargetId", "leaderOrigin", "openingInstanceId", "runAsLeaderKey", "notApplicable", "leaderState"];
+const leaderNames = ["leaderTargetId", "leaderOrigin", "openingInstanceId", "runAsLeaderKey", "notApplicable", "leaderState", "leaderHelp"];
 const leaderSetup = [/let terminalOpening = [^\n]+/, /const rosterInstance = [^\n]+/,
   /const leaderDispatch = createLeaderDispatch\(\{[^]*?\n\}\);/, /const leader = createLeader\(\{[^]*?\n\}\);/,
   /registerAction\(\{ id: "app\.leader"[^\n]*\n[^\n]*/, /for \(const \[id, does\] of \[\["roster\.openPrevious"[^]*?\n\}/];
@@ -136,6 +136,9 @@ function shell(t, { shellSource = source, ownership = createSelectionOwnership, 
   c.ownsInstanceTarget = target => target?.workspace === c.workspace && c.contextInstances.filter(row => sameInstanceActionTarget(target, row, c.workspace)).length === 1;
   if (leader) Object.assign(c, {
     window: dom.window, createLeader, createLeaderDispatch, LEADER_TABLE, leaderApplies, leaderLabel, actionLabel: () => null, rosterActsHeld: () => null,
+    // The help sheet (slice 4, D15): the shipped leaderHelp over the shared keys; on, as it is by default.
+    supportedLeaderRows, rowKeysText, getBinding: keymap.getBinding, formatChord: keymap.formatChord, isMac: false, leaderHelpEnabled: () => true,
+    DESKTOP_LEADER: keymap.DESKTOP_LEADER, LEADER_CHOICES: keymap.LEADER_CHOICES,
     said: [], sayInHint: line => { c.said.push(line); c.leaderHint.say(line); }, leaderHint: createLeaderHint({ doc: document, host: document.body }),
     // A roster row's click opens its terminal (renderContextRoster); the opens are recorded, then run as shipped.
     opened: [], failed: [], openTerminalTab: ref => {
@@ -811,22 +814,31 @@ test("an open that fails leaves no target behind: the next press steps from what
   assert.deepEqual(s.c.opened, ["B", "B"], "A is still shown: the step is from A again, not from the dead B");
 });
 
-test("the leader shows nothing while it waits, announced once; a key after it that cannot act says why in the line", async t => {
+test("the leader shows its help sheet while it waits, announced once; a key after it that cannot act says why in the line", async t => {
   const s = stepShell(t);
   await s.open(steps[0]);
   const hint = s.c.leaderHint.element;
   s.actions.get("app.leader")({ target: s.document.activeElement });
-  assert.deepEqual([...hint.children].map(child => [child.className, child.textContent]), [["sr-only", LEADER_ANNOUNCEMENT]], "no keys panel");
+  assert.deepEqual([...hint.children].map(child => [child.className, child.textContent]), [["sr-only", LEADER_ANNOUNCEMENT]], "the line shows no keys panel");
   assert.equal(s.c.leaderHint.isShown(), false);
+  // Slice 4 (D15): the help sheet lists the keys that apply here, and goes with the next key.
+  const help = s.document.getElementById("leader-help");
+  assert.equal(s.c.leaderHint.helpMode(), "wait"); assert.equal(help.hidden, false);
+  assert.match(help.querySelector(".leader-help-title").textContent, /^After Ctrl\+Space$/, "D18: the Desktop's leader");
+  assert.match(help.textContent, /If an input method takes Ctrl\+Space, choose Ctrl\+X on Keyboard shortcuts/);
+  assert.ok([...help.querySelectorAll("dt")].some(dt => dt.textContent === "K or Space"), "the palette's row");
+  assert.ok(![...help.querySelectorAll("dd")].some(dd => /split/i.test(dd.textContent) && /group/i.test(dd.textContent)), "no row that does not apply (the tabs are not split)");
   s.dispatch(s.document.activeElement, "keydown", { key: "ArrowRight", code: "ArrowRight" });
   assert.equal(s.c.leaderHint.mode(), "line", "one tab: → cannot act");
   assert.equal(hint.textContent, "There is no other tab.");
-  // The leader's ? is the shortcuts editor, which lists its keys.
+  assert.equal(s.c.leaderHint.helpMode(), null, "the key settled the wait: the sheet is gone");
+  // The leader's ? pins the help sheet (slice 4, D15); the shortcuts editor is Ctrl+, and the palette's.
   let editor = 0; s.actions.set("app.shortcuts", () => editor++);
   s.actions.get("app.leader")({ target: s.document.activeElement });
   s.dispatch(s.document.activeElement, "keydown", { key: "?", code: "Slash", shiftKey: true });
-  assert.equal(editor, 1);
-  assert.equal(s.c.leaderHint.mode(), null, "a key that ran: the wait's announcement is gone, nothing shows");
+  assert.equal(editor, 0);
+  assert.equal(s.c.leaderHint.helpMode(), "pinned");
+  assert.equal(s.c.leaderHint.mode(), null, "a key that ran: the wait's announcement is gone");
 });
 
 test("the leader's ← / → in a split: an empty or one-tab focused group says there is no other tab, and nothing moves", async t => {

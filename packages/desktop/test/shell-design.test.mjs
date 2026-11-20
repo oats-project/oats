@@ -67,14 +67,14 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
     showStageFocused: name => c.showStage(name), // the stage switch; its focus keeping is shell glue over focusRegion("main")
     registerAction(action) { const off = registerAction(action); offs.push(off); return off; }, runAction,
     // The palette action notes the leader's target as it opens (the instance entries act on it).
-    palette: { toggle: () => events.push(["palette"]), isOpen: () => false }, leaderTargetId: () => null,
-    // Instance: Pin to top / Unpin (instance-pin-menu.mjs): their real labels, offered for no target here.
+    palette: { toggle: () => events.push(["palette"]), isOpen: () => false, close() {}, open: () => events.push(["quickOpen"]) }, leaderTargetId: () => null,
+    // Agent: Pin to top / Unpin (instance-pin-menu.mjs): their real labels, offered for no target here.
     PIN_LABELS, pinTargetOffer: () => null, runPinCommand: async () => {},
-    quickOpen: { toggle: () => events.push(["quickOpen"]) },
+    // Quick Open folded into the palette (slice 4): New agent opens the palette on its souls (palette.open, above).
     shortcutsEditor: { close() {}, open: () => events.push(["shortcuts"]) },
     THEMES, setTheme: id => events.push(["theme", id]),
-    toggleTheme: () => events.push(["theme"]), themePicker: { toggle: () => events.push(["themePicker"]) },
-    fontPicker: { toggle: () => events.push(["fontPicker"]) },
+    toggleTheme: () => events.push(["theme"]), // The Appearance sheet (slice 4): on Theme for app.themePicker, on Font for app.fontPicker.
+    appearance: { toggle: ({ focus } = {}) => events.push([focus === "font" ? "fontPicker" : "themePicker"]) },
     splitPane: orientation => events.push(["split", orientation]), closeSplit: () => events.push(["split", "close"]),
     sidebarWidth: { reset: () => events.push(["sidebarWidth", "reset"]) },
     fileOpener: { choose() {}, dispose() {} },
@@ -505,34 +505,36 @@ for (const outcome of ["resolve", "reject"]) test(`reported workspace/root/host 
   assert.equal(current().title, 'same <b>name</b>', "the tooltip is the whole name: never a remote id or machine");
 });
 
-test('White, Solarized, Dark and This computer have explicit registry/palette choices without new default chords; the cycle keeps its label', t => {
+test('Light, Solarized, Dark and System have explicit registry/palette choices without new default chords; Appearance… opens the sheet', t => {
   const s = shell(t);
   t.after(() => resetBinding('app.themePicker'));
-  const cycleLabel = 'Cycle White / Solarized / Dark / This computer theme';
+  // The Appearance sheet's words (the Desktop UI rework, slice 4): White is Light, This computer is System.
+  const cycleLabel = 'Cycle Light / Solarized / Dark / System theme';
   assert.equal(listActions().find(action => action.id === 'app.themeToggle')?.label, cycleLabel, 'the cycle action stays as it is');
-  // The palette's Theme: choose… opens the picker (app.themePicker; slice 1: the settings cog is gone); it shows the
+  // The palette's Appearance… opens the sheet (app.themePicker; slice 1: the settings cog is gone); it shows the
   // effective chord, never a hard-coded one.
   assert.doesNotMatch(html, /data-action="app\.themePicker"/, 'no theme button in the markup');
-  assert.equal(listActions().find(action => action.id === 'app.themePicker')?.label, 'Choose a theme…');
+  assert.equal(listActions().find(action => action.id === 'app.themePicker')?.label, 'Appearance…');
   const start = source.indexOf('// ── command palette');
   const end = source.indexOf('// ── Quick Open', start);
   const commands = runInNewContext(`${source.slice(start, end)}\npalette.commands`, {
     ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options,
   });
-  assert.equal(commands.find(item => item.label === 'Theme: choose…').detail(), 'Ctrl+Shift+Space', 'the bound chord');
+  assert.equal(commands.find(item => item.label === 'Appearance…').detail(), 'Ctrl+Shift+Space', 'the bound chord');
   setBinding('app.themePicker', 'Ctrl+Alt+T');
-  assert.deepEqual(THEMES.map(({ id, label }) => [id, label]), [['light', 'White'], ['solarized', 'Solarized'], ['dark', 'Dark'], ['host', 'This computer']]);
+  assert.deepEqual(THEMES.map(({ id, label }) => [id, label]), [['light', 'Light'], ['solarized', 'Solarized'], ['dark', 'Dark'], ['host', 'System']]);
   for (const { id, label } of THEMES) {
     assert.equal(getBinding(`app.theme.${id}`), null, `${label} has no new default keyboard chord`);
     assert.equal(listActions().find(action => action.id === `app.theme.${id}`)?.label, `Theme: ${label}`);
     const command = commands.find(item => item.label === `Theme: ${label}`); assert.ok(command);
     assert.equal(command.detail(), ''); command.run(); assert.deepEqual(s.events.at(-1), ['theme', id]);
   }
-  assert.equal(commands.filter(item => /^Theme: /.test(item.label)).at(-1).label, 'Theme: This computer', 'listed last');
-  const cycle = commands.find(item => item.label === 'Theme: cycle White / Solarized / Dark / This computer'); assert.ok(cycle);
+  assert.equal(commands.filter(item => /^Theme: /.test(item.label)).at(-1).label, 'Theme: System', 'listed last');
+  const cycle = commands.find(item => item.label === 'Theme: cycle Light / Solarized / Dark / System'); assert.ok(cycle);
   cycle.run(); assert.deepEqual(s.events.at(-1), ['theme']);
-  const choose = commands.filter(item => item.label === 'Theme: choose…');
-  assert.equal(choose.length, 1, 'one palette entry opens the picker');
+  const choose = commands.filter(item => item.label === 'Appearance…');
+  assert.equal(choose.length, 1, 'one palette entry opens the sheet');
+  assert.equal(commands.filter(item => item.label === 'Theme: choose…').length, 1, 'and Theme: choose…, by what it holds');
   assert.equal(choose[0].detail(), 'Ctrl+Alt+T', 'its hint is the effective chord');
   resetBinding('app.themePicker');
   assert.equal(choose[0].detail(), 'Ctrl+Shift+Space');
@@ -547,11 +549,11 @@ test('White, Solarized, Dark and This computer have explicit registry/palette ch
   assert.equal(commands.some(item => /light\/dark/i.test(item.label)), false);
 });
 
-test('Font: choose… opens the font picker from the palette, the shortcuts editor\'s Global group and a chord given there (app.fontPicker, no default)', t => {
+test('Font: choose… opens the Appearance sheet on Font from the palette, the shortcuts editor\'s Global group and a chord given there (app.fontPicker, no default)', t => {
   const s = shell(t);
   t.after(() => resetBinding('app.fontPicker'));
   const action = listActions().find(each => each.id === 'app.fontPicker');
-  assert.equal(action?.label, 'Font: choose…');
+  assert.equal(action?.label, 'Appearance: font…');
   assert.equal(action.context, 'global', "in the theme rows' group of the shortcuts editor");
   assert.equal(listActions().find(each => each.id === 'app.themePicker')?.context, action.context);
   const start = source.indexOf('// ── command palette');
@@ -560,7 +562,7 @@ test('Font: choose… opens the font picker from the palette, the shortcuts edit
     ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options,
   });
   const choose = commands.filter(item => item.label === 'Font: choose…');
-  assert.equal(choose.length, 1, 'one palette entry opens the picker');
+  assert.equal(choose.length, 1, 'one palette entry opens the sheet on Font');
   assert.equal(choose[0].detail(), '', 'no default chord, so no hint');
   assert.equal(commands.indexOf(choose[0]), commands.findLastIndex(item => /^Theme: /.test(item.label)) + 1, 'right after the theme commands');
   setBinding('app.fontPicker', 'Ctrl+Alt+F12');

@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { paletteRows, createPalette, PALETTE_COMMAND_CAP } from "../renderer/palette.mjs";
 import { createOverlayPicker } from "../renderer/overlay-picker.mjs";
-import { createQuickOpen } from "../renderer/quick-open.mjs";
+import { createSoulPicker as createQuickOpen } from "./helpers/soul-picker.mjs";
 import { treeConnectors } from "../renderer/instance-tree-view.mjs";
 import { rosterGroups, instanceId } from "../../client/instance-tree.mjs";
 import { rosterSections } from "../../client/roster-sections.mjs";
@@ -224,16 +224,15 @@ test("each relation group is one named role=group in the listbox; depth is inden
   assert.equal(p.input().getAttribute("aria-activedescendant"), ids[0]);
 });
 
-test("the shell wires the cycle to the live app.palette chord; Quick Open (⌘P) keeps its plain toggle", async () => {
+test("the shell wires the cycle to the live app.palette chord; ⌘P opens the palette on its souls and closes it", async () => {
   const { readFileSync } = await import("node:fs");
   const shell = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
   assert.match(shell, /cycleKey: \(e\) => pickerCycleDirection\(e, "app\.palette", isMac\)/);
   assert.match(shell, /groupKey: \(e\) => paletteGroupDirection\(e, isMac\),\n\s*footer: paletteGroupHint\(isMac\),/, "the group keys and their footer, per platform");
   assert.equal(shell.match(/groupKey:|footer: paletteGroupHint/g).length, 2, "only the palette gets them");
   assert.match(shell, /registerAction\(\{ id: "app\.palette", [^\n]*palette\.toggle\(\)/, "the action still opens it; open, it cycles");
-  const quickOpen = readFileSync(new URL("../renderer/quick-open.mjs", import.meta.url), "utf8");
-  assert.doesNotMatch(quickOpen, /cycleKey/, "a second ⌘P still closes Quick Open");
-  assert.doesNotMatch(quickOpen, /groupKey|footer/, "Quick Open has no group keys and no footer");
+  // Quick Open folded into the palette (slice 4): ⌘P / Alt+P opens it on its souls, and a second press closes it.
+  assert.match(shell, /function openPaletteOnSouls\(\) \{\n  tabOpenIntents\.invalidate\(\);\n  if \(palette\.isOpen\(\)\) \{ palette\.close\(\); return; \}\n  paletteTargetId = leaderTargetId\(document\.activeElement\); void palette\.open\(\{ query: "\+" \}\);/);
 });
 
 // The palette's group keys (packages/client/keymap.mjs PALETTE_KEYS; paletteGroupDirection's pure
@@ -378,7 +377,7 @@ test("the footer names the group keys per platform: plain text in the dialog, af
   assert.match(rule, /font-size: 11\.5px/, "small, as the rows' details");
 });
 
-test("Quick Open takes no group keys and has no footer: ⌘N passes through, Alt+Shift+↓ is its arrow", async t => {
+test("a picker without group keys (a test picker of the family) has no footer: ⌘N passes through, Alt+Shift+↓ is its arrow", async t => {
   const dom = new JSDOM('<!doctype html><body><button id="opener">Open</button></body>', { url: "http://localhost" });
   t.after(() => dom.window.close());
   const doc = dom.window.document, reached = [];

@@ -10,6 +10,7 @@ import { revealInScrollport } from "./reveal-in-scrollport.mjs";
 import { icon } from "./shell-icons.mjs";
 import { treeGuides } from "./instance-tree-view.mjs";
 import { SOUL_COLORS } from "../../client/soul-colors.mjs";
+import { SHEET, SHEET_BACKDROP } from "./sheet.mjs";
 
 let nextPickerId = 0;
 // A document has one picker lifetime, not a stack of modal focus traps.
@@ -101,7 +102,8 @@ export function createOverlayPicker({ placeholder, ariaLabel, loadItems, compute
 
   function close() { hide?.(true); }
 
-  async function open() {
+  /** `query`: the input's text to open with (the palette's "+" for its souls group: Alt+P, slice 4). */
+  async function open({ query = "" } = {}) {
     if (overlay) return;
     const myGen = ++gen;
     const opener = coordinator.current?.opener ?? coordinator.handoff?.opener ?? captureFocusReturn(doc);
@@ -112,9 +114,10 @@ export function createOverlayPicker({ placeholder, ariaLabel, loadItems, compute
     const root = doc.createElement("div");
     overlay = root;
     const owns = () => myGen === gen && overlay === root && coordinator.current === lifetime;
-    root.className = "palette-overlay";
+    // A centred sheet over the scrim, with the sheet's ease (the Desktop UI rework, slice 4, D10: the palette is a sheet).
+    root.className = `palette-overlay ${SHEET_BACKDROP}`;
     root.innerHTML = `
-      <div class="palette" role="dialog" aria-modal="true">
+      <div class="palette ${SHEET}" role="dialog" aria-modal="true">
         <input class="palette-input" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" autocomplete="off" spellcheck="false">
         <div class="palette-list" role="listbox"></div>
       </div>`;
@@ -124,6 +127,7 @@ export function createOverlayPicker({ placeholder, ariaLabel, loadItems, compute
     const input = root.querySelector(".palette-input");
     input.id = `${id}-input`;
     input.placeholder = placeholder;
+    input.value = String(query);
     input.setAttribute("aria-label", ariaLabel);
     input.setAttribute("aria-expanded", "true");
     const list = root.querySelector(".palette-list");
@@ -358,5 +362,5 @@ export function createOverlayPicker({ placeholder, ariaLabel, loadItems, compute
 
   // A cycling picker's chord moves its rows while open (modalKeydown consumes it
   // first); toggle() — the same action from anywhere else — agrees.
-  return { open, close, isOpen: () => !!overlay, toggle: () => (!overlay ? open() : cycleKey ? cycle?.(1) : close()) };
+  return { open, close, isOpen: () => !!overlay, toggle: (options) => (!overlay ? open(options) : cycleKey ? cycle?.(1) : close()) };
 }

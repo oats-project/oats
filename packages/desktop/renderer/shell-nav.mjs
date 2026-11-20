@@ -11,7 +11,7 @@
 export const NAV = [
   // Home (the Desktop UI rework, slice 2): what needs you, what you have, and the overview whose rows open the
   // Workspace page on a tab. A workspace lands on it. It has no key of its own yet (slice 4's table decides one):
-  // its palette command, View: Home, opens it.
+  // the palette's Home section opens it.
   { name: "home", label: "Home", icon: "workspace", title: "Home" },
   // The Workspace page (Workspace overview), which opens on Souls: no pinned row of its own since slice 2 (Home's
   // overview opens it on a tab, and its row stays Home's while it shows). ⌘2 / Ctrl+2 and ⌘3 / Ctrl+3 stay theirs

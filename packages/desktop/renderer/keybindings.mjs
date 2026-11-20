@@ -6,7 +6,7 @@
 //
 // Terminal safety (docs/desktop-keyboard.md, principle 2). When the keydown target is inside
 // `.xterm`, on macOS ONLY chords whose `Mod` resolves to ⌘ (meta) may fire — ⌘ never reaches the
-// pty — plus shapes named by action id: Ctrl+Tab tab cycling, the leader's ⌃X (or ⌃\), and ⌥ with an
+// pty — plus shapes named by action id: Ctrl+Tab tab cycling, the leader's ⌃Space (or ⌃X, ⌃\), and ⌥ with an
 // arrow for the moves between tabs, groups and workspaces (the product owner's call, 2026-10-23: the program loses
 // what xterm.js sends for them, ⌥←/→'s word moves ESC b / ESC f among them); every other chord
 // (⌃digits, F6, Ctrl+letters, the other ⌥ keys) belongs to the attached program.
@@ -19,7 +19,7 @@
 // the key; xterm.js sends an Alt arrow as the Ctrl arrow, CSI 1;5, on Linux/Windows; Alt+↑/↓ are the
 // Alt family's alone, the other two leave them to the program) (the product owner's call, 2026-10-22: the rule that a default never takes a key a
 // program reads gives way for the Alt family; the collision table names each), and three named
-// exceptions (TERMINAL_ALLOWLIST has the rule), the leader's Ctrl+X among them. Every other plain
+// exceptions (TERMINAL_ALLOWLIST has the rule), the leader's Ctrl+Space among them. Every other plain
 // Ctrl+letter (Ctrl+W, Ctrl+K, Ctrl+P, Ctrl+B, Ctrl+\) and F6 stay the program's, and so does every
 // Alt key no chord holds. app-menu.mjs follows the same policy for the menu accelerators.
 // docs/desktop-keyboard.md is the keymap's reference.
@@ -321,8 +321,17 @@ export const SIDEBAR_KEYS = Object.freeze([
   ["sidebar.key.stop", "stop"], ["sidebar.key.retire", "retire"], ["sidebar.key.start", "start"], ["sidebar.key.restart", "restart"],
   ["sidebar.key.spawn", "spawn"], ["sidebar.key.spawnAnother", "spawn-another"], ["sidebar.key.help", "help"],
 ].map(([id, does]) => Object.freeze({ id, does })));
+/** Delete retires too, in the sidebar (the Desktop UI rework, decided 2026-11-19): the Desktop's own key beside the
+ * shared `D` (the TUI's Delete is its switcher's remove, so the shared table cannot hold it yet). The same Retire
+ * sheet; never a retire on its own. */
+export const SIDEBAR_DELETE = Object.freeze({ id: "sidebar.key.retireDelete", does: "retire" });
 
 const plainDefault = (does) => chordFromKeyId(PLAIN_KEYS.find((entry) => entry.does === does)?.keys[0]) ?? null;
+/** The Desktop's default leader (D18, decided 2026-11-19): Ctrl+Space on every platform. The shared LEADER (Ctrl+X)
+ * stays the TUI's until it reads Ctrl+Space, and is the Desktop's other choice (LEADER_CHOICES). */
+export const DESKTOP_LEADER = chordFromKeyId("ctrl+space");
+/** The leaders the Keyboard shortcuts sheet offers, one click each: Ctrl+Space (the default) and Ctrl+X. */
+export const LEADER_CHOICES = Object.freeze([DESKTOP_LEADER, chordFromKeyId(LEADER.other)]);
 
 // The chords the Desktop shares with the TUI (packages/client/keymap.mjs CHORDS), by the action that
 // reads each and its `does`, in the table's order. One string where both platforms have the same
@@ -355,12 +364,18 @@ function chordDefault(does, family) {
 function keymapIn(family) {
   const chordOf = (id) => chordDefault(CHORDS_READ.find((each) => each.id === id).does, family);
   return Object.freeze({
-    // The leader (docs/desktop-keyboard.md, "The leader"): the TUI's, read from the shared keymap,
-    // Ctrl+X on every platform. ⌃X on macOS fires in a terminal by name (macStructuralChord); on
-    // Linux/Windows it is terminal-allowlisted, a named exception (0x18 is a byte a program reads:
-    // the leader pressed twice gives it); in a text field there Cut keeps it (leaderLeftToField).
-    "app.leader": { mac: chordFromKeyId(LEADER.mac), other: chordFromKeyId(LEADER.other) },
+    // The leader (docs/desktop-keyboard.md, "The leader"): Ctrl+Space on every platform (D18, decided 2026-11-19),
+    // the Desktop's own default (DESKTOP_LEADER); the shared table's LEADER, Ctrl+X, is the choice beside it on the
+    // Keyboard shortcuts sheet (and the TUI's). ⌃Space on macOS fires in a terminal by name (macStructuralChord);
+    // on Linux/Windows it is terminal-allowlisted, a named exception (NUL, 0x00, is a byte a program reads: the
+    // leader pressed twice gives it). It types nothing in a text field, so it opens there too.
+    "app.leader": DESKTOP_LEADER,
     ...Object.fromEntries(SIDEBAR_KEYS.map(({ id, does }) => [id, plainDefault(does)])),
+    [SIDEBAR_DELETE.id]: "Delete",
+    // New agent (the Desktop UI rework, decided 2026-11-19): Alt+N (Ctrl+Alt+N in the other families), ⌘⌥N on
+    // macOS (⌘N is Souls there, and the palette's next group while it is open; ⌥⌘N its previous group only then).
+    // The Desktop's own for now: the TUI takes it when its New agent does.
+    "app.newAgent": { mac: "Mod+Alt+N", other: family === DEFAULT_CHORD_FAMILY ? "Alt+N" : "Ctrl+Alt+N" },
     // The leader's Tab and Shift+Tab, as chords (CHORDS group-next, group-previous): Alt+Shift+→/←
     // in the Alt family; Ctrl+Alt+A and Ctrl+Alt+Shift+A in the others; ⌥⇧→/← on macOS.
     "split.focusPrevGroup": chordOf("split.focusPrevGroup"),
@@ -500,8 +515,9 @@ export function defaultBinding(actionId, isMac = defaultIsMac(), family = chordF
 // Named exceptions, sequences no plainer key sends: Ctrl+Shift+F6, without which F6
 // cannot get out of a terminal, the Alt+Shift arrows (CSI 1;4 A–D: the shared
 // previous / next instance in every family, the editor groups in the Alt family, the tab moves
-// in the other two), which no agent or readline binds, and app.leader, the TUI's leader Ctrl+X
-// (0x18, the shell's Ctrl+X Ctrl+E and nano's exit), which the leader pressed twice gives the program.
+// in the other two), which no agent or readline binds, and app.leader, Ctrl+Space by default (NUL, 0x00: Emacs's
+// and readline's set-mark) or the TUI's Ctrl+X (0x18, the shell's Ctrl+X Ctrl+E and nano's exit), which the leader
+// pressed twice gives the program.
 // The chord family changes the key, never the list: the Alt family's keys are no binding in
 // the other two, so they go to the program there, and the other two's keys are no binding in
 // the Alt family (Ctrl+Alt+K goes to the program as ESC, then Ctrl+K). Since the list is by
@@ -513,7 +529,7 @@ export function defaultBinding(actionId, isMac = defaultIsMac(), family = chordF
 // Every plain Ctrl+letter, every other Alt key and the F-keys stay the program's, so these stay
 // out: app.openFile (Ctrl+O) and focus.next/prevRegion (F6: mc, htop, nano).
 export const TERMINAL_ALLOWLIST = Object.freeze([
-  "app.leader", "app.palette", "app.quickOpenSouls", "app.workspaces", "app.chooseSoul", "app.themePicker", "app.shortcuts", "terminal.copySelection",
+  "app.leader", "app.palette", "app.quickOpenSouls", "app.newAgent", "app.workspaces", "app.chooseSoul", "app.themePicker", "app.shortcuts", "terminal.copySelection",
   "roster.openPrevious", "roster.openNext", "workspace.previous", "workspace.next", "terminal.focusMode", "instance.edit",
   "tabs.next", "tabs.prev", "tabs.nextPage", "tabs.prevPage", "tabs.close",
   ...Array.from({ length: 9 }, (_, i) => `tabs.goto${i + 1}`),
@@ -758,7 +774,7 @@ function macStructuralChord(id, c) {
   // The leader (a named exception to principle 3): ⌃ alone with `x`, as shipped, or with `\`, the
   // leader before 0.67, for whoever binds it back. A rebind to ⌘something fires by the ⌘ rule; a
   // rebind to another ⌃ chord stays the program's.
-  if (id === "app.leader") return c.ctrl && !c.shift && (c.key === "x" || c.key === "\\");
+  if (id === "app.leader") return c.ctrl && !c.shift && (c.key === "space" || c.key === "x" || c.key === "\\");
   return false;
 }
 

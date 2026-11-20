@@ -506,6 +506,7 @@ test("`when`: an action that is not live does not exist for dispatch; its chord 
 
 test("letThrough: an event handed to the focused control matches nothing; eventMatchesBinding reads the live chord", (t) => {
   withActions(t, [{ id: "app.leader", label: "leader", context: "global", run: () => {} }]);
+  setBinding("app.leader", "Ctrl+X"); // the Ctrl+X choice (D18's default is Ctrl+Space)
   const e = ev("x", { ctrlKey: true });
   assert.equal(eventMatchesBinding(e, "app.leader", false), true);
   letThrough(e);

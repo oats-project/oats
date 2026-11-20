@@ -788,3 +788,15 @@ test("with no workspace open the leader's terminal commands do nothing from the 
     assert.deepEqual([step.state.view, step.effect], ["switcher", null], k);
   }
 });
+
+// The shared table's `b` (the Desktop's sidebar; the Desktop UI rework, slice 4): the TUI's list is its sidebar.
+test("the leader then b gives the shown terminal the whole screen, and again gives the list back; with no terminal, nothing", () => {
+  const state = opened(THREE(), "dev-a");
+  const hidden = leaderThen(state, "b", AT).state;
+  assert.deepEqual([hidden.terminal.focus, hidden.terminal.zoom], ["terminal", true], "the list hidden: the terminal has the screen and the focus");
+  const back = leaderThen(hidden, "b", AT).state;
+  assert.deepEqual([back.terminal.focus, back.terminal.zoom, back.focus], ["list", false, "list"], "the list back, with the focus");
+  const none = THREE();
+  const nothing = leaderThen(none, "b", AT);
+  assert.equal(nothing.state.terminal, null); assert.equal(nothing.state.view, "instances");
+});
