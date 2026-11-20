@@ -977,27 +977,33 @@ stoppedAt}`. The two must agree as for tmux: `E_RUNTIME_AUTHORITY_MISMATCH`
 otherwise, whose `details.fields` are `backend`, `session.provider` and
 `session.endpoint`.
 
-The receipt's `runtime` also carries `launchSent` (an instant) **while a
-launch that was sent to the provider has no recorded outcome**: written right
-before the provider's launch is called, by a spawn and by a start, and taken
-away when the endpoint is recorded or the launch is known to have started
-nothing. One that is still there afterwards is a spawn or a start that ended
-first (it was killed, or its host stopped): a session may run that no record
-names. Such a home, launched before or not, reads as unknown (`oats session
-inspect` answers `E_SESSION_UNAVAILABLE`, its status row `running: null`,
-`runtimeState: "unreachable"`), never as not launched or stopped; input to
-it is refused (`E_SESSION_INPUT_FAILED`, nothing sent); and a stop, a start
-and a retire first ask the provider to stop whatever session is rooted at
-the home, handing it that instant. A stop the provider does not confirm is
-`E_SESSION_STOP_FAILED`, and the record stays until one is; a stop of a home
-launched before records `stoppedAt` first all the same.
+**The lifecycle of a provider home is one state machine**, set out in
+[its design record](design/2026-11-20-provider-home-lifecycle.md): the
+states its records spell, what each verb does in each, in what order it
+writes, and what happens when two things cross. In short:
 
-For a home that was **never launched**, the receipt reads `runtime:
-{launched: true, backend, provider, launchSent}` meanwhile, and
-`instance.json` `launched: true`, both without an endpoint; both go back to
-not launched when the launch is settled. A kernel from before session
-providers reads that as a launch it cannot address and refuses every verb on
-the home, a retire included.
+- The receipt's `runtime` carries `launchSent` (an instant) **while a launch
+  that was sent to the provider has no recorded outcome**: written right
+  before the provider's launch is called, by a spawn and by a start, kept
+  until the launch's endpoint is in the receipt *and* in the record, and
+  removed last. A launch that is killed leaves it there.
+- Such a home is **unsettled**: a session may run that no record names. It
+  reads as unknown (`oats session inspect` answers `E_SESSION_UNAVAILABLE`,
+  its status row `running: null`, `runtimeState: "unreachable"`), during a
+  launch as after one that died; its record is not compared with its receipt
+  meanwhile; input to it is refused, nothing sent.
+- A stop, a start, a restart and a retire **settle** it first: the provider
+  is asked to stop whatever session rooted at the home was created since
+  that instant (`stop` with `endpoint: null` and `launchSent`). Confirmed, a
+  home that was never launched is as it was, and one launched before is
+  stopped; not confirmed is `E_SESSION_STOP_FAILED`, and the next verb asks
+  again.
+- For a home that was **never launched**, the receipt reads `runtime:
+  {launched: true, backend, provider, launchSent}` meanwhile and
+  `instance.json` `launched: true`, both without an endpoint. A kernel from
+  before session providers reads that as a launch it cannot address and
+  refuses every verb on the home, a retire included, where it would have
+  retired a home it read as never launched.
 
 **The verbs.**
 

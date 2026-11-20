@@ -7533,17 +7533,21 @@ Its refusals: `E_RESUME_NOT_LOST` (not a lost session), `E_SESSION_NOT_RUNNING`
 the session cannot be read), `E_SESSION_PROMPT_OPEN` (a claim or a prompt is
 open) and `E_SESSION_INPUT_QUEUED`.
 
-**A launch that was sent and never recorded.** A spawn or a start that ends
-while the provider launches (it was killed) leaves `launchSent` in the home's
-receipt. Until it is settled the home is unknown, whether it was launched
-before or not: `oats session inspect` answers `E_SESSION_UNAVAILABLE`, its
-status row reads `running: null`, `runtimeState: "unreachable"` with the
-reason, a `--resume` is `E_SESSION_UNKNOWN`, and `oats session input` is
-`E_SESSION_INPUT_FAILED` (nothing sent). A stop, a start and a retire settle
-it first, by asking the provider to stop whatever session is rooted at the
-home: a stop then answers `stopped: true` (never `alreadyIdle`), or
-`E_SESSION_STOP_FAILED` when the provider does not confirm. The row of a
-never-launched home reads `launched: true` meanwhile.
+**A launch with no recorded outcome** (the lifecycle's
+[design record](design/2026-11-20-provider-home-lifecycle.md)). From the
+moment a spawn or a start sends the provider's launch until its endpoint is
+recorded, and for good when that command died first, the home's receipt
+carries `launchSent` and the home is unknown, whether it was launched before
+or not: `oats session inspect` answers `E_SESSION_UNAVAILABLE`, its status
+row reads `running: null`, `runtimeState: "unreachable"` with the reason, a
+`--resume` is `E_SESSION_UNKNOWN`, and `oats session input` is refused with
+nothing sent (`E_SESSION_NOT_RUNNING` for a home never launched or recorded
+as stopped, else `E_SESSION_INPUT_FAILED`). A stop, a start, a restart and a
+retire settle it first, by asking the provider to stop whatever session that
+launch started: a stop then answers `stopped: true` (never `alreadyIdle`),
+or `E_SESSION_STOP_FAILED` when the provider does not confirm; a home
+launched before is left stopped. The row of a never-launched home reads
+`launched: true` meanwhile.
 
 **Stop and retire.** The stop's row is `{ok: true, stopped, alreadyIdle,
 state: "stopped"}`; `E_SESSION_STOP_FAILED` when the provider does not confirm

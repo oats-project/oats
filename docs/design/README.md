@@ -26,6 +26,9 @@ successor, with a link to its full text.
   a stopped home's package modules to the locked versions, with plan, apply,
   provider adoption and undo (supersedes workspace model v2 items 10–11 for
   package modules).
+- [The launch state machine of a provider home](2026-11-20-provider-home-lifecycle.md):
+  the records, the states, what each lifecycle verb does in each, and the
+  crossings, for a home on a session provider.
 - [The warm reader](2026-10-29-warm-reader.md): `oats reader --stdio`, a
   child the Desktop and the TUI start, answers `oats status` and `oats
   workspace status` with the kernel's own read code kept loaded: warm code,
