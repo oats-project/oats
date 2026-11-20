@@ -299,7 +299,7 @@ test("a spawn killed while its provider's readiness is asked ran no hook and sen
   const home = homeOf(fx, "k");
   const inspected = JSON.parse(fx.cli(["session", "inspect", "--home", home, "--json"]).stdout);
   assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"], JSON.stringify(inspected).slice(0, 300));
-  assert.match(inspected.error.message, /k is being spawned/);
+  assert.match(inspected.error.message, /k is being spawned, or its spawn ended before its record was written/);
 });
 
 test("a spawn killed while the provider launches leaves a sent home: unknown to reads, and the next stop settles it with the instant of the launch", async (t) => {
@@ -831,7 +831,7 @@ test("a read of a home while it is being spawned answers that its session is not
   assert.deepEqual([runtimeOf(home), recordOf(home).backend, recordOf(home).session], [{ launched: false, backend: "fake", provider: FAKE_CAPABILITY }, undefined, undefined]);
   const inspected = JSON.parse(fx.cli(["session", "inspect", "--home", home, "--json"]).stdout);
   assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"], JSON.stringify(inspected).slice(0, 300));
-  assert.match(inspected.error.message, /early is being spawned: its session is planned on fake, and its record is not written yet/);
+  assert.match(inspected.error.message, /early is being spawned, or its spawn ended before its record was written: its session is planned on fake, and its record is not there yet/);
   const row = JSON.parse(fx.cli(["status", "--json"]).stdout).agents.flatMap((a) => a.instances).find((r) => r.instance === "early");
   assert.notEqual(row?.runtimeErrorCode ?? row?.runtimeError, "E_RUNTIME_AUTHORITY_MISMATCH");
   assert.equal(JSON.stringify(row ?? {}).includes("E_RUNTIME_AUTHORITY_MISMATCH"), false, JSON.stringify(row).slice(0, 400));

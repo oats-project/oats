@@ -49,7 +49,7 @@ const dir = join(process.env.HOME, "fake-session");
 mkdirSync(dir, { recursive: true });
 const req = JSON.parse(readFileSync(0, "utf8"));
 const instance = process.env.OATS_INSTANCE;
-appendFileSync(join(dir, "calls.log"), JSON.stringify({ verb: req.verb, argv: process.argv.slice(2), cwd: process.cwd(), instance, backend: process.env.OATS_BACKEND, event: process.env.OATS_EVENT, capability: process.env.OATS_CAPABILITY, settings: process.env.OATS_SETTINGS, request: req }) + "\\n");
+appendFileSync(join(dir, "calls.log"), JSON.stringify({ verb: req.verb, argv: process.argv.slice(2), cwd: process.cwd(), instance, backend: process.env.OATS_BACKEND, event: process.env.OATS_EVENT, capability: process.env.OATS_CAPABILITY, settings: process.env.OATS_SETTINGS, soul: process.env.OATS_SOUL ?? null, soulId: process.env.OATS_SOUL_ID ?? null, level: process.env.OATS_LEVEL ?? null, request: req }) + "\\n");
 const control = existsSync(join(dir, "control.json")) ? JSON.parse(readFileSync(join(dir, "control.json"), "utf8")) : {};
 // A stop's behaviour can be set by what it is asked to stop: "stop:E" (an endpoint), "stop:null" (whatever is rooted at the home).
 const stopKind = req.verb === "stop" ? (req.input.endpoint === null ? "stop:null" : "stop:E") : null;

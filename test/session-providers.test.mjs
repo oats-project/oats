@@ -1182,6 +1182,10 @@ test("a provider's check is asked before every launch, and before any hook: a pr
   // arguments (none here), without what a hook adds.
   assert.deepEqual(fx.verbs("check")[0].request.input, { home, soul: null, settings: {}, launch: { harness: "claude", yolo: null, args: [], sandbox: fx.verbs("launch")[0].request.input.sandbox } });
   assert.deepEqual(fx.verbs("launch")[0].request.input.args, ["--from-a-hook"]);
+  // And with the environment every later call of the home has: its soul, though its record is not written yet.
+  const envOf = (call) => [call.soul, call.soulId, call.level];
+  assert.deepEqual(envOf(fx.verbs("check")[0]), envOf(fx.verbs("launch")[0]));
+  assert.ok(fx.verbs("check")[0].soul && fx.verbs("check")[0].soulId, JSON.stringify(envOf(fx.verbs("check")[0])));
 
   // Not ready at a spawn: refused with the provider's words, rolled back, no launch.
   fx.clearCalls();
@@ -1297,4 +1301,30 @@ test("E_BACKEND_AMBIGUOUS at a start: a home whose modules now hold two capabili
     await assert.rejects(fx.inEnv(start), (e) => e.code === "E_BACKEND_AMBIGUOUS" && JSON.stringify(e.details) === JSON.stringify({ backend: "fake", capabilities: [FAKE_CAPABILITY, "acme.twin"] }) && /nothing was stopped or started/.test(e.message));
   }
   assert.deepEqual(fx.verbs(), [], "nothing was launched");
+});
+
+test("a start's check is asked with no hook run and whatever its plan says: a selection whose recorded contributions do not pass preflight still asks, before anything is stopped", async (t) => {
+  // The capability's hook owns ACME_FAKE_TOKEN_FILE at the spawn and no longer at a launch, and it
+  // previews (as oats.aweb's does): a plan made from the RECORDED contributions refuses a launch
+  // configuration that sets that name; the real plan, which runs the hook, does not.
+  const files = fakeFiles();
+  const hook = files["bin/hook.mjs"].replace('process.stdout.write(JSON.stringify({ env: { ACME_FAKE_TOKEN_FILE: "/nowhere/token" },', 'process.stdout.write(JSON.stringify({ env: process.env.OATS_EVENT === "spawn" ? { ACME_FAKE_TOKEN_FILE: "/nowhere/token" } : {},');
+  assert.notEqual(hook, files["bin/hook.mjs"]);
+  files["bin/hook.mjs"] = hook;
+  const fx = providerDeployment(t, {
+    capabilities: { [FAKE_CAPABILITY]: { manifest: { ...fakeManifest({ fake: fakeProvider({ check: true }) }), launchPreview: true }, files } },
+    local: { "launch-configs": { claude: { harness: "claude" }, over: { harness: "claude", env: { ACME_FAKE_TOKEN_FILE: "/mine" } } } },
+  });
+  const { home } = await fx.launch("picky");
+  const sequence = () => fx.calls().map((c) => c.hook ? `${c.hook} hook${c.preview ? " (preview)" : ""}` : c.verb);
+  // Refused: the check was asked, no hook ran (not as a preview either), and the session still runs.
+  fx.control({ check: { result: { status: "unavailable", problems: [{ code: "server-down", message: "the bb server does not answer" }] } } });
+  fx.clearCalls();
+  await assert.rejects(fx.inEnv(() => restartInstanceSession(home, { launchConfig: "over" })), (e) => e.code === "E_BACKEND_NOT_READY" && /nothing was stopped or started/.test(e.message));
+  assert.deepEqual([sequence(), runtimeOf(home).stoppedAt], [["inspect", "check"], null]);
+  // Ready: the check first, then the hooks (as a preview, then for real), then the stop and the launch.
+  fx.control({});
+  fx.clearCalls();
+  await fx.inEnv(() => restartInstanceSession(home, { launchConfig: "over" }));
+  assert.deepEqual(sequence(), ["inspect", "check", "launch hook (preview)", "launch hook", "stop", "launch"]);
 });
