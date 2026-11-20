@@ -1027,17 +1027,27 @@ F6 moves focus to the next region, Shift+F6 to the previous one, in this order:
    region: Tab reaches them after the roster, and F6 from there goes on to
    Main, Shift+F6 back to the roster. From an empty roster's stop there (New
    instance), Shift+F6 goes back as from the roster, to the views.
-4. **Main**: with tabs open, the active tab's content (a terminal's input,
+4. **The agent's facts** (the agent view, while the active tab shows its
+   facts strip, above the terminal): its first fact, else its fold. In the
+   cycle only while it shows.
+5. **Main**: with tabs open, the active tab's content (a terminal's input,
    through the same selection intent as any explicit terminal focus), else a
    focused empty split group, else the active tab in the strip; on a stage,
    its first control. The tab strip, the split controls, Show sidebar and Show
    instance panel belong here.
-5. **Instance panel**: its selected tab (a stage's content, such as the soul
+6. **The agent's questions** (the agent view, while the active tab shows its
+   question zone, under the terminal): the question's first enabled option,
+   else the zone itself. In the cycle only while it shows; Esc in the
+   questions or the facts goes back to the terminal.
+7. **Instance panel**: its selected tab (a stage's content, such as the soul
    inspector: its first control), while the panel is open.
 
 Inside a terminal F6 belongs to the program (mc, htop, nano). **⇧⌘F6 /
 Ctrl+Shift+F6** (`focus.leaveTerminal`) leaves the terminal for the next region
-in the same order; from there plain F6 and Shift+F6 cycle as usual.
+in the same order; from there plain F6 and Shift+F6 cycle as usual. From an agent's
+terminal with questions open, that next region is its questions (the agent
+view's key: no chord and no leader key of its own, so Alt+T stays the
+program's, see [What the Alt family takes](#what-the-alt-family-takes)).
 
 Then back to the workspaces. A hidden region is skipped (the sidebar while hidden or
 in focus mode, the panel while closed or when it has nothing to show), and so
