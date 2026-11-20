@@ -2114,7 +2114,10 @@ never drops one silently, and it never stores a `secret` value where others
 can read it.
 
 Out: `{ "endpoint": { … } }`. The endpoint is a JSON object whose canonical
-JSON is at most 4 KiB (4096 bytes). The kernel records it as given, in the
+JSON is at most 4 KiB (4096 bytes). **It names one session: answer an
+endpoint you never answered before for that home** (a new thread id, not a
+locator a later session takes over). The kernel stops a session by its
+endpoint, also after a newer one was launched. The kernel records it as given, in the
 home's `instance.json` and its receipt, and hands it back on every call. It
 holds **locators only, never a credential**.
 

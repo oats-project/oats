@@ -23,6 +23,7 @@ state, in what order it writes, and what happens when two things cross.
 | **Stop receipt** | `<home>/.oats-stop.json` | the kernel; inside the home | which stop the last one was, for the current `startId`: an operator's, or the host's (`resume: true, reason: "host-stop"`) |
 | **Claim** | `<instances>/.oats-retirement/claims/<name>.lock` | the kernel; outside the home | which lifecycle verb acts on the home now, and its process |
 | **Resume count** | `OATS_HOME_DIR/session-resume/provider-resumes/<hash>.json` | the kernel; outside the home | the resumes of the last hour, this boot |
+| **Input in flight** | `<instances>/.oats-retirement/inputs/<name>/<pid>-<id>.json` | the kernel; outside the home | an input is being sent to the home now, and by which process |
 
 The receipt decides. The record must agree with it
 (`E_RUNTIME_AUTHORITY_MISMATCH` otherwise), **except while the receipt says a
@@ -183,14 +184,31 @@ one read of the home, whatever the provider answered (a refusal included):
 | What the read says | What happened | What the kernel does |
 |---|---|---|
 | running, the same `startId` and endpoint | nothing | answers the provider's answer |
-| stopped, or no session recorded | a stop, or a retire, landed | `stop {E}` again; `E_SESSION_NOT_RUNNING`, not delivered |
+| stopped, or no session recorded | a stop landed, or a retire is waiting for this input (below) | `stop {E}` again; `E_SESSION_NOT_RUNNING`, not delivered |
 | unsettled | a start is launching | `stop {E}` again; `E_SESSION_NOT_RUNNING`, not delivered |
 | running, another `startId`, another endpoint | a restart landed | `stop {E}` again (the old one); `E_SESSION_NOT_RUNNING` |
-| running, another `startId`, the same endpoint | a restart landed, and the provider reused the locator | nothing is stopped (that locator is the new session's); `E_SESSION_NOT_RUNNING`. The provider may have delivered the input to the new session all the same: the mail stays unread and is presented again, a duplicate, never a loss |
+| running, another `startId`, the same endpoint | a restart landed, and the provider reused the locator, which it must not (below) | nothing is stopped (that locator is the new session's); `E_SESSION_NOT_RUNNING`. The provider may have delivered the input to the new session all the same: the mail stays unread and is presented again, a duplicate, never a loss |
 
 The same read before the send refuses without sending. A start's step 3
 covers the input that finished between the start's inspect and its mark: the
 session it restarted at `E` is stopped before the new one is launched.
+
+A provider that hands a launch an endpoint it used before for the home
+breaks the rule below. In the rows "stopped" and "unsettled" the `stop {E}`
+then addresses whatever session holds that locator by then, which can be the
+new one: the home is recorded running, its session is gone, it reads lost,
+and the next input resumes it.
+
+**A retire and an input in flight.** After a retire the input could not ask
+for anything: the home, and the provider's commands with it, are gone. So an
+input records that it is in flight, outside the home, before its read of the
+home and until its answer; and a retire, after `stoppedAt` (from which a new
+input is refused at that read) and its first `stop {E}`, waits for the
+inputs in flight to end, at most an input's timeout and a margin, and asks
+`stop {E}` once more. Then its scan, then the removal. An input still in
+flight at the bound does not hold the retire: it goes on, with a warning
+that names the input's process. A marker whose process is gone (judged as a
+claim's holder is) is no input, and is removed.
 
 **Resume count.** Taken under its own lock, before the provider's `input`,
 and given back only when the provider itself refused the input.
@@ -200,5 +218,7 @@ and given back only when the provider itself refused the input.
 - `stop` is idempotent, and with `endpoint: null` stops whatever session
   rooted at the home was created at or after `launchSent`.
 - `launch` either answers an endpoint for a session it started, or refuses
-  having started nothing.
+  having started nothing. **The endpoint it answers differs from every
+  endpoint it answered before for that home**: an endpoint names one session,
+  never a place that a later session takes over.
 - `input` answers `submitted: true` only when it dispatched the input.

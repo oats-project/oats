@@ -10,7 +10,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inputInstanceSession, inspectInstanceSession, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
@@ -213,7 +213,10 @@ const CROSSINGS = [
   ["a stop", {}, (fx, home) => fx.inEnv(() => stopInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
   ["a stop, and the provider refuses the input", { error: { code: "E_SESSION_PROMPT_OPEN", message: "a prompt is open" } }, (fx, home) => fx.inEnv(() => stopInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
   ["a restart, to another endpoint", {}, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
-  ["a restart, and the provider reuses the locator", { stable: true }, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E"]],
+  ["a restart, and the provider reuses the locator (which a provider must not)", { stable: true }, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E"]],
+  // A retire waits for the input before its last stop: its own stop, the input's (the home is still
+  // there, stopped), and the retire's once more, after which nothing can restart the session.
+  ["a retire", {}, (fx, home) => { const r = JSON.parse(fx.cli(["retire", home.split("/").pop(), "--json"]).stdout); assert.equal(r.retired, home.split("/").pop(), JSON.stringify(r).slice(0, 300)); }, "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E", "stop:E"]],
 ];
 for (const [what, behaviour, act, answer, stops] of CROSSINGS) {
   test(`an input in flight while ${what} lands: ${answer}; stops: ${stops.join(", ") || "none"}`, async (t) => {
@@ -226,6 +229,11 @@ for (const [what, behaviour, act, answer, stops] of CROSSINGS) {
     const answered = await inputWhile(fx, home, () => act(fx, home));
     assert.equal(answered.ok ? "submitted" : answered.error.code, answer, JSON.stringify(answered).slice(0, 300));
     assert.deepEqual(callsOf(fx).filter((c) => c.startsWith("stop")), stops);
+    if (what === "a retire") {
+      // The retire's last stop came after the input's provider call had ended, and the home is gone.
+      const order = fx.calls().filter((c) => c.verb === "input" || c.verb === "stop").map((c) => c.verb);
+      assert.deepEqual([order.at(-1), existsSync(home), existsSync(join(dirname(home), ".oats-retirement", "inputs", "x")) ? readdirSync(join(dirname(home), ".oats-retirement", "inputs", "x")) : []], ["stop", false, []]);
+    }
   });
 }
 test("an input in flight to a lost session while a start marks its launch: not delivered, and the session it restarted at the old endpoint is stopped again", async (t) => {
