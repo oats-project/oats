@@ -7442,7 +7442,10 @@ tmux). A preview carries `backend: "<name>"`, `backendStatus: {name,
 installed: true, started: false}` and `executable: null`. A launched spawn's
 answer carries `backend: "<name>"`, `session: {provider, endpoint}`, `tmux:
 null`, `attach: null`, and its `launch.executable` is `null`. Refusals, before
-anything is created (a preview answers them too):
+anything is created (a preview answers them too). While the provider
+launches, the spawn holds the new home's lifecycle claim: a stop's apply, a
+start and a retire of it are refused as busy (`E_LIFECYCLE_BUSY`,
+`E_SESSION_START_BUSY`) until the launch is recorded or undone.
 
 | Code | `details` |
 |---|---|
@@ -7510,7 +7513,9 @@ spawn's and a start's). `E_SESSION_NOT_RUNNING` for a home OATS
 stopped (nothing was sent, the provider was not called), and for a lost
 session at its resume cap or with a process of its last run still in the
 home; `E_SESSION_PROMPT_OPEN` and `E_SESSION_INPUT_QUEUED` from the provider
-(nothing was sent); `E_SESSION_INPUT_FAILED` for anything else. A delivery
+(nothing was sent); `E_SESSION_INPUT_FAILED` for anything else. A stop or a
+restart that lands while an input is being sent wins, whatever the provider
+answered to it: `E_SESSION_NOT_RUNNING`, the input not delivered. A delivery
 is accepted only on `ok: true` with `submitted: true`.
 
 **Start and restart.** The result has every key a tmux start answers, with
@@ -7553,7 +7558,8 @@ required for a soul.
 **The sweep.** A row of `oats session resume` for a provider home carries
 `backend`. Its outcomes: `resumed` (a lost session: the notice was sent),
 `already-running` (a session is there), `refused` with `keeps-getting-lost`
-(the home's resume cap; `code: "E_SESSION_NOT_RUNNING"`) or `start-refused`
+(the home's resume cap; `code: "E_SESSION_NOT_RUNNING"`, with
+`nextAttemptAt`; a `--plan` reads the same count and answers the same) or `start-refused`
 (the notice was not sent: a prompt or a claim is open, or it was queued),
 `skipped` with `unknown` (not readable, or a process of the last run still
 works in the home). A home an operator stopped has no row. `--plan

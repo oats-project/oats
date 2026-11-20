@@ -2251,8 +2251,17 @@ the feature.
   stop you did not confirm is finished), a start of a stopped home before
   its launch, and after an input that crossed a stop (an input holds no
   claim: when a stop or a restart lands while one is being sent, the kernel
-  asks you to stop that session again and does not deliver the input).
+  asks you to stop that session again and does not deliver the input,
+  whatever you answered to it, a refusal included). After a restart it asks
+  that only when the new session has another endpoint: where you hand a
+  restart the same locator again, that locator is the new session's, and the
+  kernel tells the two apart by its own record of the start.
   Answer `stopped: true` for a session that is already stopped.
+- **A spawn holds the home while you launch.** From before the home can be
+  acted on until your launch's endpoint is recorded (or the spawn is undone),
+  the spawn holds the home's lifecycle claim: a stop, a start or a retire
+  that arrives meanwhile is refused as busy, never answered as if there were
+  nothing to stop.
 - **Nothing of your endpoint leaves the host.** A status row carries the
   capability and, on its own host only, the endpoint's `threadId` when it
   is a string; the endpoint is on local inspect, spawn and start answers.

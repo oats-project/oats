@@ -407,6 +407,12 @@ test("T7: a session in error, reported lost, is resumed by the sweep with one in
   assert.deepEqual([capped.ok, capped.error.code], [false, "E_SESSION_NOT_RUNNING"]);
   assert.match(capped.error.message, /was resumed 3 times in the last hour, and was lost again each time/);
   assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspect"], "the session was read; no input reached the provider");
+  // A plan says what the sweep would answer: it reads the same count, used up here by inputs as
+  // much as by sweeps, and calls no provider's input.
+  fx.clearCalls();
+  const planned = fx.cli(["session", "resume", "--deployment", fx.dep, "--plan", "--json"]).json().result.rows[0];
+  assert.deepEqual([planned.instance, planned.outcome, planned.reason, planned.code, planned.backend, Number.isFinite(Date.parse(planned.nextAttemptAt))], ["errored", "refused", "keeps-getting-lost", "E_SESSION_NOT_RUNNING", "fake", true]);
+  assert.deepEqual(fx.verbs("input"), []);
   // The sweep is refused the same way, by the same count.
   fx.clearCalls();
   const refused = sweep(fx).result.rows[0];
@@ -621,7 +627,7 @@ test("T4: a stop that lands while an input runs still wins: the input is not del
   fx.clearCalls();
   const undelivered = await inputWhile(late.home, () => fx.inEnv(() => stopInstanceSession(late.home, {})));
   assert.deepEqual([undelivered.ok, undelivered.error.code], [false, "E_SESSION_NOT_RUNNING"]);
-  assert.match(undelivered.error.message, /was stopped or restarted by OATS while this input was being sent; its fake session was asked to stop again, and the input is not delivered/);
+  assert.match(undelivered.error.message, /was stopped by OATS while this input was being sent; its fake session was asked to stop again, and the input is not delivered/);
   assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspect", "input", "stop", "stop"], "a second stop follows the input that crossed the first");
   assert.equal(Number.isFinite(Date.parse(runtimeOf(late.home).stoppedAt)), true);
   // 3. A restart lands while the input is sent: it went to the endpoint the restart replaced.
@@ -632,6 +638,64 @@ test("T4: a stop that lands while an input runs still wins: the input is not del
   assert.deepEqual([stale.ok, stale.error.code], [false, "E_SESSION_NOT_RUNNING"]);
   assert.deepEqual(fx.verbs("stop").map((c) => c.request.input.endpoint), [endpointOf("moved", 3), endpointOf("moved", 3)], "the replaced session is stopped by the restart, and again after the input that reached it");
   assert.deepEqual(runtimeOf(moved.home).endpoint, endpointOf("moved", 4));
+  // 4. The stop lands while the provider is sending, and the provider REFUSES the input (a prompt
+  //    is open): the crossing is judged all the same, whatever the provider answered.
+  const prompted = await fx.launch("prompted");
+  fx.control({ prompted: { input: { sleepMs: 2500, error: { code: "E_SESSION_PROMPT_OPEN", message: "a prompt is open" } } } });
+  fx.clearCalls();
+  const crossedRefusal = await inputWhile(prompted.home, () => fx.inEnv(() => stopInstanceSession(prompted.home, {})));
+  assert.deepEqual([crossedRefusal.ok, crossedRefusal.error.code], [false, "E_SESSION_NOT_RUNNING"]);
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspect", "input", "stop", "stop"], "a second stop follows a refused input that crossed the first too");
+  // 5. A restart lands while the input is sent, and the provider hands the new session the SAME
+  //    locator: the start's id tells them apart. The input is not delivered, and the session at
+  //    that locator, which is the new one, is not stopped by the input's cleanup.
+  const stable = { server: FAKE_SERVER, threadId: "thr_home_stable" };
+  fx.control({ fixed: { launch: { result: { endpoint: stable } } } });
+  const fixed = await fx.launch("fixed");
+  assert.deepEqual(runtimeOf(fixed.home).endpoint, stable);
+  fx.control({ fixed: { launch: { result: { endpoint: stable } }, input: { sleepMs: 2500 } } });
+  fx.clearCalls();
+  const sameLocator = await inputWhile(fixed.home, () => fx.inEnv(() => restartInstanceSession(fixed.home, {})));
+  assert.deepEqual([sameLocator.ok, sameLocator.error.code], [false, "E_SESSION_NOT_RUNNING"]);
+  assert.match(sameLocator.error.message, /fixed was restarted by OATS while this input was being sent, and the input is not delivered/);
+  assert.equal(fx.verbs("stop").length, 1, "only the restart's own stop: the new session at that locator is left running");
+  assert.deepEqual([runtimeOf(fixed.home).endpoint, runtimeOf(fixed.home).stoppedAt], [stable, null]);
+});
+
+test("a spawn on a session provider holds its home's lifecycle claim while the provider launches: a stop, a start or a retire in that window is busy, never \"nothing to stop\"", async (t) => {
+  const fx = providerDeployment(t);
+  fx.control({ launch: { sleepMs: 4000 } });
+  const child = spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "oats.mjs"), "spawn", "dev", "--name", "slow", "--backend", "fake", "--launch-config", "claude", "--json"], { cwd: fx.dep, env: fx.env, stdio: ["ignore", "pipe", "pipe"] });
+  let out = "";
+  child.stdout.on("data", (d) => { out += d; });
+  const done = new Promise((resolve) => child.on("close", resolve));
+  // Wait until the provider has been asked to launch: the home is on disk, its session is being started.
+  for (let i = 0; i < 100 && fx.verbs("launch").length === 0; i++) await new Promise((r) => setTimeout(r, 100));
+  assert.equal(fx.verbs("launch").length, 1, "the provider's launch is in flight");
+  const home = join(fx.root, "dev", "instances", "slow");
+  assert.equal(existsSync(join(home, "instance.json")), true);
+  // A stop's plan is a read (it takes no claim, and reads the record as it is); its apply acts.
+  const plan = fx.cli(["instance", "stop", "slow", "--plan", "--json"]).json();
+  assert.equal(plan.ok, true, JSON.stringify(plan));
+  const during = {
+    stop: fx.cli(["instance", "stop", "slow", "--apply", "--plan-revision", plan.result.planRevision, "--idempotency-key", "while-launching", "--json"]).json(),
+    start: fx.cli(["session", "start", "--home", home, "--json"]).json(),
+    retire: fx.cli(["retire", "slow", "--json"]).json(),
+  };
+  await done;
+  const spawned = JSON.parse(out.trim().split("\n").pop());
+  assert.deepEqual([spawned.ok, spawned.result?.launched], [true, true], JSON.stringify(spawned));
+  const said = Object.fromEntries(Object.entries(during).map(([verb, answer]) => [verb, answer.ok ? JSON.stringify(answer.result).slice(0, 300) : answer.error.code]));
+  assert.deepEqual([said.start, said.retire], ["E_SESSION_START_BUSY", "E_LIFECYCLE_BUSY"], JSON.stringify(said));
+  // The stop's apply answers per target: the home is busy, never "already idle".
+  const row = during.stop.ok ? (during.stop.result.results ?? during.stop.result.targets ?? [])[0] : null;
+  assert.equal(JSON.stringify(during.stop).includes("alreadyIdle\":true"), false, said.stop);
+  assert.match(JSON.stringify(during.stop), /E_[A-Z_]*BUSY/, said.stop);
+  assert.ok(row === null || row.ok === false || row.stopped !== true, said.stop);
+  assert.equal(existsSync(home), true, "and the home is there, launched");
+  assert.deepEqual(fx.verbs().map((c) => c.verb).filter((v) => v !== "inspect" && v !== "inspectMany"), ["launch"], "the provider was asked to launch, once, and nothing else");
+  // Once the launch is recorded the claim is released: the home stops as any other.
+  assert.equal(fx.cli(["instance", "stop", "slow", "--plan", "--json"]).json().ok, true);
 });
 
 test("a start of a home whose last stop was not confirmed asks the provider to stop again before it launches", async (t) => {
