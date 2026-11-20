@@ -1,14 +1,14 @@
 # Sandboxes: boundaries declared in the workspace, started by `oats sync`
 
-**Status:** contracts decided, 2026-11-19. Pepe's side and Juan's side agreed C1–C10
-and C3b as written at 0849ef12, with Juan's side's four changes, which Pepe's side
-accepted: the registry setting (C3, C6), a keyed `seat` (C4), the receipt of the host's
+**Status:** contracts decided, 2026-11-19. The product owner's side and aweb's maintainers agreed
+C1–C10 and C3b as written at 0849ef12, with aweb's maintainers' four changes, which
+the product owner's side accepted: the registry setting (C3, C6), a keyed `seat` (C4), the receipt of the host's
 `remove-member` (C6) and the credential-mount probe (C8). The connector half of C9
 stays designed only. Nothing is built yet. **Revised after review round 1** (marked
 "(r1)" below): existing host homes, lifecycle calls made inside a sandbox, C4's
 per-act wire shapes and provider selection, shared team aliases, mount overlap, the
 first use's GitHub API route, managed server registrations, and the missing refusal
-codes. Both sides decided those, with two precisions from Juan's side, and decided the
+codes. Both sides decided those, with two precisions from aweb's maintainers, and decided the
 `forge` egress role for the GitHub API. **Revised again after review round 2** (marked
 "(r2)"): every real agent bind is checked, `status` mutates nothing, the routed
 spawn's exact sequence and seat binding, the seat's service descriptor, provider state
@@ -43,22 +43,22 @@ reach only the declared destinations and read only the declared credentials. Ret
 it removes its identity from the team. Delisting the sandbox stops it and destroys
 nothing. All of this is shown by a live rehearsal and by the tests pinned in each spec.
 
-## Decided with Pepe
+## Decided with the product owner
 
 - **A team is membership and messaging. A sandbox is the boundary** (its local state,
   credentials and egress). In v1 a team has at most one sandbox, so the two coincide by
   default. They stay separate primitives: a later layout can split one team across
   sandboxes by relaxing validation, with no change to the file format and no identity
-  remint (Pepe, 2026-11-19, agreeing to Juan's side's requirement of 2026-11-18).
+  remint (decided 2026-11-19, agreeing to aweb's maintainers' requirement of 2026-11-18).
 - **Credentials in v1 are read-only files** mounted into the sandbox. Every agent in it
-  can read them, which is acceptable with one team per sandbox (Pepe, 2026-11-19).
+  can read them, which is acceptable with one team per sandbox (decided 2026-11-19).
 - **OATS does not create or delete machines in v1.** Sync builds and starts listed
   sandboxes on a machine that already exists. Creating machines comes later, as a
-  provider capability (Pepe, 2026-11-19).
+  provider capability (decided 2026-11-19).
 - **Both broker contracts are designed in this effort**: one for secrets, one for
-  connectors (Pepe, 2026-11-18). Credential files remain the way to start.
+  connectors (decided 2026-11-18). Credential files remain the way to start.
 - **Messaging isolation is by server:** each isolated team gets its own aweb server
-  with federation outbound off. This needs no aw contract change (Pepe, 2026-11-17).
+  with federation outbound off. This needs no aw contract change (decided 2026-11-17).
 - **Kept as they are:** the word "team"; the schedule file, with `runsOn` naming the
   machine and no lease; a sandbox does not list its own souls; there is no workspace
   list of shared deployments.
@@ -75,7 +75,7 @@ nothing. All of this is shown by a live rehearsal and by the tests pinned in eac
   and `model` (`https://api.anthropic.com`). It does not take arbitrary origins
   ([egress README](../../container/agent/egress/README.md)). The Compose boundary probe
   takes a `namePrefix` and reports `--json` receipts (#1958).
-- aweb's team bundle, `deploy/team` (`teamctl`, Juan's side), renders one
+- aweb's team bundle, `deploy/team` (`teamctl`, aweb's maintainers), renders one
   `deployment.yaml` into an aweb server, the egress proxy and the agent container. It
   sets `AWEB_FEDERATION_OUTBOUND` to `off` by default. `teamctl start` probes the
   boundary, brings up the agent, and exits 3 on purpose with the agents held: it admits
@@ -101,7 +101,7 @@ nothing. All of this is shown by a live rehearsal and by the tests pinned in eac
 | --- | --- | --- |
 | Declaration, validation, placement, CLI verbs, sync | the kernel (lane:product) | Reads `sandboxes:`, refuses the ways round the boundary, decides where a soul runs, calls the sandbox provider, and reports. No Docker. |
 | Sandbox provider | a new capability, `oats.aweb-sandbox`, in the oats-aweb package | Turns a sandbox into teamctl input, runs teamctl, registers the sandbox as a server, prepares the in-sandbox deployment, mints and delivers seats, removes members at retire. |
-| The team bundle | teamctl, aweb `deploy/team` (Juan's side) | Three new inputs: the credential mount, the protected-sources file and the `forge` role (C8). |
+| The team bundle | teamctl, aweb `deploy/team` (aweb's maintainers) | Three new inputs: the credential mount, the protected-sources file and the `forge` role (C8). |
 | The agent image and Compose | `container/agent` (lane:juan) | A read-only credential mount fragment (C8). |
 
 ### Placement
@@ -115,8 +115,7 @@ is declared in the workspace and never in a machine's local file.
   S1 builds on #1912's floor (lane:juan, held): the task goes on stdin, the apply is
   bound to its preview and keyed, and a host below 0.69.15 is refused. This costs
   nothing, because the sandbox's kernel must already be the release with `sandboxes`.
-  S1 may be built now, but does not merge before #1912, whose hold (for the routed-host
-  upgrade and a demo) lifts about 2026-11-27 at the earliest. If #1912 is withdrawn, S1 itself requires the same
+  S1 may be built now, but does not merge before #1912. If #1912 is withdrawn, S1 itself requires the same
   three properties of the sandbox's kernel, rather than relying on today's fallbacks.
 - On a host that does not list S, the spawn is refused with `E_SANDBOX_NOT_HERE`, naming
   S and the local key that would list it. A sandboxed soul never falls back to the host.
@@ -354,8 +353,8 @@ it:
   that differs from the SNI inside the encrypted stream, on a `forge` or another
   admitted connection, is not refused by this component; whether GitHub serves it is
   GitHub's. Refusing it would need TLS interception, which this record does not
-  propose. The decided "SNI/Host mismatch" item is replaced by this statement, for both
-  sides to confirm.
+  propose. This statement replaced the earlier "SNI/Host mismatch" item; both sides
+  decided it in r3, with the risk statement above.
 - The external-egress image test and the boundary probe name the hosts that stay
   refused: `uploads.github.com`, `codeload.github.com`, `raw.githubusercontent.com`,
   `objects.githubusercontent.com` and `gist.github.com`.
@@ -368,7 +367,7 @@ it:
   `sandbox-egress-forge`, because a kernel that already has `sandboxes` refuses the new
   value through C1's closed set: a workspace uses `forge` only once every one of its
   hosts lists that feature.
-- Order: the egress component and teamctl first, on lane:juan (Juan's side launches
+- Order: the egress component and teamctl first, on lane:juan (aweb's maintainers launch
   that developer once this record is final); then C1's value, on the kernel side.
 
 ### What sync does
@@ -451,7 +450,7 @@ sandboxes:
   `oats version --json` on each host lists `sandboxes`.
 - Feature `sandboxes` in `oats version --json`.
 
-### C2. The three ways round a sandbox are refused (Juan's side's edge cases)
+### C2. The three ways round a sandbox are refused (aweb's maintainers' edge cases)
 
 All are refused when the workspace file is read, with `E_WORKSPACE_SCHEMA` and a reason
 code:
@@ -712,7 +711,7 @@ existing Docker-context SSH relay from container.md.
   deployment lists, naming the old key. It is never adopted automatically; the remedy
   names moving the directory back, or the manual adoption step S2 specifies.
 
-### C8. teamctl and the container (Juan's side)
+### C8. teamctl and the container (aweb's maintainers)
 
 - **Credential mount:** a new teamctl input, `agents.credentials`, a map from name to a
   host file. It is rendered as read-only binds at `/run/oats-credentials/<name>` through a
@@ -725,7 +724,7 @@ existing Docker-context SSH relay from container.md.
   `{"protectedSourcesApi":1, "hardDenied":[<path>], "credentialSources":[<path>],
   "declaredBinds":[{"source":<path>,"target":"/run/oats-credentials/<name>"}]}`, with
   real paths, and gives it to teamctl as a new input, `agents.protectedSourcesFile`
-  (contract: teamctl's schema, Juan's side). teamctl passes it to the container's
+  (contract: teamctl's schema, aweb's maintainers). teamctl passes it to the container's
   mount acceptance, which takes those three parts and, on the started
   agent's actual mounts, asserts that no bind equals, contains or lies inside a
   protected path, the declared credential binds being the only exception to the
@@ -752,13 +751,13 @@ egress routes only.
 - **Connectors:** a sandbox may list `connectors: [<name>]` in C1, a later optional
   key. `oats connector call <name> <operation> --request-id <id> [--input-file <f>] --json`
   takes the same outcome states, through a `connector-broker` hook. aweb has no
-  connectors broker built or filed, and whether one is planned is Juan's to say. The
+  connectors broker built or filed, and whether one is planned is for aweb's maintainers to say. The
   shape is offered so that a provider-neutral gateway can implement it. It stays
-  designed only, and is not built, until Juan says whether aweb plans a connectors
+  designed only, and is not built, until aweb's maintainers say whether aweb plans a connectors
   broker and a provider exists.
 - **Order:** both contracts are agreed in this record. Each is built when its first real
   provider ships, and checked against that provider's interface before it is released.
-  This keeps Pepe's decision to design both now, and Juan's side's point that a public
+  This keeps the product owner's decision to design both now, and aweb's maintainers' point that a public
   contract must not take its shape from one unshipped product.
 - **What S4's spec settles before it is built (r1),** each a contract both sides
   agree: the `credential list` JSON and its hook request; how the broker capability
@@ -828,8 +827,8 @@ modes against users, which cannot be proved from inside one account.
 - Creating or deleting machines.
 - Several sandboxes for one team, and explicit placement.
 - A bridge soul between a sandboxed team and another team.
-- Human IDs by default and `oats sandbox adopt`. These wait on Juan's own decision on
-  reversing "strictly opt-in" (#1665) and on aweb's view. Adoption is specified once
+- Human IDs by default and `oats sandbox adopt`. These wait on aweb's maintainers' decision
+  on reversing "strictly opt-in" (#1665). Adoption is specified once
   those are settled.
 - Kubernetes. The provider contract (C4) is platform-neutral, and v1's provider is
   Compose through teamctl.
@@ -842,7 +841,7 @@ modes against users, which cannot be proved from inside one account.
   or show.
 - **`hostedBy: everyone` for containers:** Docker could start on a laptop that never
   asked for it.
-- **A sandbox that lists its own souls and gets an automatic team:** rejected by Pepe.
+- **A sandbox that lists its own souls and gets an automatic team:** rejected by the product owner.
 - **Docker in the kernel:** the kernel stays runtime-neutral; the provider owns
   containers.
 - **The container's own clock beside the host's:** two owners of one schedule.
@@ -857,8 +856,8 @@ modes against users, which cannot be proved from inside one account.
 | Spec | Surface | Lane | Builds first |
 | --- | --- | --- | --- |
 | S1 Kernel: C1, C2, C3, C4's caller, C5, C10, placement and routing | `lib/`, `bin/`, schemas, `docs/` | lane:product | first; built now, merged after #1912's hold lifts |
-| S2 Provider: `oats.aweb-sandbox`, C4's hook, C6, C7, the registry setting (C3) | the oats-aweb package | lane:setup, Juan's side reads first | after S1's contract is merged |
-| S3 Credential mount and the `forge` role: C8, the egress component, teamctl's inputs | `container/agent`, and teamctl on Juan's side | lane:juan | in parallel with S1 |
+| S2 Provider: `oats.aweb-sandbox`, C4's hook, C6, C7, the registry setting (C3) | the oats-aweb package | lane:setup, aweb's maintainers read first | after S1's contract is merged |
+| S3 Credential mount and the `forge` role: C8, the egress component, teamctl's inputs | `container/agent`, and teamctl on aweb's maintainers' side | lane:juan | in parallel with S1 |
 | S4 Broker contracts: C9 docs, then the client verbs | `docs/`, `lib/` | lane:product | after the first real provider |
 
 Each spec carries its own reference pages and a release-notes entry of its own under
@@ -871,7 +870,7 @@ Each spec carries its own reference pages and a release-notes entry of its own u
 - S2: the oats-aweb package's own docs (`identity.seat`, the registry setting,
   `oats.aweb-sandbox`'s settings, the ledger and reconcile).
 - S3: [container.md](../container.md) (the credential fragment and its probe) and
-  teamctl's docs on Juan's side.
+  teamctl's docs on aweb's maintainers' side.
 - S4: the broker contracts' reference page, when it is built.
 
 The live rehearsal runs on a disposable Linux Docker host, never on a person's machine.
