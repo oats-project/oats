@@ -1159,9 +1159,11 @@ comes from an OATS without the feature, the facts strip and the context fold
 say which. A board the Desktop can't read, or one with entries it had to leave
 out, says so too. None of these hides a question or reads as "no questions".
 
-**Answering.** **Alt+T** (Ctrl+Alt+T in the Ctrl+Alt and Ctrl+Shift families,
-⌘⌥T on macOS) moves the focus from the terminal to the questions, then to the
-facts, then back; Esc goes back to the terminal. A number, or a press on an
+**Answering.** The questions and the facts are focus regions: from the
+terminal, **Ctrl+Shift+F6** moves to the questions, and F6 / Shift+F6 move on
+from there (the facts come before the terminal, the questions after it). The
+palette's **Agent: questions and facts (focus)** moves through the questions,
+the facts and back to the terminal. Esc goes back to the terminal. A number, or a press on an
 option, puts `<id>: <option>` on the agent's input line, for example
 `q2: Yes, one clean commit`, and gives the terminal the focus. Nothing is sent:
 your Enter in the terminal sends it, as if you had typed it, so you see what

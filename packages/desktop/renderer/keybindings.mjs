@@ -349,7 +349,7 @@ export const CHORDS_READ = Object.freeze([
   ["split.vertical", "split-right"], ["split.horizontal", "split-down"],
   ["split.focusPrevGroup", "group-previous"], ["split.focusNextGroup", "group-next"],
   ["sidebar.focusFilter", "filter"], ["instance.edit", "edit-instance"],
-  ["instance.mail", "mail"], ["agent.viewFocus", "agent-view"],
+  ["instance.mail", "mail"],
 ].map(([id, does]) => Object.freeze({ id, does })));
 /** The default of the CHORDS row `does` in `family`: macOS's key, and Linux/Windows' key in that
  * family (chordKeyOf), as one string where both are the same chord. */
@@ -409,9 +409,6 @@ function keymapIn(family) {
     // The agent's mail (S2-M3; mail-sheet.mjs): Alt+M (Ctrl+Alt+M in the other two families) on Linux/Windows, ⌘⌥M
     // on macOS, for the leader's target, from every focus, a terminal's included.
     "instance.mail": chordOf("instance.mail"),
-    // The agent view (S2-D; CHORDS agent-view): the focus through the shown agent's questions and facts, and back to
-    // its terminal. Alt+T (Ctrl+Alt+T in the other two families), ⌘⌥T on macOS; transpose-words still comes from Esc, then t.
-    "agent.viewFocus": chordOf("agent.viewFocus"),
     "app.chooseSoul": { mac: "Mod+N", other: "Ctrl+Shift+N" },
     "app.shortcuts": "Mod+,",
     // No default (spec F): ⌘⇧T is "reopen closed tab" in browsers and Ctrl+Shift+T "new tab" in
@@ -538,7 +535,6 @@ export function defaultBinding(actionId, isMac = defaultIsMac(), family = chordF
 export const TERMINAL_ALLOWLIST = Object.freeze([
   "app.leader", "app.palette", "app.quickOpenSouls", "app.newAgent", "app.workspaces", "app.chooseSoul", "app.themePicker", "app.shortcuts", "terminal.copySelection",
   "roster.openPrevious", "roster.openNext", "workspace.previous", "workspace.next", "terminal.focusMode", "instance.edit", "instance.mail",
-  "roster.openPrevious", "roster.openNext", "workspace.previous", "workspace.next", "terminal.focusMode", "instance.edit", "agent.viewFocus",
   "tabs.next", "tabs.prev", "tabs.nextPage", "tabs.prevPage", "tabs.close",
   ...Array.from({ length: 9 }, (_, i) => `tabs.goto${i + 1}`),
   "split.vertical", "split.horizontal", "split.close", "split.focusPrevGroup", "split.focusNextGroup",
