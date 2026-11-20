@@ -209,10 +209,10 @@ the final values in one short message before you go on. The rules:
   - New: the **workspace name**: lowercase letters and digits, words joined
     by single `-` (`^[a-z0-9]+(?:-[a-z0-9]+)*$`), for example `acme`. Refuse
     `agents`: OATS keeps instance homes in a folder of that name. Default:
-    their project's name (its repository's, or its folder's), normalised as
-    in the machine's round, with repeated `-` collapsed and a leading or
-    trailing `-` dropped (`My_App_` gives `my-app`); with no project, ask
-    for a name.
+    their project's name: its repository's name when it has one, else its
+    folder's (the repository's wins when they differ), normalised as in the
+    machine's round, with repeated `-` collapsed and a leading or trailing
+    `-` dropped (`My_App_` gives `my-app`); with no project, ask for a name.
 - **New workspace: the host,** the one repository that holds the
   workspace's files:
   - **One repository (a monorepo):** that repository, the files at its root;
@@ -907,7 +907,10 @@ workspace: git:github.com/acme/acme-oats
   repos/<owner>/<repo>/branches/<branch> --jq .protected` prints `true`,
   `gh api repos/<owner>/<repo>/rules/branches/<branch> --jq length` prints
   more than 0, or either fails), or the push is refused: push a branch
-  instead, open a pull request, tell them, and stop until it is merged.
+  instead, open a pull request, tell them, and stop until it is merged. A
+  403 from the rules read saying the feature needs an upgrade ("Upgrade to
+  GitHub Pro or make this repository public") is not a failure: the
+  repository's plan has no rulesets, so it counts as 0.
 - If `git config user.name` or `git config user.email` prints nothing in
   `D/<repo>`, commit with the name step 1's yes covered:
   `-c user.name="<their name>" -c user.email="<their noreply address>"`,
