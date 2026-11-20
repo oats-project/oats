@@ -51,6 +51,16 @@ so there is no queue, no background worker and no watermark to keep.
    record the checkpoint and its exact outcome in the instance's own record. A
    partial edit or an opened process is not a delivered proposal.
 
+**Steps 2 and 5 may move to the reviewer.** A capability may keep the
+proposer's consultation to a quick search and leave duplicates, the canonical
+home and the destination node or subject to the reviewer. A proposal may then
+name a node or subject the proposer does not own, flagged for the reviewer
+rather than refused. `oats.okf` 6.3 works this way: its proposals carry such
+findings as warnings the knowledge maintainer resolves before merging. Say in
+the capability which side settles each of these, and make what the reviewer
+must settle visible on the proposal. The exclusions and the screen before
+delivery stay with the proposer: they protect what leaves the host.
+
 Never promote secrets, credentials, personal data about people outside the team
 (clients, correspondents, any other third party), third-party messages
 verbatim, tool noise, readily re-derived code descriptions or task-only plans.
