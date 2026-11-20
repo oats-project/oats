@@ -102,13 +102,21 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   workspace views (a path, `remote:<server>:<target>`) is stale once a view
   holds it: the server answers it with that view, whose id is adopted.
 
-`theme.css` carries semantic WCAG AA tokens for **White**, **Solarized**, and
-**Dark**. A fourth choice, **This computer** (`host`), has no palette of its
-own: it shows the theme of the computer that runs Desktop. The palette's **Theme: choose…** and Ctrl+Shift+Space (⇧⌘Space on macOS;
-`app.themePicker`) open the theme picker (`theme-picker.mjs`), a modal in the
-middle of the window that applies a choice through `setTheme`. The other
-theme actions are in the command palette; cycling follows that order
-(White, Solarized, Dark, This computer). Existing valid `oatsweb.theme` preferences survive, on
+`theme.css` carries semantic WCAG AA tokens for **Light** (the id `light`, once
+White), **Solarized**, and **Dark**. A fourth choice, **System** (`host`, once
+"This computer"), has no palette of its own: it shows the Omarchy theme on an
+Omarchy computer and the OS's light or dark setting everywhere else
+(host-theme.mjs), as "This computer" did (Joan's decision for System,
+2026-11-19). **The Appearance sheet** (`theme-picker.mjs`
+`createAppearanceSheet`; the Desktop UI rework, slice 4) is where a theme is
+chosen: the palette's **Appearance…** and Ctrl+Shift+Space (⇧⌘Space on macOS;
+`app.themePicker`) open it on Theme (System, Dark, Light, then More themes…
+for Solarized), and **Font: choose…** (`app.fontPicker`) on Font (also **Theme: choose…** for Theme). A row
+applies at once through `setTheme` / `setFont` and the sheet stays open; its
+third part is the terminals' font size (`settings-terminal.mjs`). It replaces
+the theme picker and the font picker. The other theme actions are in the
+command palette; cycling follows the THEMES order (Light, Solarized, Dark,
+System). Existing valid `oatsweb.theme` preferences survive, on
 every platform. A missing or invalid preference means the platform's default:
 This computer on Linux, White elsewhere. The shell decides which from
 `navigator.platform` and passes it to `initTheme()` as the fallback;
@@ -119,18 +127,19 @@ from a fresh one and follows a change of default, and one where White was
 chosen keeps White. Views use tokens only, scoped under `.oats-view`. Orange
 selection is distinct from error/success.
 
-**The font** (the product owner's call, 2026-10-23) is a choice beside the theme:
-**Omarchy's font**, the default on an Omarchy computer, or **System font**, the faces
-before it and the default everywhere else (2026-10-26). The palette's **Font: choose…**
-(`app.fontPicker`, the Desktop's own, with no default chord and not on
-`TERMINAL_ALLOWLIST`) open the font picker, the theme picker's module over the two fonts: `theme-picker.mjs`
-`createChoicePicker` is the picker (layer, focus containment, Escape, focus
-return), and `createThemePicker` and `createFontPicker` give it their title,
-close label and rows (`theme.mjs` `fontChoices`; on macOS the Omarchy row is
-named **JetBrains Mono**). Both keep the `.theme-picker-*` classes; the overlay
-also carries `.theme-picker-overlay` or `.font-picker-overlay`.
+**The font** (the product owner's call, 2026-10-23; D2 of the Desktop UI rework, 2026-11-19)
+is the terminals' face only: the chrome is always the system sans. **This computer's
+monospace** (the id `omarchy`, once "Omarchy's font"), the default on an Omarchy
+computer, or **System** (Inconsolata in the terminals), the default everywhere else
+(2026-10-26). The Appearance sheet's Font list (`theme.mjs` `fontChoices`) offers them,
+and **Choose…**, a family by name; on macOS the monospace row is not offered (it
+changed only the chrome there). Before D2, Omarchy's font also set the chrome
+(`--ui-font`, `--mono`, `--name-size`); the record of that is below, marked as before D2.
 
-- **What it sets.** `theme.mjs` `fontStacks(font, isMac)` is the custom
+- **What it sets (since D2).** The monospace choice sets `--term-font-family` alone,
+  on Linux and Windows; nothing else, and nothing on macOS. The terminals' face and
+  default size per face are unchanged (`TERMINAL_FACES`), so their cell geometry is.
+- **What it set before D2.** `theme.mjs` `fontStacks(font, isMac)` is the custom
   properties a choice sets inline on the root, and `initFont`, `setFont`,
   `currentFont` and `onFontChange` switch it as `initTheme` and `setTheme` do the
   theme. Omarchy's font on Linux and Windows: `--ui-font`, `--mono` and
@@ -571,7 +580,7 @@ split into sections) is `packages/client/roster-sections.mjs`.
   names are the sidebar's 13px (the current one at 650), the roster's machine labels (`.ctx-deployment`) 11px 650
   muted capitals, its agent groups 12px apart (`.ctx-group`) and each top-level bundle inside a group 12px after
   the one before (`.ctx-bundle-gap`, a spacer: no row box is spaced). The palette has no button: it has its own
-  chord, and **Settings: Connections…** in it is Connections' only entry. The workspace list hides its scrollbar
+  chord, and **Connections**, in its Sections group, is Connections' only entry. The workspace list hides its scrollbar
   as the roster does.
   The roster has no
   filter field (the TUI keeps its own): the palette finds an instance by name. `sidebar.focusFilter`
@@ -1798,8 +1807,9 @@ section is the module map.
   the instance steps the instance an open still in flight is opening
   (`openingInstanceId`, from `openTerminalTabFlow`'s `terminalOpening`), so
   presses faster than an open each move.
-  The leader's wait draws nothing (`leader-hint.mjs` `announce`, for a screen
-  reader); its line says why a key could not act.
+  The leader's wait is announced (`leader-hint.mjs` `announce`, for a screen
+  reader) and shows the help sheet (`showHelp`; slice 4, D15) unless it is
+  turned off; `?` pins it until Esc. Its line says why a key could not act.
   `keymapTakes(e)` tells a view's own key handler that the keymap binds this
   keydown (matchEvent's answer, nothing run); the roster tree, the overview
   canvas, the Souls grid and a row's actions button give way to it on their
@@ -1853,7 +1863,11 @@ section is the module map.
   `context` row is `aria-disabled` and never active. An optional `cycleKey(e)`
   lets the picker's own chord move the active row while open (wrapping,
   skipping context rows); with it, `toggle()` on an open picker cycles.
-- **palette.mjs** — the command palette's rows (`paletteRows`): the sidebar's
+- **palette.mjs** — the command palette's rows (`paletteRows`), in groups (slice 4,
+  `PALETTE_ORDER`): Needs you (claimed rows, newest claim first), the recent agents,
+  Sections (the shell's `sections`), the commands, and New agent ("New agent: <soul>",
+  `quickOpenRows`, `onSoul`); each row carries its `kind`. `>` keeps the commands, `+`
+  the souls. The recent agents are the sidebar's
   tree ordered by last focus (#1383), from the sidebar's own builders
   (`filterInstanceTree` with the fuzzy matcher as its predicate, then
   `rosterSections` with `{ lastFocus }`, whose groups are `rosterGroups` over
@@ -1874,16 +1888,27 @@ section is the module map.
   (`theme.mjs`: `setTerminalFontSize`, `resetTerminalFontSize`,
   `onTerminalTypographyChange`), so every open terminal and the control follow
   each other. A typed size applies on Enter or on leaving the field, never per
-  keystroke. The font family stays on the palette's prompt.
-- **quick-open.mjs** — Quick Open for souls (⌘P / Alt+P, also “Souls: quick
-  open…” in the palette): fuzzy-find a soul from the Spawn view's data
-  source and hand off through `views/spawn.mjs` `preselectSpawn()`: the
+  keystroke. The font family is the Appearance sheet's Choose… field (the palette's **Terminal: set font family…** opens it).
+- **quick-open.mjs** — the souls' rows (`quickOpenRows`), shared by the palette's
+  New agent group and the New agent form's soul field (slice 5). Quick Open's own
+  overlay folded into the palette (slice 4): ⌘P / Alt+P opens the palette on its
+  souls (`+`). A pick goes to `openNewAgent` (shell.mjs), today the spawn dialog
+  through `views/spawn.mjs` `preselectSpawn()`: the
   spawn dialog scoped to that soul, as its page's New agent opens it, with focus
-  in Name. Opening never spawns; Spawn stays explicit. Attached-only, refused
+  in the Opening instruction. Opening never spawns; Spawn stays explicit. Attached-only, refused
   and CLI pending/unavailable souls open their soul page instead, which says
   why. Dismissing the dialog returns to where the operator was
   (`surface-return.mjs`). No second spawn form exists.
-- **keybindings-editor.mjs** — the shortcuts editor dialog (`Mod+,`). Its first section is
+- **status-line.mjs** — the status line (slice 4): one line at the bottom of the window with
+  the three keys for where the focus is (`statusKeys` in the shell) and one-line messages
+  (`say`). It asks nothing: its y/n questions for Stop, Start and Restart were taken out of the
+  slice after five review rounds, and those keep their dialogs.
+- **sheet.mjs** — centred sheets over the scrim with a 150 ms ease (none with reduced
+  motion), focus trapped and returned: `openSheet` (Appearance), and the `sheet` /
+  `sheet-backdrop` classes the Retire dialog and the shortcuts editor take.
+  **retire-ghosts.mjs** keeps a retired row's dim ✕ ghost for 10 s.
+- **keybindings-editor.mjs** — the shortcuts editor sheet (`Mod+,`), with the leader's
+  help-sheet setting at its top. Its first section is
   **Most useful** (`usefulRows`): a read-only table (a row header per action, then its keys) of
   the shared keymap's most used rows, read from the live keymap at every render (platform,
   chord family, rebinds), the leader's key standing in for an action with no chord, hidden

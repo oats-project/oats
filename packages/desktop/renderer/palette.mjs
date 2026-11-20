@@ -29,7 +29,14 @@
    relation group (one per deployment where there are several) is one, and the
    commands after the instances are one more. They win over every binding while
    the palette is open, and only then; a footer under the list names them.
-   Overlay chrome lives in overlay-picker.mjs (shared with Quick Open), the fuzzy
+   The Desktop UI rework, slice 4 (guide v6 tour step 19): the palette is the one place to reach everything.
+   Its groups, in order: Needs you (the rows with a needs-input claim, waitingClaim, newest claim first: a
+   shortcut, so such a row is in the tree below as well), the recent agents (the tree above, by last focus),
+   Sections (the shell's pages: Workspace and its tabs, Automations, Connections), the commands, and the souls
+   ("New agent: <soul>", quickOpenRows over GET /api/agents, which open the New agent form on that soul). An
+   agent row is its dot, its name and its soul. ">" restricts the list to the commands, and "+" to the souls
+   (Alt+P opens the palette on "+": Quick Open's separate overlay folded into the palette).
+   Overlay chrome lives in overlay-picker.mjs, the fuzzy
    matcher in packages/client/subsequence-score.mjs (shared with the TUI); this
    module owns only the palette's row semantics. */
 import { runtimeState, siblingText } from "../../client/instance-presentation.mjs";
@@ -40,6 +47,19 @@ import { treeConnectors } from "./instance-tree-view.mjs";
 import { createOverlayPicker } from "./overlay-picker.mjs";
 import { dotColor } from "./instance-dot.mjs";
 import { subsequenceScore } from "../../client/subsequence-score.mjs";
+import { needsYouRows } from "../../client/waiting-on-you.mjs";
+import { quickOpenRows } from "./quick-open.mjs";
+import { DESKTOP_NOUNS } from "./desktop-terms.mjs";
+
+/** The palette's groups, in their order (the Desktop UI rework, slice 4). The recent agents' rows keep the sidebar's
+ * relation groups (their keys and labels), and the commands are the run of rows with no group, as before. */
+export const PALETTE_GROUPS = Object.freeze({
+  needsYou: Object.freeze({ key: "needs-you", label: "Needs you" }),
+  sections: Object.freeze({ key: "sections", label: "Sections" }),
+  souls: Object.freeze({ key: "souls", label: `New ${DESKTOP_NOUNS.instance}` }),
+});
+/** The order of a row's kind in the palette: needs you, recent, sections, commands, souls. */
+export const PALETTE_ORDER = Object.freeze(["needs-you", "recent", "section", "command", "soul"]);
 
 /** Commands listed at most (after every instance row; the instance list scrolls). */
 export const PALETTE_COMMAND_CAP = 12;
@@ -64,15 +84,29 @@ export const PALETTE_COMMAND_CAP = 12;
  * `roster.pins` (feature instance-pin, this computer's CLI lists it): pinned rows lead each section's order, as in
  * the sidebar, so rows never focused keep it; recency still leads (`recencyOrder`). A command with `when()` is
  * listed only while it answers true (an instance command that applies to the leader's target). */
-export function paletteRows(roster, commands, raw, { openTerminal } = {}) {
+export function paletteRows(roster, commands, raw, { openTerminal, sections = [], onSoul = null } = {}) {
   const instances = (Array.isArray(roster) ? roster : roster?.instances) || [];
   const deployments = (Array.isArray(roster) ? null : roster?.deployments) || [];
   const recent = !Array.isArray(roster) && roster?.recent instanceof Map ? roster.recent : new Map();
   const pins = !Array.isArray(roster) && roster?.pins === true;
-  const cmdMode = raw.startsWith(">");
-  const q = (cmdMode ? raw.slice(1) : raw).trim();
+  const souls = (!Array.isArray(roster) && Array.isArray(roster?.souls)) ? roster.souls : [];
+  const cmdMode = raw.startsWith(">"), soulMode = raw.startsWith("+");
+  const q = (cmdMode || soulMode ? raw.slice(1) : raw).trim();
   const rows = [];
-  if (!cmdMode) {
+  // Needs you: the rows with a claim, newest claim first, each its dot, its name and its soul.
+  const needsYou = [];
+  if (!cmdMode && !soulMode) {
+    // The shared order (packages/client waiting-on-you.mjs needsYouRows), then the query.
+    const claimed = needsYouRows(instances).map(({ row }) => row)
+      .filter(inst => !q || subsequenceScore(`${inst.instance} ${inst.agent || ""} ${inst.repoName || ""}`, q) != null);
+    for (const inst of claimed) {
+      const state = runtimeState(inst);
+      needsYou.push({ kind: "needs-you", label: inst.instance, detail: [inst.agent, inst.server].filter(Boolean).join(" · "),
+        depth: 0, group: PALETTE_GROUPS.needsYou, connectors: [], state, color: dotColor(inst, state),
+        run: () => openTerminal({ instance: inst.instance, home: inst.home, agentsRoot: inst.agentsRoot, ...(inst.server ? { server: inst.server } : {}) }) });
+    }
+  }
+  if (!cmdMode && !soulMode) {
     // The house fuzzy matcher decides what matches; the tree path around a
     // match is kept by the identity-aware filterInstanceTree (the TUI's filter's
     // too; the sidebar has no filter).
@@ -97,8 +131,10 @@ export function paletteRows(roster, commands, raw, { openTerminal } = {}) {
           const parent = depth > 0 && inst.parentInstance ? inst.parentInstance : null;
           const said = siblingText(siblings.get(instanceId(inst)));
           const row = {
+            kind: "recent",
             label: inst.instance,
-            detail: [inst.server, inst.agent, inst.branch, runtimeState(inst)].filter(Boolean).join(" · "),
+            // Its name and its soul (the dot is its state); a remote row's machine after, and an unknown state in words.
+            detail: [inst.agent, inst.server, runtimeState(inst) === "unknown" ? "unknown" : null].filter(Boolean).join(" · "),
             depth,
             group,
             // The sidebar row's lines and dot: its connectors over the cluster as listed, and its state.
@@ -117,18 +153,25 @@ export function paletteRows(roster, commands, raw, { openTerminal } = {}) {
       }
     }
   }
-  const commandRows = [];
-  for (const c of commands) {
-    if (typeof c.when === "function" && !c.when()) continue;
-    const sc = q ? subsequenceScore(c.label, q) : 0;
-    if (sc == null) continue;
-    // detail may be a function so chord labels stay live against the
-    // current keymap (rebinding in the editor updates the next render).
-    const detail = typeof c.detail === "function" ? c.detail() : (c.detail || "");
-    commandRows.push({ sc, label: c.label, detail, dot: null, run: c.run });
-  }
-  commandRows.sort((a, b) => a.sc - b.sc);
-  return [...rows, ...commandRows.slice(0, PALETTE_COMMAND_CAP).map(({ sc, ...row }) => row)];
+  // detail may be a function so chord labels stay live against the current keymap (rebinding in the editor updates
+  // the next render).
+  const scored = (list, kind, group) => {
+    const out = [];
+    for (const c of list) {
+      if (typeof c.when === "function" && !c.when()) continue;
+      const sc = q ? subsequenceScore(c.label, q) : 0;
+      if (sc == null) continue;
+      const detail = typeof c.detail === "function" ? c.detail() : (c.detail || "");
+      out.push({ sc, kind, label: c.label, detail, dot: null, run: c.run, ...(group ? { group } : {}) });
+    }
+    return out.sort((a, b) => a.sc - b.sc).map(({ sc, ...row }) => row);
+  };
+  const sectionRows = cmdMode || soulMode ? [] : scored(sections, "section", PALETTE_GROUPS.sections);
+  const commandRows = soulMode ? [] : scored(commands, "command", null).slice(0, PALETTE_COMMAND_CAP);
+  // The souls: "New agent: <soul>", each opening the New agent form on that soul (onSoul).
+  const soulRows = cmdMode || typeof onSoul !== "function" ? [] : quickOpenRows(souls, q, { onPick: onSoul })
+    .map(({ sc, ...row }) => ({ ...row, kind: "soul", label: `New ${DESKTOP_NOUNS.instance}: ${row.label}`, group: PALETTE_GROUPS.souls }));
+  return [...needsYou, ...rows, ...sectionRows, ...commandRows, ...soulRows];
 }
 
 /**
@@ -142,15 +185,24 @@ export function paletteRows(roster, commands, raw, { openTerminal } = {}) {
  * @param {string} [deps.footer] the line under the list naming the group keys
  *        (paletteGroupHint, keybindings.mjs).
  */
-export function createPalette({ loadInstances, openTerminal, commands = [], cycleKey, groupKey, footer, doc }) {
-  return createOverlayPicker({
-    placeholder: 'Jump to an instance… (">" for commands)',
+export function createPalette({ loadInstances, loadSouls = null, onSoul = null, sections = () => [], openTerminal, commands = [], cycleKey, groupKey, footer, doc }) {
+  // `commands` is the list itself, read at each render: a command the shell adds later is listed from then on.
+  return Object.assign(createOverlayPicker({
+    placeholder: `Go to an ${DESKTOP_NOUNS.instance}, a section or a command… (">" commands, "+" new ${DESKTOP_NOUNS.instance})`,
     ariaLabel: "Command palette",
-    loadItems: async () => { try { return await loadInstances(); } catch { return []; } },
-    computeRows: (roster, raw) => paletteRows(roster || [], commands, raw, { openTerminal }),
+    // The roster and the souls are read side by side; either one failing leaves its groups empty, never the other's.
+    loadItems: async () => {
+      const [roster, souls] = await Promise.all([
+        (async () => { try { return await loadInstances(); } catch { return []; } })(),
+        (async () => { if (!loadSouls) return []; try { return (await loadSouls())?.agents || []; } catch { return []; } })(),
+      ]);
+      if (Array.isArray(roster)) return souls.length ? { instances: roster, souls } : roster;
+      return { ...(roster || {}), souls };
+    },
+    computeRows: (roster, raw) => paletteRows(roster || [], commands, raw, { openTerminal, sections: sections(), onSoul }),
     cycleKey,
     groupKey,
     footer,
     doc, // undefined: the picker's own default (the global document)
-  });
+  }), { commands });
 }

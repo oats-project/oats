@@ -8,6 +8,9 @@ html, body, #app { height: 100%; margin: 0; }
    hidden, which still allows programmatic scrolling, so the body is what leaves nothing to scroll. */
 html { overflow: clip; }
 body { position: relative; overflow: clip; }
+/* The window is the app above the status line (status-line.mjs), one line at the bottom across its width. */
+body { display: flex; flex-direction: column; }
+body > #app { flex: 1 1 auto; height: auto; min-height: 0; }
 body {
   background: var(--bg);
   color: var(--fg);
@@ -333,7 +336,7 @@ body {
    meets AA on every row fill, never opacity. */
 .ctx-held-hint { color: var(--muted); font-size: 11.5px; line-height: normal; }
 .ctx-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
-/* An instance's name: 12.5px, or the font choice's --name-size (12px in Omarchy's font; theme.mjs fontStacks). */
+/* An instance's name: 12.5px (--name-size, which the font choice no longer sets since D2). */
 .ctx-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--name-size, 12.5px); font-weight: 600; line-height: 15px; }
 .ctx-meta { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Spec E: "New" on a just-spawned row the operator was not taken to: text and a dot, until it is first opened. */
@@ -486,6 +489,11 @@ body {
 .leader-hint:not([data-mode="line"]) { width: 1px; height: 1px; left: 0; right: auto; bottom: 0; padding: 0; margin: -1px;
                                        border: 0; overflow: hidden; clip-path: inset(50%); box-shadow: none; }
 .leader-hint-line { margin: 0; color: var(--fg); }
+/* The Desktop UI rework, slice 4: the hint's line is said on the status line (status-line.mjs): drawn over it, the
+   window's bottom line, in its place and its type, for as long as it stays (the next key, click or focus change). */
+.leader-hint[data-mode="line"] { position: fixed; left: 0; right: 0; bottom: 0; z-index: 46; max-height: none; min-height: 26px;
+  padding: 3px 12px; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none;
+  background: var(--surface-2); font-size: 11.5px; line-height: 1.4; }
 #show-sidebar { left: 6px; }
 #show-panel { right: 6px; }
 .main-edge-control:hover { color: var(--fg); background: var(--surface-2); }
@@ -847,3 +855,27 @@ body {
   .kb-marks { width: auto; margin-left: auto; }
   .kb-chord-cell { width: auto; }
 }
+/* The leader's help sheet (leader-hint.mjs; the Desktop UI rework, slice 4, D15): small, at the window's bottom right
+   above the status line, while the leader waits (and pinned with the leader then ?). It never takes the pointer. */
+.leader-help { position: fixed; right: 16px; bottom: 38px; z-index: 45; width: min(300px, calc(100vw - 32px)); max-height: 60vh;
+               overflow: auto; box-sizing: border-box; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
+               background: var(--surface); color: var(--fg); box-shadow: var(--shadow-popover); font-size: 12px; line-height: 1.5;
+               pointer-events: none; animation: sheet-in 150ms ease both; }
+.leader-help[hidden] { display: none; }
+.leader-help-title { margin: 0 0 6px; color: var(--muted); font-weight: 600; }
+.leader-help-keys { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 0; }
+.leader-help-keys dt { margin: 0; }
+.leader-help-keys dd { margin: 0; color: var(--fg); overflow-wrap: anywhere; }
+.leader-help-keys kbd { font: inherit; font-family: var(--mono); color: var(--accent); }
+.leader-help-foot { margin: 8px 0 0; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .leader-help { animation: none; } }
+/* The keyboard shortcuts sheet's help setting (keybindings-editor.mjs): one checkbox line under the head. */
+.kb-help-setting { display: flex; gap: 8px; align-items: center; padding: 8px 16px 0; color: var(--fg); font-size: 12px; }
+.kb-help-setting input { accent-color: var(--accent); }
+/* A retired row's ghost (retire-ghosts.mjs; the Desktop UI rework, slice 4): dim by the muted ink, never opacity. */
+.ctx-tree-row.ctx-ghost { display: flex; align-items: center; color: var(--muted); font-size: 12.5px; }
+.ctx-ghost-line { display: inline-flex; gap: 6px; align-items: baseline; min-width: 0; padding-left: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-ghost-mark { color: var(--muted); display: inline-flex; align-self: center; }
+/* The Keyboard shortcuts sheet's leader choice (keybindings-editor.mjs; D18): the family choice's own rules, and its notes. */
+.kb-leader { margin: 0; padding: 8px 16px 0; border: 0; }
+.kb-leader-note, .kb-leader-own { margin: 4px 0 0; color: var(--muted); font-size: 12px; }

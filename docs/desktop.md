@@ -278,16 +278,16 @@ agents; and, over a line, the foot, one bar: at its left **N need you**, the
 number of this workspace's agents that need input (hidden when none does;
 it takes you to the first of them, in the roster's order, expanding a collapsed
 parent or opening the Background section to show it), and at its right
-**New agent**, which opens Quick Open (⌘P / Alt+P, named in its tooltip) to
-pick a soul and then the spawn dialog, and **?**, which opens the keyboard
-shortcuts. The foot has no mark, no Hide sidebar button and no settings menu:
-⌘B / Ctrl+Shift+B and the palette's **Sidebar: toggle (hide/show)** hide the
-sidebar, and the palette's **Theme: choose…**, **Font: choose…** and
-**Shortcuts: edit keyboard shortcuts…** open the theme, the font and the
-shortcuts. A window opens on **Home**: at launch, and after you choose a
-workspace for it. Connections is in the
-command palette (**Settings: Connections…**), and the palette opens with its
-shortcut or Ctrl+X then `k`.
+**New agent**, which opens the command palette on its souls (⌘P / Alt+P,
+named in its tooltip) to pick a soul and then the spawn dialog, and **?**,
+which opens the keyboard shortcuts. The foot has no mark, no Hide sidebar
+button and no settings menu: ⌘B / Ctrl+Shift+B and the palette's **Sidebar:
+toggle (hide/show)** hide the sidebar, and the palette's **Appearance…** and
+**Keyboard shortcuts…** open the two sheets for the theme and the fonts, and
+for the keys. A window opens on **Home**: at launch, and after you choose a workspace
+for it. Connections is in the
+command palette (**Connections**, among its sections), and the palette opens with its
+shortcut or the leader (Ctrl+Space) then `k`.
 **Home** answers two questions on one page: what needs you, and what you
 have.
 
@@ -310,9 +310,31 @@ have.
 - **A workspace with no agents yet** shows what OATS does in two lines and
   three keys (New agent, the command palette, Home), then the overview.
 
-Home has no key of its own yet: the palette's **View: Home** opens it. The
+Home has no key of its own yet: the palette's **Home** (among its sections)
+opens it. The
 board never changes the roster's order: urgency is sorted on Home only.
 
+**The command palette** (⌘K / Alt+K) is the one place to reach everything.
+It lists, in order: the agents that need you (the newest first), your recent
+agents (the sidebar's tree, the one you used last on top), the sections
+(Home, Workspace overview and its tabs, Automations, Connections), the commands,
+and one **New agent: <soul>** row per soul. Type to narrow it; `>` keeps only
+the commands and `+` only the souls.
+
+**The status line** runs along the bottom of the window. It shows the three
+keys most useful where you are (in the roster: Enter, Stop and the palette;
+in a terminal: the leader, close tab and the palette), says in one line why a
+key could not act (the leader's line is drawn there), says what was just done
+("Workspace onboarded. The lock is written."), says when the terminal in front
+loses its server and when it is back (the pane keeps its countdown and its
+**Reconnect now**). It asks nothing: Stop, Start and Restart keep their
+dialogs.
+
+**The help sheet.** Press the leader (Ctrl+Space; Ctrl+X if you chose it) and a small sheet at the
+bottom right lists the keys it takes where you are; the next key does its job
+and the sheet goes. The leader then `?` keeps it open until Esc. To turn the
+sheet off, untick **Show the help sheet when the leader is pressed** on the
+Keyboard shortcuts sheet.
 The instances have no search field: to find one by name, type it in the
 command palette, which opens its terminal. ⌘F / Alt+F (**Focus the
 instance roster**) and `/` in the sidebar go to the roster's current row;
@@ -331,45 +353,49 @@ hidden; a window too narrow for it shows it narrower, and gives it back when
 the window grows again. The terminals refit as it moves, and their programs
 hear the new size once, when you let go.
 
-**Theme and font.** The palette's **Theme: choose…** and
-⇧⌘Space / Ctrl+Shift+Space open the theme picker (White, Solarized, Dark, or
-This computer, which follows the computer's own theme). The font has a picker
-of its own, **Font: choose…** in the palette (no
-shortcut unless you give it one in the shortcuts editor), with two choices:
+**Appearance.** The palette's **Appearance…** and ⇧⌘Space / Ctrl+Shift+Space
+open the Appearance sheet, with three parts. **Theme**: System (Omarchy's theme on a computer that runs Omarchy, else
+the system's light or dark setting; it was "This computer"), Dark, Light, and
+More themes… (Solarized). **Font**, the terminals' font (the window's own
+text is always the system's interface font):
 
-- **Omarchy's font**, the default on a computer that runs Omarchy. On Linux the whole window and its
-  terminals use the computer's monospace font, the one `omarchy font current`
-  names and `omarchy font set` changes (fontconfig's `monospace`, on any
-  Linux). A font changed that way shows when Desktop next starts, at the
-  latest. On Windows it is the system's monospace font, for the window and the
-  terminals. On macOS the choice is named **JetBrains Mono**, Omarchy's default
-  face: the window uses it (or the system's monospace font where it is not
-  installed), and the terminals keep Inconsolata. On every platform, instance
-  names in the sidebar and on tabs are a little smaller in it (12px, from
-  12.5px), since a monospace face runs wider.
-- **System font**, the faces Desktop had before: the system's interface font
-  for the window and Inconsolata in the terminals. It is the default on every
+- **This computer's monospace**, the default on a computer that runs Omarchy
+  (it was "Omarchy's font"). On Linux the terminals use the computer's
+  monospace font, the one `omarchy font current` names and `omarchy font set`
+  changes (fontconfig's `monospace`, on any Linux); a font changed that way
+  shows when Desktop next starts, at the latest. On Windows it is the system's
+  monospace font. It is not offered on macOS, where the terminals keep
+  Inconsolata.
+- **System**: Inconsolata in the terminals. It is the default on every
   computer that doesn't run Omarchy (other Linux, macOS and Windows).
+- **Choose…**: a font family by name, as the palette's **Terminal: set font
+  family…**.
+
+And **Terminal font size**, the same size as ⌘= / Ctrl+= change. A choice
+applies at once and the sheet stays open; Esc closes it.
+
+Changed in the next release: the window's own text no longer follows the font
+choice. Before, Omarchy's font made the whole window monospace; now only the
+terminals use it (D2 of the Desktop UI rework).
 
 Desktop knows a computer runs Omarchy when Omarchy's theme directory
-(`~/.local/state/omarchy/current`) is there, the same one the **This computer**
+(`~/.local/state/omarchy/current`) is there, the same one the **System**
 theme reads. A font you chose always wins over the default.
 
 The terminal's size belongs to the face its terminals are in, since the same
-size looks larger in a wider face. Omarchy's font in the terminals defaults to
+size looks larger in a wider face. The computer's monospace in the terminals defaults to
 13px (JetBrains Mono, Omarchy's default face, at 13px), and Inconsolata, with
-System font, on macOS or when Omarchy's font shows System font's faces, to
+System, on macOS or when the monospace shows Inconsolata, to
 15px, on every computer. A size you set is kept for that face only, and a
 font change never carries it to the other. Resetting the size or the zoom
 goes back to the default of the face in use.
 
 The computer's monospace font is used only once it draws at a fixed width.
-Desktop checks it at start and on each choice in the picker. Where the
+Desktop checks it at start and on each choice in the sheet. Where the
 computer has no monospace font, or `monospace` names a bitmap font (which the
-window cannot draw), **Omarchy's font** shows System font's faces, and its row
-in the picker says **No monospace font on this computer: showing System
-font**. The choice stays Omarchy's font, so the computer's font is used once
-it draws.
+terminals cannot draw), **This computer's monospace** shows Inconsolata, and its row
+says **No monospace font on this computer: showing System**. The choice stays,
+so the computer's font is used once it draws.
 
 The choice is kept on this computer, like the theme, and applies at once:
 open terminals switch font and take that face's size in place, and keep what
@@ -417,7 +443,7 @@ a choice saved for it is ignored.)
   deployment that isn't live (stale, not reached, its last read failed) and
   an oats without `waiting-on-you`. The mark never moves a row: the order
   stays the same whoever waits.
-- **Picking a row** (a click, Enter, or the leader's ↑ / ↓, Ctrl+X then ↑ /
+- **Picking a row** (a click, Enter, or the leader's ↑ / ↓, Ctrl+Space then ↑ /
   ↓, which are also ⌥↑ / ⌥↓ on macOS and Alt+↑ / Alt+↓ on Linux and Windows
   in the Alt family, the default) shows that workspace in this window, with its own tabs, layout and
   selection; one another window shows moves here ([A workspace another window
@@ -432,7 +458,7 @@ a choice saved for it is ignored.)
   Windows does it from the keyboard. It opens the workspace in its own window,
   or brings the window that shows it to the front.
 - **Keyboard.** The list is one Tab stop, Up/Down/Home/End move in it, and
-  `w` in the sidebar, Ctrl+X then `o`, ⌥⌘O / Alt+O and the palette's
+  `w` in the sidebar, Ctrl+Space then `o`, ⌥⌘O / Alt+O and the palette's
   **Workspace: switch…** focus it. The full keys are in [the keyboard
   reference](../packages/desktop/docs/desktop-keyboard.md#the-list-of-workspaces).
 
@@ -712,6 +738,13 @@ the server. Every dropdown in the app has the
 same themed look, and its open list follows the light or dark theme.
 
 ## Stopping and retiring
+
+Stop and Retire open a centred sheet with what Desktop has read they will
+do: Stop's children, and for Retire what goes (the home, the worktree and its
+uncommitted work, the branch and pull request it leaves alone). After you
+confirm a retire, the row reads Retiring…, then a dim "✕ name · retired" row
+stays in its place for ten seconds. Start and Restart open their dialog, with
+the harness, permissions and model.
 
 The Desktop runs one stop or retire at a time for its own requests. Another
 program using OATS at the same time, such as the `oats` command or the
@@ -1257,8 +1290,8 @@ starts, opens, takes input and retires as any other.
 - **Pinning.** A row's context menu offers **Pin to top**, or **Unpin** on a
   pinned instance, which runs `oats instance pin <name> on|off`. Each is an
   act at once, with no dialog. The row moves when the roster is next read,
-  right after the change. The command palette offers **Instance: Pin to
-  top** or **Instance: Unpin** for the instance the leader keys act on. An
+  right after the change. The command palette offers **Agent: Pin to
+  top** or **Agent: Unpin** for the instance the leader keys act on. An
   instance that is held (spawning, or being retired) offers neither.
 - **Shared.** The pin is kept in the instance's home, so everyone who views
   that machine sees the same pins, in the Desktop, the TUI and another

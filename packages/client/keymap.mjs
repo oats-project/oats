@@ -29,7 +29,10 @@
 /** The leader per platform: Ctrl+X on both, as Emacs has it (#1433). Without the kitty keyboard
  * protocol it is one byte, 0x18, in every terminal; pressed twice it sends that byte to the program
  * (the shell's Ctrl+X Ctrl+E, nano's exit). The Desktop leaves it to Cut in an editable field on
- * Linux and Windows (packages/desktop/docs/desktop-keyboard.md, "The leader"). */
+ * Linux and Windows (packages/desktop/docs/desktop-keyboard.md, "The leader").
+ * D18 (decided 2026-11-19, Joan): the Desktop's default leader is Ctrl+Space, with Ctrl+X a choice; the TUI keeps
+ * Ctrl+X here until it reads Ctrl+Space, which a terminal sends as NUL (0x00), a byte its key decoder reads as no
+ * key today (packages/tui/lib/term/keys.mjs c0Key). This shared default moves to `ctrl+space` with that change. */
 export const LEADER = Object.freeze({ mac: "ctrl+x", other: "ctrl+x" });
 
 /** The keys read after the leader, in the TUI's order, and what each does. `terminal`: named in
@@ -47,11 +50,16 @@ export const LEADER_TABLE = Object.freeze([
   { keys: ["up"], does: "workspace-previous", label: "previous workspace" },
   { keys: ["down"], does: "workspace-next", label: "next workspace" },
   { keys: ["z"], does: "zoom", label: "zoom", terminal: true },
+  // `b`, Herdr's (the Desktop UI rework, decided 2026-11-19): the sidebar hidden or shown in the Desktop; in the TUI,
+  // whose list is its sidebar, the shown terminal takes the whole screen or gives the list back.
+  { keys: ["b"], does: "sidebar", label: "hide or show the list" },
   { keys: ["w"], does: "close-terminal", label: "close terminal", terminal: true },
   { keys: ["left"], does: "tab-previous", label: "previous tab", terminal: true },
   { keys: ["right"], does: "tab-next", label: "next tab", terminal: true },
-  { keys: ["|"], does: "split-right", label: "split right", terminal: true },
-  { keys: ["-"], does: "split-down", label: "split down", terminal: true },
+  // `h` and `v` beside `|` and `-` (the Desktop UI rework, decided 2026-11-19): Herdr's letters, h a pane to the
+  // right and v one below, as its split_horizontal and split_vertical are.
+  { keys: ["|", "h"], does: "split-right", label: "split right", terminal: true },
+  { keys: ["-", "v"], does: "split-down", label: "split down", terminal: true },
   { keys: ["tab"], does: "group-next", label: "next group", terminal: true },
   { keys: ["shift+tab"], does: "group-previous", label: "previous group", terminal: true },
   { keys: ["m"], does: "tab-move", label: "move tab", terminal: true },

@@ -43,6 +43,16 @@ export function waitingClaim(row, { stale = false } = {}) {
   return waitingOnYouData(row.waitingOnYou);
 }
 
+/** The rows that need you, newest claim first (the Desktop's palette and Home, the TUI's list later: one order for
+ * both clients, the Desktop UI rework, slice 4): each row's claim through the one gate (waitingClaim; `stale(row)`
+ * says a row is held stale), as `{ row, claim }`. Equal times keep the rows' own order. */
+export function needsYouRows(rows, { stale = () => false } = {}) {
+  return (Array.isArray(rows) ? rows : []).map((row, at) => ({ row, at, claim: waitingClaim(row, { stale: stale(row) }) }))
+    .filter(({ claim }) => claim)
+    .sort((a, b) => Date.parse(b.claim.since) - Date.parse(a.claim.since) || a.at - b.at)
+    .map(({ row, claim }) => ({ row, claim }));
+}
+
 const LABELS = Object.freeze({ permission: 'Waiting for a tool approval', question: 'Asked you a question', attention: 'Asked for your attention' });
 /** The reason in words. The raw reason is never rendered: an unknown one reads "Needs input". */
 export const waitingLabel = claim => Object.hasOwn(LABELS, claim?.reason ?? '') ? LABELS[claim.reason] : 'Needs input';

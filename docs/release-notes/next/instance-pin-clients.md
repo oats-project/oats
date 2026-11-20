@@ -16,8 +16,8 @@
   lifts its whole group and the path down to it. Among pinned instances the
   order is spawn time, newest first, as for the rest.
   - The Desktop: a row's context menu offers **Pin to top**, or **Unpin** on
-    a pinned instance, and the command palette offers **Instance: Pin to
-    top** / **Instance: Unpin** for the instance the leader keys act on. A
+    a pinned instance, and the command palette offers **Agent: Pin to
+    top** / **Agent: Unpin** for the instance the leader keys act on. A
     pinned row shows a pin after its name, which a screen reader hears as
     "Pinned". A group that holds a pinned instance, its top instance
     included, doesn't start collapsed, so the pin is seen with its group;

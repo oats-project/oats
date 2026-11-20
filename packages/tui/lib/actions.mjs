@@ -99,9 +99,10 @@ export const ACTIONS = Object.freeze([
  *  and from any other focus it only cancels the leader (lib/store.mjs `twice`). */
 export const LEADER = LEADER_TABLE;
 /** What the leader does that no action of ACTIONS does (lib/store.mjs `led`): `workspace-previous`
- *  and `workspace-next` (the workspace before or after the open one in the list of workspaces) and
- *  `list` (the list's focus, which Esc gives). */
-export const LEADER_OWN = Object.freeze(["workspace-previous", "workspace-next", "list"]);
+ *  and `workspace-next` (the workspace before or after the open one in the list of workspaces),
+ *  `list` (the list's focus, which Esc gives), and `sidebar` (the shared table's `b`, the Desktop's
+ *  sidebar: here the list, hidden by the shown terminal taking the whole screen, or given back). */
+export const LEADER_OWN = Object.freeze(["workspace-previous", "workspace-next", "list", "sidebar"]);
 /** What a chord does that neither the leader's table nor an action does (lib/store.mjs `led`):
  *  `tab-1` to `tab-8`, the focused group's Nth tab shown, and `tab-9`, its last (as the Desktop and
  *  the browsers do). No key after the leader does them: LEADER has no row for them. */

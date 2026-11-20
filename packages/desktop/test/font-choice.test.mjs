@@ -44,10 +44,11 @@ const OMARCHY = Object.freeze({ isOmarchy: true });
 /** The font stacks set inline on the root (the size token is not a font stack). */
 const inlineStacks = u => ["--ui-font", "--mono", "--term-font-family"].filter(name => u.root.style.getPropertyValue(name) !== "");
 
-test("the two fonts; Omarchy's font is the default on an Omarchy computer and System font elsewhere (2026-10-26)", t => {
+test("the two fonts; the monospace (once Omarchy's font) is the default on an Omarchy computer and System elsewhere (2026-10-26)", t => {
   const { theme } = runtime(t);
   // JSON: the runtime is another realm (runInNewContext), whose arrays deepEqual does not take as ours.
-  assert.deepEqual(JSON.parse(JSON.stringify(theme.FONTS)), [{ id: "omarchy", label: "Omarchy's font" }, { id: "system", label: "System font" }]);
+  // The Appearance sheet's words (the Desktop UI rework, slice 4); the ids stay.
+  assert.deepEqual(JSON.parse(JSON.stringify(theme.FONTS)), [{ id: "omarchy", label: "This computer's monospace" }, { id: "system", label: "System" }]);
   assert.ok(Object.isFrozen(theme.FONTS) && theme.FONTS.every(Object.isFrozen));
   assert.equal(theme.defaultFont(true), "omarchy"); assert.equal(theme.defaultFont(false), "system");
   assert.equal(theme.defaultFont(), "system", "before initFont is told otherwise: not Omarchy");
@@ -68,29 +69,30 @@ test("off Omarchy: initFont is System font and the terminal's 15px, with nothing
   }
 });
 
-test("the stacks per platform and per choice: fontconfig's monospace on Linux/Windows (UI and terminals), JetBrains Mono on macOS (UI only), none for System font", t => {
+// D2 (the Desktop UI rework, 2026-11-19): the chrome is the system sans; the choice is the terminals' face only.
+test("the stacks per platform and per choice: fontconfig's monospace on Linux/Windows for the terminals only, nothing on macOS, none for System", t => {
   const { theme } = runtime(t);
-  assert.deepEqual({ ...theme.fontStacks("omarchy", false) },
-    { "--ui-font": "ui-monospace, monospace", "--mono": "ui-monospace, monospace", "--term-font-family": "ui-monospace, monospace", "--name-size": "12px" });
-  assert.deepEqual({ ...theme.fontStacks("omarchy", true) }, { "--ui-font": MAC_UI, "--mono": MAC_UI, "--name-size": "12px" }, "macOS: the terminals keep Inconsolata");
+  assert.deepEqual({ ...theme.fontStacks("omarchy", false) }, { "--term-font-family": "ui-monospace, monospace" });
+  assert.deepEqual({ ...theme.fontStacks("omarchy", true) }, {}, "macOS: the terminals keep Inconsolata, and the chrome is the system's");
   for (const isMac of [false, true]) {
     assert.deepEqual({ ...theme.fontStacks("system", isMac) }, {}, `System font sets nothing, mac=${isMac}`);
     assert.deepEqual({ ...theme.fontStacks("nonsense", isMac) }, {});
     // Never the bare generic: alone, `monospace` changes the default font size.
-    for (const [name, value] of Object.entries(theme.fontStacks("omarchy", isMac))) {
-      if (name === "--name-size") continue; // a size, not a stack
+    for (const [, value] of Object.entries(theme.fontStacks("omarchy", isMac))) {
       assert.notEqual(value.trim(), "monospace"); assert.match(value, /, monospace$/, "the generic last, so fontconfig's alias answers");
     }
   }
   assert.doesNotMatch(themeSource, /\.(ttf|otf|woff2?)\b/, "no font file is bundled for it");
 });
 
-test("Omarchy: initFont applies Omarchy's font to the UI, its code and the terminals at 13px, stores nothing, and marks the root", t => {
+test("Omarchy: initFont applies the monospace to the terminals at 13px (not the UI: D2), stores nothing, and marks the root", t => {
   const u = runtime(t);
   assert.equal(u.theme.initFont(false, undefined, OMARCHY), "omarchy");
   assert.deepEqual(u.writes, [], "the default stays a default");
   assert.equal(u.root.dataset.font, "omarchy");
-  for (const name of ["--ui-font", "--mono", "--term-font-family"]) assert.equal(stack(u.token(name)), "ui-monospace, monospace", name);
+  assert.equal(stack(u.token("--term-font-family")), "ui-monospace, monospace");
+  assert.equal(u.token("--ui-font").trim(), "", "the chrome keeps its system sans");
+  assert.equal(stack(u.token("--mono")), INCONSOLATA, "the UI's code face is theme.css's");
   assert.equal(stack(u.theme.terminalTypography().fontFamily), "ui-monospace, monospace", "new terminals start in it");
   assert.equal(u.theme.terminalFace(), "omarchy");
   assert.equal(u.root.style.getPropertyValue("--term-font-size"), "13px", "the size token follows the face's default");
@@ -183,8 +185,9 @@ test("the face: Omarchy's only where its stacks set the terminals' family; macOS
 });
 
 // The product owner, 2026-10-26, on Omarchy's font: "can we make the instance name font on the sidebar and on the
-// tabs a bit smaller?" The names read --name-size: 12px in Omarchy's font, 12.5px (the rules' own) otherwise.
-test("an instance's name on its row and its tab: 12px in Omarchy's font, 12.5px with System font or the fallback", t => {
+// tabs a bit smaller?" That was for a monospace chrome; since D2 the chrome is always the system sans, so the names
+// are the rules' own 12.5px in every choice (the rules still read --name-size, which nothing sets).
+test("an instance's name on its row and its tab: 12.5px in every font choice (D2)", t => {
   const sizes = u => {
     const row = u.dom.window.document.createElement("span"); row.className = "ctx-name";
     const tab = u.dom.window.document.createElement("div"); tab.className = "tab";
@@ -198,7 +201,7 @@ test("an instance's name on its row and its tab: 12px in Omarchy's font, 12.5px 
   for (const isMac of [false, true]) {
     const omarchy = runtime(t, { stored: { "oats.desktop.font": "omarchy" } });
     omarchy.theme.initFont(isMac, () => true);
-    assert.deepEqual(sizes(omarchy), ["12px", "12px"], `Omarchy's font, mac=${isMac}`);
+    assert.deepEqual(sizes(omarchy), ["12.5px", "12.5px"], `the monospace, mac=${isMac}: the chrome is not monospace`);
     omarchy.theme.setFont("system");
     assert.deepEqual(sizes(omarchy), ["12.5px", "12.5px"], "System font: as before, in place");
     assert.equal(omarchy.root.style.getPropertyValue("--name-size"), "", "nothing left inline");
@@ -212,10 +215,10 @@ test("an instance's name on its row and its tab: 12px in Omarchy's font, 12.5px 
   }
 });
 
-test("macOS: Omarchy's font, when chosen, is the UI only; the terminals keep Inconsolata", t => {
+test("macOS: the monospace, when stored from before, sets nothing: the chrome is the system's and the terminals keep Inconsolata (D2)", t => {
   const u = runtime(t, { stored: { "oats.desktop.font": "omarchy" } });
   assert.equal(u.theme.initFont(true), "omarchy", "a stored choice beats the default");
-  assert.equal(stack(u.token("--ui-font")), MAC_UI); assert.equal(stack(u.token("--mono")), MAC_UI);
+  assert.equal(u.token("--ui-font").trim(), ""); assert.equal(stack(u.token("--mono")), INCONSOLATA);
   assert.equal(stack(u.token("--term-font-family")), INCONSOLATA);
   assert.match(stack(u.theme.terminalTypography().fontFamily), /^"Inconsolata",/);
 });
@@ -299,12 +302,18 @@ test("the fixed-width check's verdicts: a monospace face draws, a proportional f
   assert.equal(verdict({}, { throws: true })[0], true, "a failing canvas: the same");
 });
 
-test("the fallback: where the monospace font does not draw at a fixed width, Omarchy's font shows System font's faces and stays chosen", t => {
-  for (const isMac of [false, true]) {
-    // Linux: Omarchy's default; macOS (never Omarchy): Omarchy's font chosen.
-    const u = isMac ? runtime(t, { stored: { "oats.desktop.font": "omarchy" } }) : runtime(t), checked = [];
+test("the fallback: where the monospace font does not draw at a fixed width, the monospace shows System's faces and stays chosen", t => {
+  {
+    // macOS sets no stack for it (D2), so there is nothing to check and nothing to fall back from.
+    const mac = runtime(t, { stored: { "oats.desktop.font": "omarchy" } }), checked = [];
+    mac.theme.initFont(true, stack => { checked.push(stack); return false; });
+    assert.deepEqual(checked, [], "macOS: nothing checked"); assert.equal(mac.theme.fontFallsBack(), false);
+  }
+  for (const isMac of [false]) {
+    // Linux: the monospace is the default on Omarchy.
+    const u = runtime(t), checked = [];
     assert.equal(u.theme.initFont(isMac, stack => { checked.push(stack); return false; }, { isOmarchy: !isMac }), "omarchy");
-    assert.deepEqual(checked, [u.theme.fontStacks("omarchy", isMac)["--ui-font"]], `Omarchy's UI stack is checked, mac=${isMac}`);
+    assert.deepEqual(checked, [u.theme.fontStacks("omarchy", isMac)["--term-font-family"]], "the terminals' stack is checked");
     assert.equal(u.theme.currentFont(), "omarchy", "still the choice"); assert.deepEqual(u.writes, [], "and nothing stored");
     assert.equal(u.theme.fontFallsBack(), true);
     assert.equal(u.root.dataset.font, "omarchy"); assert.equal(u.root.dataset.fontFallback, "system");
@@ -322,17 +331,17 @@ test("the fallback: where the monospace font does not draw at a fixed width, Oma
   const ok = runtime(t);
   ok.theme.initFont(false, () => true, OMARCHY);
   assert.equal(ok.theme.fontFallsBack(), false); assert.equal(ok.root.dataset.fontFallback, undefined);
-  assert.equal(stack(ok.token("--ui-font")), "ui-monospace, monospace");
+  assert.equal(stack(ok.token("--term-font-family")), "ui-monospace, monospace");
 });
 
-test("the picker's Omarchy row says when it falls back", t => {
+test("the Appearance sheet's monospace row says when it falls back; macOS offers System alone (D2)", t => {
   const { theme } = runtime(t);
-  assert.equal(theme.FONT_FALLBACK_NOTE, "No monospace font on this computer: showing System font");
+  assert.equal(theme.FONT_FALLBACK_NOTE, "No monospace font on this computer: showing System");
   const rows = (isMac, fallback) => JSON.parse(JSON.stringify(theme.fontChoices(isMac, fallback)));
-  assert.deepEqual(rows(false, false), [{ id: "omarchy", label: "Omarchy's font", note: "This computer's monospace font" }, { id: "system", label: "System font" }]);
-  assert.deepEqual(rows(false, true), [{ id: "omarchy", label: "Omarchy's font", note: "No monospace font on this computer: showing System font" }, { id: "system", label: "System font" }]);
-  assert.deepEqual(rows(true, false)[0], { id: "omarchy", label: "JetBrains Mono", note: "Terminals keep Inconsolata" });
-  assert.deepEqual(rows(true, true)[0], { id: "omarchy", label: "JetBrains Mono", note: "No monospace font on this computer: showing System font" });
+  const system = { id: "system", label: "System", note: "Inconsolata in the terminals" };
+  assert.deepEqual(rows(false, false), [system, { id: "omarchy", label: "This computer's monospace", note: "Fontconfig's monospace in the terminals" }]);
+  assert.deepEqual(rows(false, true), [system, { id: "omarchy", label: "This computer's monospace", note: "No monospace font on this computer: showing System" }]);
+  assert.deepEqual(rows(true, false), [system]); assert.deepEqual(rows(true, true), [system]);
   assert.deepEqual(rows(false), rows(false, false), "no fallback unless said");
 });
 
@@ -383,14 +392,14 @@ test("open terminals switch family and size in place and refit (the grid and the
   const fits = a.fits.length; u.theme.setFont("system"); assert.equal(a.fits.length, fits, "a closed terminal hears nothing");
 });
 
-test("the shell applies the font before its first await, with the platform; the picker, palette and action are wired", () => {
+test("the shell applies the font before its first await, with the platform; the Appearance sheet, palette and action are wired", () => {
   const firstAwait = shellSource.indexOf("await ");
   const init = shellSource.indexOf('initFont(navigator.platform.includes("Mac"), undefined, { isOmarchy: desk?.isOmarchy === true });');
   assert.ok(shellSource.indexOf("const desk = window.oatsDesktop;") < init, "preload's constant, read where the shell reads its bridge");
   assert.ok(init > 0 && init < firstAwait, "initFont runs before the window's first paint can wait on anything");
-  assert.match(shellSource, /createFontPicker\(\{ doc: document, fonts: \(\) => fontChoices\(navigator\.platform\.includes\("Mac"\), fontFallsBack\(\)\), current: currentFont, choose: setFont,\n  subscribe: onFontChange,/);
+  assert.match(shellSource, /fonts: \(\) => fontChoices\(navigator\.platform\.includes\("Mac"\), fontFallsBack\(\)\), currentFont, chooseFont: \(id\) => \{ setTerminalFontFamily\(""\); setFont\(id\); \},/);
   assert.match(shellSource, /\{ label: "Font: choose…", detail: chordDetail\("app\.fontPicker"\), run: \(\) => runAction\("app\.fontPicker"\) \}/);
-  assert.match(shellSource, /registerAction\(\{ id: "app\.fontPicker", label: "Font: choose…", context: "global", run: \(e\) => \{ if \(!e\?\.repeat\) fontPicker\.toggle\(\); \} \}\);/);
+  assert.match(shellSource, /registerAction\(\{ id: "app\.fontPicker", label: "Appearance: font…", context: "global", run: \(e\) => \{ if \(!e\?\.repeat\) appearance\.toggle\(\{ focus: "font" \}\); \} \}\);/);
   assert.doesNotMatch(shellSource, /location\.reload|webContents\.reload/, "a font change never reloads the window");
 });
 

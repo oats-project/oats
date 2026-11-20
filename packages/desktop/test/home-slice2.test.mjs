@@ -175,7 +175,7 @@ test("slice2 first run", (t) => {
   const first = u.el.querySelector('[data-home-section="first-run"]');
   assert.ok(first, "a workspace with no agents shows the first run");
   assert.equal(first.querySelectorAll("p").length, 2, "OATS in two lines");
-  assert.deepEqual([...first.querySelectorAll("li")].map((li) => li.textContent), ["New agent: Ctrl+N", "Command palette: Ctrl+K", "Home: View: Home in the palette"]);
+  assert.deepEqual([...first.querySelectorAll("li")].map((li) => li.textContent), ["New agent: Ctrl+N", "Command palette: Ctrl+K", "Home: Home in the palette"]);
   assert.ok(u.el.querySelector('[data-home-section="overview"]'), "then the overview");
   assert.equal(u.el.querySelector('[data-home-section="board"]'), null);
   assert.deepEqual(firstRunCopy(() => "").keys.map((k) => k.label), ["New agent", "Command palette", "Home"]);
