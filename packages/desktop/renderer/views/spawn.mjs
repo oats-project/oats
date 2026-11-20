@@ -73,8 +73,10 @@ const CSS = `
 .workspace-title[hidden] { display:none; }
 /* The title row (slice 3c, the prototype's "Souls [grid | table]"): the trail, then the Souls tab's Grid | Table inline
    beside its h1, on the title's baseline row. */
-.workspace-title-row { flex:none; display:flex; align-items:center; flex-wrap:wrap; gap:0 var(--space-3); min-width:0; }
-.workspace-title-row > .souls-view { margin-top:var(--space-3); }
+.workspace-title-row { flex:none; display:flex; align-items:center; flex-wrap:wrap; gap:0; min-width:0; }
+.workspace-title-row > .workspace-title { flex:0 1 auto; min-width:0; } /* the trail still wraps in a narrow pane */
+/* Its left margin is the trail's own inset, so a switch wrapped under a narrow trail lines up with it. */
+.workspace-title-row > .souls-view { margin:var(--space-3) 0 0 calc(20px + var(--main-lead-inset, 0px)); }
 .workspace-title-row > .souls-view[hidden] { display:none; }
 .oats-view .workspace-title button.workspace-crumb, .workspace-title button.workspace-crumb { appearance:none; height:auto; min-height:0; margin:0; padding:0 4px; border:0;
   border-radius:6px; background:transparent; color:var(--muted); font:inherit; line-height:inherit; cursor:pointer; }
@@ -1006,9 +1008,10 @@ function renderGrid(s, { restoreFocus = true } = {}) {
   const list = s.souls.agents.filter((a) => matches(s, a));
   s.q("souls-sum").classList?.add("workspace-sr-only");
   s.q("souls-sum").textContent = `${list.length} of ${s.souls.agents.length} souls${cliProbePending() ? " · Checking CLI…" : ""}`;
-  // The first line's counts (slice 3c): every soul listed, and those with an agent running, once the souls are read.
+  // The first line's counts (slice 3c): every soul listed, and those with an agent running, once the souls are read
+  // (a read that found none says "You have 0 souls").
   const read = s.gridState ? s.gridState.hasData : true, lede = s.q("souls-lede");
-  if (lede) lede.textContent = read && s.souls.agents.length
+  if (lede) lede.textContent = read
     ? soulsLede({ souls: s.souls.agents.length, running: s.souls.agents.filter((a) => soulInstances(s, a).some((i) => i.running === true)).length })
     : SOULS_LEDE;
   if (typeof grid.append !== "function") return; // non-DOM host (tests observe s.souls)

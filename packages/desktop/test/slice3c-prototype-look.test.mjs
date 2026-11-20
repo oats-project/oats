@@ -138,10 +138,15 @@ test('slice3c souls title, switch inline, counts sentence, uppercase group heads
   assert.equal(row.querySelector('.workspace-title').nextElementSibling, sw, 'right after the title');
   assert.deepEqual([...sw.querySelectorAll('button')].map(b => [b.textContent, b.getAttribute('aria-pressed')]), [['Grid', 'true'], ['Table', 'false']]);
   assert.equal(u.css('.workspace-title-row').display, 'flex'); assert.equal(u.css('.workspace-title-row').alignItems, 'center');
+  // In a narrow pane the trail gives way and wraps inside the row (the page clips what overflows): it shrinks, never
+  // holds its one-line width. The live check measures it in Electron at a 312px pane.
+  const trail = u.css('.workspace-title');
+  assert.deepEqual([trail.flexShrink, trail.minWidth, trail.flexWrap], ['1', '0px', 'wrap']);
   // One sentence with the real counts: five souls, one of them with agents running (lane-maintainer's agent is stopped).
   assert.equal(u.$('.souls-lede').textContent, 'A soul is what an agent is made of: its instructions, its skills and capabilities, and the knowledge it keeps. '
     + 'You have 5 souls, 1 with agents running, grouped by where they come from; maintainers first, then experts, developers, operations. Enter opens one.');
   assert.equal(u.spawn.soulsLede({ souls: 1, running: 0 }).match(/You have [^,]+, [^,]+,/)[0], 'You have 1 soul, none with agents running,');
+  assert.equal(u.spawn.soulsLede({ souls: 0, running: 0 }).match(/You have [^,]+, [^,]+,/)[0], 'You have 0 souls, none with agents running,');
   // Group heads: small uppercase, tracked, with the count after the name.
   const head = u.$('.souls-group-title');
   assert.equal(head.querySelector('.souls-group-name').textContent, 'agents');
@@ -191,6 +196,11 @@ test('slice3c capabilities rows with pills and intro', t => {
   assert.match(u.$('.cap-intro').textContent, /You have 5 capabilities/, 'the search never narrows the counts');
   renderCapabilityList(u.$('.caps'), { rows: ROWS, status: { ...STATUS, defaults: undefined }, onOpen() {} });
   assert.doesNotMatch(u.$('.cap-intro').textContent, /default/, 'no defaults reported: nothing said about them');
+  // A read that found none still says what a capability is, with its zero; an unread catalog says nothing.
+  renderCapabilityList(u.$('.caps'), { rows: [], status: STATUS, onOpen() {} });
+  assert.match(u.$('.cap-intro').textContent, /You have 0 capabilities, 0 official: /);
+  renderCapabilityList(u.$('.caps'), { rows: null, status: STATUS, onOpen() {} });
+  assert.equal(u.$('.cap-intro'), null);
   renderCapabilityList(u.$('.caps'), { rows: ROWS, status: STATUS, onOpen() {} });
   // Rows: no box around the list, a thin rule under each row, a quiet hover and selected state.
   assert.match(ruleBody(catalogCSS, '.cap-list > li'), /border-bottom:1px solid var\(--border\)/, 'a thin rule under each row');

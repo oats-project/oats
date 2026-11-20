@@ -184,8 +184,8 @@ export const INTRO_COPY = Object.freeze({
   defaults: ' “default” is what this workspace gives a soul unless it says otherwise.',
 });
 function capabilityIntro(doc, { rows, status }) {
+  if (!Array.isArray(rows)) return null; // not read: nothing to count
   const all = capabilityList(rows, status);
-  if (!all.length) return null;
   const p = node(doc, 'p', null, 'cap-intro');
   const mark = node(doc, 'span', null, 'cap-official'); mark.setAttribute('aria-hidden', 'true'); mark.append(iconElement(doc, 'check', { size: 10 }));
   const said = node(doc, 'span', '✓', 'workspace-sr-only');
