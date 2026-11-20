@@ -269,8 +269,8 @@ async function a13(browser, viewport, threads) {
       `(() => { const chip = document.querySelector(${JSON.stringify(testId("oats-chip-oats"))})?.getBoundingClientRect(); const row = document.querySelector(${JSON.stringify(testId("oats-identity-row"))})?.getBoundingClientRect(); return Boolean(chip && row && chip.width > 0 && chip.left >= row.left && chip.right <= Math.min(row.right, innerWidth)); })()`,
     );
     check(chipInRow, `${at} the OATS chip is on screen, whatever the other chips' width`);
-    const rowHeight = await page.evaluate(`document.querySelector(${JSON.stringify(testId("oats-identity-row"))}).getBoundingClientRect().height`);
-    check(rowHeight < 50, `${at} the row is one line (${Math.round(rowHeight)} px)`);
+    const rowHeight = await page.evaluate(`document.querySelector(${JSON.stringify(testId("oats-identity-row"))})?.getBoundingClientRect().height ?? -1`);
+    check(rowHeight > 0 && rowHeight < 50, `${at} the row is one line (${Math.round(rowHeight)} px)`);
     await page.shot(`a13-${viewport.name}-thread`);
 
     // a thread that is no agent has no row
@@ -344,6 +344,10 @@ async function a14(browser, viewport, threads) {
 }
 
 // ---- the run
+
+// A bb that was never opened shows its first-run guide in place of the app: mark it as done, as a
+// person does by walking through it. (A setting of bb's own; nothing of the plugin depends on it.)
+bb("settings", "general", "onboardingCompletedAt", new Date().toISOString());
 
 const threads = threadsByFixtureId();
 fake({ status: { stdout: statusWithRealIds(threads) } });
