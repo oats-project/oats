@@ -361,13 +361,14 @@ The three Linux / Windows columns are [the chord families](#the-chord-families):
 | Close the split (`split.close`; no button since spec F) | ⌥⌘W | Ctrl+Shift+Alt+W | the same | the same | yes |
 | Home (`stage.home`, the palette's **Home** section; its key comes with a later slice) | none | none | none | none | no |
 | Workspace › Machines / Workspace / Automations (`stage.hierarchy`: the Workspace page on its Machines tab, the palette's **View: Workspace › Machines**; `stage.spawn`, `stage.automations`) | ⌘1 / ⌘2 / ⌘3 | Ctrl+1 / Ctrl+2 / Ctrl+3 | the same | the same | yes (Ctrl+3 is ESC, which Esc still sends) |
-| Focus next / previous region (`focus.nextRegion`, `focus.prevRegion`) | F6 / ⇧F6 | F6 / Shift+F6 | the same | the same | no (mc, htop, nano) |
+| Focus next / previous region (`focus.nextRegion`, `focus.prevRegion`; with an agent view, its facts before the terminal and its questions after it are regions too) | F6 / ⇧F6 | F6 / Shift+F6 | the same | the same | no (mc, htop, nano) |
 | Leave the terminal for the next region (`focus.leaveTerminal`) | ⇧⌘F6 | Ctrl+Shift+F6 | the same | the same | yes |
 | Sidebar (`sidebar.toggle`; also the palette's **Sidebar: toggle (hide/show)**, and Show sidebar while it is hidden) | ⌘B | Ctrl+Shift+B | the same | the same | yes (plain Ctrl+B, the tmux prefix, stays the program's) |
 | The sidebar's width back to 288px (`sidebar.resetWidth`; the palette's **Sidebar: reset width**; also Enter or a double-click on the sidebar's width handle) | none | none | none | none | – (the palette keeps it) |
 | Focus the instance roster, on its current row, or, on an empty roster, the foot's New agent (`sidebar.focusFilter`, its id from when the roster had a filter; to find an instance by name, use the command palette) | ⌘F | Alt+F | Ctrl+Alt+F | Ctrl+Alt+F | yes |
 | An instance's name and colour, for the leader's target (`instance.edit`; also **Instance: name and colour…**; no leader key) | ⌥⌘R | Alt+R | Ctrl+Alt+R | Ctrl+Alt+R | yes |
 | The agent's mail, a read-only sheet from the right, for the leader's target; pressed again, or Esc, it closes (`instance.mail`; also **Agent: mail** and Details' **Mail**; no leader key; [desktop-mail-sheet.md](desktop-mail-sheet.md)) | ⌥⌘M | Alt+M | Ctrl+Alt+M | Ctrl+Alt+M | yes (ESC m, which Esc, then m still sends: Emacs's M-m, back-to-indentation, and zsh's copy-prev-shell-word; readline binds none) |
+| The agent view: the focus from the terminal to its questions, then its facts, then back (`agent.viewFocus`, the palette's **Agent: questions and facts (focus)**; no chord and no leader key: F6 reaches both as regions, Ctrl+Shift+F6 from the terminal; in the questions, c opens the context; Esc in the questions or the facts goes back to the terminal) | none | none | none | none | – (Ctrl+Shift+F6 reaches it from a terminal) |
 | Instance panel (`panel.toggle`; also Show instance panel while it is closed, and the panel's own close button) | ⌘I | Ctrl+Shift+I | the same | the same | yes (plain Ctrl+I, the Tab byte, stays the program's) |
 | The Appearance sheet, on Theme (`app.themePicker`; also the palette's **Appearance…**) | ⇧⌘Space | Ctrl+Shift+Space | the same | the same | yes |
 | The Appearance sheet, on Font (`app.fontPicker`; also the palette's **Font: choose…**) | none | none | none | none | – (the palette keeps it) |
@@ -727,6 +728,9 @@ marked unknown, and the Ctrl+Alt family gives the key back
 ([Switch family](#switch-family)). An Alt key no chord holds (Alt+B, Alt+D,
 Alt+T, Alt+.) is still the program's.
 
+Alt+T: refused, Claude Code's extended thinking (the agent view's focus, which asked for it, is on F6's regions and
+the palette instead: a Desktop key never takes a key an agent's harness needs).
+
 The Alt arrows take nothing in the Desktop. Its terminal (xterm.js) sends an
 Alt arrow as the Ctrl arrow on Linux and Windows (`CSI 1;5`), before and after
 this change, so a program never got Alt+arrow from it, and Ctrl+arrow still
@@ -1023,17 +1027,27 @@ F6 moves focus to the next region, Shift+F6 to the previous one, in this order:
    region: Tab reaches them after the roster, and F6 from there goes on to
    Main, Shift+F6 back to the roster. From an empty roster's stop there (New
    instance), Shift+F6 goes back as from the roster, to the views.
-4. **Main**: with tabs open, the active tab's content (a terminal's input,
+4. **The agent's facts** (the agent view, while the active tab shows its
+   facts strip, above the terminal): its first fact, else its fold. In the
+   cycle only while it shows.
+5. **Main**: with tabs open, the active tab's content (a terminal's input,
    through the same selection intent as any explicit terminal focus), else a
    focused empty split group, else the active tab in the strip; on a stage,
    its first control. The tab strip, the split controls, Show sidebar and Show
    instance panel belong here.
-5. **Instance panel**: its selected tab (a stage's content, such as the soul
+6. **The agent's questions** (the agent view, while the active tab shows its
+   question zone, under the terminal): the question's first enabled option,
+   else the zone itself. In the cycle only while it shows; Esc in the
+   questions or the facts goes back to the terminal.
+7. **Instance panel**: its selected tab (a stage's content, such as the soul
    inspector: its first control), while the panel is open.
 
 Inside a terminal F6 belongs to the program (mc, htop, nano). **⇧⌘F6 /
 Ctrl+Shift+F6** (`focus.leaveTerminal`) leaves the terminal for the next region
-in the same order; from there plain F6 and Shift+F6 cycle as usual.
+in the same order; from there plain F6 and Shift+F6 cycle as usual. From an agent's
+terminal with questions open, that next region is its questions (the agent
+view's key: no chord and no leader key of its own, so Alt+T stays the
+program's, see [What the Alt family takes](#what-the-alt-family-takes)).
 
 Then back to the workspaces. A hidden region is skipped (the sidebar while hidden or
 in focus mode, the panel while closed or when it has nothing to show), and so

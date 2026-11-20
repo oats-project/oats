@@ -22,6 +22,7 @@
 // instance-pin-menu.test.mjs turns the feature on. The palette's Agent: Pin to top / Unpin carry their real labels
 // (PIN_LABELS) and offer themselves for no target here (pinTargetOffer, asked of the palette's own target, which is
 // none: paletteTargetId), so a suite that builds the palette lists neither.
+// The agent view (S2-D): a suite about other behaviour runs the shipped tab boards without the feature (`tabBoards`).
 import { deploymentState, rosterSections, rowStale, splitByDeployment, rosterSectionKey, sidebarSections, isMultiDeployment } from "../../../client/roster-sections.mjs";
 import { siblingText } from "../../../client/instance-presentation.mjs";
 import { backgroundHeading } from "../../renderer/background-heading.mjs";
@@ -44,6 +45,7 @@ import { dotColor, paintDotColor } from "../../renderer/instance-dot.mjs";
 import { syncWaitingRow } from "../../renderer/waiting-row.mjs";
 import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, anyBelow } from "../../renderer/roster-disclosure.mjs";
 import { noTerminal } from "../../renderer/provider-row.mjs";
+import { createTabBoards } from "../../renderer/agent-board-tabs.mjs";
 
 /** Every root opened by hand: the roster as it was drawn before roots started collapsed. */
 class AllOpen extends Set { has() { return true; } }
@@ -92,4 +94,7 @@ export const viewContext = () => ({
   treeConnectors, treeGuides, drawsParentLine, withParentGate, relatedSiblings,
   pinMenu: { items: () => [], handles: () => false, run: async () => {} },
   PIN_LABELS, paletteTargetId: null, pinTargetOffer: () => null, runPinCommand: async () => {},
+  // The agent view (agent-board-tabs.mjs): the shipped controller, without the kernel's feature (instance-board), so
+  // every terminal tab is today's terminal and its waiting row and nothing is read; agent-view.test.mjs drives it on.
+  tabBoards: createTabBoards({ features: () => null, post: () => Promise.reject(new Error("no backend in this suite")), openLink() {} }),
 });

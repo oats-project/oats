@@ -1,6 +1,9 @@
 // oats desktop — keyboard regions (spec F, Part 4): F6 / Shift+F6 move focus between the
 // window's regions, in the sidebar's order top to bottom, then the main area (2026-10-26):
 // workspaces → views (the nav under the list) → instance roster → main → instance panel → back.
+// The agent view (S2-D) adds two regions around its terminal, in the order they show: its facts (above the
+// terminal, before main) and its questions (under it, after main). Each is in the cycle only while the active tab
+// shows it; from a terminal, Ctrl+Shift+F6 (focus.leaveTerminal) goes on to the questions.
 //
 // A region that is hidden (the sidebar while hidden or in focus mode, the panel while closed or when
 // there is nothing to show) is skipped. Focus lands on the region's current item, never on <body>:
@@ -22,7 +25,7 @@
 
 import { revealInScrollport } from "./reveal-in-scrollport.mjs";
 
-export const REGIONS = Object.freeze(["workspaces", "views", "roster", "main", "panel"]);
+export const REGIONS = Object.freeze(["workspaces", "views", "roster", "facts", "main", "questions", "panel"]);
 
 const TABBABLE = 'button, [href], input, select, textarea, summary, [tabindex]';
 
@@ -54,8 +57,11 @@ export function firstTabbable(root) {
  *        content (or the focused empty split group) and answer whether focus landed; called
  *        only while the tab layer covers the stage
  * @param {() => boolean} [deps.tabLayerVisible]
+ * @param {{ part: (name: 'facts'|'questions') => HTMLElement | null, focus: (name: 'facts'|'questions') => boolean }} [deps.agentView]
+ *        the active tab's agent view (agent-board-tabs.mjs): its facts strip or question zone while shown, and the
+ *        focus on its current item
  */
-export function createFocusRegions({ doc, focusMainContent = () => false, tabLayerVisible = () => false }) {
+export function createFocusRegions({ doc, focusMainContent = () => false, tabLayerVisible = () => false, agentView = { part: () => null, focus: () => false } }) {
   const app = () => doc.getElementById("app");
   const byId = id => doc.getElementById(id);
   const sidebarShown = () => !app()?.classList.contains("sidebar-hidden") && !app()?.classList.contains("focus-mode") && isShown(byId("sidebar"));
@@ -68,6 +74,7 @@ export function createFocusRegions({ doc, focusMainContent = () => false, tabLay
     if (name === "workspaces") return sidebarShown() && isShown(byId("ws-list"));
     if (name === "views") return sidebarShown() && isShown(byId("nav"));
     if (name === "roster") return sidebarShown() && isShown(byId("instance-roster"));
+    if (name === "facts" || name === "questions") return tabLayerVisible() && isShown(agentView.part(name));
     if (name === "main") return isShown(byId("main"));
     if (name === "panel") return isShown(byId("context-panel"));
     return false;
@@ -106,6 +113,7 @@ export function createFocusRegions({ doc, focusMainContent = () => false, tabLay
   /** Focus a region's current item. True when focus landed on a control (never <body>). */
   function focusRegion(name) {
     if (!visible(name)) return false;
+    if (name === "facts" || name === "questions") return agentView.focus(name) && landed() && agentView.part(name).contains(doc.activeElement);
     if (name === "main" && tabLayerVisible()) {
       if (focusMainContent() && landed() && byId("main").contains(doc.activeElement)) return true;
       // No content to focus (an artifact without controls): its tab in the strip.
@@ -132,6 +140,7 @@ export function createFocusRegions({ doc, focusMainContent = () => false, tabLay
     if (byId("nav")?.contains(active)) return "views";
     if (inFoot(active)) return null; // the foot is not a region (cycle places it)
     if (byId("sidebar")?.contains(active)) return "workspaces"; // anything else the sidebar holds sits above the roster
+    for (const name of ["facts", "questions"]) if (agentView.part(name)?.contains(active)) return name;
     if (byId("main")?.contains(active)) return "main";
     if (byId("context-panel")?.contains(active)) return "panel";
     return null;

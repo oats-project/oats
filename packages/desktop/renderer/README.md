@@ -2381,6 +2381,56 @@ comes with the New agent form's backend choice.
 Tests: `provider-rows.test.mjs`, and the A4 cases of `workspace-tab-memory.test.mjs`,
 `retired-tabs.test.mjs` and `instance-tree.test.mjs`.
 
+### The agent view (`agent-board.mjs`, `agent-board-tabs.mjs`)
+
+With the kernel's board (feature `instance-board`; the shared contract module
+`packages/client/instance-board.mjs` validates the row's `board` and the
+`inspect --home --board` answer, and holds the rules both clients share: the
+three shown facts, the hidden-fact rule, the typed answer `<id>: <option>`,
+the dialog claims; a link the display filter would withhold is dropped from its fact), a terminal tab is the agent's view. `syncTabNeedsInput`
+calls `tabBoards.sync(tab, row, claim, workspace)` for each terminal tab, and
+gives the waiting row the claim only when that answers false: the board's own
+claim (producer `oats.board`) shows in the question zone instead. The view
+prepends `.agent-facts` and appends `.agent-questions` either side of the
+tab's `.term-wrap` (`place`, also after the shell appends the wrap), and the
+pane becomes a flex column (`.agent-view`), as with the waiting row; the
+terminal's geometry is never set here. Its two reads, the detail through
+`/api/capabilities` (`board: true`) and the claims through
+`/api/instance-events`, each carry a latest-intent counter checked on success
+and on rejection, and run when the view opens and when the board or the claim
+changes, never on an unchanged poll. The answer goes through
+`createTerminalTab`'s `type(text)`, the tab's own PTY lease (no control
+character, no line end, never while the pane isn't active): `desk.termWrite(h, text, { answer: true })`, which main
+answers (`term:answer`, terminal-owner.mjs `answer`, the same frame guard and lease as a write) only after reading
+the viewer pane's `#{pane_in_mode}` on its `=`-anchored session, synchronously, and writes with no turn of the event
+loop in between. Only a read of 0 types. In a mode (tmux copy mode, where `q` is cancel and `q1: Yes` would arrive as
+`1: Yes`) it answers `E_TERM_IN_MODE` (`IN_MODE_NOTE`); a read that failed or didn't resolve, or a remote viewer, which
+has no local pane to read, answers `E_TERM_MODE_UNKNOWN` (`MODE_UNKNOWN_NOTE`); either way not one character is
+written, and never a cancel. A remote row's view (`row.server`) never asks: its numbers are disabled from the start,
+with `remoteNote` (follow-up #2029: the remote kernel reporting the pane's mode would enable it). The frame and lease checks come before the read, so a document that holds no lease learns
+nothing about a pane. Not closed: a key the person presses into the scrollback during the read's few milliseconds. The view keeps no state about the input line: a card stays until the agent clears its
+question, and after a press the zone shows `TYPED_NOTE`, information only, which the next terminal input (`input`; not the terminal's own focus or mouse reports) or a
+changed board ends. While the board has a question, `sync` keeps its claim off the waiting row. The person's input is seen through its
+`onInput` observer. Before a number types, the view reads the claims again
+(`checkClaims`): only the latest claims read paints and may let the press type,
+and the shell's `inView` (the tab's pane active, the tab layer shown, its
+workspace current) is checked before the read, after it and at the write.
+A question's "typed" note and its context are keyed by its occurrence (`id@since`). The
+facts strip and the question zone are F6 regions (`focus-regions.mjs`, `facts`
+before `main` and `questions` after it, through the active tab's `part` and
+`focusPart`); `agent.viewFocus`, the palette's command, has no chord (Alt+T is
+Claude Code's extended thinking) and no leader key (the shared table is the TUI's).
+A repaint rebuilds a fact's row, the address box and the zone's options only
+when what they show changed (each keyed: the rows by fact, `factRows`, the others
+by `dataset.key`), and never takes out a row that stays, whatever the repaint (a
+poll's, or the budget's, which lays the strip out full and then compact): a focus
+in the pane selects its tab, which reads the roster and syncs the board again, so
+a repaint that replaced the focused control and focused its new copy would loop,
+and a press would land on a replaced button. A focused control whose row was
+replaced, or moved (a fact the agent unsets and sets again goes last), is given
+the focus back (`agent-view.test.mjs`, "no loop", "a compact strip keeps its row"
+and "a moved row").
+
 ### Workspace-local tab memory
 
 `workspace-tab-memory.mjs` retains each workspace's group membership/order,

@@ -1115,6 +1115,96 @@ the operation says so, with what to do: stop it and upgrade it (`oats instance
 upgrade`), or start a new agent of its soul. The details are in
 [packages/desktop/docs/desktop-mail-sheet.md](../packages/desktop/docs/desktop-mail-sheet.md).
 
+## The agent view: facts and questions
+
+With an OATS that reports the agent's board (feature `instance-board`; the
+agent writes it with `oats instance board set` and `oats instance board ask`,
+[docs/desktop-cli-api.md](desktop-cli-api.md)), an agent's terminal tab is its
+**agent view**. Top to bottom:
+
+1. **Facts**: what the agent keeps in your view, one compact row each,
+   `label · value unit`, with "updated 4 min ago". At most three show; **N
+   more** unfolds the rest. While the view is open the Desktop reads each
+   fact's history once, and a number that changed draws a small sparkline.
+   A link shows as the agent's, with its host (`dev-a says: github.com…`). A
+   press shows its whole address over the top of the terminal, wrapped, the
+   host in bold, with **Open in browser** beside it: only that press opens it,
+   in your browser. Esc closes it. An address that looks like it carries a
+   secret (a token in it) is never shown: the fact shows without its link. **×**, or
+   **u** on a focused fact, hides it on this computer only: the agent's board
+   is unchanged, and the fact shows again when its value changes. **N hidden ·
+   show** brings them all back.
+2. **The agent's own terminal**, unchanged: the same viewer, the same cell
+   geometry, the only part that scrolls (a long context scrolls inside its
+   own open fold, at most twelve lines tall). The board leaves it at least
+   120 px, or 40% of the pane: in a short pane the facts give way to one (the
+   rest stay behind **N more**), then the questions drop their key hint, then
+   an open context shortens to three lines. A pane too short even for that
+   keeps its terminal smaller, and a number types only while at least two of
+   its lines show. It gives up exactly the rows the
+   facts and the questions take.
+3. **Questions**: one at a time, under the terminal, so they sit right by the
+   agent's input line at the bottom of its screen. "question 2 of 3", ‹ › and
+   the dots turn them, and so do Tab / Shift+Tab and ← / → while the questions
+   have the focus. A question with context has a **Context** fold, attributed
+   to the agent, as plain text: **c** opens or closes it and moves the focus
+   there, where Tab moves into its text. With no open question there is no zone.
+
+**What the view says when it can't show something.** History and context come
+from a second read while the view is open (`oats inspect --home <h> --board`,
+sent only when this computer's OATS, and for an agent on another machine that
+machine's OATS too, has the feature). The view reads it when it opens, when a
+fact changes and when a question with context is asked, never on the roster's
+poll. When that read fails, comes back in a shape the Desktop can't read, or
+comes from an OATS without the feature, the facts strip and the context fold
+say which. A board the Desktop can't read, or one with entries it had to leave
+out, says so too. None of these hides a question or reads as "no questions".
+
+**Answering.** The questions and the facts are focus regions: from the
+terminal, **Ctrl+Shift+F6** moves to the questions, and F6 / Shift+F6 move on
+from there (the facts come before the terminal, the questions after it). The
+palette's **Agent: questions and facts (focus)** moves through the questions,
+the facts and back to the terminal. Esc goes back to the terminal. A number, or a press on an
+option, puts `<id>: <option>` on the agent's input line, for example
+`q2: Yes, one clean commit`, and gives the terminal the focus. Nothing is sent:
+your Enter in the terminal sends it, as if you had typed it, so you see what
+goes. No bare digit is ever typed, and nothing is typed into a terminal that
+isn't on screen: a press whose terminal left the screen while the Desktop read
+the agent's claims types nothing. After a press the card says, quietly, "Typed
+on the input line: press Enter in the terminal to send it." until your next
+input in the terminal or a change on the board. The Desktop doesn't guess what
+the input line holds: the card stays until the agent clears the question once
+it has read your answer, and a second press types again, as typing would.
+
+While the terminal is in its scrollback (you scrolled up with the
+wheel or Shift+PgUp), nothing is typed either, because the scrollback would
+read the answer's first letter as its own key: the zone says "The terminal is
+in its scrollback: press q or scroll to the bottom, then press the number
+again." The Desktop checks the terminal just before it types, and types only
+when the check says it isn't in its scrollback: when it can't tell (the check
+failed), nothing is typed and the zone says "The answer wasn't typed: the Desktop
+couldn't check the terminal's scrollback. Type it there yourself, or press the
+number again." On an agent on another machine the numbers are disabled from the
+start, since its terminal can't be checked from this computer, and the zone says
+"This agent runs on another machine: type the answer in its terminal (for
+example q1: Yes)." (follow-up: #2029). The check and the typing are two steps a few milliseconds apart:
+if you enter the scrollback in exactly that moment, tmux can still read the
+answer's first letter as a scrollback key. That window is not closed.
+
+**While a dialog is open** (the agent has a live `permission` or `question`
+claim, from its harness or any other producer), the numbers are disabled and
+the zone says "The agent's terminal is showing a prompt: answer it there
+first." The Desktop reads the agent's claims for this when the view opens and
+when they change, because the roster row shows only the newest one.
+
+The board's own question is the agent's needs-input claim (reason
+`attention`), so the sidebar mark, the tab's mark and Home's "needs you" read
+it as before. In the agent view it shows in the question zone, not in the
+waiting row. Any other claim keeps the waiting row described above. Without
+the feature (an older OATS), the tab is the terminal and its waiting row, as
+before. A tab on another machine shows the board when that machine's OATS has
+the feature.
+
 ## Copy from a terminal
 
 Drag over an agent's output to select it, as in any terminal. The selection
