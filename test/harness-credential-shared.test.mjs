@@ -12,7 +12,7 @@ import { launchConfigFolder } from "../lib/harness-trust.mjs";
 import { resumeSessions } from "../lib/session-resume.mjs";
 import { recordSeen } from "../lib/session-seen.mjs";
 import { launchEnvHandoff } from "../lib/launch-env.mjs";
-import { v2Deployment } from "./helpers/v2-deployment.mjs";
+import { v2Deployment, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 import { isolateSessionEnvironment, oatsSocket, systemExecutable, waitUntil } from "./helpers/host-fixture.mjs";
 
 const CLI = resolve("bin/oats.mjs");
@@ -403,8 +403,7 @@ function hookedCredentials(t) {
   for (const path of [join(ambient, ".claude"), dirty]) writeFileSync(join(path, ".credentials.json"), "fixture");
   writeFileSync(token, "fixture-hook-token\n");
   const executable = join(dir, "harness");
-  writeFileSync(executable, `#!${process.execPath}\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(process.env.OATS_INSTANCE_HOME+'/fixture.pid',String(process.pid));\nsetInterval(()=>{},1000);\n`);
-  chmodSync(executable, 0o755);
+  writeFixtureExecutable(dir, executable, `#!${process.execPath}\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(process.env.OATS_INSTANCE_HOME+'/fixture.pid',String(process.pid));\nsetInterval(()=>{},1000);\n`);
   const hook = `import {appendFileSync,existsSync,readFileSync,writeFileSync} from 'node:fs';\nimport {join} from 'node:path';\nconst home=process.env.OATS_HOME, instance=process.env.OATS_INSTANCE;\nconst selector=join(home,'selector');\nconst dir=existsSync(selector)?readFileSync(selector,'utf8'):instance.includes('dirty')?${JSON.stringify(dirty)}:${JSON.stringify(clean)};\nappendFileSync(${JSON.stringify(events)},instance+'\\n');\nif(process.env.OATS_LAUNCH_PREVIEW!=='1' && process.env.OATS_HARNESS==='claude' && existsSync(join(home,'create-credential')))writeFileSync(join(dir,'.credentials.json'),'fixture');\nprocess.stdout.write(JSON.stringify({env:{CLAUDE_CONFIG_DIR:dir}})+'\\n');\n`;
   const fx = v2Deployment({ souls: { hooked: { soul: { capabilities: { "claude.selector": { from: "here" } } } }, plain: {} }, capabilities: { "claude.selector": { manifest: { environment: ["CLAUDE_CONFIG_DIR"], launchPreview: true, hooks: { spawn: "hook.mjs", launch: "hook.mjs" } }, files: { "hook.mjs": hook } } }, local: { "launch-configs": {
     token: { harness: "claude", executable, env: { CLAUDE_CODE_OAUTH_TOKEN: { fromFile: token } } },

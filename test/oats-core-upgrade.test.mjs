@@ -9,7 +9,7 @@ import { mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFile
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { oatsSocket } from "./helpers/host-fixture.mjs";
-import { v2Deployment, git } from "./helpers/v2-deployment.mjs";
+import { v2Deployment, git, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 import { contentDigest } from "../lib/remote.mjs";
 import { writeLock } from "../lib/packages.mjs";
 import { planUpgrade, applyUpgrade } from "../lib/instance-upgrade.mjs";
@@ -93,7 +93,8 @@ for (const tag of ["oats-framework/v1.4.1", "oats-framework/v1.8.0", "oats-frame
 
     // The next start composes on the moved module: its launch hook writes the settings anew.
     execFileSync("tmux", ["-S", oatsSocket(fx.env.TMUX_TMPDIR), "new-session", "-d", "-s", fx.env.OATS_TMUX_SESSION, "-n", "hq", "-c", fx.base], { env: fx.env, stdio: "ignore" });
-    writeFileSync(meta.launch.executable, "#!/bin/sh\nif [ \"$1\" = --version ]; then echo '2.1.300 (Claude Code)'; exit 0; fi\nexec sleep 600\n", { mode: 0o755 });
+    // (The recorded harness is the fixture's inert `claude`: releasedHome spawned with the fixture's PATH.)
+    writeFixtureExecutable(fx.base, meta.launch.executable, "#!/bin/sh\nif [ \"$1\" = --version ]; then echo '2.1.300 (Claude Code)'; exit 0; fi\nexec sleep 600\n");
     const started = fx.cli(["session", "start", "--home", home, "--json"]);
     assert.equal(started.status, 0, started.stdout + started.stderr);
     assert.deepEqual(started.json().result.warnings.filter(w => w.includes("oats.core")), [], "oats.core's launch hook ran clean");

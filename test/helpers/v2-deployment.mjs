@@ -16,15 +16,42 @@
 // fixture's own, never the operator's. Inside a session environment (isolateSessionEnvironment, which
 // must be installed first) that environment's TMUX_TMPDIR is used, so both name one `oats` server.
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, lstatSync, realpathSync } from "node:fs";
 import { devNull } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, isAbsolute, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import YAML from "yaml";
 import { inertHarnessDir } from "./runtime-stub.mjs";
 import { applyFixtureRules, assertNoFixtureProcesses, expectLoginFallback, fixtureBase, fixtureEnv, fixtureRules, inheritedEnv, isolatedTmuxTmpdir, noLoginShell, privateTmuxTmpdir, removeTmuxTmpdir } from "./host-fixture.mjs";
 
 export const CLI = resolve(new URL("../../bin/oats.mjs", import.meta.url).pathname);
+
+/** Write an executable a fixture runs as its harness (a stand-in, or a file a test rewrites) at
+ *  `path`, which must be INSIDE the fixture's base: `base` (v2Deployment's `fx.base`, or any
+ *  directory a test made for itself). Refused, with nothing written, when it is not: when the
+ *  directory it is in is not under the base once links are followed, or when `path` itself is a
+ *  link. Every test that writes an executable goes through here (test/fixture-executable.test.mjs
+ *  holds the tests to it).
+ *
+ *  Why: a home's recorded `launch.executable` is whatever the spawn found for its harness, and an
+ *  in-process spawn looks on the PATH of the process that runs the tests. On a machine with the
+ *  harness installed that is the person's own binary; a test that wrote "its" harness there
+ *  replaced it (oats-project/oats#2042). */
+export function writeFixtureExecutable(base, path, content, mode = 0o755) {
+  if (typeof base !== "string" || !isAbsolute(base) || typeof path !== "string" || !isAbsolute(path)) throw new Error(`writeFixtureExecutable needs an absolute base and an absolute path (got ${base} and ${path})`);
+  const outside = (why) => new Error(`refusing to write the executable ${path}: ${why}. A test writes only inside its fixture (${base}); a home's recorded launch.executable is the harness the spawn found on PATH, which on this machine may be the real one. Spawn with the fixture's PATH (process.env.PATH = fx.env.PATH, whose inert harnesses come first), or point a launch configuration at a file of the fixture`);
+  let root, dir;
+  try { root = realpathSync(base); dir = realpathSync(dirname(path)); } catch (e) { throw outside(`its directory or the fixture's base cannot be resolved (${e.code ?? e.message})`); }
+  const rel = relative(root, dir);
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw outside(`it is not inside the fixture's base (its directory is ${dir})`);
+  let existing = null;
+  try { existing = lstatSync(path); } catch (e) { if (e.code !== "ENOENT") throw e; }
+  if (existing?.isSymbolicLink()) throw outside("it is a symbolic link, and the write would land where it points");
+  if (existing && !existing.isFile()) throw outside("it is not a regular file");
+  writeFileSync(path, content);
+  chmodSync(path, mode);
+  return path;
+}
 const DATE = "2026-09-25T09:00:00Z";
 
 function gitEnv() {

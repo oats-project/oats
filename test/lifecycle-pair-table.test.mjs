@@ -46,7 +46,7 @@ import YAML from "yaml";
 import { retireClaimPath, retireInstance, retirePendingMarkerPath } from "../lib/core.mjs";
 import { BEFORE_EFFECT_CODES, BUSY_HOLDERS } from "../lib/errors.mjs";
 import { processStartToken } from "../lib/worktree-hooks.mjs";
-import { CLI, git, v2Deployment } from "./helpers/v2-deployment.mjs";
+import { CLI, git, v2Deployment, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 import { hostProcessState, killAndReap, waitUntil } from "./helpers/host-fixture.mjs";
 import { runFaulted, startGated } from "./helpers/fs-gate-preload.mjs";
 import { tableAfter } from "./helpers/docs-table.mjs";
@@ -130,7 +130,7 @@ function fixture(t) {
   const pids = join(fx.base, "harness-pids");
   mkdirSync(pids);
   const executable = join(fx.base, "harness-stand-in");
-  writeFileSync(executable, `#!/bin/sh\necho $$ > '${pids}'/"$OATS_INSTANCE"\nexec sleep 600\n`, { mode: 0o755 });
+  writeFixtureExecutable(fx.base, executable, `#!/bin/sh\necho $$ > '${pids}'/"$OATS_INSTANCE"\nexec sleep 600\n`);
   const localFile = join(fx.dep, "oats-local.yaml");
   writeFileSync(localFile, YAML.stringify({ ...YAML.parse(readFileSync(localFile, "utf8")), "launch-configs": { "stand-in": { harness: "pi", executable } } }, { lineWidth: 0 }));
   // A process that lives for the whole walk and is no oats command: the pid a hand-written claim
