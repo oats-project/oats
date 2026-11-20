@@ -52,7 +52,7 @@ import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory,
 import { verifyAppSignature } from "./codesign-verify.mjs";
 import { checkLinuxFloor } from "./linux-floor.mjs";
 import { WATCHDOG_MS, PHASE_BUDGET_MS, boundedTail, readDevToolsPort, awaitClose } from "./launch-probe.mjs";
-import { connectProbe, probeSandbox, probeTerminal, probeWorkspace } from "./sandbox-probe.mjs";
+import { connectProbe, probeSandbox, probeTerminal, probeWorkspace, waitForShell } from "./sandbox-probe.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = join(HERE, "..");
@@ -460,15 +460,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
           const cdp = await connectProbe(targets.webSocketDebuggerUrl);
           try {
             const state = await probeSandbox(cdp, { requireSandbox: !linux });
-            const reloaded = await cdp.evaluate(`new Promise((resolve, reject) => {
-              const until = Date.now() + 15000;
-              function check() {
-                if (window.oatsDesktop && document.querySelectorAll('#nav .nav-item').length) resolve(true);
-                else if (Date.now() >= until) reject(new Error('sandboxed shell did not reload'));
-                else setTimeout(check, 100);
-              } check();
-            })`);
-            if (reloaded !== true) throw new Error('sandboxed shell reload failed');
+            await waitForShell(cdp, 15000, 'reloaded picker');
             ok(`packaged preload process.sandboxed=${String(state.sandboxed)}, process.contextIsolated=${state.isolated}, process.argv=${JSON.stringify(state.argv)} (CDP call frame)`);
           } finally { cdp.close(); }
         }

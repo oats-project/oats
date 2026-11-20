@@ -31,6 +31,19 @@ export async function connectProbe(url, timeout = 20000) {
   return { command, evaluate, listeners, close() { rejectAll(new Error('CDP probe closed')); listeners.clear(); socket.close(); } };
 }
 
+export async function waitForShell(cdp, timeout, label) {
+  const ready = await cdp.evaluate(`new Promise(resolve => {
+    const until = Date.now() + ${timeout};
+    function check() {
+      if (typeof window.oatsDesktop?.api === 'function' && document.querySelector('#nav .nav-item')) resolve(true);
+      else if (Date.now() >= until) resolve(false);
+      else setTimeout(check, 50);
+    }
+    check();
+  })`);
+  if (ready !== true) throw new Error(`${label} shell did not reach the preload bridge`);
+}
+
 // The sandbox's process is a parameter of Electron's preload wrapper, not a
 // page global. Pause at its argv read on a picker-only reload and read that
 // call frame; checking the main world or a copied renderer flag would not prove it.
@@ -139,14 +152,7 @@ export async function probeWorkspace(cdp, { port, targetId, deployment }) {
   if (!chooser) throw new Error('workspace chooser CDP target absent');
   const other = await connectProbe(chooser.webSocketDebuggerUrl);
   try {
-    await other.evaluate(`new Promise((resolve, reject) => {
-      const until = Date.now() + 10000;
-      function check() {
-        if (window.oatsDesktop && document.querySelectorAll('#nav .nav-item').length) resolve(true);
-        else if (Date.now() >= until) reject(new Error('chooser shell not ready'));
-        else setTimeout(check, 50);
-      } check();
-    })`);
+    await waitForShell(other, 10000, 'workspace chooser');
     const taken = await other.evaluate(`oatsDesktop.windowClaimWorkspace(${JSON.stringify(workspace)}, { takeOver: true })`);
     const release = await cdp.evaluate('window.__sandboxProbeRelease');
     if (taken?.ok !== true || taken.workspace !== workspace || !taken.layout || release?.workspace !== workspace || !Number.isSafeInteger(release.request))
