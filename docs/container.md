@@ -747,8 +747,8 @@ With `AGENT_CHILD` set, the supervisor reads the declaration once, before
 any child, and then:
 
 1. Starts the wake broker and waits for it, as on the base image.
-2. Asks `ready.url` once. A ready answer before the child exists is another
-   process's, and refuses the start.
+2. Asks `ready.url` once. Any HTTP answer before the child exists, ready or
+   not, is another process's, and refuses the start.
 3. Starts the child: argv exactly `command`, the supervisor's own
    environment plus `env` plus the `envFromFile` values, in a process group
    of its own.
@@ -796,7 +796,8 @@ file.
   declares its child and AGENT_CHILD (the bb image now lives in
   oats-project/oats-bb)`.
 - **The child is not ready.** A child that exits before it is ready, 30
-  seconds without a ready answer, or a ready answer before the child starts
+  seconds without a ready answer, or any answer from `ready.url` before the
+  child starts
   fails the container start: neither sshd nor host run starts, the exit is
   nonzero and the restart policy starts the container again.
 - **The child ends later.** That is not a container failure. The supervisor

@@ -209,19 +209,21 @@ export async function supervise({
       catch { say(`${declared.name} could not start`); restartChild(0); }
     }, wait);
   };
-  const childReady = () => new Promise((resolve) => {
-    let text = "", settled = false, request;
+  // One request to the ready URL: "ready", "answered" (any other HTTP response) or "silent".
+  const askChild = () => new Promise((resolve) => {
+    let text = "", settled = false, responded = false, request;
     const answer = (ready) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       request?.destroy();
-      resolve(ready);
+      resolve(ready ? "ready" : responded ? "answered" : "silent");
     };
     const timeout = setTimeout(() => answer(false), 1000);
     requested.then(() => answer(false));
     try {
       request = get(declared.ready.url, { agent: false }, (response) => {
+        responded = true;
         if (response.statusCode !== 200) { answer(false); return; }
         response.setEncoding("utf8");
         response.on("data", (chunk) => { if (text.length + chunk.length > 65536) answer(false); else text += chunk; });
@@ -236,6 +238,7 @@ export async function supervise({
       request.on("error", () => answer(false));
     } catch { answer(false); }
   });
+  const childReady = async () => await askChild() === "ready";
   const finish = async (state, stopMs) => {
     if (!state) return;
     state.stopRequested = true;
@@ -280,9 +283,10 @@ export async function supervise({
       await pause();
     }
     if (!stopping) say("broker ready (daemon_running: true)");
-    // The answer names no process. Nothing else runs yet, so a ready answer
-    // before the child starts is another process's, and could later pass for our child's.
-    if (!stopping && declared && await childReady()) { failed = true; say(`${declared.name}'s ready URL already answers before ${declared.name} starts`); stop(); }
+    // The answer names no process. Nothing else runs yet, so any answer before
+    // the child starts is another process's: ready now or only later, it could
+    // pass for our child's while that child lives without holding the port.
+    if (!stopping && declared && await askChild() !== "silent") { failed = true; say(`${declared.name}'s ready URL already answers before ${declared.name} starts`); stop(); }
     if (!stopping && declared) {
       child = startChild();
       const childDeadline = Date.now() + startupMs;

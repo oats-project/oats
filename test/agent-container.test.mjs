@@ -684,7 +684,12 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   // Another process answering on the declared port: it also counts every probe made.
   let statusHits = 0, external;
   if (externalStatus) {
-    external = createHttpServer((_request, response) => { statusHits += 1; response.end(JSON.stringify({ up: true })); });
+    // true: ready at once. "later": not ready when first asked, ready from then on. "error": 503 first. "text": not JSON first.
+    external = createHttpServer((_request, response) => {
+      statusHits += 1;
+      if (externalStatus === "error" && statusHits === 1) response.statusCode = 503;
+      response.end(externalStatus === "text" && statusHits === 1 ? "starting" : JSON.stringify({ up: externalStatus === true || statusHits > 1 }));
+    });
     await new Promise((resolve, reject) => external.once("error", reject).listen(childPort, "127.0.0.1", resolve));
   }
   writeFileSync(childFile, `
@@ -704,6 +709,8 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
         }
       }
       if (mode === "exits") { fs.appendFileSync(events, "child started\\nchild exited\\n"); process.exit(0); }
+      // Alive, and never on the declared port.
+      if (mode === "idle") { fs.appendFileSync(events, "child started\\n"); setInterval(() => {}, 1000); return; }
       const answers = {
         ready: { hostId: "host_fixture", up: true }, never: { up: false }, truthy: { up: "true" }, nested: { status: { up: true } },
         "not-json": "up: true", array: [true], missing: { ready: true },
@@ -1476,7 +1483,8 @@ test("a child that never reports ready fails the start and admits neither SSH no
   }
 });
 
-test("a ready answer without our live child, or before the child starts, cannot admit agents", async t => {
+// Bounded: on a supervisor that admitted another process's answer, sshd and host run start and `running` never settles.
+test("a ready answer without our live child, or before the child starts, cannot admit agents", {timeout: 30_000}, async t => {
   // The answer names no process: one that is ready before the child starts is refused,
   // since it could otherwise pass for our child's while that child still lives.
   const stale = await supervisorFixture(t, {child: "extra", externalStatus: true});
@@ -1484,6 +1492,16 @@ test("a ready answer without our live child, or before the child starts, cannot 
   assert.ok(stale.said.includes("extra's ready URL already answers before extra starts"));
   assert.deepEqual(roles(stale), ["broker"], "another process's ready answer admits nothing");
   assert.ok(stale.statusHits() >= 1);
+  // Any answer before the child starts refuses, not only a ready one: a process that holds the
+  // port and says "not ready", 503 or no JSON now would say "ready" later, beside a child of
+  // ours that lives and never held the port.
+  for (const externalStatus of ["later", "error", "text"]) {
+    const early = await supervisorFixture(t, {child: "extra", externalStatus, childMode: "idle"});
+    assert.equal(await early.running, 1, externalStatus);
+    assert.ok(early.said.includes("extra's ready URL already answers before extra starts"), externalStatus);
+    assert.deepEqual(roles(early), ["broker"], externalStatus + ": the child is not started, and neither sshd nor host run");
+    assert.equal(early.statusHits(), 1, externalStatus + ": asked once");
+  }
   const dead = await supervisorFixture(t, {child: "extra", childMode: "exits"});
   assert.equal(await dead.running, 1);
   assert.ok(dead.said.includes("extra exited (0)"));
