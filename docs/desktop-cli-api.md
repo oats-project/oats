@@ -2497,7 +2497,7 @@ oats sandbox start|stop|reconcile <name> (--plan | --plan-revision <r> --idempot
 sandbox, act, state, server, receipts: [{step, ok, detail?}], problems}`;
 `reconcile` adds `seats` (as in status) and `replays` (`{spawnKey, instance,
 seat, outcome}`, outcome `replayed`, `held-<state>`, `held-unlisted`,
-`deleted-<state>` or `no-ledger-entry`). An apply whose `state` is `failed` or `unknown` exits 1.
+`held-unsent`, `deleted-<state>` or `no-ledger-entry`). An apply whose `state` is `failed` or `unknown` exits 1.
 
 - A start records the sandbox as started before its act runs; a stop
   answered `stopped` or `absent` drops it. `absent` is never a failure.
@@ -2514,6 +2514,29 @@ seat, outcome}`, outcome `replayed`, `held-<state>`, `held-unlisted`,
   deleted. A kept spawn for a sandbox this host no longer lists is never
   replayed (`held-unlisted`), nor one the provider's ledger does not hold
   (`no-ledger-entry`): readiness reports both.
+- The sandbox's kernel is checked for the routed floor (`sandboxes`,
+  `spawn-task-stdin`, `spawn-preview-2`, `spawn-apply-2`,
+  `spawn-idempotency-2`) on the probe that sends each preview, apply and
+  replay: below it nothing is sent, the task never travels as an argument,
+  and a replay is `held-unsent` with `E_REMOTE_INCOMPATIBLE` in `problems`;
+  the request stays kept.
+- A seat's bind that the provider answers stale is `E_PLAN_STALE` with the
+  fresh plan in `details.plan`, `details.act: "bind"` and `details.applied`
+  (whether the apply already ran in the sandbox); the request stays kept and
+  the next reconcile binds it. On a replay the same refusal is in
+  `problems`, and the replay's `plan` holds the fresh plan.
+
+### A retire from the host
+
+`oats retire <instance> --server sandbox-<name>` of a home in a sandbox this
+deployment lists runs the remote retire, then the provider's `release`
+(reason `retired`) of that instance's seat, read from the provider's
+`status`. Only a retire whose answer says the home is gone releases: not a
+failed one, nor a deferred, quarantined (`rollbackIncomplete`), kept
+(`retainedHome`) or not-removed (`removedDir: false`) one, whose home may
+still be live. A release that does not settle (stale, failed, or no seat
+found) is a line in the answer's `warnings`, and the next reconcile settles
+the seat.
 
 ### Placement on status rows, and the spawn answer
 

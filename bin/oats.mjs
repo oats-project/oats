@@ -2342,6 +2342,7 @@ async function releaseAfterRoutedRetire(name, instance, bail) {
     const released = await sb.releaseRetiredSeat(sctx, name, { instance });
     if (released === null) return `sandbox ${name}: its provider names no seat of ${instance}; \`oats sandbox reconcile ${name}\` settles it`;
     if (released.seat?.state === "released") return null;
+    if (released.state === "stale") return `sandbox ${name}: the release of ${instance}'s seat answered stale (E_PLAN_STALE: the provider's state changed since its plan); nothing was released; \`oats sandbox reconcile ${name}\` settles it`;
     return `sandbox ${name}: the release of ${instance}'s seat answered ${released.seat?.state ?? released.state}${released.problem?.message ? ` (${released.problem.message})` : ""}; \`oats sandbox status ${name}\` shows it, and \`oats sandbox reconcile ${name}\` settles it`;
   } catch (e) {
     if (typeof e?.code === "string" && e.code.startsWith("E_")) return `sandbox ${name}: the seat of ${instance} was not released (${e.code}: ${e.message}); \`oats sandbox reconcile ${name}\` settles it`;
@@ -4976,9 +4977,10 @@ async function serverRouteCmd() {
   const { envelope, stderr } = routed;
   if (stderr && stderr.trim()) process.stderr.write(stderr.endsWith("\n") ? stderr : stderr + "\n");
   // A retire in a sandbox this deployment lists (the sandboxes record, Lifecycle): once the remote retire
-  // removed the home, the provider releases its seat at once (reason retired). A failed retire releases
-  // nothing; a release that does not settle is a warning, and the next reconcile settles the seat.
-  if (cmd === "retire" && !rest.includes("--plan") && envelope.ok && !envelope.result?.rollbackIncomplete && id.startsWith(SANDBOX_SERVER_PREFIX)) {
+  // removed the home, the provider releases its seat at once (reason retired). A failed, deferred,
+  // quarantined or kept-home retire releases nothing (servers.mjs remoteRetireCompleted: the home may be
+  // live); a release that does not settle is a warning, and the next reconcile settles the seat.
+  if (cmd === "retire" && !rest.includes("--plan") && id.startsWith(SANDBOX_SERVER_PREFIX) && (await import("../lib/servers.mjs")).remoteRetireCompleted(envelope)) {
     const warning = await releaseAfterRoutedRetire(id.slice(SANDBOX_SERVER_PREFIX.length), envelope.result?.retired, bail);
     if (warning) envelope.result.warnings = [...(Array.isArray(envelope.result.warnings) ? envelope.result.warnings : []), warning];
   }

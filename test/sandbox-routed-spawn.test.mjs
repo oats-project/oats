@@ -371,3 +371,45 @@ test("a self-retire inside the sandbox, then an otherwise no-op sync: the sync s
   assert.deepEqual(host.calls, [], "no replay is sent");
   assert.deepEqual(pass.sandboxes[0].seats.map((s) => [s.seatId, s.state]), [[seatId, "released"]]);
 });
+
+test("a replay re-checks the sandbox's routed floor on the probe that sends it: a kernel rebuilt without spawn-task-stdin gets nothing, the task never on a command line; the request stays kept", async (t) => {
+  const fx = await routed(t);
+  const { spawnKey, seatId } = await keptByLostAnswer(fx);
+  fx.sandbox.set({ reconcile: { state: "ready", server: "sandbox-ingest", seats: [{ seatId, state: "delivered" }] } });
+  const host = fakeHost(fx, { features: FEATURES.filter((f) => f !== "spawn-task-stdin") });
+  const commands = [];
+  const io = { execFileSync: (bin, argv, options) => { commands.push(String(argv.at(-1))); return host.io.execFileSync(bin, argv, options); } };
+  const answer = await fx.withKernel((sb, ctx) => sb.reconcileSandbox(ctx, "ingest", { planRevision: "r", idempotencyKey: "k", io }));
+  assert.deepEqual(answer.replays.map((r) => [r.spawnKey, r.outcome, r.apply]), [[spawnKey, "held-unsent", "E_REMOTE_INCOMPATIBLE"]]);
+  assert.ok(answer.problems.some((p) => p.code === "E_REMOTE_INCOMPATIBLE" && p.sandbox === "ingest"), JSON.stringify(answer.problems));
+  assert.deepEqual(host.calls, [], "no spawn was sent");
+  assert.equal(commands.some((c) => c.includes(SENTINEL)), false, "the task is on no command line");
+  assert.deepEqual(acts(fx), ["reconcile"], "nothing reaches bind: nothing happened there");
+  assert.deepEqual(fx.kept(), [`${spawnKey}.json`]);
+  const kept = JSON.parse(readFileSync(join(fx.pendingDir, `${spawnKey}.json`), "utf8"));
+  assert.deepEqual([kept.lastApply.code, kept.lastApply.sent], ["E_REMOTE_INCOMPATIBLE", false]);
+});
+
+test("a stale bind is E_PLAN_STALE with its fresh plan, saying the apply already ran; the request stays kept, and a replay's stale bind is reported the same way", async (t) => {
+  const fx = await routed(t);
+  const fresh = { planRevision: "fresh-bind", actions: [] };
+  fx.sandbox.set({ bind: { state: "stale", plan: fresh } });
+  await assert.rejects(fx.spawnInto(fakeHost(fx)), (e) => {
+    assert.equal(e.code, "E_PLAN_STALE", e.message);
+    assert.equal(e.details.act, "bind");
+    assert.deepEqual(e.details.plan, fresh);
+    assert.equal(e.details.applied, true);
+    assert.match(e.message, /was applied in the sandbox/);
+    return true;
+  });
+  const spawnKey = fx.sandbox.calls().find((x) => x.act === "plan" && x.request.target === "seat").request.instance.spawnKey;
+  assert.deepEqual(fx.kept(), [`${spawnKey}.json`], "kept: the next reconcile binds it");
+  // The replay meets a stale bind too.
+  fx.sandbox.set({ bind: { state: "stale", plan: fresh }, reconcile: { state: "ready", server: "sandbox-ingest", seats: [{ seatId: `seat-${spawnKey.slice(0, 8)}`, state: "delivered" }] } });
+  fx.sandbox.reset();
+  const answer = await fx.withKernel((sb, ctx) => sb.reconcileSandbox(ctx, "ingest", { planRevision: "r", idempotencyKey: "k", io: fakeHost(fx).io }));
+  assert.deepEqual([answer.replays[0].outcome, answer.replays[0].bound], ["replayed", "stale"]);
+  assert.deepEqual(answer.replays[0].plan, fresh);
+  assert.ok(answer.problems.some((p) => p.code === "E_PLAN_STALE" && p.sandbox === "ingest"), JSON.stringify(answer.problems));
+  assert.deepEqual(fx.kept(), [`${spawnKey}.json`]);
+});

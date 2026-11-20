@@ -102,6 +102,26 @@ test("a failed sandbox's sync, the kernel's real answer: ok: true, exit 1, the f
   assert.ok(shown.includes(sandboxProblem.message), shown);
 });
 
+test("a failed reconcile in sync's seat pass, the kernel's real answer: exit 1, ok: true, the failure in the sandbox's own entry too; the client reads it as the report", async (t) => {
+  const fx = sandboxDeployment({ t });
+  fx.sandbox.set({ reconcile: { state: "failed", server: "sandbox-ingest", problem: { code: "E_SANDBOX_PROVIDER", reason: "reconcile-failed", message: "cannot reconcile seats", remedy: "check the provider" } } });
+  const raw = fx.cliS(["sync", "--json"]);
+  assert.equal(raw.status, 1, raw.stdout);
+  const kernel = raw.json();
+  assert.equal(kernel.ok, true);
+  const entry = kernel.result.sandboxes.find((e) => e.name === "ingest");
+  assert.ok(entry.problems.some((p) => p.code === "E_SANDBOX_PROVIDER" && p.message.includes("cannot reconcile seats")), JSON.stringify(entry));
+  const global = kernel.result.problems.find((p) => p.sandbox === "ingest");
+  assert.equal(global.reason, "reconcile-failed");
+  assert.match(global.message, /cannot reconcile seats — check the provider/);
+  fx.sandbox.reset();
+  const result = await clientSync(fx);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const answered = await createWorkspaceSyncBoundary({ invoke: async () => result })({ action: "sync" }, { workspace: { scope: fx.dep }, cli: { ...JSON.parse(fx.cli(["version", "--json"]).stdout), ok: true, bin: CLI } });
+  assert.equal(answered.status, "ok", JSON.stringify(answered));
+  assert.ok((await sheetShows(answered)).includes("cannot reconcile seats"));
+});
+
 test("D-S1-3's readiness reasons are no failure: the kernel answers exit 0 with empty problems and a warning, the client reads the report, and the sheet opens on nothing", async (t) => {
   for (const reason of ["ssh-include-missing", "state-orphaned"]) {
     const fx = sandboxDeployment({ t });

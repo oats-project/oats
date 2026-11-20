@@ -186,6 +186,15 @@ test("retire from the host: the remote retire, then release (reason retired) wit
   const failed = fx.cliS(["retire", "ingester-a", "--server", "sandbox-ingest", "--json"], ssh.env);
   assert.notEqual(failed.status, 0, failed.stdout + failed.stderr);
   assert.equal(fx.sandbox.calls().some((c) => c.act === "release"), false, "no release after a failed retire");
+  // A retire that answered ok but whose home may still be live: deferred (a self-retire's saved receipt
+  // too), quarantined, kept, or not removed. Nothing is released; the next reconcile settles the seat.
+  const home = "/sbx/agents/ingester/instances/ingester-a";
+  for (const extra of [{ deferred: true, pendingMarker: `${home}/.retire-pending` }, { rollbackIncomplete: true }, { retainedHome: true }, { removedDir: false }]) {
+    ssh.set({ probe, status, retire: { schemaVersion: 1, ok: true, result: { retired: "ingester-a", home, warnings: [], ...extra } } });
+    fx.sandbox.reset();
+    fx.cliS(["retire", "ingester-a", "--server", "sandbox-ingest", "--json"], ssh.env);
+    assert.equal(fx.sandbox.calls().some((c) => c.act === "release" || (c.act === "plan" && c.request.target === "release")), false, `no release: ${JSON.stringify(extra)}`);
+  }
   ssh.set({ probe, status, retire: { schemaVersion: 1, ok: true, result: { retired: "ingester-a", home: "/sbx/agents/ingester/instances/ingester-a", warnings: [] } } });
   fx.sandbox.reset();
   const done = fx.cliS(["retire", "ingester-a", "--server", "sandbox-ingest", "--json"], ssh.env);
