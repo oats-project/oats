@@ -642,20 +642,21 @@ sandboxes:
   - Sync's plan, and readiness, show each soul's additions and source changes before
     they're applied. Sandbox status and readiness show the recorded set and the
     current derived set.
-  - **The admission revision and its commit (r5).** `oats sync --plan` answers, for
-    each listed sandbox, an admission revision and the per-soul changes it would
-    admit (C5). The revision is a hash of the workspace's commit and lock, each listed
-    soul's derived set (ids and sources), the exclusions, and the currently recorded
-    entries.
+  - **The admission revision and its commit (r5).** `oats sync --plan` answers one
+    admission revision for the whole sync, with the per-soul changes it would admit,
+    grouped by sandbox (C5). The revision is one hash over the entire admission plan:
+    the workspace's commit and lock and, for every listed sandbox and soul, its derived
+    set (ids and sources), the exclusions and the currently recorded entry.
     - **Widening:** only `oats sync --admission-revision <revision>` widens admission,
       and only when its revision equals the one the current inputs give. An upstream
-      change made after the plan was reviewed changes the revision, so the apply
-      refuses that sandbox's admission (`E_PLAN_STALE`, with the fresh plan in its
-      detail), records nothing for it, and goes on with the rest of the sync.
-    - **The commit point:** a sync that applies an admission revision writes the
-      recorded entries (per sandbox and soul, the derived set and the revision) for
-      all its sandboxes in one atomic write, under sync's own lock, and only when the
-      whole sync has succeeded, with no problem in any sandbox. A sync that fails
+      change anywhere in the plan after it was reviewed changes the revision, so the
+      apply refuses all admission for that sync (`E_PLAN_STALE`, with the fresh plan
+      in its detail) and records nothing. The rest of the sync goes on.
+    - **The commit point:** a sync that applies an admission revision writes, in one
+      atomic write under sync's own lock, only the entries its plan widens or changes
+      (per sandbox and soul, the derived set and the revision). An unchanged or
+      narrowed entry keeps its recorded set. The write happens only when the whole
+      sync has succeeded, with no problem in any sandbox. A sync that fails
       anywhere writes none. Its infrastructure changes stand, as they always have,
       and a later sync with a fresh revision applies the admission. So when sandbox A
       succeeds and sandbox B fails, A's admission isn't widened either.
@@ -911,10 +912,12 @@ and by act:
   `{sandboxApi:1, sandbox, act, state, server, receipts, problems}`, and a stale
   revision refuses `E_PLAN_STALE` with the fresh plan in its detail (r1).
 - `oats sync --json` gains `sandboxes` with the same entries plus `action`
-  (`build|start|stop|none`), and, in a plan, the admission it would apply:
-  `admission: {revision, changes: [{soul, added:[{id, source}], sourceChanged:[{id, from, to}]}]}`
-  (r5). `oats sync --admission-revision <revision>` applies it (C1, "The applied-plan
-  gate"), and a sync without the flag widens nothing. The fields are additive, so
+  (`build|start|stop|none`), and, in a plan, the admission it would apply: each
+  sandbox entry carries its `admission: {changes: [{soul, added:[{id, source}], sourceChanged:[{id, from, to}]}]}`,
+  and the answer carries one top-level `admissionRevision` over every sandbox's
+  changes (r5). `oats sync --admission-revision <revision>` takes that one value and
+  applies all of it or none (C1, "The applied-plan gate"), and a sync without the
+  flag widens nothing. The fields are additive, so
   `syncApi` stays 1; the flag is new.
 - `oats status --json` gains `placement: {sandbox, seatId}` on each instance placed in
   one; `seatId` is the seat its home took (r2).
@@ -1141,7 +1144,9 @@ egress routes only.
   ID (r4d: one whose delivered copy could not be confirmed deleted stays here); a
   `delivered` seat with no kept request, including one whose release waits on a copy
   deletion that could not be confirmed; or a `delivered` seat whose last replay
-  answered `E_IDEMPOTENCY_CONFLICT` or `E_SPAWN_INCOMPLETE` (r2, r3, r4d). A pinned
+  answered `E_IDEMPOTENCY_CONFLICT` or `E_SPAWN_INCOMPLETE` (r2, r3, r4d); or a
+  `delivered` seat whose kept request was sent before and is now `held-not-admitted`
+  (r5). A pinned
   negative: a known certificate ID whose copy deletion fails gives no replay, no home,
   and this item;
 - `sandbox-state-orphaned`: provider state under another deployment key for a
@@ -1184,7 +1189,7 @@ The refusals belong to the acts:
 | A soul reference no member or package offers (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `soul-unknown` |
 | A composition that needs an excluded capability (r5) | the routed spawn, after the remote preview and before anything is kept or minted; a replay's recheck (`held-not-admitted`) | `E_SANDBOX_PLACEMENT`, `capability-excluded` |
 | A composition with a capability, or a capability source, the last applied plan didn't admit for this soul (r5) | the routed spawn (by hand or a tick), after the remote preview and before anything is kept or minted; a replay's recheck (`held-not-admitted`) | `E_SANDBOX_PLACEMENT`, `capability-not-applied` |
-| `oats sync --admission-revision` whose revision no longer matches the current inputs (r5) | `oats sync`, for that sandbox's admission only | `E_PLAN_STALE`, with the fresh plan |
+| `oats sync --admission-revision` whose revision no longer matches the current inputs (r5) | `oats sync`, for all of that sync's admission; its other steps go on | `E_PLAN_STALE`, with the fresh plan |
 | `--sandbox` together with `--server` (r5) | `oats spawn` | `E_BAD_ARGS`; the remedy says to choose one target, `--sandbox` for a placed soul or `--server` for a registered server |
 | A join beyond the default team, into a sandbox (r5) | `seat`, before the mint | `E_SANDBOX_PLACEMENT`, `join-not-seated` |
 | A resident's grant seat, into a sandbox (r5) | `seat`, before the mint | `E_SANDBOX_PLACEMENT`, `grant-seat-not-sandboxable` |
@@ -1270,7 +1275,7 @@ the release notes when that feature ships (r5).
 | Same team, separate sandboxes | A reviewer and a deployer in one team, in two sandboxes, exchange the messages aweb allows. Their state, session material and mounts stay separate, and the reviewer can't use the deployment credential. The same holds with cross-team messaging allowed, and with it denied, by aweb's policy. Pending for v1's provider until aweb's maintainers say whether teamctl runs two sandboxes for one team (C8). |
 | Teams independent of the runtime | Changing a soul's default team, or a label's alias, moves no soul. Two teams in one sandbox, accepted as co-resident trust, run on a provider that serves several teams; v1's provider refuses it with `team-not-served`. One team in two sandboxes introduces no second team. |
 | Placement and capability refusals | An ambiguous target, a wrong host, a wrong sandbox, an excluded capability, a capability not yet applied, a forged seat binding and an unavailable provider route each fail with the responsible decision and a remedy, before any placement succeeds or usable authority leaks. |
-| The admission fence and its commit | An exclusion committed between the seat and the apply: the apply is not sent, the seat is released with no home made, and the request is gone. The same exclusion before a replay of an apply that was sent: the replay isn't sent and the seat stays delivered (`held-not-admitted`). Sandbox A's sync step succeeds and B's fails under `--admission-revision`: neither's admission is recorded. |
+| The admission fence and its commit | An exclusion committed between the seat and the apply: the apply is not sent, the seat is released with no home made, and the request is gone. The same exclusion before a replay of an apply that was sent: the replay isn't sent and the seat stays delivered (`held-not-admitted`). Sandbox A's sync step succeeds and B's fails under `--admission-revision`: neither's admission is recorded. Both succeed under the plan's one revision: both sandboxes' widened entries are recorded in one write. A's entry had narrowed while B's widens: A keeps its recorded set. |
 | Capabilities widen only through an applied plan | One sandbox lists review (capability `read`) and deploy (`read` and `deploy`). Upstream adds `deploy` to review, with no new applied plan. A manual spawn of review and its tick both refuse before minting (`capability-not-applied`), and deploy still works. After the revised plan is approved and applied, review may load the capability, which still grants it no credential or operation. |
 | Identity apart from the route | Designed while grant seats stay on the host. A grant-backed agent restarts with the same stable DID and a new valid session; one without public inbound reach stays usable as the same principal; an alias match, a wrong team or a stale session can't spend its grant; revocation stops the next dispatch with both sandboxes left in place. |
 | Target and policy | With Compose: start, authorized work, stop, resume and delist, with separate state and one clock. The same contract against an existing Kubernetes cluster, including storage across a workload replacement and a check of the network policy, before that provider is claimed. |
