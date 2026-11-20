@@ -7,7 +7,7 @@
  *     needsYou: every row with a claim it may show (waiting-on-you.mjs `waitingClaim`, the one liveness gate,
  *               `stale(row)` the roster's held-stale rule), newest claim first (its `since`), then the roster's
  *               order. running: every other live row (`running === true`, no reported state but `running`, a
- *               reached server), newest spawn first (instance-tree.mjs `rosterOrder`). There is no working/idle
+ *               reached server; a row on a session provider on `running === true` and a reached server alone), newest spawn first (instance-tree.mjs `rosterOrder`). There is no working/idle
  *               fact yet (the activity contract is not built), and none is inferred
  *               (instance-activity-is-reported-not-inferred): a live row is "running". Stopped and unknown rows
  *               aren't on the board (D11). The "New" group (stopped or finished since you last looked) has no
@@ -19,11 +19,15 @@ import { waitingClaim } from './waiting-on-you.mjs';
 import { rosterOrder } from './instance-tree.mjs';
 import { attributedHumanData } from './attributed-human.mjs';
 import { instanceDisplayName } from './instance-display-name.mjs';
+import { sessionProvider } from './instance-presentation.mjs';
 
 const record = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const rowsOf = (rows) => (Array.isArray(rows) ? rows.filter((row) => record(row) && typeof row.instance === 'string' && row.instance) : []);
 const since = (claim) => { const t = Date.parse(claim.since); return Number.isFinite(t) ? t : -Infinity; };
-const live = (row) => row.running === true && row.serverUnreached !== true && (row.runtimeState == null || row.runtimeState === 'running');
+// A row on a session provider is live on `running === true` alone: its `runtimeState` is the provider's word
+// ("unknown" while it runs), never tmux's "running".
+const live = (row) => row.running === true && row.serverUnreached !== true
+  && (row.runtimeState == null || row.runtimeState === 'running' || sessionProvider(row) !== null);
 
 export function homeBoard(rows, { stale = () => false } = {}) {
   const needsYou = [], running = [];

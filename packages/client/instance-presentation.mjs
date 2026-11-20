@@ -56,18 +56,19 @@ export function unsupportedSession(instance) {
 
 /** A session provider's name, by the session-provider contract: 1 to 40 lowercase letters, digits and dashes.
  * Here it also starts with a letter or a digit: a name is a `--backend` value, and one that starts with a dash
- * is an option to the CLI's parser. `tmux` is the kernel's own backend, never a provider's name. Not on the
- * stable surface. */
+ * is an option to the CLI's parser. `tmux` is the kernel's own backend and `session-provider` the contract's
+ * word for any provider: both are reserved, never a provider's name. Not on the stable surface. */
 const PROVIDER_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
-export const sessionProviderName = (value) => typeof value === "string" && value !== "tmux" && PROVIDER_NAME.test(value);
+export const sessionProviderName = (value) => typeof value === "string" && value !== "tmux" && value !== "session-provider" && PROVIDER_NAME.test(value);
 
 /** The session provider a row runs on, by name, or null for a row that runs in tmux. A provider (a
  * capability's session backend, "bb" say) has no tmux target and no terminal: a client takes such a row's
  * `running`, `runtimeState` and `runtimeError` from the kernel as given, never probes tmux for it
  * (liveness.mjs) and opens, splits or restores no terminal for it (instance-acts.mjs `openAct`).
  *
- * It is the row's `backend` when that is a provider's name. A row with no `backend`, with "tmux", or with
- * a value that is no name the contract allows is not one, and reads as it always did. A Herdr-recorded row
+ * It is the row's `backend` when that is a provider's name. A row with no `backend` (an older kernel's, or an
+ * older routed host's) is a tmux row, as one with "tmux" is; a value that is no name the contract allows is
+ * no provider's either, and the row reads as it always did. A Herdr-recorded row
  * (`unsupportedSession`, `backend: "herdr"` included) is never one: its own reason comes first, everywhere.
  * Not on the stable surface: a client reads `openAct`'s answer. */
 export function sessionProvider(instance) {
@@ -91,10 +92,11 @@ export function openLink(instance) {
   return { label, url };
 }
 
-/** The id of the provider's thread a row runs in: `session.endpoint.threadId` when it is text, else null.
- * For display only, through `displayLine`: it addresses nothing here. Not on the stable surface. */
+/** The id of the provider's thread a row runs in: `session.threadId` when it is text, else null. Only a
+ * status row of this machine carries it: a row relayed from another host never does, and nothing here may
+ * depend on it. For display only, through `displayLine`: it addresses nothing. Not on the stable surface. */
 export function sessionThreadId(instance) {
-  const id = instance?.session?.endpoint?.threadId;
+  const id = instance?.session?.threadId;
   return typeof id === "string" && id && id.length <= 200 ? id : null;
 }
 

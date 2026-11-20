@@ -217,13 +217,13 @@ export function deploymentStatusData(document, deployment) {
       if (own(instance, 'sessionTarget')) row.sessionTarget = sessionTarget(instance.sessionTarget);
       // Session providers (feature session-providers): where the instance runs, when it is not tmux's. Validated,
       // never check()ed: `backend` is kept as "tmux" or a name the contract allows (instance-presentation.mjs
-      // `sessionProvider` reads it), else dropped, and the row reads as one with none. Of `session` the row keeps
-      // the provider's capability and its thread id, both for display only; of `open` the link a client may show
-      // in place of a terminal (`openLink`: an http(s) url). The endpoint's other keys address nothing here.
+      // `sessionProvider` reads it), else dropped, and the row reads as one with none (a tmux row). Of `session` the
+      // row keeps the provider's capability and, on this machine's rows, the thread id (`session.threadId`), both
+      // for display only; of `open` the link a client may show in place of a terminal (`openLink`: an http(s) url).
       if (own(instance, 'backend') && (instance.backend === 'tmux' || sessionProviderName(instance.backend))) row.backend = instance.backend;
       if (own(instance, 'session') && record(instance.session)) {
         const provider = instance.session.provider, threadId = sessionThreadId(instance);
-        const session = { ...(text(provider) && provider.length > 0 && provider.length <= 200 ? { provider } : {}), ...(threadId !== null ? { endpoint: { threadId } } : {}) };
+        const session = { ...(text(provider) && provider.length > 0 && provider.length <= 200 ? { provider } : {}), ...(threadId !== null ? { threadId } : {}) };
         if (Object.keys(session).length) row.session = session;
       }
       if (own(instance, 'open') && openLink(instance) !== null) row.open = openLink(instance);

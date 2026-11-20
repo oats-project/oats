@@ -297,7 +297,7 @@ test("openAct reads a row that runs in tmux only through instanceActs: it touche
 /* ── Session providers (spec C1): a row whose `backend` is a provider's name ("bb") runs in no terminal. Its
  *    acts follow the running table; Open is never enabled, says where the agent runs, and carries the link
  *    the provider offers. ── */
-const BB = { ...LOCAL, backend: "bb", tmux: null, session: { provider: "oats.bb", endpoint: { threadId: "thr_x" } } };
+const BB = { ...LOCAL, backend: "bb", tmux: null, session: { provider: "oats.bb", threadId: "thr_x" } };
 const BB_LINK = { label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_x" };
 const BB_SENTENCE = "Runs in a bb thread; open it in bb.";
 

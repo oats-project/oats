@@ -282,7 +282,12 @@ test('waitingRollup: a chain that leaves the waiting row\'s section (deployment)
 test('layering: the claim contract imports only contract modules and the display filter, which imports nothing (the server loads it; the tree roll-up lives in instance-tree.mjs)', () => {
   const source = readFileSync(new URL('../../client/waiting-on-you.mjs', import.meta.url), 'utf8');
   const importsOf = text => [...text.matchAll(/^import\b[^;]*?from\s+['"]([^'"]+)['"]/gm)].map(m => m[1]).sort();
-  assert.deepEqual(importsOf(source), ['./display-text.mjs', './instance-events-contract.mjs', './readiness-contract.mjs']);
+  // instance-presentation.mjs (spec C1): the one rule of which row runs on a session provider, whose claim has its
+  // own liveness gate. A pure module the server already loads (deployment-data.mjs): no tree, no DOM.
+  assert.deepEqual(importsOf(source), ['./display-text.mjs', './instance-events-contract.mjs', './instance-presentation.mjs', './readiness-contract.mjs']);
+  const presentation = readFileSync(new URL('../../client/instance-presentation.mjs', import.meta.url), 'utf8');
+  assert.deepEqual(importsOf(presentation), ['./client-terms.mjs', './soul-colors.mjs', './terminal-contract.mjs']);
+  assert.doesNotMatch(presentation, /from\s+['"][^'"]*instance-tree|\bimport\s*\(|\bdocument\b/, 'no tree import, no dynamic import, no DOM');
   assert.doesNotMatch(source, /from\s+['"][^'"]*instance-tree|import\s*\(/, 'no tree import, static or dynamic');
   const filter = readFileSync(new URL('../../client/display-text.mjs', import.meta.url), 'utf8');
   assert.deepEqual(importsOf(filter), []); assert.doesNotMatch(filter, /\bimport\s*\(|\bdocument\b/, 'pure: no import, no DOM');

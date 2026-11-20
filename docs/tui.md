@@ -274,7 +274,8 @@ while a terminal is open); under 80 columns it has the whole width.
   bb.") and, when the provider offers a link, prints it under that
   (`OATS says: Open in bb: http://…`) for you to open. The palette does not
   list it among the agents to open, the agent steps pass over it, and a
-  workspace's remembered tabs never open it
+  workspace's remembered tabs never open it. Its `!` mark shows whenever
+  OATS reports that it waits on you and it is not stopped
   ([how the clients read `backend`](desktop-cli-api.md#row-backend-clients)).
 
 **A view of more than one deployment** (this machine and another, or two

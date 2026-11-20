@@ -14,7 +14,7 @@ const SENTENCE = "Runs in a bb thread; open it in bb.";
 const LINK = Object.freeze({ label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_x" });
 /** A bb row as the shared reader hands it on: no tmux target, the kernel's own state. */
 const bbRow = (name, extra = {}) => instanceRow("dev", name, { backend: "bb", tmux: null, runtimeState: "unknown",
-  session: { provider: "oats.bb", endpoint: { threadId: "thr_x" } }, open: LINK, ...extra });
+  session: { provider: "oats.bb", threadId: "thr_x" }, open: LINK, ...extra });
 const rowOf = (state, name) => roster(state).instances.find((row) => row.instance === name);
 const on = (state, name) => Object.freeze({ ...state, selected: instanceId(rowOf(state, name)) });
 

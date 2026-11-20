@@ -172,7 +172,7 @@ test("a row's own evidence counts only from a current read of its deployment: he
 
 // Session providers (spec C1): a row whose `backend` is a provider's name has no terminal.
 test("(P) A4: a tab for instance 'a' whose current row has backend 'bb' is closed as a retired one is, and nothing errors; only from a current read", () => {
-  const bb = { backend: "bb", tmux: null, session: { provider: "oats.bb", endpoint: { threadId: "thr_x" } }, open: { label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_x" } };
+  const bb = { backend: "bb", tmux: null, session: { provider: "oats.bb", threadId: "thr_x" }, open: { label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_x" } };
   const A_TAB = tabOf(answer({ a: [row(A, "a", { createdAt: T1 })] }), "a");
   // The same home, the same incarnation, now on a session provider: in any state.
   for (const state of [{ running: true }, { running: false, runtimeState: "stopped" }, { running: null, runtimeState: "unknown" }]) {

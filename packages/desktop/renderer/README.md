@@ -2331,9 +2331,15 @@ home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
   the row's state.
 - **Its tooltip** (`rowFactsTitle`) adds `bb · thread <id>`, and the instance
   panel's Session line reads the same where it read `tmux · <session>`
-  (`sessionLine`; the thread id is `session.endpoint.threadId`, shown through the
+  (`sessionLine`; the thread id is `session.threadId`, which only this machine's rows carry, shown through the
   display filter, addressing nothing). The panel shows a row only while its
   terminal tab is active, so a provider row reaches it once Details serves any row.
+- **Needs input and Home**: the shared gates read such a row by its own rule
+  (`packages/client/waiting-on-you.mjs` `waitingClaim`: the kernel's claim unless the row is
+  stopped; `home-board.mjs` `homeBoard`: running on `running: true` alone), since a
+  provider's `runtimeState` is never "running" and a waiting agent is idle there.
+- **Start and Restart** are sent as for any row; `start-instance.mjs` waits for no
+  terminal and opens none after one.
 - **No terminal**: `resolveTerminalOpen` (`instance-tree-view.mjs`) answers such a
   row `no-terminal` before any key or tab is decided, so no open, split or
   take-over restore makes a tab for it; `workspace-tab-memory.mjs` never restores a

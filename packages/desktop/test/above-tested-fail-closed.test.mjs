@@ -181,3 +181,35 @@ for (const [name, create, feature, write, unknowns] of RECORDS) {
     });
   }
 }
+
+// Session providers (spec C1): a row on one is started through its provider, and its receipt has no terminal target.
+const BB_ROW = (running) => ({ ...row(running), backend: 'bb', tmux: null });
+const BB_RECEIPT = { instance: 'dev-1', agent: 'dev', home: HOME, harness: 'claude', backend: 'bb', model: null, launchConfig: null, yolo: null,
+  session: { provider: 'oats.bb', endpoint: { server: 'http://127.0.0.1:38886', projectId: 'proj_1', threadId: 'thr_x' } }, target: null,
+  startedAt: '2026-11-11T22:00:00.000Z', restartCount: 0, reused: 'new', warnings: [] };
+const { session: _session, ...NO_SESSION } = BB_RECEIPT;
+for (const restart of [false, true]) {
+  const verb = restart ? 'Restart' : 'Start';
+  test(`above the bound, a ${verb} of a row on a session provider is reported started on the provider's receipt: local (with its endpoint) or routed (the provider alone)`, async () => {
+    const { target: _none, ...noTarget } = BB_RECEIPT;
+    for (const result of [BB_RECEIPT, noTarget, { ...BB_RECEIPT, session: { provider: 'oats.bb' } }, { ...BB_RECEIPT, restartCount: 2, warnings: ['a launch hook said so'] }]) {
+      const outcome = await startInstance(above(START_CLI), BB_ROW(restart), {}, { restart, terms, verifyHome: () => HOME, start: async () => answered(result) });
+      assert.deepEqual(outcome, { ok: true, result });
+    }
+  });
+  test(`acceptance (fail closed): above the bound, a ${verb} of a provider row answered with another backend's receipt, or a provider's it does not know, is not reported started; nor is a tmux row's on a provider's`, async () => {
+    for (const [name, result, of] of [
+      ['a tmux receipt for a provider row', RECEIPT, BB_ROW(restart)],
+      ['another provider\'s receipt', { ...BB_RECEIPT, backend: 'other' }, BB_ROW(restart)],
+      ['a provider receipt with a terminal target', { ...BB_RECEIPT, target: RECEIPT.target }, BB_ROW(restart)],
+      ['a provider receipt with no session', NO_SESSION, BB_ROW(restart)],
+      ['a provider receipt whose session names no provider', { ...BB_RECEIPT, session: { endpoint: {} } }, BB_ROW(restart)],
+      ['a provider receipt whose endpoint is not an object', { ...BB_RECEIPT, session: { provider: 'oats.bb', endpoint: 'thr_x' } }, BB_ROW(restart)],
+      ['a provider receipt for another home', { ...BB_RECEIPT, home: '/another/agents/dev/instances/dev-1' }, BB_ROW(restart)],
+      ['a provider receipt for a tmux row', BB_RECEIPT, row(restart)],
+    ]) {
+      const outcome = await startInstance(above(START_CLI), of, {}, { restart, terms, verifyHome: () => HOME, start: async () => answered(result) });
+      assert.deepEqual([outcome.ok, outcome.outcome], [false, 'uncertain'], name);
+    }
+  });
+}

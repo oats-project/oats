@@ -7,6 +7,7 @@
 import { record } from './readiness-contract.mjs';
 import { eventsTimestamp, eventsId, eventsUnsafe, EVENTS_WITHHELD } from './instance-events-contract.mjs';
 import { NOT_NOTE_TEXT } from './display-text.mjs';
+import { sessionProvider } from './instance-presentation.mjs';
 
 /** A claim's note: a non-empty string of at most 200 code points (not UTF-16 units: 101 emoji is a valid
  * note), with none of NOT_NOTE_TEXT (the set's one definition is in display-text.mjs); unsafe text is
@@ -36,9 +37,18 @@ export function waitingOnYouData(v) {
  * or a row the roster holds stale (`stale`: its last re-read failed), carries a last-known claim, which is
  * unknown. A null or absent `runtimeState` is "not reported", never "not running" (#582): the kernel's
  * remote roster sends null on every row, so a remote row is gated on the `running` its host reported; a
- * local row always carries the concrete state Desktop liveness observed. */
+ * local row always carries the concrete state Desktop liveness observed.
+ *
+ * A row on a session provider (instance-presentation.mjs `sessionProvider`: "bb", say) has another liveness
+ * gate, under the same two rules of currency: it shows the claim the kernel's row carries unless the row is
+ * stopped (`running === false`). Its `runtimeState` is never "running" (a provider's states are `unknown`,
+ * `shell`, `stopped`, `unreachable`), and an agent that waits on a person is idle there, which the kernel
+ * reports as `running: null`: the kernel is such a row's only reader, and it decides whether the row carries
+ * a claim at all. A home OATS stopped reads `running: false` and shows none. */
 export function waitingClaim(row, { stale = false } = {}) {
-  if (stale || !record(row) || row.running !== true || row.serverUnreached === true) return null;
+  if (stale || !record(row) || row.serverUnreached === true) return null;
+  if (sessionProvider(row)) return row.running === false ? null : waitingOnYouData(row.waitingOnYou);
+  if (row.running !== true) return null;
   if (row.runtimeState != null && row.runtimeState !== 'running') return null;
   return waitingOnYouData(row.waitingOnYou);
 }

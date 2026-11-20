@@ -3780,11 +3780,26 @@ its absence.
     `https` url with no credentials in it is shown, and only on a row of
     this machine: another machine's url is that machine's own loopback. No
     client attaches, splits or restores a terminal for the row.
-  - The Desktop shows the backend and `session.endpoint.threadId`, when it
-    is text, as `bb · thread thr_…`. Nothing else of `session.endpoint` is
-    read, and the id addresses nothing.
+  - Its `waitingOnYou` claim is shown unless the row is stopped
+    (`running: false`): while it runs and when the kernel answers
+    `running: null`, since an agent that waits on a person is idle in its
+    provider. A tmux row's claim still needs `running: true` and no
+    `runtimeState` but `running`. A row whose last read failed, or whose
+    server was not reached, shows none, as for any row.
+  - It counts as running (the Desktop's Home, the counts) on `running: true`
+    alone: its `runtimeState` is the provider's word (`unknown` while it
+    runs), never `running`.
+  - A start's or a restart's answer for it carries the provider's name as
+    `backend`, `session: {provider, endpoint?}` and no terminal `target`;
+    the clients open no terminal after it.
+  - The Desktop shows the backend and `session.threadId`, when it is text,
+    as `bb · thread thr_…`. Only a status row of this machine carries the
+    thread id: a row relayed from another host (`oats server roster`,
+    `--server`) never does, so a client shows the backend alone there and
+    depends on the id for nothing. The id addresses nothing.
 
-  A row with no `backend`, or with `tmux`, is read as before. A row recorded
+  A row with no `backend` (an older kernel's, or an older routed host's)
+  reads as tmux, as one with `tmux` does: both are read as before. A row recorded
   on Herdr keeps its own reason (`E_HERDR_REMOVED`) before any of this, and a
   `backend` that is no name of that form is ignored. `--backend` on a
   client's spawn is held to the names the kernel lists: `sessionBackends` of

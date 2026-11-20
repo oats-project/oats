@@ -30,7 +30,7 @@ const LINK = Object.freeze({ label: "Open in bb", url: "http://127.0.0.1:38886/t
 const local = (name, extra = {}) => ({ instance: name, agent: "oats-desktop-developer", home: `/synthetic/${name}`, agentsRoot: "/synthetic/agents",
   repoName: "desktop-repo", branch: `b/${name}`, harness: "claude", running: true, createdAt: "2026-10-01T00:00:00.000Z", ...extra });
 /** A bb row as /api/panel serves it (packages/client deployment-panel.mjs panelInstance). */
-const bb = (name, extra = {}) => local(name, { backend: "bb", tmux: null, runtimeState: "unknown", session: { provider: "oats.bb", endpoint: { threadId: "thr_x" } }, open: LINK, ...extra });
+const bb = (name, extra = {}) => local(name, { backend: "bb", tmux: null, runtimeState: "unknown", session: { provider: "oats.bb", threadId: "thr_x" }, open: LINK, ...extra });
 
 test("noTerminal: the shared sentence and the link for a provider row, null for every other row and for one that says its own reason", () => {
   assert.deepEqual(noTerminal(bb("a")), { sentence: SENTENCE, link: LINK });
@@ -49,10 +49,10 @@ test("sessionLine: tmux and its session, a provider and its thread, or nothing; 
   assert.equal(sessionLine(local("t", { tmux: { session: "oats-agents", window: "t" } })), "tmux · oats-agents");
   assert.equal(sessionLine(local("t", { backend: "tmux", tmux: { session: "oats-agents" } })), "tmux · oats-agents");
   assert.equal(sessionLine(bb("a")), "bb · thread thr_x");
-  for (const session of [undefined, null, {}, { provider: "oats.bb" }, { endpoint: {} }, { endpoint: { threadId: 7 } }, { endpoint: { threadId: " \n " } },
-    { endpoint: { threadId: "token=abcdef0123456789" } }]) assert.equal(sessionLine(bb("a", { session })), "bb", JSON.stringify(session));
-  assert.equal(sessionLine(bb("a", { session: { endpoint: { threadId: "thr\n_x" } } })), "bb · thread thr _x");
-  assert.doesNotMatch(sessionLine(bb("a", { session: { endpoint: { threadId: "token=abcdef0123456789" } } })), new RegExp(DETAIL_WITHHELD.replace(/[[\]]/g, "\\$&")));
+  for (const session of [undefined, null, {}, { provider: "oats.bb" }, { endpoint: { threadId: "thr_endpoint" } }, { threadId: 7 }, { threadId: " \n " },
+    { threadId: "token=abcdef0123456789" }]) assert.equal(sessionLine(bb("a", { session })), "bb", JSON.stringify(session));
+  assert.equal(sessionLine(bb("a", { session: { threadId: "thr\n_x" } })), "bb · thread thr _x");
+  assert.doesNotMatch(sessionLine(bb("a", { session: { threadId: "token=abcdef0123456789" } })), new RegExp(DETAIL_WITHHELD.replace(/[[\]]/g, "\\$&")));
   // A provider row never names a tmux session, whatever else it carries; a row with neither says nothing.
   assert.equal(sessionLine(bb("a", { tmux: { session: "oats-agents" } })), "bb · thread thr_x");
   for (const row of [local("t"), local("t", { tmux: null }), local("t", { tmux: { session: "" } }), null]) assert.equal(sessionLine(row), "");
@@ -74,10 +74,10 @@ test("the instance panel's Session line shows the backend: tmux and its session,
   const select = row => panel.setContext({ workspace: "A", instance: row, key: row.home });
   select(bb("a"));
   assert.equal(line().hidden, false); assert.equal(line().textContent, "bb · thread thr_x");
-  assert.doesNotMatch(root.textContent, /proj_|38886|undefined/, "nothing else of the endpoint, and no link, is in the panel");
+  assert.doesNotMatch(root.textContent, /proj_|38886|undefined/, "no link and nothing else of the row's session is in the panel");
   select(bb("a", { session: { provider: "oats.bb" } }));
   assert.equal(line().textContent, "bb", "no thread id reported: the backend alone");
-  select(bb("a", { session: { endpoint: { threadId: "<img src=x onerror=alert(1)>" } } }));
+  select(bb("a", { session: { threadId: "<img src=x onerror=alert(1)>" } }));
   assert.equal(line().textContent, "bb · thread <img src=x onerror=alert(1)>"); assert.equal(line().children.length, 0, "text, never markup");
   select(local("t", { home: "/synthetic/t", tmux: { session: "oats-agents", window: "t" } }));
   assert.equal(line().textContent, "tmux · oats-agents");

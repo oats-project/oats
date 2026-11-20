@@ -29,7 +29,7 @@ export function noTerminal(row) {
 
 /** Where the row's session runs, in one line for the instance panel's Session card and the row's tooltip:
  * `tmux · <session>` for a row with a recorded tmux session, `<provider> · thread <id>` for a provider row whose
- * endpoint names its thread (`<provider>` alone without one), '' for a row that reports neither. Display only:
+ * row names its thread (`session.threadId`, this machine's rows only; `<provider>` alone without one), '' for a row that reports neither. Display only:
  * the thread id through the display filter; it addresses nothing. */
 export function sessionLine(row) {
   const provider = sessionProvider(row);
