@@ -1030,8 +1030,8 @@ inspect; the provider's version owns their result shapes. For oats.okf, see
 
 **Messaging operations.** The messaging provider's operations are listed by
 inspect too. One of them is a contract of the messaging layer, whatever the
-provider: `messaging:mail`, below. oats.aweb is its first provider, from its
-first release after 1.43.0 (its `docs/mail-read.md` says how it reads).
+provider: `messaging:mail`, below. oats.aweb is its first provider, from the
+release that adds it (its `docs/mail-read.md` says how it reads).
 
 <a id="mail-mailapi-1"></a>
 #### Mail, `mailApi: 1`
