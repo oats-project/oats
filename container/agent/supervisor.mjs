@@ -161,7 +161,7 @@ export async function supervise({
   spawnChild = spawn, httpGet = get, onSignal = onSignals, killGroup = (pid) => process.kill(-pid, "SIGKILL"),
   say = (line) => process.stderr.write(`agent-supervisor: ${line}\n`),
   pollMs = 200, startupMs = 30_000, sshdStopMs = stopBudgetsMs.sshd, brokerStopMs = stopBudgetsMs.broker,
-  env = process.env, fs = nodeFs,
+  env = process.env, fs = nodeFs, now = Date.now,
   restartBackoffMs = 1_000, restartBackoffMaxMs = 60_000, restartStableMs = 300_000,
 } = {}) {
   if (env.AGENT_BB !== undefined) { say("AGENT_BB is gone: use an image that declares its child and AGENT_CHILD (the bb image now lives in oats-project/oats-bb)"); return 1; }
@@ -306,15 +306,17 @@ export async function supervise({
     if (!stopping && before !== "refused") { failed = true; say(`${declared.name}'s ready URL already answers before ${declared.name} starts`); stop(); }
     if (!stopping && declared) {
       child = startChild();
-      const childDeadline = Date.now() + startupMs;
+      const childDeadline = now() + startupMs;
       while (!stopping) {
-        // Only while our own child lives does a ready answer count, and only
-        // inside the budget: no request and no wait runs past the deadline.
-        const ready = await askChild(childDeadline - Date.now()) === "ready", left = childDeadline - Date.now();
+        // The budget bounds everything: no request starts once it is spent, and
+        // none, like no pause, runs past it.
+        const budget = childDeadline - now();
+        if (budget <= 0) { failed = true; say(`${declared.name} readiness timed out`); stop(); break; }
+        // Only while our own child lives does a ready answer count, and only inside the budget.
+        const ready = await askChild(budget) === "ready", left = childDeadline - now();
         if (ready && left > 0 && !child.ended && child.child.exitCode === null && child.child.signalCode === null && !stopping) { childUp = true; break; }
         if (stopping) break;
-        if (left <= 0) { failed = true; say(`${declared.name} readiness timed out`); stop(); break; }
-        await pause(Math.min(pollMs, left));
+        if (left > 0) await pause(Math.min(pollMs, left));
       }
       if (childUp) say(`${declared.name} ready (${declared.ready.field}: true)`);
     }
