@@ -746,6 +746,37 @@ test('agent view facts: an unchanged repaint keeps the nodes, so a focus that re
   assert.equal(f.doc.activeElement, now);
 });
 
+// The fix's delta reader: the budget lays the strip out full and then compact on every repaint, so a compact strip
+// must keep its rows too, under refreshes that answer later (as the roster read does) and under a resize.
+test('agent view facts: a compact strip keeps its row through the budget\'s repaints: no loop, and a press lands', async t => {
+  const dom = new JSDOM('<!doctype html><body><div class="tab-pane active"><div class="term-wrap"></div></div></body>');
+  t.after(() => dom.window.close());
+  const doc = dom.window.document, pane = doc.querySelector('.tab-pane');
+  const measure = { room: () => 130, used: () => pane.querySelectorAll('.agent-fact').length * 20 + 100 };
+  let resized = null;
+  const view = createAgentBoard({ pane, home: '/h', name: 'dev-a', now: () => NOW, type: () => true, focusTerminal: () => {}, openLink: () => {},
+    hidden: createHiddenFacts(memoryStorage()), measure, observe: (_, fn) => { resized = fn; return () => {}; } });
+  const data = boardData({ facts: ['a', 'b', 'c'].map(k => fact(k)), questions: [] });
+  view.update(data);
+  assert.equal(pane.querySelectorAll('.agent-fact').length, 1, 'compact: one fact');
+  let focuses = 0;
+  pane.addEventListener('focusin', () => { if (++focuses < 20) queueMicrotask(() => view.update(data, { claims: [] })); });
+  const settle = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
+  const body = pane.querySelector('li[data-key="a"] .agent-fact-focus');
+  body.focus(); await settle();
+  assert.equal(focuses, 1, 'one focus, no loop');
+  assert.ok(body.isConnected, 'the same row');
+  assert.equal(doc.activeElement, body);
+  resized(); await settle();
+  assert.equal(focuses, 1, 'a resize\'s fit keeps it too');
+  assert.equal(doc.activeElement, body);
+  const hide = pane.querySelector('li[data-key="a"] .agent-fact-hide');
+  view.update(data); resized();
+  assert.ok(hide.isConnected, 'a repaint and a resize between press and release leave the button in place');
+  hide.click(); await settle();
+  assert.deepEqual([...pane.querySelectorAll('.agent-fact')].map(li => li.dataset.key), ['b'], 'the press hid it');
+});
+
 // The round-4 delta's finding: the occurrence check fails closed.
 test('r4 delta: an answer that does not prove its question\'s since (absent, null, not a time) shows no context', t => {
   for (const since of [undefined, null, 'invalid']) {

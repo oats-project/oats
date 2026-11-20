@@ -135,6 +135,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   const measure = { ...defaultMeasure, ...measured };
   const doc = pane.ownerDocument;
   let board = null, detail = null, dialog = false, unfolded = false, index = 0, shownId = null, pending = null, alive = true, chooseSeq = 0, painting = false, compact = false, openUrl = null;
+  // Each fact's row as last painted (its key -> { sig, li }): paintFacts keeps a row whose sig is unchanged.
+  const factRows = new Map();
   // A question's occurrence (instance-board.mjs questionOccurrence): its answer, its context and its options are its own.
   const occurrence = questionOccurrence;
   const answered = new Set(); // occurrences whose answer the person sent from this tab (hidden until the agent clears them)
@@ -314,12 +316,22 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     const at = facts.contains(doc.activeElement) ? doc.activeElement : null;
     const focusedKey = at?.closest?.('li')?.dataset.key ?? null;
     const focusedPart = !at ? null : urlBox.contains(at) ? 'open' : at.classList.contains('agent-fact-link') ? 'link' : at.classList.contains('agent-fact-hide') ? 'hide' : 'body';
-    // The list is rebuilt only when what it shows changed, as the zone's options are (a poll repaints unchanged facts).
-    // A rebuild under the focus gives the focus back, and a focus in the pane selects its tab, which reads the roster
-    // again and repaints: rebuilding on every repaint made that a loop, and a press landed on a replaced button.
-    const factsKey = JSON.stringify([view.shown.map(f => [f.key, f.label, f.value, f.unit, f.link?.href ?? null, !!f.withheld, f.at,
-      updatedText(f.at, now()), sparkValues(detail?.state === 'ok' ? detail.facts.get(f.key)?.history : null)]), openUrl]);
-    if (factList.dataset.key !== factsKey) { factList.dataset.key = factsKey; factList.replaceChildren(...view.shown.map(paintFact)); }
+    // Each fact's row is rebuilt only when what it shows changed, and a row that stays is never taken out of the list,
+    // whatever the repaint (a poll's, or the budget's: fit() lays the strip out full and then compact on every
+    // repaint). A row taken out under the focus gives the focus back, and a focus in the pane selects its tab, which
+    // reads the roster again and repaints: rebuilding the list on every repaint made that a loop, and a press landed
+    // on a replaced button.
+    const rows = view.shown.map(f => {
+      const sig = JSON.stringify([f.label, f.value, f.unit, f.link?.href ?? null, !!f.withheld, f.at, updatedText(f.at, now()),
+        sparkValues(detail?.state === 'ok' ? detail.facts.get(f.key)?.history : null), openUrl === f.key]);
+      let row = factRows.get(f.key);
+      if (row?.sig !== sig) { row = { sig, li: paintFact(f) }; factRows.set(f.key, row); }
+      return row.li;
+    });
+    const live = new Set((board?.facts ?? []).map(f => f.key));
+    for (const key of [...factRows.keys()]) if (!live.has(key)) factRows.delete(key);
+    for (const li of [...factList.children]) if (!rows.includes(li)) li.remove();
+    rows.forEach((li, i) => { if (factList.children[i] !== li) factList.insertBefore(li, factList.children[i] ?? null); });
     fold.hidden = !view.folded.length && !(unfolded && view.shown.length > FACTS_SHOWN);
     setText(fold, unfolded ? 'Fold' : `${view.folded.length} more`);
     fold.setAttribute('aria-expanded', String(unfolded));
