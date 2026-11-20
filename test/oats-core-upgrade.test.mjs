@@ -9,7 +9,7 @@ import { mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFile
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { oatsSocket } from "./helpers/host-fixture.mjs";
-import { v2Deployment, git, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
+import { v2Deployment, git, writeFixtureExecutable, insideFixture } from "./helpers/v2-deployment.mjs";
 import { contentDigest } from "../lib/remote.mjs";
 import { writeLock } from "../lib/packages.mjs";
 import { planUpgrade, applyUpgrade } from "../lib/instance-upgrade.mjs";
@@ -58,6 +58,8 @@ async function releasedHome(t, tag) {
   t.after(() => { process.env.PATH = path; });
   process.env.PATH = fx.env.PATH;
   const { home } = await fx.spawn("dev", { name: "seat", harness: "claude", noLaunch: true });
+  const recorded = json(join(home, "instance.json")).launch.executable;
+  assert.ok(insideFixture(fx.base, recorded), `the home's recorded harness (${recorded}) is a file of the fixture (${fx.base}), never one of this machine`);
   const oldVersion = JSON.parse(old[`${CORE}/oats.json`].text).version;
   assert.equal(json(join(home, ".oats/modules/oats.core/oats.json")).version, oldVersion, `the home runs oats.core ${oldVersion} from ${tag}`);
   assert.equal(Object.hasOwn(json(join(home, "instance.json")).capabilityMeta || {}, "oats.core"), false, "no released oats.core records meta");

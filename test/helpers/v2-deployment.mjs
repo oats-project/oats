@@ -16,7 +16,7 @@
 // fixture's own, never the operator's. Inside a session environment (isolateSessionEnvironment, which
 // must be installed first) that environment's TMUX_TMPDIR is used, so both name one `oats` server.
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, lstatSync, realpathSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, realpathSync, openSync, closeSync, fstatSync, ftruncateSync, writeSync, fchmodSync, constants as fsConstants } from "node:fs";
 import { devNull } from "node:os";
 import { dirname, join, resolve, isAbsolute, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -30,8 +30,10 @@ export const CLI = resolve(new URL("../../bin/oats.mjs", import.meta.url).pathna
  *  `path`, which must be INSIDE the fixture's base: `base` (v2Deployment's `fx.base`, or any
  *  directory a test made for itself). Refused, with nothing written, when it is not: when the
  *  directory it is in is not under the base once links are followed, or when `path` itself is a
- *  link. Every test that writes an executable goes through here (test/fixture-executable.test.mjs
- *  holds the tests to it).
+ *  link or has a second name (a hard link). Every test that writes a harness stand-in, or a
+ *  home's recorded `launch.executable`, goes through here; test/fixture-executable.test.mjs
+ *  refuses the one shape that went wrong, a write to a recorded `launch.executable` (it cannot
+ *  see every write of every test: docs/implementation.md says the rule).
  *
  *  Why: a home's recorded `launch.executable` is whatever the spawn found for its harness, and an
  *  in-process spawn looks on the PATH of the process that runs the tests. On a machine with the
@@ -44,13 +46,31 @@ export function writeFixtureExecutable(base, path, content, mode = 0o755) {
   try { root = realpathSync(base); dir = realpathSync(dirname(path)); } catch (e) { throw outside(`its directory or the fixture's base cannot be resolved (${e.code ?? e.message})`); }
   const rel = relative(root, dir);
   if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw outside(`it is not inside the fixture's base (its directory is ${dir})`);
-  let existing = null;
-  try { existing = lstatSync(path); } catch (e) { if (e.code !== "ENOENT") throw e; }
-  if (existing?.isSymbolicLink()) throw outside("it is a symbolic link, and the write would land where it points");
-  if (existing && !existing.isFile()) throw outside("it is not a regular file");
-  writeFileSync(path, content);
-  chmodSync(path, mode);
+  // Opened without following a link at the path, and without truncating: what was opened is
+  // looked at first, by its descriptor, and only then emptied, written and made executable.
+  let fd;
+  try { fd = openSync(path, fsConstants.O_WRONLY | fsConstants.O_CREAT | (fsConstants.O_NOFOLLOW ?? 0) | (fsConstants.O_NONBLOCK ?? 0), 0o600); } catch (e) {
+    if (e.code === "ELOOP") throw outside("it is a symbolic link, and the write would land where it points");
+    if (e.code === "EISDIR" || e.code === "ENXIO") throw outside("it is not a regular file");
+    throw e;
+  }
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) throw outside("it is not a regular file");
+    if (opened.nlink > 1) throw outside("it has a second name (a hard link), and the write would land in that file too");
+    ftruncateSync(fd, 0);
+    writeSync(fd, content);
+    fchmodSync(fd, mode);
+  } finally { closeSync(fd); }
   return path;
+}
+/** Whether `path` is inside the fixture's base, links followed: what a test asserts of a home's
+ *  recorded `launch.executable` before it relies on writing there. */
+export function insideFixture(base, path) {
+  try {
+    const rel = relative(realpathSync(base), realpathSync(path));
+    return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+  } catch { return false; }
 }
 const DATE = "2026-09-25T09:00:00Z";
 

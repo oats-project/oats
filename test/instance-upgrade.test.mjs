@@ -7,7 +7,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileS
 import { execFileSync, spawnSync } from "node:child_process";
 import { killAndReap, oatsSocket } from "./helpers/host-fixture.mjs";
 import { join } from "node:path";
-import { CLI, v2Deployment, git, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
+import { CLI, v2Deployment, git, insideFixture, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 import { runFaulted, startGated } from "./helpers/fs-gate-preload.mjs";
 import { recordLaunch } from "./helpers/recorded-tmux-server.mjs";
 import { contentDigest } from "../lib/remote.mjs";
@@ -73,6 +73,8 @@ async function fixture(t, { names = ["acme.one"], oldMode = "adopt", nextMode = 
   process.env.PATH = fx.env.PATH;
   let home;
   try { ({ home } = await fx.spawn("dev", { name: "seat", noLaunch: true })); } finally { process.env.PATH = hostPath; }
+  const recorded = json(join(home, "instance.json")).launch.executable;
+  assert.ok(insideFixture(fx.base, recorded), `the home's recorded harness (${recorded}) is a file of the fixture (${fx.base}), never one of this machine`);
   fx.commit(pkg("2.0.0", nextMode, names, nextLaunch));
   const next = lock(fx, "2.0.0");
   return { fx, home, old, next,
