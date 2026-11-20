@@ -1058,7 +1058,9 @@ Its `result`:
 ```json
 {"documents":[{"label":"Mail","kind":"markdown","text":"…plain rendering…"}],
  "mail":{"mailApi":1,"acknowledges":false,"observedAt":"2026-11-19T12:00:00.000Z",
-  "identities":[{"team":"oats","alias":"dev-1","identity":"<opaque>","primary":true,"error":null}],
+  "identities":[{"team":"oats","alias":"dev-1","identity":"<opaque>","primary":true,"error":null},
+                {"team":"alpha","alias":"dev-1","identity":"<opaque>","primary":false,"error":"conversation-unreadable",
+                 "unreadableConversations":["<opaque>"]}],
   "messages":[{"id":"<opaque>","conversationId":"<opaque>","threadTitle":"Review","direction":"received","team":"oats",
     "from":{"alias":"lead","address":"oats.aweb.ai/lead","identity":"<opaque>"},
     "to":{"alias":"dev-1","address":"oats.aweb.ai/dev-1","identity":"<opaque>"},
@@ -1087,9 +1089,14 @@ Its `result`:
 - **Bounds.** Each `body` is at most 16 KiB of UTF-8, cut at a character
   boundary, with `truncated: true`. The whole `result` is at most 256 KiB;
   past it the answer stops early, with `hasMore: true` and a `nextCursor`.
-  `limit` is 1 to 200, default 50 (`E_BAD_ARGS` otherwise).
+  Where one message alone wouldn't fit, its `subject` and `threadTitle` are
+  cut too, and `truncated: true` marks that as well: `truncated` means the
+  provider shortened the message, whichever of its texts it cut. An answer
+  is never sent oversized, nor as an empty page with `hasMore: true` and no
+  `nextCursor`. `limit` is 1 to 200, default 50 (`E_BAD_ARGS` otherwise).
 - **Paging.** `nextCursor`, passed back as `--arg cursor=…`, gives the next
-  messages in the same order, with no overlap. `--arg conversation=<id>`
+  messages in the same order, with no overlap. What a cursor encodes is the
+  provider's (oats.aweb's: the last message's `createdAt`, id and team). `--arg conversation=<id>`
   reads one conversation, newest first; its cursor is valid only with the same
   conversation.
 - **Partial conversations.** Where the provider can read only the oldest part
@@ -1103,10 +1110,19 @@ Its `result`:
   agent's keys, and shown to whoever can run `oats operation run` on that
   machine (routed reads included): the access that attaching to the agent's
   terminal already gives, no wider. `encrypted: true` marks them.
-- **Errors.** Per identity, in `identities[].error` (a provider's code, such as
-  a grant without mail read): an identity with an error may still have
-  messages shown. The operation fails whole only when no identity can be
-  read.
+- **Errors per identity.** In `identities[].error`, a provider's code (such
+  as a grant without mail read). **An identity's `error` doesn't mean it has
+  no messages:** it can come with that identity's messages beside it, and a
+  reader shows both the mail and that some of it couldn't be read. One code
+  is the layer's: `conversation-unreadable`, one or more of that identity's
+  conversations couldn't be read; its other messages are shown, and the row
+  names the missing ones in `unreadableConversations` (conversation ids,
+  present only with that code, the list's tail dropped first if the 256 KiB
+  bound needs it, so it may name fewer than failed, or none).
+- **Whole failures.** The operation fails whole, with no answer, in two
+  cases: `E_MAIL_UNREADABLE` when no identity can be read
+  (`details.identities` holds the rows), and `E_MAIL_TOO_LARGE` when even an
+  answer with no messages can't fit the 256 KiB bound (its identities alone).
 - **Cost.** Each read calls the messaging service several times. Read on
   demand (opening a view, a manual refresh), never on a status poll.
 - **Older sides.** A home whose provider copy predates the operation answers
@@ -1114,8 +1130,16 @@ Its `result`:
   `oats instance upgrade` or a new spawn. A home with no messaging slot
   answers `E_OPERATION_UNAVAILABLE`, and a remote host without `operations`
   `E_REMOTE_INCOMPATIBLE`. A provider's own refusals are relayed with their
-  code, such as oats.aweb's `E_AW_TOO_OLD` for an aw too old to read mail
-  without acknowledging it.
+  code, such as oats.aweb's `E_AW_TOO_OLD` (`details: {version, needs}`) for
+  an aw too old to read mail without acknowledging it.
+- **The provider's own.** How a provider maps its service's values onto the
+  closed sets, its other identity error codes, what its cursor encodes and how
+  much of a body its `documents` rendering shows are its own, in its docs. For
+  oats.aweb: the "messaging:mail" section of its
+  [README](https://github.com/awebai/oats-aweb/blob/main/README.md#messagingmail-an-instances-mail-read-without-acknowledging-it)
+  and its [docs/mail-read.md](https://github.com/awebai/oats-aweb/blob/main/docs/mail-read.md)
+  (the aw commands it runs, the verification and priority mappings, the
+  cursor, every error code, a 500-character body excerpt in `documents`).
 
 <a id="workspace-model-workspaceapi-2"></a>
 ## Workspace
