@@ -189,6 +189,8 @@ see the [official catalog](official-catalog.md) for current pins.
 | `schedule-host-register-only` | `oats schedule host install --register-only`: the scope is recorded in the host schedule registry and no timer is installed ([`oats schedule`](#oats-schedule)). Routed with `--server`, the option is sent only to a host that lists this and `schedule`; otherwise it is refused here with `E_REMOTE_INCOMPATIBLE` before anything is sent, since a host without it ignores the option and installs a timer | |
 | `instance-board` | the agent's board: `oats instance board set\|unset\|ask\|ask --clear`, run by the agent in its own home; `board` on `oats status --json` instance rows and `oats server roster --json` rows; `oats inspect --home <h> --board` for each fact's history and each question's context; the `oats.board` needs-input claim, reason `attention` ([The agent's board](#the-agents-board-oats-instance-board)). Gate on the probe, locally or in the host's `probe.features`: an older kernel refuses `oats instance board` (`E_BAD_ARGS`) and its rows have no `board` | `boardApi: 1` |
 | `spawn-task-stdin` | `oats spawn <soul> --task-file -` reads the task from standard input. A spawn routed with `--server` sends its `--task` or `--task-file` text that way, to the preview and to the apply, to a host that lists this, and not as an argument; a host that does not list it gets the text as an argument, and the answer's `warnings` gains one line that says it was readable in both machines' process lists ([servers.md](servers.md#a-routed-spawns-task)) |
+| `sandboxes` | the workspace's `sandboxes:` block and the local file's `sandboxes`, `credentials` and `sandbox` keys are read ([workspaces.md](workspaces.md#sandboxes), [configuration.md](configuration.md#sandboxes)); `oats sandbox status\|start\|stop\|reconcile` ([Sandboxes](#sandboxes)); `sandboxes` on `oats sync --json`; `placement` on `oats status --json` rows and remote rows; `capabilityMeta` on a spawn apply's answer; `OATS_SPAWN_IDEMPOTENCY_KEY` for a keyed apply's spawn hooks; the `sandbox` hook event ([capabilities.md](capabilities.md#the-sandbox-event)). A kernel without it refuses `sandboxes:` in the workspace file |
+| `sandbox-egress-forge` | a sandbox's `egress` may name `forge` (`https://api.github.com`); without it, `forge` is refused |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
 `workspaceStatusApi: 1`, `capabilitiesApi: 1`, the `oats souls` document's
@@ -1449,6 +1451,22 @@ applies: gate `sync --plan` on `version` 0.44.0 or later, never by trying.
   `hook-event-unsupported {code, capability, path, message}` per hook event a
   listed member capability declares and this kernel does not run
   ([capability warnings](#capability-warnings-hook-event-unsupported-oats-0490)).
+- `sandboxes` (feature `sandboxes`), only on a deployment that lists a
+  sandbox or has one recorded as started: one entry per sandbox it lists, then
+  one per recorded sandbox it no longer lists, each the
+  [`oats sandbox status`](#sandboxes) entry plus `action`: `build` (the
+  provider answers it `absent`, or its start plan renders), `start`, `stop`
+  (no longer listed: stopped, never destroyed) or `none` (it runs, and its
+  start plan has nothing to do). A `--plan` answer reports the actions and
+  performs none. Its seats are reconciled after the start, whatever the action.
+- **A failed sandbox** (an act answered `failed`, `unknown` or `stale`, or a
+  refusal of the kernel's) undoes nothing: the lock and the snapshot are
+  written, the answer is `ok: true` with the failure in `problems[]` (`{code,
+  reason?, sandbox, message}`), and the process exits 1, as a retire whose
+  cleanup is incomplete does. A client reads the report whatever the exit. The
+  provider's readiness facts (`ssh-include-missing`, `state-orphaned`) are no
+  failure: they are envelope `warnings` (`{code: "sandbox-<reason>", sandbox,
+  message}`) and readiness items, with exit 0.
 - Errors: `E_LOCAL_MISSING`, `E_WORKSPACE_SCHEMA {path, problems}`,
   `E_REMOTE_UNREADABLE`, `E_LOCK_SCHEMA`, `E_PACKAGE_MISSING`,
   `E_PACKAGE_INTEGRITY`, `E_PACKAGE_MANIFEST`, `E_REPO_REF`, `E_BAD_ARGS`.
@@ -2429,6 +2447,116 @@ The cache cannot answer when:
 Any other error, such as an invalid lock, is named as itself.
 
 <a id="soul-launch-preferences-feature-launch-preference-oats-0300"></a>
+## Sandboxes
+
+Feature `sandboxes` (the design record
+[2026-11-19-sandboxes](design/2026-11-19-sandboxes.md); the files:
+[workspaces.md](workspaces.md#sandboxes) and
+[configuration.md](configuration.md#sandboxes)). Each verb acts through the
+one capability the workspace's defaults compose that declares the `sandbox`
+hook ([capabilities.md](capabilities.md#the-sandbox-event)), from the
+deployment it runs in. None of them takes `--server`.
+
+### `oats sandbox status`
+
+```text
+oats sandbox status [--dir <d>] --json
+```
+
+Read-only: the provider's `status` act for every sandbox the workspace
+declares, listed here or not.
+
+```json
+{"sandboxApi":1,"host":"cloud-1",
+ "sandboxes":[{"name":"ingest","team":{"label":"ingest-team","id":"ingest:example.org"},"listedHere":true,
+               "state":"ready","server":"sandbox-ingest","egress":["model"],
+               "credentials":[{"name":"sources-read","source":"present"}],"problems":[],
+               "seats":[{"seatId":"seat-3f2a","instance":"ingester-1","alias":"ingester-1","certificateId":"…","state":"active"}]}]}
+```
+
+- `team.id` is `null` while the sandbox's team has no provider id.
+- `state` is the provider's: `ready`, `stopped`, `absent`, `failed`,
+  `unknown` (a hook that failed: `problems[0]` is `E_SANDBOX_PROVIDER`
+  `hook-failed`) or `stale`. With no provider composed, every entry is
+  `unknown` with problem `E_SANDBOX_PROVIDER` `none` (or `ambiguous`, naming
+  the capabilities).
+- `credentials[].source` is `present` or `missing` (no entry in the local
+  file's `credentials:`, or no file there). The path is never shown.
+- The provider's readiness facts (`ssh-include-missing`, `state-orphaned` on
+  a `ready` or `stopped` sandbox) are not `problems`: they are envelope
+  `warnings` `{code: "sandbox-<reason>", sandbox, message}`.
+
+### `oats sandbox start`, `stop` and `reconcile`
+
+```text
+oats sandbox start|stop|reconcile <name> (--plan | --plan-revision <r> --idempotency-key <k>) [--dir <d>] --json
+```
+
+`--plan` answers `{sandboxApi, sandbox, act, planRevision, actions:
+[{step, detail?}]}` and changes nothing. The apply answers `{sandboxApi,
+sandbox, act, state, server, receipts: [{step, ok, detail?}], problems}`;
+`reconcile` adds `seats` (as in status) and `replays` (`{spawnKey, instance,
+seat, outcome}`, outcome `replayed`, `held-<state>`, `deleted-<state>` or
+`no-ledger-entry`). An apply whose `state` is `failed` or `unknown` exits 1.
+
+- A start records the sandbox as started before its act runs; a stop
+  answered `stopped` or `absent` drops it. `absent` is never a failure.
+- A stop of a sandbox the workspace no longer declares is sent with `team:
+  null`, `egress: []` and `credentials: []`; every other act for one is
+  refused before the hook: `E_WORKSPACE_SCHEMA`, reason `sandbox-unknown`.
+- Every act but `plan` and `status` holds the sandbox's lock, per deployment:
+  a second one is `E_LIFECYCLE_BUSY`.
+- A provider answer of `stale` is `E_PLAN_STALE` with the fresh plan in
+  `details.plan`.
+- `reconcile` runs the provider's act first, then replays each kept routed
+  spawn whose seat it reports `delivered`, unchanged, with its spawn key
+  (never one `minting` or `mint-uncertain`); one whose seat is `released` is
+  deleted.
+
+### Placement on status rows, and the spawn answer
+
+- `placement: {sandbox, seatId}` on an `oats status --json` instance row,
+  and on a remote row, of a home spawned inside a sandbox; absent on every
+  other row. `seatId` is the last path segment of the seat the host
+  delivered.
+- A spawn apply's answer carries `capabilityMeta` (what the capabilities'
+  spawn hooks recorded in the new home) and `placement` when it has them.
+- A keyed apply (`--idempotency-key`) hands its key to its spawn hooks as
+  `OATS_SPAWN_IDEMPOTENCY_KEY`; an unkeyed spawn's hooks never get it, and an
+  inherited one is dropped.
+
+### Sandbox refusals
+
+| Code | Reason | When |
+|---|---|---|
+| `E_SANDBOX_PROVIDER` | `none`, `ambiguous`, `hook-failed` | no composed capability declares the hook, two or more do, or the hook's answer was not one valid answer (`unknown`) |
+| `E_SANDBOX_NOT_HERE` | `not-listed` | a spawn of a soul placed in a sandbox this host does not list (it never falls back to the host), or a start of one |
+| `E_SANDBOX_NOT_HERE` | `not-running` | a spawn into a listed sandbox its provider does not answer `ready` |
+| `E_SANDBOX_HOST_AGENT` | `host-spawn`, `host-session`, `host-home-running`, `host-home-unreadable` | a deployment that lists a sandbox: a host-placed spawn; a session start, restart or resume of a host home (the resume sweep reports it as a refused row); a sandbox start while a host home runs or cannot be read |
+| `E_SANDBOX_PLACEMENT` | `spawn-from-host`, `not-placed-here` | inside a sandbox: a spawn without a host-delivered seat (an `identity.seat` provider option on an apply bound by `--expect-decision` and keyed), or of a soul placed elsewhere |
+| `E_SANDBOX_TEAM` | `team-not-created` | a start of, or a spawn into, a sandbox whose team has no provider id |
+| `E_SANDBOX_CREDENTIAL` | `no-source`, `missing` | a start of a sandbox with a declared credential the local file does not give, or whose file does not exist |
+| `E_REMOTE_INCOMPATIBLE` | | a spawn into a sandbox whose kernel does not advertise `sandboxes`, `spawn-task-stdin`, `spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2` (`details.missing`) |
+| `E_SERVER_INVALID` | `reserved-prefix` | `oats server add\|connect` of an id starting `sandbox-` |
+
+### Sandbox readiness items
+
+`oats readiness` lists them under `checks.configured` with `producer:
+"sandboxes"`, `status: "fail"`, `required: false`, `code`, `reason` and
+`remedy`, in a deployment whose workspace declares a sandbox or whose local
+file lists one. They refuse nothing, and readiness exits 0.
+
+| Code | When |
+|---|---|
+| `sandbox-listed-not-running` | a listed sandbox the provider does not answer `ready` |
+| `sandbox-credential-missing` | a declared credential with no source, or no file |
+| `sandbox-host-agents` | the deployment lists a sandbox and has host homes, running or stopped |
+| `sandbox-provider-missing` | no composed capability declares the `sandbox` hook, or two do |
+| `sandbox-ssh-include-missing` | the provider's `status` problem: the SSH `Include` of its file is missing (its remedy, unchanged) |
+| `sandbox-state-orphaned` | the provider's `status` problem: its state for a listed sandbox is under another deployment key |
+| `sandbox-seat-unsettled` | a `mint-uncertain` seat; a `delivered` seat with no kept request; or a `delivered` seat whose last replay answered `E_IDEMPOTENCY_CONFLICT` or `E_SPAWN_INCOMPLETE` |
+| `sandbox-pending-stale` | a kept routed request older than 24 hours, named by its spawn key and never its task |
+
 ## Launch preferences
 
 Feature `launch-preference` (OATS 0.30.0): gate every field and flag below on

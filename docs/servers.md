@@ -18,6 +18,12 @@ oats server remove build
 To put a workspace on a machine that has no deployment yet, use
 [`oats server connect`](#connect-a-machine) instead of `server add`.
 
+A server id starting `sandbox-` is reserved for the sandboxes a deployment
+lists ([workspaces.md](workspaces.md#sandboxes)): the sandbox provider
+registers `sandbox-<name>` itself, and `oats server add|connect` refuse a
+`sandbox-` id (`E_SERVER_INVALID`, `details.reason: "reserved-prefix"`). A
+`sandbox-` server already in `servers.json` is read as before.
+
 `server add` and `server connect` also accept `--operator-ssh <alias>`.
 It records the optional operator route separately in
 `~/.oats/server-operator-routes.json`:

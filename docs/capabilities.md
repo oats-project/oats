@@ -674,6 +674,13 @@ When the program has changed, the launch runs the new one and says so: a warning
 in the answer and a `launch-warning` event in the home, both naming the path the
 hooks were given and the path it runs.
 
+A spawn hook of a keyed apply (`oats spawn … --expect-decision <D>
+--idempotency-key <k>`) also gets `OATS_SPAWN_IDEMPOTENCY_KEY` (feature
+`sandboxes`): the key `k`, so a provider can bind what it delivers to that one
+spawn (a sandbox's seat). An unkeyed spawn's hooks never get it, and it is
+reserved like `OATS_SPAWNER_HOME`: an inherited value is dropped, and a launch
+configuration cannot set it.
+
 A spawn hook also gets `OATS_SPAWNER_HOME` (feature `spawn-attribution`): the
 absolute home of the instance whose session ran the spawn, as the kernel
 validated it and recorded it in `instance.json` `spawnedBy`
@@ -1207,6 +1214,65 @@ own configuration.
 4. To limit it, put the hook in a small capability composed only by the souls
    that need the setup.
 5. Declare it `required` when the tree is unusable without the setup.
+
+### The sandbox event
+
+`OATS_EVENT=sandbox` (feature `sandboxes`; the design record
+[2026-11-19-sandboxes](design/2026-11-19-sandboxes.md), C4) is a sandbox
+provider's one hook. It runs at deployment level, never per instance, for each
+act on a sandbox: `oats sandbox status|start|stop|reconcile`, `oats sync`'s
+sandbox pass, a spawn routed into a sandbox, and the release after a retire
+from the host ([Sandboxes](desktop-cli-api.md#sandboxes)).
+
+```json
+{ "hooks": { "sandbox": "bin/sandbox.mjs" } }
+```
+
+**Which capability.** The capabilities the workspace's `defaults` compose (a
+spawn's resolution without a soul's layer) whose manifest declares `sandbox`:
+exactly one. None is `E_SANDBOX_PROVIDER` reason `none`; two or more are
+`ambiguous`, naming them. Its settings are its manifest defaults, then the
+workspace's payload for its slot when it fills one, then the host's
+`settings.<capability>` in `oats-local.yaml`, merged as for a spawn.
+
+**The call.** The kernel runs `node <script>` from the capability's
+materialized directory with `OATS_SANDBOX_ACT` set to `plan`, `start`, `stop`,
+`status`, `reconcile`, `seat`, `bind` or `release`, writes one JSON request on
+its stdin and reads one JSON answer on its stdout. The request and each act's
+fields are the record's table (C4); every answer has the envelope
+`{sandboxApi: 1, act, state, receipts, problem?}`. A hook that exits nonzero,
+is killed at its time limit, or prints anything but one valid answer is read
+as `state: "unknown"` with problem `E_SANDBOX_PROVIDER`, reason
+`hook-failed`. A `stale` answer carries a fresh `plan`, which the kernel
+answers as `E_PLAN_STALE`.
+
+**Time limits.** `plan` and `status` are read-only and get 60 s; every other
+act gets 30 minutes (a build). Every act but `plan` and `status` runs under the
+sandbox's lock, per deployment: a second one is `E_LIFECYCLE_BUSY`.
+
+**The environment.** The invoker's environment without any name the kernel
+generates (no instance, soul, team or captured-context name), then:
+
+| Name | Value |
+|---|---|
+| `OATS_EVENT` | `sandbox` |
+| `OATS_SANDBOX_ACT` | the act |
+| `OATS_CAPABILITY`, `OATS_LAYER` | the provider and its layer |
+| `OATS_LEVEL` | `deployment` |
+| `OATS_WORKSPACE` | the deployment directory's real path (the provider derives its deployment key from it) |
+| `OATS_ROOT` | the deployment's agents root |
+| `OATS_SETTINGS`, `OATS_SETTINGS_ORIGINS` | the merged settings and where each came from |
+| `OATS_CLI_BIN`, `OATS_NODE_BIN` | the kernel's own executables |
+
+`OATS_DEPLOYMENT` is never set: it marks a captured context, in which the
+kernel refuses every command but `version`.
+
+**The provider's readiness facts.** A `status` answer on a `ready` or
+`stopped` sandbox whose `problem.reason` is `ssh-include-missing` or
+`state-orphaned` is no failure: readiness reports it as item
+`sandbox-<reason>` with the provider's remedy unchanged, and `oats sync` and
+`oats sandbox status` give it as an envelope warning. The kernel reads the
+reason, never the code alone.
 
 ## Official packages
 
