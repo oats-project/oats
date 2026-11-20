@@ -280,6 +280,12 @@ while a terminal is open); under 80 columns it has the whole width.
   ([how the clients read `backend`](desktop-cli-api.md#row-backend-clients)).
   Start the TUI outside an agent's home: OATS refuses to retire a home while
   a process works in it, the TUI's own included, and names that process.
+  A known limit: when another machine's agent moves to a session provider
+  while the TUI is opening it, a check of its terminal that fails says
+  OATS's failure ("The session is no longer running on …") and not where
+  it runs, and an agent OATS holds by then (a retire that began) may have a
+  viewer started for it, which OATS refuses (`E_SESSION_NO_TERMINAL`).
+  Neither reaches another agent.
 
 **A view of more than one deployment** (this machine and another, or two
 deployments on one machine) is one list, grouped as the Desktop groups it:
