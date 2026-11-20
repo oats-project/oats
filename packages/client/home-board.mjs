@@ -10,7 +10,8 @@
  *     running:  every other live row, in the roster's order (pinned first where `pins`, as homeAgents): Home shows
  *               the first few, cropped and expandable (slice 2b, Amendment 1: Pepe, 2026-11-20).
  *     counts:   the summary line's numbers. agents: every row. needYou: the rows in needsYou. running: every other live row
- *               (`running === true`, no reported state but `running`, a reached server). stopped: every other row
+ *               (`running === true`, no reported state but `running`, a reached server; a row on a session
+ *               provider on `running === true` and a reached server alone). stopped: every other row
  *               that says `running: false`. unknown: the rest (no runtime fact, an unreached server, another
  *               reported state). Each row is counted once, so the four add up to agents. There is no working/idle
  *               fact yet (the activity contract is not built), and none is inferred
@@ -24,11 +25,15 @@ import { waitingClaim } from './waiting-on-you.mjs';
 import { rosterOrder, rowPinned } from './instance-tree.mjs';
 import { attributedHumanData } from './attributed-human.mjs';
 import { instanceDisplayName } from './instance-display-name.mjs';
+import { sessionProvider } from './instance-presentation.mjs';
 
 const record = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const rowsOf = (rows) => (Array.isArray(rows) ? rows.filter((row) => record(row) && typeof row.instance === 'string' && row.instance) : []);
 const since = (claim) => { const t = Date.parse(claim.since); return Number.isFinite(t) ? t : -Infinity; };
-const live = (row) => row.running === true && row.serverUnreached !== true && (row.runtimeState == null || row.runtimeState === 'running');
+// A row on a session provider is live on `running === true` alone: its `runtimeState` is the provider's word
+// ("unknown" while it runs), never tmux's "running".
+const live = (row) => row.running === true && row.serverUnreached !== true
+  && (row.runtimeState == null || row.runtimeState === 'running' || sessionProvider(row) !== null);
 
 export function homeBoard(rows, { stale = () => false, pins = false } = {}) {
   const needsYou = [], running = [], counts = { agents: 0, running: 0, needYou: 0, stopped: 0, unknown: 0 };

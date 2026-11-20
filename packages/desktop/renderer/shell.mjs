@@ -91,6 +91,7 @@ import { createHostTheme } from "./host-theme.mjs";
 import { createSpawnJobs } from "./spawn-jobs.mjs";
 import { createSpawnFollow, watchOperator } from "./spawn-follow.mjs";
 import { createLaunchFocus } from "./launch-focus.mjs";
+import { noTerminal } from "./provider-row.mjs";
 import { registerSpawnDialogKeys } from "./spawn-dialog-keys.mjs";
 import { revealInScrollport } from "./reveal-in-scrollport.mjs";
 import { rosterRowFacts } from "../../client/roster-row-facts.mjs";
@@ -1306,14 +1307,18 @@ function renderContextRoster(instances) {
         // A row that can't open (unknown state, a remote row the kernel does not report addressable) stays
         // focusable (aria-disabled, spec F): its tools and its context menu (Shift+F10, the Menu key: Inspect/Stop/
         // Retire) must stay reachable from the keyboard. Its activation does nothing and says why.
-        const unavailable = i.running == null || !canAddressRemote(i);
+        // A row on a session provider (provider-row.mjs: "bb", say) that runs has no terminal to open: it is such
+        // a row too, and says where it runs. Stopped, its activation is Start…, as any row's.
+        const elsewhere = noTerminal(i);
+        const unavailable = i.running == null || !canAddressRemote(i) || (!!elsewhere && i.running === true);
         // #802: a home a spawn or a retire left half cleaned, or one being retired (#1247; held: the spawning one drew
         // above), opens and starts nothing either; its context menu offers Retire only (secondary while retiring).
         if (unavailable || held) { row.setAttribute("aria-disabled", "true"); row.classList.add("unavailable"); }
         // Why it can't open: the full sentence as its title and description (line 2 stays soul · machine).
         // A sentence that is the row's own text is said with who made it (speaker-line.mjs).
         const reason = rowReason(i);
-        const why = rowReasonLine(reason) || heldLine(held) || runtimeErrorLine(i) || (i.running ? `Open ${i.instance} terminal` : `Start ${i.instance}`);
+        const why = [rowReasonLine(reason) || heldLine(held) || runtimeErrorLine(i) || (elsewhere && i.running !== false ? null : i.running ? `Open ${i.instance} terminal` : `Start ${i.instance}`),
+          elsewhere && i.running !== false ? elsewhere.sentence : null].filter(Boolean).join(" · ");
         // Slice 1 (the Desktop UI rework): no hover card. An unavailable row keeps its reason as a title; every row's
         // waiting facts are its description, and the instance panel shows them in full (its Needs input line).
         // Line 2: `<soul> · <machine>`, the shared row facts (packages/client roster-row-facts.mjs), the machine in
@@ -1426,6 +1431,10 @@ function renderContextRoster(instances) {
             if (again) setRovingRow(listEl, again);
             return;
           }
+          // A provider row that runs has no terminal: its activation says where it runs (the hint's line, announced,
+          // never an alert), supersedes any open under way, and opens nothing. A home the kernel holds, or a row it
+          // does not report addressable, says its own reason, as any row.
+          if (elsewhere && i.running === true && !held && canAddressRemote(i)) { tabOpenIntents.invalidate(); sayInHint(elsewhere.sentence); return; }
           if (staleStart || unavailable || held) return; spawnJobs.seen?.(ws, i); i.running ? openTerminalTab(i) : openInstanceStart(i);
         });
         // full keyboard tree operability (roving tabindex; policy in
@@ -1447,8 +1456,11 @@ function renderContextRoster(instances) {
           scope: ws, owner: menuOwner, onMenuState: menuState, onFocusChange: () => updateActiveContexts(), dispatch: runAction,
           shortcut: id => { const chord = getBinding(id, isMac); return chord ? formatChord(chord, isMac) : ''; },
           extra: [
+            // A row on a session provider: what the provider offers in place of a terminal, as an external link under
+            // its own label, first; Open in split stays listed, not enabled, and says where the agent runs.
+            ...(elsewhere?.link ? [{ action: 'open-link', label: elsewhere.link.label, reason: '' }] : []),
             { action: 'open-split', actionId: 'instance.openSplit', label: 'Open in split', reason: () => !actionTarget ? 'Instance identity is not fully reported.'
-              : unsupportedLine(i) || (i.running !== true ? 'No live terminal is reported.' : instanceSplitPlan(splitOpenState()).reason) },
+              : unsupportedLine(i) || elsewhere?.sentence || (i.running !== true ? 'No live terminal is reported.' : instanceSplitPlan(splitOpenState()).reason) },
             { action: 'open-pr', actionId: 'instance.openPullRequest', label: 'Open pull request…', reason: !actionTarget ? 'Instance identity is not fully reported.'
               : i.server || i.remote ? 'Remote PR inspection is unavailable; no local fallback.' : '' },
             ...backgroundMenu.items(i, placement),
@@ -1459,6 +1471,9 @@ function renderContextRoster(instances) {
             if (backgroundMenu.handles(action)) return backgroundMenu.run(action, instance);
             if (pinMenu.handles(action)) return pinMenu.run(action, instance);
             if (action === 'open-split') return openTerminalTab(instance, { inSplit: true, expected: actionTarget, valid: menuOwner });
+            // The system browser, through the window's own handler (main.mjs: http and https only); the url is the
+            // one this row's menu was drawn with (provider-row.mjs noTerminal: validated by the shared home).
+            if (action === 'open-link') { if (elsewhere?.link) ctx.openExternal(elsewhere.link.url); return; }
             if (action === 'open-pr') return instancePrAction.open(actionTarget);
             if (action === "start" || action === "restart") { openInstanceStart(instance, { restart: action === "restart" }); return; }
             if (action === "inspect") {
@@ -2454,7 +2469,11 @@ async function openTerminalTab(ref, { quiet = false, inSplit = false, expected =
   // the tab mount) would still escape as an unhandled rejection from an
   // automated caller that does not await. runOpenFlow catches every quiet
   // rejection into notify; interactive opens keep throwing.
-  return runOpenFlow(() => openTerminalTabFlow(ref, notify, { inSplit, expected, valid, followed, refuse, focusContent }), { quiet, notify });
+  // A row on a session provider has no terminal, whoever asks (the palette, a view's Open, a launch's --instance):
+  // an interactive open says where it runs in a notice, never in a blocking alert(). A quiet open, and a caller
+  // with its own onError, keep their notify.
+  const say = onError || quiet ? undefined : (line) => notifications.notify(line);
+  return runOpenFlow(() => openTerminalTabFlow(ref, notify, { inSplit, expected, valid, followed, refuse, focusContent, say }), { quiet, notify });
 }
 
 async function openTerminalTabFlow(ref, notify, options = {}) {
@@ -2505,6 +2524,14 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
     // finds ITS instance; a bare name resolves only when unambiguous — the
     // first same-named match could be another agents root's tmux session.
     const r = resolveTerminalOpen(panel.instances, ref, ws);
+    // A row on a session provider has no terminal (resolveTerminalOpen): its sentence says where it runs, through
+    // the open's own `say` when it has one (openTerminalTab: a notice, not an alert). An open of a selected target
+    // (the row menu's Open in split) speaks only of that target: the open's own read may hold the home's
+    // replacement before the sidebar does, and that row is not the one that was chosen.
+    if (r.error === "no-terminal") {
+      if (options.expected && !sameInstanceActionTarget(options.expected, r.row, ws)) return notify('The selected instance identity changed. Use the current roster.');
+      return (options.say || notify)(r.sentence);
+    }
     if (r.error) {
       return notify(r.error === "ambiguous"
         ? `several instances are named "${r.name}" — open it from the sidebar tree, which addresses the exact one`
@@ -2532,7 +2559,7 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
     if (pendingTerms.has(pending)) return; // an open for this key is already in flight
     pendingTerms.add(pending);
     try {
-      await openTerminalTabInner(inst, ws, key, owns, notify, commitDestination, read, options.focusContent !== false);
+      await openTerminalTabInner(inst, ws, key, owns, notify, commitDestination, read, options.focusContent !== false, options.say || notify);
     } finally {
       pendingTerms.delete(pending);
     }
@@ -2541,7 +2568,7 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
   }
 }
 
-async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert(msg), commitDestination = () => true, read = 0, focusContent = true) {
+async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert(msg), commitDestination = () => true, read = 0, focusContent = true, say = notify) {
   // inst is the RESOLVED roster instance (openTerminalTab resolves + keys
   // before dedup; review 7d740f9). Re-check ownership here — whenKeyFree
   // may have waited across a workspace switch.
@@ -2554,7 +2581,15 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
   // retired wins — no tab opens for a row the roster no longer has.
   const judged = judgedAnswer;
   if (judged && judged.read > read && judged.workspace === ws
-    && retiredTabs([[0, { kind: "terminal", workspace: ws, key, origin }]], judged.panel).length) return notify(`unknown instance "${name}"`);
+    && retiredTabs([[0, { kind: "terminal", workspace: ws, key, origin }]], judged.panel).length) {
+    // The newer answer may show this very row moved to a session provider, not retired: it is there and has no
+    // terminal, which is said as any open of such a row says it (the open's own `say`: a notice, never an alert).
+    // Only for the open's own target: a row of the judged answer with this terminal key and no other incarnation.
+    // Another incarnation at the home, or a same-named home elsewhere, is not this instance: it stays unknown.
+    const moved = (judged.panel.instances || []).find((row) => row && typeof row === "object" && terminalKey(ws, row) === key
+      && !otherIncarnation(origin.incarnation, row.createdAt) && noTerminal(row));
+    return moved ? say(noTerminal(moved).sentence) : notify(`unknown instance "${name}"`);
+  }
 
   if (!commitDestination()) return notify('The terminal destination changed. Select the instance again.');
   const wrap = document.createElement("div");
@@ -3826,7 +3861,8 @@ function closeWorkspaceTabs(taken) {
 /** A take-over's layout (layout-handover.mjs), handed over by the window the workspace came from: its terminals
  * opened here again (fresh viewers; the agents keep running) and laid out as they were, under ONE intent ticket, so
  * any selection made meanwhile (a click, a key, another open) supersedes what is left of it, as does a switch or a new
- * connection. A terminal that no longer resolves in this workspace's roster, or no longer runs, is left out, as a
+ * connection. A terminal that no longer resolves in this workspace's roster, no longer runs, or whose row now runs
+ * on a session provider (resolveTerminalOpen answers it no-terminal) is left out, quietly, as a
  * stale memory's is (workspace-tab-memory.mjs recall). A layout off the descriptor's shape (main refuses one; this
  * is the backstop) restores nothing, and throws nothing. */
 async function restoreHandedLayout(ws, layout) {

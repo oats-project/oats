@@ -21,6 +21,7 @@ import { retainedSpawnDetails } from './launch-prompt-outcome.mjs';
 import { answeringFeatures, busyHolder } from './lifecycle-contract.mjs';
 import { displayLine } from './display-text.mjs';
 import { requireTerms } from './client-terms.mjs';
+import { sessionProviderName } from './instance-presentation.mjs';
 
 /** The gate is page-safe and lives apart (start-gate.mjs); a client takes it from here, with the rest of the rule. */
 export { startGate };
@@ -93,16 +94,27 @@ const START_REUSED = Object.freeze(['new', 'pane', 'adopted']);
 /** Whether `v` is the receipt of a completed start or restart of `row`, as the kernel answers one
  * (docs/desktop-cli-api.md, `oats session start`: `{instance, agent, home, harness, backend, model, launchConfig,
  * yolo, target, startedAt, restartCount, reused, warnings}`): the row's instance, in the row's home (the kernel
- * answers with its real path: `canonical`, the verified local home), on the one backend there is, tmux, with its
- * target (`{backend, session, window, socket}`, more keys allowed) and the other fields a start always carries.
- * Read where the CLI is newer than this client was tested with, so a format it does not know is not taken for one. */
+ * answers with its real path: `canonical`, the verified local home), on the backend the receipt itself names, and
+ * the other fields a start always carries. What was started is what the receipt says, not what the row read before
+ * the start said: a home's backend can move at a start. The receipt's `backend` picks its shape:
+ *   "tmux"               with its target (`{backend, session, window, socket}`, more keys allowed)
+ *   a session provider   (instance-presentation.mjs `sessionProviderName`) with `session: {provider, endpoint?}` and
+ *                        no terminal target (`target` null or absent).
+ *                        A start on this machine carries the endpoint, an object; a routed one (`--server`) carries the
+ *                        provider alone, the endpoint never leaving its host: required here, refused there
+ * A receipt that names no backend, or anything else, is no receipt this client knows. Read where the CLI is newer
+ * than this client was tested with, so a format it does not know is not taken for one. */
 function startReceipt(v, row, canonical) {
   const record = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
   const text = (x) => typeof x === 'string' && x.length > 0;
+  const routed = !!row.server;
+  const session = (x) => (x.backend === 'tmux'
+    ? record(x.target) && x.target.backend === 'tmux' && text(x.target.session) && text(x.target.window)
+      && text(x.target.socket) && x.target.socket.startsWith('/')
+    : sessionProviderName(x.backend) && (x.target === null || x.target === undefined) && record(x.session) && text(x.session.provider)
+      && (routed ? x.session.endpoint === undefined : record(x.session.endpoint)));
   return record(v) && v.instance === row.instance && text(v.home) && (v.home === row.home || (canonical !== null && v.home === canonical))
-    && text(v.agent) && text(v.harness) && v.backend === 'tmux' && text(v.startedAt)
-    && record(v.target) && v.target.backend === 'tmux' && text(v.target.session) && text(v.target.window)
-    && text(v.target.socket) && v.target.socket.startsWith('/')
+    && text(v.agent) && text(v.harness) && text(v.startedAt) && session(v)
     && Number.isSafeInteger(v.restartCount) && v.restartCount >= 0 && START_REUSED.includes(v.reused)
     && Array.isArray(v.warnings) && v.warnings.every((w) => typeof w === 'string');
 }

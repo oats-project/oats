@@ -267,6 +267,25 @@ while a terminal is open); under 80 columns it has the whole width.
 - **Opening an agent.** `Enter` on an instance that runs opens its terminal
   beside the sidebar, where the detail was, as a tab: see
   [Open an agent's terminal](#open-an-agents-terminal) and [Tabs](#tabs).
+- **An agent that runs on a session provider** (a capability's session
+  backend, such as bb) has no terminal. The list shows it in the state OATS
+  reports (the detail says `running` or `stopped` when OATS says which, else
+  the provider's own word), and `S`, `R`, `X` and `D` act on it as on any agent. `Enter` opens
+  nothing: the line says where it runs ("Runs in a bb thread; open it in
+  bb.") and, when the provider offers a link, prints it under that
+  (`"Open in bb: http://…"`) for you to open. The palette does not
+  list it among the agents to open, the agent steps pass over it, and a
+  workspace's remembered tabs never open it. Its `!` mark shows whenever
+  OATS reports that it waits on you and it is not stopped
+  ([how the clients read `backend`](desktop-cli-api.md#row-backend-clients)).
+  Start the TUI outside an agent's home: OATS refuses to retire a home while
+  a process works in it, the TUI's own included, and names that process.
+  A known limit: when another machine's agent moves to a session provider
+  while the TUI is opening it, a check of its terminal that fails says
+  OATS's failure ("The session is no longer running on …") and not where
+  it runs, and an agent OATS holds by then (a retire that began) may have a
+  viewer started for it, which OATS refuses (`E_SESSION_NO_TERMINAL`).
+  Neither reaches another agent.
 
 **A view of more than one deployment** (this machine and another, or two
 deployments on one machine) is one list, grouped as the Desktop groups it:
@@ -704,7 +723,8 @@ Each terminal open in the panel is a tab, and the panel holds up to four.
     as the workspace was left. The shown tab is the most recent for
     [the palette](#the-palette).
   - A tab whose instance is gone or cannot be opened now (retired,
-    stopped) is dropped, and nothing is said of it. A group the drops
+    stopped, or now running on a session provider, which has no terminal)
+    is dropped, and nothing is said of it. A group the drops
     leave with no tab goes, as when its last tab is closed; a group that
     was empty when the workspace was left is empty again. A shown tab
     dropped gives its place to the next, else the one before.

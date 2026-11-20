@@ -33,6 +33,8 @@ import { MACHINE_ID, machineFieldProblem } from './machine-contract.mjs';
 import { kernelMade } from './kernel-made.mjs';
 import { SOUL_COLORS } from './soul-colors.mjs';
 import { NAMING_TIMEOUT_MS } from './spawn-preview-contract.mjs';
+import { listedBackends } from './session-backends.mjs';
+import { sessionProviderName } from './instance-presentation.mjs';
 
 const ENVELOPE_TIMEOUT_MS = 60_000;
 
@@ -64,7 +66,10 @@ const SPAWN_ARG_RULES = {
   name:    { flag: "--name",    re: /^[a-z0-9][a-z0-9-]*$/ },
   repo:    { flag: "--repo",    re: /^[^-][^\0]*$/ },                       // path — anything not option-shaped
   work:    { flag: "--work",    re: /^(worktree|checkout|attached|workspace|directory)$/ },
-  backend: { flag: "--backend", re: /^tmux$/ },
+  // A session backend's name: the kernel's own ("tmux") or a session provider's (instance-presentation.mjs
+  // `sessionProviderName`: 1 to 40 lowercase letters, digits and dashes, never option-shaped, never a reserved
+  // word), and only one the kernel lists (`backendsListed`, below).
+  backend: { flag: "--backend", re: { test: (value) => value === "tmux" || sessionProviderName(value) } },
   // The flag is the kernel's (harness-names.mjs harnessFlag): the caller names it, never guessed.
   harness: { flag: null, re: /^(pi|claude|codex)$/ },
   // A configuration's name, or the word that selects none (launch-contract.mjs LAUNCH_CONFIG_NONE), which this rule admits.
@@ -81,6 +86,12 @@ const SPAWN_ARG_RULES = {
   // the pair when it spawns related — path-shaped, never option-shaped.
   relativeRoot: { flag: "--relative-root", re: /^[^-][^\0]*$/ },
 };
+/** The session backends a spawn may name: the caller's `backends`, the names the kernel lists (`oats version
+ * --json` `sessionBackends`, the kernel's own, and `oats inspect --json` `sessionProviders`, the ones a soul's
+ * capabilities supply). With no list, "tmux" alone, as before session providers. Never "herdr": OATS removed it. */
+const backendsListed = (backends) => (Array.isArray(backends) ? listedBackends(backends) : ["tmux"]);
+
+/** `opts.backends` is not an argument: it is the list `opts.backend` is held to (`backendsListed`). */
 export function spawnArgv(agent, workspaceDir, taskFile, opts = {}) {
   const agentName = String(agent);
   if (agentName.startsWith("-")) { const e = new Error(`invalid agent name "${agentName}"`); e.code = "E_BAD_ARGS"; throw e; }
@@ -117,7 +128,7 @@ export function spawnArgv(agent, workspaceDir, taskFile, opts = {}) {
     const v = opts[key];
     if (v === undefined || v === null || v === "") continue;
     const s = String(v);
-    if (!rule.re.test(s)) { const e = new Error(`invalid ${key} value`); e.code = "E_BAD_ARGS"; throw e; }
+    if (!rule.re.test(s) || (key === "backend" && !backendsListed(opts.backends).includes(s))) { const e = new Error(`invalid ${key} value`); e.code = "E_BAD_ARGS"; throw e; }
     argv.push(key === "harness" ? flagFor(opts.harnessFlag) : rule.flag, s);
   }
   if (opts.yolo !== undefined) {

@@ -33,3 +33,15 @@ test('unpreservable inputs and the command kind get no invented default or strip
   for (const v of [entry({ tz: undefined }), entry({ kind: 'command', argv: ['oats', 'status'] }), entry({ backend: 'future' }), entry({ backend: 'herdr' }), entry({ runtime: 'future' }),
     entry({ wake: { cron: '* * * * *', tz: 'UTC', message: 'wake', enabled: false } }), entry({ name: 'nightly', origin: { kind: 'local' } })]) assert.equal(scheduleDraft(v), null);
 });
+
+// Session providers (spec C1): a schedule's backend is kept when the kernel lists it.
+test('a schedule whose backend is a provider the kernel lists is a draft, with its backend; an unlisted value is refused as before', () => {
+  assert.equal(scheduleDraft(entry({ backend: 'bb' }), { backends: ['tmux', 'bb'] }).backend, 'bb');
+  assert.equal(scheduleDraft(entry({ backend: 'tmux' }), { backends: ['tmux', 'bb'] }).backend, 'tmux');
+  for (const backends of [undefined, ['tmux'], [], null, 'bb', ['tmux', 'other']]) assert.equal(scheduleDraft(entry({ backend: 'bb' }), backends === undefined ? undefined : { backends }), null, JSON.stringify(backends));
+  assert.equal(scheduleDraft(entry({ backend: 'herdr' })), null);
+  assert.equal(scheduleDraft(entry({ backend: 'tmux' }), { backends: ['bb'] }), null, 'a kernel that does not list tmux');
+  // A schedule that names no backend is a draft whatever the list.
+  const { backend: _none, ...plain } = entry();
+  for (const backends of [['tmux'], [], ['bb']]) assert.equal(Object.hasOwn(scheduleDraft(plain, { backends }), 'backend'), false);
+});

@@ -3,6 +3,7 @@ import { iconElement } from './shell-icons.mjs';
 import { ageText } from './age-text.mjs';
 import { createSoulMark, createRuntimeBadge, harnessName } from './identity-marks.mjs';
 import { reasonLine, unsupportedLine, runtimeErrorLine } from './speaker-line.mjs';
+import { sessionLine } from './provider-row.mjs';
 import { waitingLabel, waitedText, waitingClock } from '../../client/waiting-on-you.mjs';
 import { desktopActs } from './desktop-acts.mjs';
 import { needsInputReportingGap } from '../../client/needs-input-reporting-gap.mjs';
@@ -660,7 +661,7 @@ export function createContextPanel({
         const code = node('span', 'context-panel-fact-code', part.code); code.title = part.code; return code;
       }));
     }
-    // Session card: the harness mark and name, the model, the terminal session.
+    // Session card: the harness mark and name, the model, the terminal session or the session provider's thread.
     const reportingGap = needsInputReportingGap(instance);
     sessionNote.textContent = reportingGap ? `This agent's Claude questions and permission requests don't show as needs input: its oats.core (oats.framework ${reportingGap}) is older than 2.4.0. Upgrade or respawn it to report them.` : '';
     sessionNote.hidden = !reportingGap;
@@ -675,7 +676,8 @@ export function createContextPanel({
     waitingMessage.hidden = !message;
     const harness = typeof instance.harness === 'string' && instance.harness ? instance.harness : null;
     if (sessionBadge.dataset.harness !== (harness ?? '')) { sessionBadge.dataset.harness = harness ?? ''; sessionBadge.replaceChildren(...(harness ? [createRuntimeBadge(document, harness)] : [])); }
-    const tmux = typeof instance.tmux?.session === 'string' && instance.tmux.session ? `tmux · ${instance.tmux.session}` : '';
+    // Where the session runs: `tmux · <session>`, or the session provider and its thread, `bb · thread thr_x`.
+    const tmux = sessionLine(instance);
     if (tmuxLine.textContent !== tmux) tmuxLine.textContent = tmux;
     tmuxLine.hidden = !tmux;
     state.dataset.state = instance.running === true ? 'running' : instance.running === false ? 'stopped' : 'unknown';

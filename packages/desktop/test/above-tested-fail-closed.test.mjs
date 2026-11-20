@@ -181,3 +181,64 @@ for (const [name, create, feature, write, unknowns] of RECORDS) {
     });
   }
 }
+
+// Session providers (spec C1): a row on one is started through its provider, and its receipt has no terminal target.
+const BB_ROW = (running) => ({ ...row(running), backend: 'bb', tmux: null });
+const BB_RECEIPT = { instance: 'dev-1', agent: 'dev', home: HOME, harness: 'claude', backend: 'bb', model: null, launchConfig: null, yolo: null,
+  session: { provider: 'oats.bb', endpoint: { server: 'http://127.0.0.1:38886', projectId: 'proj_1', threadId: 'thr_x' } }, target: null,
+  startedAt: '2026-11-11T22:00:00.000Z', restartCount: 0, reused: 'new', warnings: [] };
+const { session: _session, ...NO_SESSION } = BB_RECEIPT;
+// The same home on another machine: the row names its server, and the answer is relayed without the endpoint.
+const FAR_HOME = '/srv/team/agents/dev/instances/dev-1';
+const BB_FAR_ROW = (running) => ({ instance: 'dev-1', home: FAR_HOME, agentsRoot: '/srv/team/agents', server: 'build', addressable: true, running, backend: 'bb', tmux: null });
+const BB_FAR_RECEIPT = { ...BB_RECEIPT, home: FAR_HOME, session: { provider: 'oats.bb' } };
+const startOf = (of, restart, result, seen = []) => startInstance(above(START_CLI), of, {}, { restart, terms, verifyHome: () => HOME, localCwd: '/team',
+  start: async (bin, args) => { seen.push(args); return answered(result); } });
+for (const restart of [false, true]) {
+  const verb = restart ? 'Restart' : 'Start';
+  test(`above the bound, a ${verb} of a row on a session provider is reported started on the provider's receipt: on this machine with its endpoint, routed with the provider alone`, async () => {
+    const { target: _none, ...noTarget } = BB_RECEIPT;
+    for (const result of [BB_RECEIPT, noTarget, { ...BB_RECEIPT, restartCount: 2, warnings: ['a launch hook said so'] }]) {
+      const seen = [];
+      assert.deepEqual(await startOf(BB_ROW(restart), restart, result, seen), { ok: true, result });
+      assert.equal(seen[0].server, undefined, 'a start on this machine');
+    }
+    const { target: _far, ...farNoTarget } = BB_FAR_RECEIPT;
+    for (const result of [BB_FAR_RECEIPT, farNoTarget]) {
+      const seen = [];
+      assert.deepEqual(await startOf(BB_FAR_ROW(restart), restart, result, seen), { ok: true, result });
+      assert.deepEqual([seen[0].server, seen[0].home, seen[0].workspaceDir], ['build', FAR_HOME, '/team'], 'the routed call: --server, from this machine\'s directory');
+    }
+  });
+  test(`above the bound, a ${verb} whose home moved backend at the start is reported started on the receipt's own backend: a row read as tmux answered on a provider, a row read as a provider's answered on tmux or on another provider`, async () => {
+    for (const [name, result, of] of [
+      ['a provider receipt for a row read as tmux', BB_RECEIPT, row(restart)],
+      ['a tmux receipt for a row read as a provider\'s', RECEIPT, BB_ROW(restart)],
+      ['another provider\'s receipt', { ...BB_RECEIPT, backend: 'other', session: { provider: 'acme.other', endpoint: {} } }, BB_ROW(restart)],
+      ['a routed provider receipt for a row read as tmux', BB_FAR_RECEIPT, { ...BB_FAR_ROW(restart), backend: 'tmux' }],
+    ]) {
+      assert.deepEqual(await startOf(of, restart, result), { ok: true, result }, name);
+    }
+  });
+  test(`acceptance (fail closed): above the bound, a ${verb} answered with a provider receipt it does not know, or one that names no backend it knows, is not reported started`, async () => {
+    for (const [name, result, of] of [
+      ['a provider receipt with a terminal target', { ...BB_RECEIPT, target: RECEIPT.target }, BB_ROW(restart)],
+      ['a tmux receipt with no target, for a provider row', { ...RECEIPT, target: null }, BB_ROW(restart)],
+      ['a receipt that names no backend', (({ backend: _b, ...rest }) => rest)(BB_RECEIPT), BB_ROW(restart)],
+      ['a receipt whose backend is no name', { ...BB_RECEIPT, backend: 'Not A Name' }, BB_ROW(restart)],
+      ['a receipt whose backend is the reserved word', { ...BB_RECEIPT, backend: 'session-provider' }, BB_ROW(restart)],
+      ['a receipt whose backend is empty', { ...BB_RECEIPT, backend: '' }, BB_ROW(restart)],
+      ['a provider receipt with no session', NO_SESSION, BB_ROW(restart)],
+      ['a provider receipt whose session names no provider', { ...BB_RECEIPT, session: { endpoint: {} } }, BB_ROW(restart)],
+      ['a provider receipt whose endpoint is not an object', { ...BB_RECEIPT, session: { provider: 'oats.bb', endpoint: 'thr_x' } }, BB_ROW(restart)],
+      ['a start on this machine answered without its endpoint (the routed shape)', { ...BB_RECEIPT, session: { provider: 'oats.bb' } }, BB_ROW(restart)],
+      ['a provider receipt for another home', { ...BB_RECEIPT, home: '/another/agents/dev/instances/dev-1' }, BB_ROW(restart)],
+      ['a routed start answered with an endpoint, which never leaves its host', { ...BB_FAR_RECEIPT, session: BB_RECEIPT.session }, BB_FAR_ROW(restart)],
+      ['a routed start answered without the backend', (({ backend: _b, ...rest }) => rest)(BB_FAR_RECEIPT), BB_FAR_ROW(restart)],
+      ['a routed start answered for another home', { ...BB_FAR_RECEIPT, home: HOME }, BB_FAR_ROW(restart)],
+    ]) {
+      const outcome = await startOf(of, restart, result);
+      assert.deepEqual([outcome.ok, outcome.outcome], [false, 'uncertain'], name);
+    }
+  });
+}

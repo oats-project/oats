@@ -356,3 +356,45 @@ test("away and back: a remote tab is kept when its server's held rows say anothe
   await land(s, held({ missingRemotely: true }));
   assert.equal(s.c.tabs.has(tab.id), true);
 });
+
+// Session providers (spec C1, a known limit the spec owner accepted): a home that moves to a session provider while its
+// workspace is not shown. Its remembered terminal tab comes back with the workspace (the restore runs before the
+// first roster read and judges the row the tab last showed), and closes on that read's answer (retired-tabs.mjs, P).
+test("away and back: a tab whose home moved to a session provider while its workspace was away is restored, then closed on the workspace's first roster answer, quietly; the tab beside it stays", async t => {
+  const s = shell(t), a = await s.open(row("a")), b = await s.open(row("b"));
+  s.switchTo("B"); s.switchTo("A");
+  assert.equal(s.c.tabs.has(a.id), true, "restored before any roster read: its pane is the dead tmux window until the answer");
+  // The answer: the same home and incarnation, now on bb (its backend moved at a start), in any state.
+  const moved = { ...row("a"), backend: "bb", tmux: null, running: true, runtimeState: "unknown", session: { provider: "oats.bb", threadId: "thr_x" } };
+  await land(s, answer([moved, row("b")]));
+  assert.equal(s.c.tabs.has(a.id), false, "closed on the first roster answer");
+  assert.equal(s.c.tabs.has(b.id), true);
+  assert.deepEqual(s.detached, [1], "its viewer is detached, no other");
+  assert.equal(s.c.activeTab, b.id, "the tab beside it is shown");
+});
+
+test("an open that races a home's move to a session provider says where it runs through the open's own say, never \"unknown instance\"; a retired one still says so", async t => {
+  const s = shell(t), said = [], notified = [];
+  const moved = { ...row("a"), backend: "bb", tmux: null, running: true, runtimeState: "unknown" };
+  const racing = async (later, options) => {
+    const done = s.openTerminalTabFlow(row("a"), message => notified.push(message), options);
+    const request = s.requests.at(-1);
+    await land(s, later);                       // a newer roster answer, judged while the open waits for its own read
+    request.resolve({ instances: [row("a")] }); // the open's own, older read still shows the tmux row
+    await done; await settle();
+  };
+  await racing(answer([moved]), { say: line => said.push(line) });
+  assert.deepEqual([said, notified], [["Runs in a bb thread; open it in bb."], []]);
+  await racing(answer([moved]));
+  assert.deepEqual([said.length, notified], [1, ["Runs in a bb thread; open it in bb."]], "with no say of its own, the open's notify is told the same sentence");
+  await racing(answer([row("a", T2)]), { say: line => said.push(line) });
+  assert.deepEqual([said.length, notified.at(-1)], [1, 'unknown instance "a"'], "another incarnation: retired, as before");
+  // The sentence is for the open's own target only: another incarnation at the home that runs on bb, and a same-named
+  // bb home of another agents root, are not this instance.
+  await racing(answer([{ ...moved, createdAt: T2 }]), { say: line => said.push(line) });
+  assert.deepEqual([said.length, notified.at(-1), notified.length], [1, 'unknown instance "a"', 3], "a bb respawn under the same home");
+  const homonym = { ...moved, home: "/elsewhere/agents/dev/instances/a", agentsRoot: "/elsewhere/agents" };
+  await racing(answer([homonym]), { say: line => said.push(line) });
+  assert.deepEqual([said.length, notified.at(-1), notified.length], [1, 'unknown instance "a"', 4], "a bb row of the same name in another agents root");
+  assert.deepEqual([s.c.tabs.size, s.attachments.length], [0, 0], "no tab and no viewer for any of them");
+});

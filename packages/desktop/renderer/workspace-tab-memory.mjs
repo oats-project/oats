@@ -3,6 +3,7 @@
 // terminal attachments remain shell-owned.
 import { canActivateTab, fallbackTabForContext } from "./workspace-tabs.mjs";
 import { removeSplitTab } from "./split-layout.mjs";
+import { sessionProvider } from "../../client/instance-presentation.mjs";
 
 function copySplit(split) {
   return split ? { ...split, groups: split.groups.map(g => ({ ...g, tabs: [...g.tabs] })) } : null;
@@ -31,16 +32,23 @@ export function createWorkspaceTabMemory() {
       if (!saved) return { split: null, activeTab: null, sidebarMode: "overview", tabLayerVisible: false };
       const tabs = new Map(entries);
       let split = copySplit(saved.split);
+      // A terminal tab whose row runs on a session provider has no terminal: it is never restored, in a group or
+      // as the active tab, and nothing is said of it. The row judged here is the one the tab last showed
+      // (`instanceRef`: set at its open, refreshed while it is the active tab of the shown workspace), since a
+      // recall has no roster of its own: it runs before the workspace's first read. A tab whose row became a
+      // provider's while its workspace was away therefore still comes back here, and the shell closes it,
+      // quietly, on that first roster answer (retired-tabs.mjs, P), as it closes a retired one.
+      const restorable = tab => canActivateTab(tab, workspace) && !(tab.kind === "terminal" && sessionProvider(tab.instanceRef));
       // Closed/foreign tabs must not be resurrected by stale layout memory.
       for (const id of saved.split?.groups.flatMap(g => g.tabs) || []) {
         const tab = tabs.get(id);
-        if (tab?.kind !== "terminal" || !canActivateTab(tab, workspace)) split = removeSplitTab(split, id).split;
+        if (tab?.kind !== "terminal" || !restorable(tab)) split = removeSplitTab(split, id).split;
       }
       const focused = split?.groups.find(g => g.id === split.focusedGroup);
-      const activeTab = canActivateTab(tabs.get(saved.activeTab), workspace) ? saved.activeTab
+      const activeTab = restorable(tabs.get(saved.activeTab)) ? saved.activeTab
         : !saved.tabLayerVisible ? null
         : focused ? focused.activeTab
-        : fallbackTabForContext(tabs, saved.sidebarMode, workspace)?.[0] ?? null;
+        : fallbackTabForContext([...tabs].filter(([, tab]) => restorable(tab)), saved.sidebarMode, workspace)?.[0] ?? null;
       // An empty terminal layout is a real, restorable surface, not a missing
       // tab that should fall back to a different group or to the stage.
       return { ...saved, split, activeTab,

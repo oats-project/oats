@@ -3885,6 +3885,62 @@ its absence.
   output, not the exit status, and nothing is printed, whether or not it can
   be read or written. A status routed with `--server` records nothing on this
   machine ([execution-targets.md](execution-targets.md#which-losses-come-back)).
+- <a id="row-backend-clients"></a>**How the clients read `backend`** (the
+  Desktop and the TUI, `packages/client`). A row whose `backend` is text that
+  is not empty and not `tmux` runs on a session provider, in no terminal (an
+  empty `backend` names none: the kernel never sends one, and the row reads
+  as one with no `backend`):
+  - Its `running`, `runtimeState` and `runtimeError` are shown as the kernel
+    reports them. No client asks tmux about it: with an older kernel, whose
+    rows a client's own terminal check refines, such a row is never passed
+    to that check.
+  - Its acts are the ones of its state: Restart, Stop and Retire while it
+    runs; Start, Stop and Retire stopped; Stop and Retire when the kernel
+    answers `running: null`.
+  - Open is never offered. The clients say where the agent runs ("Runs in a
+    bb thread; open it in bb.") and, when the row carries `open`
+    (`{label, url}`), show it as a link: the Desktop opens it in the system
+    browser from the row's menu, the TUI prints the url. Only an `http` or
+    `https` url with no credentials in it is shown, and only on a row of
+    this machine: another machine's url is that machine's own loopback. No
+    client attaches, splits or restores a terminal for the row.
+  - Its `waitingOnYou` claim is shown unless the row is stopped
+    (`running: false`): while it runs and when the kernel answers
+    `running: null`, since an agent that waits on a person is idle in its
+    provider. A tmux row's claim still needs `running: true` and no
+    `runtimeState` but `running`. A row whose last read failed, or whose
+    server was not reached, shows none, as for any row.
+  - It counts as running (the Desktop's Home, the counts) on `running: true`
+    alone: its `runtimeState` is the provider's word (`unknown` while it
+    runs), never `running`.
+  - A start's or a restart's answer for it carries the provider's name as
+    `backend`, `session: {provider, endpoint?}` and no terminal `target`
+    (the endpoint on a start on this machine, never on a routed one); the
+    clients open no terminal after it.
+  - Its stop and its retire run from the deployment's directory, never from
+    its home. The retire of such a home is refused while any process works in
+    it, the client's own included: start the Desktop or the TUI outside an
+    agent's home.
+  - The Desktop shows the backend and `session.threadId`, when it is text,
+    as `bb · thread thr_…`. Only a status row of this machine carries the
+    thread id: a row relayed from another host (`oats server roster`,
+    `--server`) never does, so a client shows the backend alone there and
+    depends on the id for nothing. The id addresses nothing.
+
+  A row with no `backend` (an older kernel's, or an older routed host's)
+  reads as tmux, as one with `tmux` does: both are read as before. A row recorded
+  on Herdr keeps its own reason (`E_HERDR_REMOVED`) before any of this. On a
+  row of this machine `herdr` is not read as a backend: such a row is known
+  by its `sessionTarget` or its `unsupported` state, and one that only names
+  `herdr` reads as before. A
+  `backend` that is no provider's name (1 to 40 lowercase letters, digits
+  and dashes, the first a letter or a digit; not `tmux` or
+  `session-provider`) still makes the row a provider's, never asked of tmux:
+  the clients then say "Runs outside tmux; it has no terminal to open." and
+  show the value only as display text. `--backend` on a
+  client's spawn is held to the names the kernel lists: `sessionBackends` of
+  `oats version --json` and the session providers `oats inspect --json`
+  reports.
 - **`color`** (feature `instance-color`): the instance's colour, one of
   `sand`, `sage`, `slate`, `mauve`, `clay`, `olive`, or `null` for none,
   from the home's own record ([An instance's colour](#an-instances-colour-oats-instance-color));

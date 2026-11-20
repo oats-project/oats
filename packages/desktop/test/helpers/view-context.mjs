@@ -43,6 +43,7 @@ import { retiredTabs, tabShowsRow, otherIncarnation, terminalOrigin } from "../.
 import { dotColor, paintDotColor } from "../../renderer/instance-dot.mjs";
 import { syncWaitingRow } from "../../renderer/waiting-row.mjs";
 import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, anyBelow } from "../../renderer/roster-disclosure.mjs";
+import { noTerminal } from "../../renderer/provider-row.mjs";
 
 /** Every root opened by hand: the roster as it was drawn before roots started collapsed. */
 class AllOpen extends Set { has() { return true; } }
@@ -53,6 +54,8 @@ export const viewContext = () => ({
   rehomeMap, viewMembership: createViewMembership(), rehomeWorkspaceState() {},
   waitingClaim, waitingRollup, waitingSentence, waitingDetail, waitingClock, splitByDeployment,
   rowReasonLine, runtimeErrorLine, unsupportedLine, speakerLine, keptFailureLine, keptFailure, heldLine,
+  // Session providers (spec C1): why a row has no terminal, and its link (provider-row.mjs), pure, read by the roster paint.
+  noTerminal,
   // #1421 §2: an instance's colour on its dots (instance-dot.mjs), pure, read by the roster paint, the tab sync and a tab's open.
   dotColor, paintDotColor,
   shownRows: rows => rows, retires: { landed() {}, ids: () => new Set() },

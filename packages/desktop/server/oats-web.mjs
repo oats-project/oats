@@ -420,6 +420,9 @@ async function spawnAgent({ agent, agentsRoot, task, purpose, name: instanceName
     // is the local kernel's: its --server route translates for an older host.
     harness: harness ? String(harness) : undefined, harnessFlag: harnessFlag(cliState),
     backend: backend ? String(backend) : undefined,
+    // The backends this kernel lists (cli-adapter.mjs spawnArgv holds `backend` to them): its own. A session
+    // provider's name joins them with the form's choice (the soul's inspect `sessionProviders`).
+    backends: cliState.sessionBackends || ["tmux"],
     yolo,
     ...(background !== undefined ? { background } : {}),
     launchConfig,

@@ -1974,7 +1974,8 @@ trigger for it) draws what `instanceActs` (`packages/client/instance-acts.mjs`)
 decides: the acts in its order under the menu's own labels and icons, the shell's
 items (Open in split, Open pull request…) in front unless the row is `blocked` or
 `limited`, an act with a reason disabled with it, and for a `blocked` row no menu:
-asked for, it says the reason. It decides nothing itself. It opens on the row's
+asked for, it says the reason. A row on a session provider (below) gets the provider's
+link in front of them, under the provider's own label, when it carries one. It decides nothing itself. It opens on the row's
 `contextmenu` (a right-click, Shift+F10 or the ContextMenu key), as the workspace
 row's does (`workspace-switcher.mjs`): the page's own menu, never the native one; at
 the event's point when it falls on the row (a right-click's pointer; Chromium gives
@@ -2315,6 +2316,66 @@ basis is `--tab-name-min` (102px, what the floor budgets the name), so line
 breaking sees the name at its minimum and the number wraps out of sight, whole,
 only when even that does not fit (`shell.css`, `.tab-trigger`).
 
+### A row on a session provider
+
+A roster row whose `backend` is text that is not empty and not "tmux" runs on a session provider (a capability's session
+backend: "bb"): it has no tmux target and no terminal. Whether a row is one, its
+sentence ("Runs in a bb thread; open it in bb.") and its link are the shared
+home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
+`provider-row.mjs` reads that answer for the places that draw it (`noTerminal`,
+`sessionLine`):
+
+- **The row** is drawn in the state the kernel reports. One that runs can't be
+  opened: it is `aria-disabled`, as a row of unknown state is. Its activation (a
+  click, Enter) opens nothing, supersedes any open under way and says the sentence
+  in the hint's line (announced, never an alert); its title and description say it
+  too (after its own reason, for one of unknown state, whose activation says
+  nothing, as before). A stopped one opens Start…, as any row.
+- **Its context menu** offers the link first, under the provider's label (one
+  display line), and opens it in the system browser through the window's own
+  handler (`ctx.openExternal`; main opens `http` and `https` only). Open in split
+  stays listed, not enabled, with the sentence. The acts are `instanceActs`', by
+  the row's state.
+- **Its tooltip** (`rowFactsTitle`) adds `bb · thread <id>`, and the instance
+  panel's Session line reads the same where it read `tmux · <session>`
+  (`sessionLine`; the thread id is `session.threadId`, which only this machine's rows carry, shown through the
+  display filter, addressing nothing). The panel shows the row of the active
+  terminal tab only, and a provider row never has one: the panel never shows a
+  provider row, and the tooltip is where a person reads its backend and thread.
+- **Needs input and Home**: the shared gates read such a row by its own rule
+  (`packages/client/waiting-on-you.mjs` `waitingClaim`: the kernel's claim unless the row is
+  stopped; `home-board.mjs` `homeBoard`: running on `running: true` alone), since a
+  provider's `runtimeState` is never "running" and a waiting agent is idle there.
+- **Start and Restart** are sent as for any row; `start-instance.mjs` waits for no
+  terminal and opens none after one. What was started is what the receipt says when it
+  names a backend (the home's backend can move while the dialog is open): a provider's
+  name, no follow; `tmux`, the usual follow; no `backend`, the answer of the row the
+  dialog was opened with. A launched spawn whose row is a provider's is
+  complete once the roster shows it running (`spawn-jobs.mjs`: no tmux session to wait
+  for); the follow then opens no terminal and marks the row New.
+- **No terminal**: `resolveTerminalOpen` (`instance-tree-view.mjs`) answers such a
+  row `no-terminal` before any key or tab is decided, so no open, split or
+  take-over restore makes a tab for it. `workspace-tab-memory.mjs` never restores a
+  remembered tab whose last-shown row (`instanceRef`) is one; a recall runs before the
+  workspace's first roster read, so a tab whose row became one while the workspace was
+  away comes back and is closed by `retiredTabs` (P) on that first answer, quietly, as a
+  retired one is (a known limit: a home's backend can move at a start, and until that
+  answer the restored tab shows the dead tmux pane, which takes no input; holding every
+  restored terminal for the roster read would slow every workspace switch;
+  `retired-tabs-shell.test.mjs` pins the close). An interactive open from anywhere else (the palette, a view's Open, a
+  launch's `--instance`) says the sentence in a notice, never in an alert. An open of a
+  selected target (Open in split) speaks only of that target: when its own read holds the
+  home's replacement, it says the identity changed.
+
+The Schedules form is unchanged: it offers and keeps tmux only, so a schedule whose `backend` is a session
+provider is refused as before ("edit it with the CLI"). `scheduleDraft` takes the backends a form can keep
+(`schedule-read-data.mjs`, "tmux" alone by default) and `packages/client/session-backends.mjs` gives the names
+the kernel lists; a form that keeps a provider's schedule, with the read of its soul's inspection that needs,
+comes with the New agent form's backend choice.
+
+Tests: `provider-rows.test.mjs`, and the A4 cases of `workspace-tab-memory.test.mjs`,
+`retired-tabs.test.mjs` and `instance-tree.test.mjs`.
+
 ### Workspace-local tab memory
 
 `workspace-tab-memory.mjs` retains each workspace's group membership/order,
@@ -2375,10 +2436,11 @@ remembers a key; it is a restoration fallback only.
 
 `retiredTabs(tabs, panel)` is the one rule that decides a tab's instance is
 retired, and its header lists the panel facts that prove each case: (R) the same
-home with another incarnation, (G) a remote row `missingRemotely`, (A) absent
+home with another incarnation, (G) a remote row `missingRemotely`, (P) a row that
+now runs on a session provider (it has no terminal), (A) absent
 from a successful, current read of the tab's recorded deployment (its
 `deployments[]` entry reachable, not stale, of the tab's kind, and no kept
-`error` or `serverUnreached` row for it). (R) and (G) count only from a current
+`error` or `serverUnreached` row for it). (R), (G) and (P) count only from a current
 read of the row's own deployment: a held row keeps its last-read facts. Anything
 it cannot prove keeps the tab.
 `refreshContextRoster` runs it (`closeRetiredTabs`) on an owned answer of the

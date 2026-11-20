@@ -10,6 +10,8 @@
  *     { code: 'unsupported-session', sentence, origin? }
  *     { code: 'not-running', sentence }                   an `open` act's only (`openAct`)
  *     { code: 'state-unknown', sentence }                 an `open` act's only
+ *     { code: 'no-terminal', sentence, link? }            an `open` act's only: the row runs on a session provider
+ *                                                         link: { label, url }, what the provider offers instead
  *
  * A client may switch on `code`, and on `key` or `kind` when it needs to; never on the sentence.
  * The sentences are the ones the shared tables already produce. Two of them can be text this home did
@@ -49,12 +51,28 @@
  *   running === true                                      inspect, restart, stop, retire
  *   running === false                                     inspect, start, stop, retire
  *   running unknown                                       inspect, stop, retire
+ * A row on a session provider (instance-presentation.mjs `sessionProvider`: "bb", say) is offered by the
+ * same last three lines, from the `running` the kernel reports for it: the kernel starts, stops and retires
+ * it through its provider.
  *
  *   openAct(instance) -> { verb: 'open', enabled, reason: Reason | null } | null
  *
  * Whether the row's terminal can be opened, and why not. It is not one of `acts`: it is read from
- * `instanceActs`'s answer and from nothing else of the row, so the order above is written once.
+ * `instanceActs`'s answer, and of the row only from whether it runs on a session provider, so the order
+ * above is written once.
  *   blocked or limited is set       null: the row's own reason says why, and a client adds no act
+ *   a Herdr-recorded row            not enabled, with Start's own reason (unsupported-session), as below
+ *   a row on a session provider     not enabled (no-terminal), whatever its state: it has no terminal.
+ *                                   The sentence names where the agent runs ("Runs in a bb thread; open it
+ *                                   in bb."), this home's own, built from the provider's name when the
+ *                                   row's `backend` is one (`sessionProviderName`); a row whose `backend`
+ *                                   is any other text says "Runs outside tmux; it has no terminal to
+ *                                   open.", and none of that text. `link` is
+ *                                   the row's `open` (`openLink`: `{ label, url }`, an http(s) url), there
+ *                                   only for a row of this machine that carries one: another machine's url
+ *                                   is its own loopback. A client may show `link` as an external link (the
+ *                                   label through `displayLine`); none attaches, splits or opens a
+ *                                   terminal for the row, and none restores a remembered tab for it.
  *   restart is listed, enabled      enabled: the row runs
  *   start is listed, enabled        not enabled (not-running)
  *   start is listed, not enabled    not enabled, with that act's own reason (unsupported-session)
@@ -63,12 +81,12 @@
  * client's, and is not here.
  */
 import { heldHome } from './instance-tree.mjs';
-import { unsupportedSession } from './instance-presentation.mjs';
+import { unsupportedSession, sessionProvider, sessionProviderName, openLink } from './instance-presentation.mjs';
 import { canAddressRemote, rowReason } from './remote-address.mjs';
 
 const act = (verb, reason = null, secondary = false) => ({ verb, enabled: !reason, reason, ...(secondary ? { secondary: true } : {}) });
 // An `open` act's own two codes, and the one sentence both carry.
-const NOT_RUNNING = 'not-running', STATE_UNKNOWN = 'state-unknown';
+const NOT_RUNNING = 'not-running', STATE_UNKNOWN = 'state-unknown', NO_TERMINAL = 'no-terminal';
 const NO_LIVE_TERMINAL = 'No live terminal is reported.';
 
 export function instanceActs(instance) {
@@ -97,6 +115,15 @@ export function instanceActs(instance) {
 export function openAct(instance) {
   const { blocked, limited, acts } = instanceActs(instance);
   if (blocked || limited) return null;
+  // A session provider's row has no terminal in any state. After the held and unaddressable rows, whose own
+  // reason stands; a Herdr-recorded row is no provider's (`sessionProvider`) and keeps Start's reason below.
+  const provider = sessionProvider(instance);
+  if (provider) {
+    const link = instance.server ? null : openLink(instance);
+    // The sentence is this home's own, shown as written: only a provider's name is set in it, never other text of the row.
+    const sentence = sessionProviderName(provider) ? `Runs in a ${provider} thread; open it in ${provider}.` : 'Runs outside tmux; it has no terminal to open.';
+    return act('open', { code: NO_TERMINAL, sentence, ...(link ? { link } : {}) });
+  }
   const restart = acts.find(({ verb }) => verb === 'restart'), start = acts.find(({ verb }) => verb === 'start');
   if (restart?.enabled) return act('open');
   if (start?.enabled) return act('open', { code: NOT_RUNNING, sentence: NO_LIVE_TERMINAL });

@@ -235,3 +235,50 @@ test("an instance whose state is not known: the dialog's status carries the row'
   assert.equal(markup.textContent, `Desktop's terminal check says: ${MARKUP}`); assert.equal(markup.querySelector("b, script"), null);
   assert.equal((await status({ runtimeError: CONTROL, runtimeErrorOrigin: "kernel" })).textContent, DETAIL_WITHHELD);
 });
+
+// Session providers (spec C1): a row whose `backend` is a provider's name has no terminal.
+test("a started instance on a session provider: the dialog closes, no terminal is opened or waited for, and nothing is said of one", async () => {
+  for (const ready of [true, false, async () => assert.fail("no terminal is waited for")]) {
+    const s = setup({ ready, row: { backend: "bb", tmux: null, session: { provider: "oats.bb", threadId: "thr_x" } } });
+    try {
+      await tick(); s.submit(); await tick(); await tick();
+      assert.ok(s.calls.some((c) => c.path.startsWith("/api/start/")), "the start is sent, as for any row");
+      assert.equal(s.modal.isConnected, false);
+      assert.deepEqual([s.opened, s.notified], [[], []]);
+    } finally { s.cleanup(); }
+  }
+});
+
+test("a start answered on a session provider, for a row the dialog was opened with as a tmux row: no terminal is waited for or opened, and nothing is said of one; a receipt on tmux, or with no backend, follows as before", async () => {
+  const receipt = backend => ({ instance: "accountant-minerva", home: "/workspace/agents/accountant/instances/accountant-minerva", ...(backend === undefined ? {} : { backend }) });
+  for (const ready of [false, async () => assert.fail("no terminal is waited for")]) {
+    const s = setup({ ready, start: () => ({ ...receipt("bb"), session: { provider: "oats.bb" }, target: null }) });
+    try {
+      await tick(); s.submit(); await tick(); await tick();
+      assert.equal(s.modal.isConnected, false);
+      assert.deepEqual([s.opened, s.notified], [[], []], "the receipt's backend decides, not the captured row");
+    } finally { s.cleanup(); }
+  }
+  for (const backend of ["tmux", undefined, ""]) {
+    const s = setup({ start: () => receipt(backend) });
+    try {
+      await tick(); s.submit(); await tick(); await tick();
+      assert.deepEqual(s.opened, [s.instance], String(backend));
+    } finally { s.cleanup(); }
+  }
+  // The other way: the dialog was opened on a provider row, and the home moved back to tmux meanwhile. A receipt
+  // that names tmux is followed as any start; one that names no backend keeps the captured row's answer (none).
+  const bbRow = { backend: "bb", tmux: null, session: { provider: "oats.bb", threadId: "thr_x" } };
+  for (const [backend, opens] of [["tmux", true], [undefined, false], ["", false], ["bb", false]]) {
+    const s = setup({ row: bbRow, start: () => receipt(backend) });
+    try {
+      await tick(); s.submit(); await tick(); await tick();
+      assert.deepEqual([s.opened, s.notified], [opens ? [s.instance] : [], []], String(backend));
+    } finally { s.cleanup(); }
+  }
+  const late = setup({ row: bbRow, ready: false, start: () => receipt("tmux") });
+  try {
+    await tick(); late.submit(); await tick(); await tick();
+    assert.deepEqual([late.opened, late.notified], [[], ["accountant-minerva was started, but its terminal isn't ready yet. Open it from its row when it is."]], "a tmux start is waited for, as any");
+  } finally { late.cleanup(); }
+});

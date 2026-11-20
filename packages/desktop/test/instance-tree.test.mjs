@@ -525,6 +525,30 @@ test("hasInstanceChildren by identity: a childless duplicate-name parent gets NO
   assert.equal(m.hasInstanceChildren([{ instance: "a", parentInstance: "p" }], "a"), false);
 });
 
+test("resolveTerminalOpen, A4: a row on a session provider resolves to no terminal, before any key exists, with the shared sentence; a restore leaves it out", async () => {
+  const m = { ...await import("../../client/instance-tree.mjs"), ...await import("../renderer/instance-tree-view.mjs") };
+  const { openAct } = await import("../../client/instance-acts.mjs");
+  const a = { instance: "a", agentsRoot: "/ws1/agents", home: "/ws1/a", running: true, backend: "bb", tmux: null };
+  const roster = [a, { instance: "b", agentsRoot: "/ws1/agents", home: "/ws1/b", running: true, tmux: { session: "s1" } }];
+  for (const ref of ["a", { instance: "a", home: "/ws1/a", agentsRoot: "/ws1/agents" }]) {
+    const r = m.resolveTerminalOpen(roster, ref, "w");
+    assert.deepEqual(r, { error: "no-terminal", name: "a", row: a, sentence: openAct(a).reason.sentence });
+    assert.equal(r.sentence, "Runs in a bb thread; open it in bb.");
+  }
+  // Whatever its state, and when the kernel holds it (its own reason is the row's; the open still has no terminal).
+  for (const extra of [{ running: false }, { running: null }, { running: true, rollbackIncomplete: true }]) {
+    const r = m.resolveTerminalOpen([{ ...a, ...extra }], "a", "w");
+    assert.equal(r.error, "no-terminal", JSON.stringify(extra)); assert.equal(r.key, undefined); assert.ok(r.sentence);
+  }
+  // The tmux row beside it, and a row that names tmux, resolve as they always did.
+  assert.equal(m.resolveTerminalOpen(roster, "b", "w").error, undefined);
+  assert.equal(m.resolveTerminalOpen([{ ...a, backend: "tmux" }], "a", "w").inst.instance, "a");
+  // The shell's restore of a handed layout (restoreHandedLayout) leaves out every reference that resolves with an
+  // error, and says nothing: a remembered terminal of 'a' is one.
+  const shell = (await import("node:fs")).readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
+  assert.match(shell, /const r = resolveTerminalOpen\(panel\.instances \|\| \[\], ref, ws\);\n    if \(r\.error\) continue;/);
+});
+
 test("resolveTerminalOpen: string and object refs of one identity mint ONE key; ambiguity refuses before any key exists (review 7d740f9)", async () => {
   const m = { ...await import("../../client/instance-tree.mjs"), ...await import("../renderer/instance-tree-view.mjs") };
   const uniqueRoster = [

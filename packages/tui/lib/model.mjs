@@ -108,7 +108,11 @@ export function reachedMachines(state, at) {
  *  that was not reached (the shared home marks it) still carries the word of its last report,
  *  which is not its state now: it gets the shared word, so nothing reads as stopped, or as
  *  running, that is only not reached. */
-const stateWord = (row) => (text(row.runtimeState) && row.serverUnreached !== true ? row.runtimeState : runtimeState(row));
+const stateWord = (row) => (text(row.runtimeState) && row.serverUnreached !== true && !providerKnown(row) ? row.runtimeState : runtimeState(row));
+/** A row on a session provider (the shared openAct's `no-terminal`) whose `running` the kernel answered: its
+ *  `runtimeState` is the provider's word (`unknown` while it runs), which would contradict its mark, so its
+ *  state is the shared word for its `running`. One the kernel answered `running: null` keeps the kernel's word. */
+const providerKnown = (row) => typeof row.running === "boolean" && openAct(row)?.reason?.code === "no-terminal";
 /** The word a list row shows beside its name, or null: only what its mark cannot say. That is a
  *  held home's state (Retiring… while a retire runs, or this run's own is in flight), else the
  *  shared label of the reason the row can't be reached or opened (remote-address.mjs rowReason:
@@ -528,7 +532,8 @@ const elsewhere = (row) => typeof row.server === "string" && row.server !== "";
  *        for a row of another machine (its preflight runs first)
  *    { open: false, said: { said, under } }             opens nothing, and this says why
  *  Whether a row can be opened is the shared openAct's, switched on its reason's code, never on a
- *  sentence. The viewer is started with no key of its own (the TUI takes the back key before the
+ *  sentence. A row on a session provider is never opened, from the list, the palette, the steps or a
+ *  workspace's remembered tabs (they all ask here); its reason's link is printed under its sentence. The viewer is started with no key of its own (the TUI takes the back key before the
  *  pane sees it), so a kernel or a host of any version is opened alike. */
 export function openDecision(state, row, acts) {
   const name = row.instance, id = instanceId(row);
@@ -542,7 +547,13 @@ export function openDecision(state, row, acts) {
   if (!act.enabled) {
     if (act.reason.code === "not-running") return no(OPEN_WORDS.notRunning(name));
     if (act.reason.code === "state-unknown") return no(OPEN_WORDS.stateUnknown(name));
-    return no([], outside(reasonSpoken(act.reason)));
+    // A row on a session provider (code `no-terminal`) has no terminal: the shared home's sentence says where
+    // the agent runs, and under it the link the provider offers (its label and its url, one text from outside),
+    // for the person to open themselves. The link carries no mark of who made it, and the TUI names no speaker
+    // of its own (test/tui-boundary.test.mjs): it stands in quotation marks, as any text nobody vouches for.
+    // Nothing is attached or started.
+    const link = act.reason.link ? spoken(`${act.reason.link.label}: ${act.reason.link.url}`, undefined, false) : null;
+    return no([], [...outside(reasonSpoken(act.reason)), ...outside(link)]);
   }
   if (!elsewhere(row)) return { open: true, id, name, machine, target: { home: row.home }, routed: false };
   return { open: true, id, name, machine, target: { serverId: row.server, instance: row.instance, home: row.home }, routed: true };
