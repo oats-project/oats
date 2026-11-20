@@ -306,32 +306,101 @@ for (const verb of ["start", "restart"]) {
   });
 }
 
-test("a launch that died between two of its writes leaves an unsettled home, never a record that contradicts its receipt", async (t) => {
+// The write orders, by the writers: the kernel dies (SIGKILL) at a named point between two writes
+// (lib/core.mjs dieAt), and the records it leaves are a state of the page, which the next verb acts
+// on. A row: [the point, the state the home is built in, the verb that dies, what the provider had
+// been asked to do by then (its reads aside), the state left, the next verb, what the provider is asked then, the state after].
+const DEATHS = [
+  // The mark: the receipt, then the record.
+  ["mark:receipt-written", "planned", "start", [], "sent", "stop", ["stop:null"], "planned"],
+  ["mark:receipt-written", "stopped (operator)", "start", ["stop:E"], "resent", "start", ["stop:null", "stop:E", "launch"], "running"],
+  // A launch that answered: the receipt's endpoint with the mark kept, the record, the mark removed.
+  ["outcome:receipt-written", "planned", "start", ["launch"], "resent", "start", ["stop:null", "stop:E", "launch"], "running"],
+  ["outcome:receipt-written", "stopped (operator)", "start", ["stop:E", "launch"], "resent", "stop", ["stop:E", "stop:null"], "stopped"],
+  ["outcome:record-written", "planned", "start", ["launch"], "resent", "retire", ["stop:E", "stop:null"], "gone"],
+  ["outcome:record-written", "running", "restart", ["stop:E", "launch"], "resent", "start", ["stop:null", "stop:E", "launch"], "running"],
+  // A launch the provider refused: unmarked, the record, then the receipt.
+  ["unmark:record-written", "planned", "start (refused)", ["launch"], "sent", "start", ["stop:null", "launch"], "running"],
+  // A settle: the provider's stop, the record, then the receipt.
+  ["settle:record-written", "sent", "stop", ["stop:null"], "sent", "stop", ["stop:null"], "planned"],
+  ["settle:record-written", "resent (not stopped)", "stop", ["stop:E", "stop:null"], "resent", "start", ["stop:null", "stop:E", "launch"], "running"],
+  // The stop rule: stoppedAt, the stop receipt, then the provider's stop.
+  ["stop:stoppedAt-written", "running", "stop", [], "stopped", "stop", ["stop:E"], "stopped"],
+  ["stop:receipt-written", "running", "stop", [], "stopped", "start", ["stop:E", "launch"], "running"],
+  ["stop:stoppedAt-written", "running", "restart", [], "stopped", "start", ["stop:E", "launch"], "running"],
+  // The resume of a home stopped with the host: the notice, stoppedAt cleared, the stop receipt removed.
+  ["resume:notice-sent", "stopped (host)", "resume", ["input"], "stopped", "resume", ["input"], "running"],
+  ["resume:stop-cleared", "stopped (host)", "resume", ["input"], "running", "stop", ["stop:E"], "stopped"],
+];
+/** The verb as its own process, which dies at `point` → the signal that ended it. */
+function dies(fx, verb, home, point) {
+  const name = home.split("/").pop();
+  const env = { ...fx.env, OATS_TEST_PROVIDER_DIE_AT: point };
+  const run = (args, e = env) => spawnSync(process.execPath, [CLI, ...args], { cwd: fx.dep, env: e, encoding: "utf8" });
+  if (verb === "stop") {
+    const plan = JSON.parse(run(["instance", "stop", name, "--plan", "--json"], fx.env).stdout.trim().split("\n").pop());
+    return run(["instance", "stop", name, "--apply", "--plan-revision", plan.result.planRevision, "--idempotency-key", `die-${name}`, "--json"]).signal;
+  }
+  if (verb === "resume") return run(["session", "start", "--resume", "--home", home, "--json"]).signal;
+  return run(["session", verb.startsWith("start") ? "start" : verb, "--home", home, "--json"]).signal;
+}
+test("the kernel dying between two writes leaves a state of the page, and the next verb acts on it", async (t) => {
   const fx = providerDeployment(t);
   fx.controls = {};
-  // Between the mark's two writes: the receipt says sent, the record still says not launched.
-  const marked = await STATES.planned(fx, "w1");
-  writeRuntime(marked, { launched: true, backend: "fake", provider: FAKE_CAPABILITY, launchSent: SENT_AT });
-  assert.deepEqual([recordOf(marked).launched, await answerOf(fx, "inspect", marked)], [false, "E_SESSION_UNAVAILABLE"]);
-  assert.deepEqual([await answerOf(fx, "stop", marked), stateOf(marked)], ["stopped", "planned"]);
-
-  // After the answer: the receipt has the new endpoint, still marked as sent; the record has none yet.
-  const answered = await STATES.planned(fx, "w2");
-  writeRuntime(answered, { launched: true, backend: "fake", provider: FAKE_CAPABILITY, endpoint: E("w2", 1), stoppedAt: null, launchSent: SENT_AT }, { launched: true });
-  assert.deepEqual([recordOf(answered).session.endpoint, await answerOf(fx, "inspect", answered), await answerOf(fx, "input", answered)], [null, "E_SESSION_UNAVAILABLE", "E_SESSION_INPUT_FAILED"]);
-  fx.clearCalls();
-  assert.equal(await answerOf(fx, "stop", answered), "stopped");
-  assert.deepEqual([callsOf(fx), stateOf(answered), recordOf(answered).session.endpoint], [["stop:E", "stop:null"], "stopped", E("w2", 1)], "stopped, and the record rewritten to agree");
-
-  // The same on a home launched before: the receipt has the new endpoint, the record the old one.
-  const again = await STATES.running(fx, "w3");
-  writeRuntime(again, { ...runtimeOf(again), endpoint: E("w3", 9), launchSent: SENT_AT });
-  assert.deepEqual([recordOf(again).session.endpoint, await answerOf(fx, "status", again)], [E("w3", 1), "unknown"]);
-  assert.equal(await answerOf(fx, "start", again), "launched");
-  assert.deepEqual([stateOf(again), recordOf(again).session.endpoint], ["running", runtimeOf(again).endpoint]);
-
-  // The record written too, and only the mark's removal missing: settled the same way.
-  const last = await STATES.running(fx, "w4");
-  writeRuntime(last, { ...runtimeOf(last), launchSent: SENT_AT });
-  assert.deepEqual([await answerOf(fx, "retire", last), stateOf(last)], ["retired", "gone"]);
+  let n = 0;
+  for (const [point, state, verb, asked, left, next, then, after] of DEATHS) {
+    await t.test(`${verb} of a ${state} home dies at ${point}: ${left}; then ${next}: ${then.join(", ") || "not called"}; ${after}`, async () => {
+      const name = `d${++n}`;
+      const home = await STATES[state](fx, name);
+      if (verb.endsWith("(refused)")) { fx.controls = { ...fx.controls, [name]: { launch: { error: { code: "E_BACKEND_NOT_READY", message: "down" } } } }; fx.control(fx.controls); }
+      fx.clearCalls();
+      assert.equal(dies(fx, verb, home, point), "SIGKILL", "the kernel died at the point");
+      // (What the provider was told to do: its reads, which a plan makes too, are not what a write order is about.)
+      assert.deepEqual([callsOf(fx, home).filter((call) => call !== "inspect"), stateOf(home)], [asked, left]);
+      // An unsettled home is unknown to a read; a settled one's record agrees with its receipt.
+      if (left === "sent" || left === "resent") assert.equal(await answerOf(fx, "inspect", home), "E_SESSION_UNAVAILABLE");
+      else assert.doesNotThrow(() => inspectInstanceSession(home));
+      if (verb.endsWith("(refused)")) { const { [name]: _gone, ...rest } = fx.controls; fx.controls = rest; fx.control(fx.controls); }
+      fx.clearCalls();
+      const answered = await answerOf(fx, next, home);
+      assert.equal(/^E_/.test(answered), false, `${next} answered ${answered}`);
+      assert.deepEqual([callsOf(fx, home), stateOf(home)], [then, after]);
+      if (after !== "gone") assert.doesNotThrow(() => inspectInstanceSession(home), "the record and the receipt agree");
+    });
+  }
 });
+
+test("a stop killed while the provider stops leaves the home stopped, with the stop's receipt: the host's stop is still one a resume brings back", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("k");
+  fx.control({ k: { stop: { sleepMs: 1500 } } });
+  fx.clearCalls();
+  // The host's stop, as `oats host run` gives it, killed during the provider's stop.
+  const child = spawn(process.execPath, [HOST_STOP_CHILD, home, "20000"], { cwd: fx.dep, env: fx.env, stdio: "ignore" });
+  const done = new Promise((resolve) => child.on("close", resolve));
+  for (let i = 0; i < 200 && !fx.verbs("stop").length; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(fx.verbs("stop").length, 1, "the provider's stop is in flight");
+  child.kill("SIGKILL");
+  await done;
+  assert.deepEqual([stateOf(home), stopReceiptOf(home).reason], ["stopped", "host-stop"], "stoppedAt and the stop receipt were written before the provider was asked");
+  fx.control({});
+  fx.clearCalls();
+  assert.equal(await answerOf(fx, "resume", home), "resumed");
+  assert.deepEqual([callsOf(fx, home), stateOf(home), stopReceiptOf(home)], [["input"], "running", null]);
+});
+
+test("a resume that died after it cleared the host's stop left that stop's receipt: a later loss of the same start is counted as a loss, in the sweep's plan too", async (t) => {
+  const fx = providerDeployment(t);
+  fx.controls = {};
+  const home = await STATES["stopped (host)"](fx, "r");
+  assert.equal(dies(fx, "resume", home, "resume:stop-cleared"), "SIGKILL");
+  assert.deepEqual([stateOf(home), stopReceiptOf(home).reason], ["running", "host-stop"]);
+  // The session is then lost: its resume is one of the home's cap, whatever that receipt says.
+  fx.control({ r: { inspect: { result: LOST } } });
+  const { providerResumes, RESUME_LIMIT } = await import("../lib/provider-resume.mjs");
+  for (let i = 0; i < RESUME_LIMIT; i++) assert.equal(await answerOf(fx, "input", home), "submitted");
+  assert.equal((await fx.inEnv(() => providerResumes(home))).count, RESUME_LIMIT);
+  const planned = fx.cli(["session", "resume", "--deployment", fx.dep, "--plan", "--json"]).json().result.rows.find((row) => row.instance === "r");
+  assert.deepEqual([planned.outcome, planned.reason], ["refused", "keeps-getting-lost"]);
+});
+

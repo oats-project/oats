@@ -5,7 +5,8 @@ Status: design of record for the lifecycle of a home on a session provider
 [capabilities.md](../capabilities.md#session-providers-sessionproviders)).
 Decided 2026-11-20. The tests in `test/session-provider-lifecycle.test.mjs`
 follow the tables below: one test per cell of "The verbs, by state", one per
-crossing, one per point at which a holder can die.
+crossing, and one per point between two writes at which the kernel can die
+(it is killed there, by a seam, and the records it leaves are checked).
 
 A provider runs the session; **OATS decides what state the home is in, from
 its own records alone**. The provider is asked only what a record cannot say
@@ -68,7 +69,9 @@ on it (stop, start, restart, retire), under that verb's claim:
 1. Ask the provider: `stop {home, endpoint: null, launchSent: t}`: stop
    whatever session rooted at this home was created at or after `t`.
 2. Not confirmed: `E_SESSION_STOP_FAILED`; the state is unchanged, and the
-   next verb asks again.
+   next verb asks again. (A retire goes on all the same when no process works
+   in the home, with a warning that names the provider's own tooling: it
+   never strands a home on a provider that does not answer.)
 3. Confirmed: no session of that launch runs. The record is rewritten to
    agree with what the receipt will say, then the receipt:
    - from *sent* → **planned** (record `launched: false`, `endpoint: null`);
@@ -87,9 +90,9 @@ before its home can be acted on):
 
 | # | Step | Record written | State after |
 |---|---|---|---|
-| 1 | Everything that can refuse: the plan, the launch hooks, the provider's `check` with the planned launch | none | unchanged |
+| 1 | What can refuse: the plan, the launch hooks, the provider's `check` with the planned launch. (Three checks run later, after step 3: the home's roots, the kernel's shim, the host run's admission. One that refuses there leaves the home as step 3 left it: stopped) | none | unchanged |
 | 2 | If unsettled: settle | see Settling | planned or stopped |
-| 3 | If launched before: stop the session at `E`. A restart of *running* records `stoppedAt` and the stop receipt first (the stop rule). A start of *stopped*, and a start of *running* whose session is gone, ask the provider's `stop {endpoint: E}` again; not confirmed is `E_SESSION_STOP_FAILED`, nothing started | receipt, stop receipt (restart) | stopped, or running-and-gone with `E` stopped |
+| 3 | If launched before: stop the session at `E`. A restart of *running* whose session is there records `stoppedAt` and the stop receipt first (the stop rule). A start or a restart of *stopped*, and of *running* whose session is gone, ask the provider's `stop {endpoint: E}` again and record nothing (so a stop that is not confirmed leaves a lost home lost, not stopped as by an operator); not confirmed is `E_SESSION_STOP_FAILED`, nothing started | receipt, stop receipt (a restart of a session that is there) | stopped, or running-and-gone with `E` stopped |
 | 4 | **Mark**: receipt `launchSent: t` (and `launched: true` from planned), then the record's `launched: true` from planned | receipt, then record | sent or resent |
 | 5 | The provider's `launch` | none | sent or resent |
 | 6a | It answered `E'`: receipt `endpoint: E'`, `stoppedAt: null`, **`launchSent` kept**; then the record (`launched: true`, `endpoint: E'`, new `startId`); then the receipt's `launchSent` removed | receipt, record, receipt | running at `E'` |
@@ -115,10 +118,10 @@ reads the launch from its receipt and record, never from the marker.
 |---|---|---|---|---|---|
 | **inspect**, **status** (none) | not launched; — | unknown (`E_SESSION_UNAVAILABLE`; row `unreachable`); — | the provider's `inspect`; unknown when it fails; gone reads *lost* | stopped; — | unknown; — |
 | **input** (none) | `E_SESSION_NOT_RUNNING`; — | `E_SESSION_NOT_RUNNING`; — | `inspect`, then `input` (below) | `E_SESSION_NOT_RUNNING`; — | `E_SESSION_NOT_RUNNING` when `stoppedAt` is set, else `E_SESSION_INPUT_FAILED`; — |
-| **stop** (`stop`) | nothing to stop | settle → planned; answers stopped | the stop rule → stopped | operator's: asks `stop {E}` again, and takes a host's stop as its own. Host's: nothing | the stop rule (when `stoppedAt` is null), then settle → stopped |
+| **stop** (`stop`) | nothing to stop | settle → planned; answers stopped | the stop rule → stopped | operator's: asks `stop {E}` again, and takes a host's stop as its own. Host's: nothing | as of *running* or of *stopped* by its `stoppedAt` (the stop rule, or `stop {E}` again), then settle → stopped; answers stopped |
 | **start** (`start`) | launch | settle, launch | `inspect`: there → `E_SESSION_RUNNING` or `E_SESSION_UNKNOWN`; gone → launch | launch | settle, launch |
-| **restart** (`start`) | launch | settle, launch | `inspect` (unknown refuses), the stop rule, launch | launch | settle, launch |
-| **resume** (`resume`) | `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` | gone → count, then `input` (the notice); there → `E_SESSION_RUNNING` / `E_RESUME_NOT_LOST` | host's stop → clear `stoppedAt`, `input`; operator's → `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` |
+| **restart** (`start`) | launch | settle, launch | `inspect` (unknown refuses): there → the stop rule, launch; gone → launch | launch | settle, launch |
+| **resume** (`resume`) | `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` | gone → count, then `input` (the notice); there → `E_SESSION_RUNNING` / `E_RESUME_NOT_LOST` | host's stop → `input` (the notice), then `stoppedAt` cleared, then the stop receipt removed → running; operator's → `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` |
 | **retire** (`retire`) | remove | settle, scan, remove | the stop rule, scan, remove | `stop {E}` again, scan, remove | the stop rule, settle, scan, remove |
 
 **The stop rule** (every OATS stop of a *running* home: stop, restart,
@@ -130,6 +133,13 @@ write on, input is refused whatever the provider does.
 
 **Scan** (a retire): no process may work in the home after the provider's
 stop, confirmed or not.
+
+**A resume's notice that fails.** Refused by the provider (a prompt is open,
+it was queued): nothing was sent; a lost session's count is given back, and a
+home stopped with the host stays so, still to resume. Failed otherwise: the
+provider may have restarted the session on it; a lost session's count stays,
+and for a home stopped with the host, which stays stopped, the provider is
+asked `stop {E}` again.
 
 **Input to a running home**: `inspect`; gone is a lost session, whose input
 is a resume (counted before the provider is called, refused at the cap);
@@ -160,8 +170,11 @@ orders of "A launch" and of the stop rule:
 | before the mark (step 4) | as before the verb | acts on it |
 | between the mark's two writes | sent, record `launched: false` (not compared) | settles |
 | during the provider's launch, or after its answer and before the last write of 6a | sent or resent; a session may run | settles: the provider stops it by home and `launchSent` |
-| during the stop rule, after `stoppedAt` | stopped; the provider may not have been asked | a stop or a start asks `stop {E}` again |
+| during the stop rule, after `stoppedAt` | stopped (as an operator's until the stop receipt is written, then as the stop's own); the provider may not have been asked | a stop or a start asks `stop {E}` again |
 | during a settle, after the provider confirmed | unsettled still, or settled | settles again (the provider's stop is idempotent), or acts |
+| during a launch the provider refused, between the record and the receipt of its unmarking | sent | settles (there is nothing to stop) |
+| during a resume of a home stopped with the host, after its notice | stopped with the host; its session may run again | the sweep sends the notice again; a stop or a start asks `stop {E}` |
+| during that resume, after `stoppedAt` was cleared | running, with the host's stop receipt left | acts on a running home; a later loss of that start is a loss like any other, counted (a stop receipt says the host's stop only beside a receipt that says stopped) |
 
 **An input in flight across a state change.** An input holds no claim and a
 provider restarts a session on it, so the kernel checks after the send, with
