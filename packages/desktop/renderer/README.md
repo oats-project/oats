@@ -1895,7 +1895,7 @@ section is the module map.
   souls (`+`). A pick goes to `openNewAgent` (shell.mjs), today the spawn dialog
   through `views/spawn.mjs` `preselectSpawn()`: the
   spawn dialog scoped to that soul, as its page's New agent opens it, with focus
-  in Name. Opening never spawns; Spawn stays explicit. Attached-only, refused
+  in the Opening instruction. Opening never spawns; Spawn stays explicit. Attached-only, refused
   and CLI pending/unavailable souls open their soul page instead, which says
   why. Dismissing the dialog returns to where the operator was
   (`surface-return.mjs`). No second spawn form exists.
