@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { childDeclarationFile, childDeclarationMaxBytes, parseChildDeclaration } from "./supervisor.mjs";
 
 function required(env, name) {
   assert.ok(env[name], `set ${name} to the reviewed Compose value`);
@@ -12,18 +13,20 @@ function required(env, name) {
 
 const ids = (env) => ({ uid: env.AGENT_UID || "20001", gid: env.AGENT_GID || "20001" });
 
-// The acceptance host says whether the bb fragment was included: AGENT_BB=1,
-// the entry compose.agent.bb.yaml sets. Nothing else selects it.
-export function bbSelected(env) {
-  assert.ok(env.AGENT_BB === undefined || env.AGENT_BB === "" || env.AGENT_BB === "1", "AGENT_BB must be 1 (compose.agent.bb.yaml is included) or unset");
-  return env.AGENT_BB === "1";
+// The acceptance host says which declared child the deployment switched on:
+// AGENT_CHILD=<name>, the one entry a derived image's fragment sets. Nothing
+// else selects it. Answers the name, or null.
+export function childSelected(env) {
+  if (env.AGENT_CHILD === undefined || env.AGENT_CHILD === "") return null;
+  assert.match(env.AGENT_CHILD, /^[a-z0-9-]{1,20}$/, "AGENT_CHILD must be the declared child's name (1 to 20 lowercase letters, digits or dashes) or unset");
+  return env.AGENT_CHILD;
 }
 
-// The optional public-CA mount and the bb fragment's one fixed entry are the
-// only deployment environment exceptions.
+// The optional public-CA mount and the child switch's one entry are the only
+// deployment environment exceptions.
 // Both trust settings reach the broker before it starts, including its Node child.
-export function agentEnvironment(imageEnv, publicCA = false, bb = false) {
-  const fixed = [...(publicCA ? ["SSL_CERT_FILE=/etc/agent-trust/ca.pem", "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem"] : []), ...(bb ? ["AGENT_BB=1"] : [])];
+export function agentEnvironment(imageEnv, publicCA = false, child = null) {
+  const fixed = [...(publicCA ? ["SSL_CERT_FILE=/etc/agent-trust/ca.pem", "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem"] : []), ...(child ? [`AGENT_CHILD=${child}`] : [])];
   if (!fixed.length) return imageEnv;
   const names = fixed.map(entry => entry.split("=", 1)[0]);
   return [...imageEnv.filter(entry => !names.includes(entry.split("=", 1)[0])), ...fixed];
@@ -83,10 +86,13 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
   equal("agent IP", info.NetworkSettings.Networks[network].IPAddress, required(env, "AGENT_IP"));
   const names = (entries) => entries.map((entry) => entry.split("=", 1)[0]);
   assert.ok(Array.isArray(image?.Config?.Env), "image environment baseline is required");
-  const bb = bbSelected(env);
-  const actualEnv = info.Config.Env || [], expectedEnv = agentEnvironment(image.Config.Env, !!env.AGENT_CA_FILE, bb);
-  // An image that sets the switch itself is refused too: only the fragment turns bb on.
-  if (!bb) assert.ok(!names(actualEnv).includes("AGENT_BB"), "AGENT_BB is set in the container: include compose.agent.bb.yaml and export AGENT_BB=1 for acceptance, or recreate the container without it");
+  const child = childSelected(env);
+  const actualEnv = info.Config.Env || [], expectedEnv = agentEnvironment(image.Config.Env, !!env.AGENT_CA_FILE, child);
+  // The removed switch is refused whoever set it, and so is an image that sets
+  // the switch itself: the declaration is the image's, the switch the deployment's.
+  assert.ok(!names(actualEnv).includes("AGENT_BB"), "AGENT_BB is set in the container: it is gone; recreate the container with an image that declares its child and AGENT_CHILD");
+  assert.ok(!names(image.Config.Env).includes("AGENT_CHILD"), "the image sets AGENT_CHILD itself: only the deployment's Compose fragment may");
+  if (!child) assert.ok(!names(actualEnv).includes("AGENT_CHILD"), "AGENT_CHILD is set in the container: export the same AGENT_CHILD for acceptance, or recreate the container without it");
   const allNames = new Set([...names(actualEnv), ...names(expectedEnv)]);
   const entriesFor = (entries, name) => entries.filter((entry) => entry.split("=", 1)[0] === name).sort();
   const changedNames = [...allNames].filter((name) => !isDeepStrictEqual(entriesFor(actualEnv, name), entriesFor(expectedEnv, name)));
@@ -188,10 +194,35 @@ function runtimeCheck(uid, gid, outboxGid) {
   socket.once("error", (err) => { console.error(err.message); process.exit(1); });
 }
 
-// Serialized inside the agent, with the bb fragment only. /proc/net lists every
+// Serialized inside the agent, with AGENT_CHILD only: the supervisor's own
+// checks of the declaration file, on the running container. Answers its text.
+export function declarationCheck(path, maxBytes, fs = require("node:fs")) {
+  try {
+    const stat = fs.lstatSync(path);
+    if (stat.isSymbolicLink() || !stat.isFile() || stat.uid !== 0 || (stat.mode & 0o022) !== 0 || stat.size > maxBytes) throw new Error("invalid file");
+    let writable = true;
+    try { fs.accessSync(path, fs.constants.W_OK); }
+    catch (error) { if (error.code === "EROFS" || error.code === "EACCES") writable = false; else throw error; }
+    if (writable) throw new Error("writable declaration");
+    return fs.readFileSync(path, "utf8");
+  } catch { throw new Error(path + " must be a regular file owned by root, not a symlink, not writable by its group, by others or by the agent, and at most " + maxBytes + " bytes (contents withheld)"); }
+}
+
+// Serialized inside the agent, with AGENT_CHILD only: what the image recorded
+// as its child's version at build time. One short printable line, or refused.
+export function versionFileCheck(path, fs = require("node:fs")) {
+  try {
+    const stat = fs.statSync(path);
+    if (!stat.isFile() || stat.size > 256) throw new Error("invalid file");
+    return fs.readFileSync(path, "utf8");
+  } catch { throw new Error("the declared version file must be a readable regular file of at most 256 bytes (contents withheld)"); }
+}
+
+// Serialized inside the agent, with AGENT_CHILD only. /proc/net lists every
 // listening socket of the container's network namespace, whoever owns it.
-// bb's API has no login, so nothing but sshd may listen beyond loopback.
-export function listenerCheck(fs = require("node:fs"), endianness = require("node:os").endianness()) {
+// A declared child's ports carry no login of their own, so every declared port
+// must listen on loopback and nothing but sshd may listen beyond it.
+export function listenerCheck(ports, fs = require("node:fs"), endianness = require("node:os").endianness()) {
   // The kernel prints each 32-bit word of an address in host byte order.
   const bytes = (hex) => (hex.match(/.{8}/g) || []).flatMap((word) => {
     const pairs = word.match(/../g).map((pair) => parseInt(pair, 16));
@@ -218,8 +249,8 @@ export function listenerCheck(fs = require("node:fs"), endianness = require("nod
   }
   const exposed = listeners.filter((listener) => !listener.loopback && listener.port !== 2222).map((listener) => listener.name);
   if (exposed.length) throw new Error("listening beyond loopback: " + exposed.join(", ") + " (only sshd's port 2222 may)");
-  for (const port of [38886, 38887]) {
-    if (!listeners.some((listener) => listener.port === port)) throw new Error("bb is not listening on 127.0.0.1:" + port);
+  for (const port of ports) {
+    if (!listeners.some((listener) => listener.port === port && listener.loopback)) throw new Error("the declared child is not listening on loopback port " + port);
   }
   return "listening TCP sockets: " + listeners.map((listener) => listener.name).sort().join(", ") + "; all on loopback except sshd's port 2222";
 }
@@ -379,11 +410,19 @@ export function main(args, env, { spawnSync: run = spawnSync } = {}) {
   for (const line of token.evidence) report(line);
   if (env.AGENT_CA_FILE) report(`PASS ${JSON.parse(program(publicCACheck, []))}`);
   if (env.AGENT_MIRRORS_DIR) report(`PASS ${JSON.parse(program(mirrorsCheck, []))}`);
-  if (bbSelected(env)) {
-    report(`PASS ${JSON.parse(program(listenerCheck, []))}`);
-    const pinned = JSON.parse(readFileSync(new URL("../agent-bb/package.json", import.meta.url), "utf8")).dependencies["bb-app"];
-    assert.equal(docker(["exec", container, "bb", "--version"]), pinned, "bb --version must equal container/agent-bb's pinned bb-app");
-    report(`PASS bb: ${pinned} (container/agent-bb's pin)`);
+  const child = childSelected(env);
+  if (child) {
+    // The declaration is read from the running container, never from a checkout.
+    let declared;
+    try { declared = parseChildDeclaration(JSON.parse(program(declarationCheck, [childDeclarationFile, childDeclarationMaxBytes]))); }
+    catch (error) { assert.fail(`${childDeclarationFile}: ${error.message}`); }
+    assert.equal(declared.name, child, `${childDeclarationFile}: name differs from AGENT_CHILD`);
+    report(`PASS ${childDeclarationFile}: root-owned regular file, not a symlink, not writable by group, others or the agent; declares ${child}`);
+    report(`PASS ${JSON.parse(program(listenerCheck, [declared.listen]))}`);
+    const recorded = JSON.parse(program(versionFileCheck, [declared.version.file])).trim();
+    assert.match(recorded, /^[\x21-\x7e](?:[\x20-\x7e]{0,62}[\x21-\x7e])?$/, "the declared version file must hold one printable line of at most 64 characters (contents withheld)");
+    assert.ok(docker(["exec", container, ...declared.version.command]) === recorded, "the declared version command must print exactly the content of the declared version file (output withheld)");
+    report(`PASS ${child}: version ${recorded} (the declared command prints the image's version file)`);
   }
   report(`PASS ${JSON.parse(program(inputsCheck, [!!env.TEAM_INPUT_DIR]))}`);
   report(`PASS ${JSON.parse(program(outboxCheck, [!!env.TEAM_OUTBOX_DIR, uid, env.TEAM_OUTBOX_GID || null]))}`);

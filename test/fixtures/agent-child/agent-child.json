@@ -1,0 +1,10 @@
+{
+  "name": "fixture",
+  "command": ["/usr/local/bin/node", "/opt/agent-child/child.mjs"],
+  "env": { "FIXTURE_CHILD_MODE": "declared" },
+  "envFromFile": { "FIXTURE_CHILD_TOKEN": "/etc/agent-login/fixture-child-token" },
+  "ready": { "url": "http://127.0.0.1:39111/", "field": "ok" },
+  "listen": [39111],
+  "version": { "command": ["/usr/local/bin/node", "/opt/agent-child/child.mjs", "--version"], "file": "/opt/agent-child/version" },
+  "stopMs": 2000
+}

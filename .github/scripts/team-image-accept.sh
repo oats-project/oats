@@ -6,7 +6,8 @@ set -euo pipefail
 fixture=$(mktemp -d)
 export TEAM="ci-$(basename "$fixture" | tr '[:upper:].' '[:lower:]-')"
 export AGENT_UID=20001 AGENT_GID=20001
-export AGENT_PIDS=256 AGENT_MEMORY=1g AGENT_CPUS=1
+# A derived image's child may need more than the base image does.
+export AGENT_PIDS="${AGENT_PIDS:-256}" AGENT_MEMORY="${AGENT_MEMORY:-1g}" AGENT_CPUS=1
 export AGENT_TMP_SIZE=134217728
 export TEAM_STATE_DIR="$fixture/state" TEAM_LOGIN_DIR="$fixture/login"
 export AUTHORIZED_KEYS_FILE="$fixture/authorized_keys" RESOLV_CONF_FILE="$fixture/resolv.conf"
@@ -14,11 +15,11 @@ export AGENTS_NETWORK="oats-$TEAM" AGENT_IP=172.30.88.2
 # The base service intentionally has no optional /work mount.
 unset TEAM_WORK_DIR TEAM_INPUT_DIR AGENT_CA_FILE AGENT_MIRRORS_DIR TEAM_OUTBOX_DIR TEAM_OUTBOX_GID
 compose=(docker compose -p "oats-$TEAM" -f container/agent/compose.agent.yaml)
-# AGENT_BB=1 runs the same fixture with the bb fragment, on an image built from
-# container/agent-bb. bb adds about 650 MB and 180 pids to an idle team.
-if [ "${AGENT_BB:-}" = 1 ]; then
-  compose+=(-f container/agent/compose.agent.bb.yaml)
-  export AGENT_PIDS=512 AGENT_MEMORY=2g
+# AGENT_CHILD=<name> runs the same fixture with a declared child's switch, on a
+# derived image: AGENT_CHILD_FRAGMENT is that image's Compose fragment, which
+# may come from another checkout (an absolute path then).
+if [ -n "${AGENT_CHILD:-}" ]; then
+  compose+=(-f "${AGENT_CHILD_FRAGMENT:?Set AGENT_CHILD_FRAGMENT to the Compose fragment that sets AGENT_CHILD}")
 fi
 
 cleanup() {
@@ -81,6 +82,15 @@ compose+=(-f container/agent/compose.agent.outbox.yaml)
 # umask077-style subdirectories must be scanned as the agent, not root without DAC capabilities.
 docker exec "oats-agent-$TEAM" node -e 'require("node:fs").mkdirSync("/outbox/private", {mode: 0o700});'
 container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64
+if [ -n "${AGENT_CHILD:-}" ]; then
+  # The switch is the deployment's: acceptance that was not told of it refuses.
+  if env -u AGENT_CHILD container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64 > "$fixture/unselected-child.log" 2>&1; then
+    echo 'Acceptance without AGENT_CHILD unexpectedly admitted a container that has it' >&2
+    exit 1
+  fi
+  grep -F 'AGENT_CHILD is set in the container' "$fixture/unselected-child.log"
+  printf 'PASS unselected child: acceptance without AGENT_CHILD refused the container\n'
+fi
 
 # This assertion runs in the accepted container, before cleanup or any registry
 # credential. Version metadata alone is not runtime evidence.

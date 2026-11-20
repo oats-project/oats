@@ -1,8 +1,0 @@
-{
-  "name": "oats-agent-bb-image",
-  "private": true,
-  "version": "1.0.0",
-  "dependencies": {
-    "bb-app": "0.50.1"
-  }
-}

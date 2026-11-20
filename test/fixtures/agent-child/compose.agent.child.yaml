@@ -1,0 +1,6 @@
+# The switch for this fixture image's declared child. Include after
+# container/agent/compose.agent.yaml; AGENT_IMAGE is then an image built here.
+services:
+  agent:
+    environment:
+      AGENT_CHILD: "fixture"
