@@ -103,7 +103,7 @@ const { readBoardDetail, askBoardQuestion, clearBoardQuestion, setBoardFact, uns
 const { CLIENT_VIA, addDeployment, deploymentAtOrAbove, importDesktopDeployments, listDeployments, listResolved, removeDeployment } = await kernelImport("deployments", () => import("../lib/deployments.mjs"));
 const { observeResolvedDeployment } = await kernelImport("resolved-deployment", () => import("../lib/resolved-deployment.mjs"));
 const { SESSION_RESUME_FEATURE } = await kernelImport("session-resume-contract", () => import("../lib/session-resume-contract.mjs"));
-const { BOARD_API, KERNEL_FEATURES, READER_API } = await kernelImport("kernel-features", () => import("../lib/kernel-features.mjs"));
+const { BOARD_API, BUILTIN_SESSION_BACKENDS, KERNEL_FEATURES, READER_API, SESSION_PROVIDER_NAME_RE } = await kernelImport("kernel-features", () => import("../lib/kernel-features.mjs"));
 const { inheritedContextRefusal } = await kernelImport("captured-context", () => import("../lib/captured-context.mjs"));
 const { callSession, parseMaxAge, readBudget } = await kernelImport("read-call", () => import("../lib/read-call.mjs"));
 const { cachedWorkspace, legacyLayoutProblems, statusAnswer, statusView } = await kernelImport("roster-read", () => import("../lib/roster-read.mjs"));
@@ -526,7 +526,8 @@ function scopeSouls(ctx, { extraRoots = [] } = {}) {
   const roots = [...new Set([findRoot(ctx), ...extraRoots].filter(Boolean).map((p) => realOrResolved(resolve(p))))];
   const souls = [];
   for (const root of roots) {
-    for (const a of listInstances(root)) {
+    // Names only: no session provider is asked.
+    for (const a of listInstances(root, undefined, undefined, { askProviders: false })) {
       const soul = findAgent(root, a.name) || a;
       const e = soulEntry(soul, root);
       e.instances = (a.instances || []).map((i) => i.instance);
@@ -684,6 +685,8 @@ function printWorkspaceInspect(doc) {
   if (doc.identity) console.log(`  identity: ${servedIdentityLine(doc.identity)}`);
   for (const l of LAYERS) console.log(`  ${l} capability: ${doc.layers[l].id || "none"}`);
   for (const c of doc.capabilities) console.log(`  ${c.id}@${c.version || "?"} ${c.from?.kind === "package" ? `package ${c.from.package}` : c.from?.kind === "member" ? `member ${c.from.repoKey}` : ""}${c.operations.length ? `  ops: ${c.operations.map((o) => `${o.name}${o.available ? "" : "(unavailable)"}`).join(", ")}` : ""}`);
+  // Feature session-providers: the backends `--backend` takes here beside tmux, each with the capability that supplies it.
+  if (doc.sessionProviders?.length) console.log(`  session backends: tmux, ${doc.sessionProviders.map((p) => `${p.name} (${p.capability})`).join(", ")}`);
   for (const p of doc.problems) console.log(`  ! ${p.code}: ${p.message}`);
   for (const w of doc.warnings) console.log(`  warning  ${w.code}  ${w.message}`);
   const board = doc.instance?.board;
@@ -1174,8 +1177,11 @@ function launchPreview(bail) {
   let plan;
   try { plan = planLaunch({ home, instance, meta, contextDir: context, agentLike, selection: sel, resolvedCfg: r, preview: true, pane: () => previewPaneEnvironment(meta ? { home, meta } : { deployment: context }) }); } catch (e) { bail(e.code || "E_BAD_ARGS", e.message); }
   const { recipe } = plan;
-  const command = renderLaunchRecipe(recipe, { home, instance, redact: true, trustHome: plan.trustHome });
-  const d = describeLaunchCommand(command);
+  // A home on a session provider has no command line: its launch is handed to the provider as data
+  // (`command` and `argv` null, the executable's path null); its environment is listed by name.
+  const onProvider = plan.command === undefined;
+  const command = onProvider ? null : renderLaunchRecipe(recipe, { home, instance, redact: true, trustHome: plan.trustHome });
+  const d = onProvider ? { argv: null, environment: [...Object.keys(recipe.hooks?.env || {}).sort().map((name) => ({ name, redacted: true })), ...Object.keys(recipe.env || {}).sort().map((name) => (typeof recipe.env[name] === "string" ? { name, redacted: true } : { name, reference: true }))] } : describeLaunchCommand(command);
   const environment = d.environment.map((e) => e.reference && recipe.env[e.name] && typeof recipe.env[e.name] === "object" ? { name: e.name, ...recipe.env[e.name] } : e);
   jsonOk({ context, selected, ...(plan.warnings?.length ? { warnings: plan.warnings } : {}), selection: { source: plan.selectionSource, launchConfig: recipe.launchConfig, harness: sel.harness ?? null, model: sel.model ?? null, yolo: sel.yolo ?? null }, harness: plan.harness, model: recipe.model, modelSource: plan.modelSource, yolo: recipe.yolo ?? null, launchConfig: recipe.launchConfig, launchConfigSource: recipe.launchConfigSource, launchConfigDefault: recipe.launchConfigDefault === true, executable: { path: plan.executable.path, declared: plan.executable.declared ?? null, resolvedFrom: plan.executable.resolvedFrom }, argv: d.argv, environment, command, prompt: recipe.prompt, hooks: redactLaunchRecipe(recipe).hooks, preflight: plan.preflight, ok: plan.ok });
 }
@@ -2621,6 +2627,17 @@ async function capabilityShowCmd(bail) {
     }
     for (const p of doc.triggerSourceProblems ?? []) console.log(`  trigger source problem: ${p.pointer} — ${safeText(p.message, 300)}`);
   }
+  if (doc.sessionProviders !== undefined) {
+    // As declared (a malformed declaration is shown, never refused), made safe to print.
+    const { safeText } = await import("../lib/refused-text.mjs");
+    const decl = doc.sessionProviders && typeof doc.sessionProviders === "object" && !Array.isArray(doc.sessionProviders) ? doc.sessionProviders : null;
+    console.log(decl && Object.keys(decl).length ? "  session providers:" : `  session providers: ${decl ? "(none)" : "(malformed — see session provider problems)"}`);
+    for (const [n, provider] of Object.entries(decl ?? {})) {
+      const o = provider && typeof provider === "object" ? provider : {};
+      console.log(`    ${safeText(n, 60)}  harnesses ${Array.isArray(o.harnesses) ? o.harnesses.map((h) => safeText(String(h), 40)).join(",") : "?"}${typeof o.description === "string" ? `  — ${safeText(o.description, 200)}` : ""}`);
+    }
+    for (const p of doc.sessionProviderProblems ?? []) console.log(`  session provider problem: ${p.pointer} — ${safeText(p.message, 300)}`);
+  }
   for (const p of doc.problems) console.log(`  problem: ${p.code}${p.path ? ` ${p.path}` : ""} — ${p.message}`);
   for (const w of doc.warnings) console.log(`  warning  ${w.code}  ${w.message}`);
   console.log(`\n  a file's text: oats capabilities show ${doc.name}${doc.kind === "package" ? ` --package ${doc.package}` : ""} --file <path>`);
@@ -2749,7 +2766,7 @@ function printStatus({ root, agents: data, ws, problems }, verbose) {
     if (a.description) console.log(`      ${a.description}`);
     for (const i of a.instances) {
       // Feature instance-background: the row is marked; it is listed like any other.
-      console.log(`      • ${i.instance}${i.background === true ? " [background]" : ""}  ${statusWord(i)}  (branch ${i.branch || "?"}, ${i.work || "?"})${i.runtimeError ? `  ${i.runtimeError}` : ""}`);
+      console.log(`      • ${i.instance}${i.background === true ? " [background]" : ""}  ${statusWord(i)}  (branch ${i.branch || "?"}, ${i.work || "?"}${i.session ? `, on ${i.backend}` : ""})${i.runtimeError ? `  ${i.runtimeError}` : ""}`);
       { const lost = lostLine(i); if (lost) console.log(`          ${lost}`); }
       // Feature waiting-on-you: non-null only on a running row; the reader has
       // already validated the message (one line, no control characters).
@@ -2816,7 +2833,9 @@ async function spawnCmd() {
   const yolo = yoloFlag();
   { const herdr = herdrSpawnFlag(); if (herdr) { const e = herdrSettingRemoved(`${herdr} was given`); bail(e.code, e.message); } }
   const backend = valueFlag("backend");
-  if (backend !== undefined && backend !== "tmux") bail("E_BAD_ARGS", "--backend must be tmux");
+  // tmux, or a session provider one of the soul's capabilities declares: the kernel resolves the name
+  // against the instance's modules (E_BACKEND_UNKNOWN names the backends available there).
+  if (backend !== undefined && !SESSION_PROVIDER_NAME_RE.test(backend)) bail("E_BAD_ARGS", "--backend must be tmux or a session provider's name (1 to 40 lowercase letters, digits and dashes)");
   const requestedWork = valueFlag("work");
   const workDir = valueFlag("work-dir"), branch = valueFlag("branch"), repo = valueFlag("repo");
   const checkDirectoryOptions = (work) => {
@@ -3085,7 +3104,8 @@ async function spawnCmd() {
       // #917: what this spawn's start did with Claude's development-channel prompt, as a start answers it.
       ...(r.launchPrompts ? { launchPrompts: r.launchPrompts } : {}),
       ...(wakeSchedule ? { wakeSchedule } : {}), ...(wakeScheduleError ? { wakeScheduleError } : {}),
-      tmux: r.tmux || null, backend: "tmux", repo: r.repo || null, harness: r.harness || null,
+      // A home on a session provider carries its backend's name and `session` ({ provider, endpoint }), and no tmux.
+      tmux: r.tmux || null, backend: r.session ? r.backend : "tmux", ...(r.session ? { session: r.session } : {}), repo: r.repo || null, harness: r.harness || null,
       model: r.model || null, parent: r.parentInstance || null,
       sibling: r.siblingInstance || null, relation: r.relation || null,
       spawnOrigin: r.spawnOrigin, attach: r.attach,
@@ -3103,7 +3123,7 @@ async function spawnCmd() {
     });
     return;
   }
-  console.log(`Spawned ${r.instance} (${r.work}${r.branch ? `, branch ${r.branch}` : ""})${r.launched ? ` — tmux window "${r.tmux.window}"` : " — not launched"}`);
+  console.log(`Spawned ${r.instance} (${r.work}${r.branch ? `, branch ${r.branch}` : ""})${r.launched ? (r.session ? ` — ${r.backend} session` : ` — tmux window "${r.tmux.window}"`) : " — not launched"}`);
   console.log(`  home:   ${shortPath(r.home)}`);
   if (r.background === true) console.log(`  list:   background (from the ${r.backgroundFrom === "flag" ? "--background flag" : "soul"})`);
   { const line = namingLine(r.naming); if (line) console.log(`  name:   ${line}`); }
@@ -3113,7 +3133,8 @@ async function spawnCmd() {
   if (wakeScheduleError) console.error(`  wake:   NOT saved — ${wakeScheduleError.message} (the instance is created and launched; add the wake by hand with oats schedule add)`);
   if (!r.launched) console.log(`  launch: oats session start --home ${shellQuote(r.home)}`);
   for (const w of r.warnings || []) console.log(`  WARNING: ${terminalText(w)}`);
-  console.log(`  attach: ${r.attach}`);
+  if (r.attach) console.log(`  attach: ${r.attach}`);
+  else if (r.session) console.log(`  open:   oats session inspect --home ${shellQuote(r.home)} --json (its \`open\` link; ${terminalText(r.backend)} has no terminal to attach to)`);
 }
 
 /** The line naming the branch a FAILED_SPAWN_BRANCH_LEFT item speaks of, on a line of its own: the item names
@@ -3604,7 +3625,7 @@ async function sessionCmd() {
       const deployment = flag("deployment");
       if (deployment === true || (typeof deployment === "string" && !deployment.trim())) throw Object.assign(new Error(`--deployment needs a deployment directory\n${usage}`), { code: "E_BAD_ARGS" });
       const { resumeSessions } = await import("../lib/session-resume.mjs");
-      const answer = await resumeSessions({ deployment, plan: args.includes("--plan"), kernel: { execPath: process.execPath, bin: CLI_BIN } });
+      const answer = await resumeSessions({ deployment, plan: args.includes("--plan"), askProviders: !args.includes("--without-provider-inspect"), kernel: { execPath: process.execPath, bin: CLI_BIN } });
       if (JSON_MODE) { jsonOk(answer); return; }
       for (const d of answer.deployments) console.log(`${d.deployment}: ${d.swept ? "swept" : `not swept (${d.reason}${d.code ? `, ${d.code}` : ""})`}`);
       for (const r of answer.rows) console.log(`  ${r.instance}  ${answer.plan ? "would be " : ""}${r.outcome}${r.reason ? ` (${r.reason}${r.code ? `, ${r.code}` : ""})` : ""}${r.message ? `: ${terminalText(r.message)}` : ""}`);
@@ -4325,7 +4346,7 @@ function versionCmd() {
     // Phase B: `instance-modules` and `spawn-provider-payload` are advertised only once spawn
     // runs on resolve/materialize (contract §6); a feature the binary does not implement is
     // never listed.
-    console.log(JSON.stringify({ schemaVersion: 1, name: "@awebai/oats", version: OATS_VERSION, desktopApi: 1, harnesses: ["pi", "claude", "codex"], sessionBackends: ["tmux"], launchOptions: ["yolo"], remote: ["spawn", "retire", "status", "session", "session-start", "session-restart", "launch-config", "roster", "harvest", "schedule", "session-upload", "operations", "readiness", "instance-events", "instance-git", "lifecycle-plans"], features: KERNEL_FEATURES, automationsApi: A.AUTOMATIONS_API, workspaceApi: 2, instanceGitApi: 1, spawnApplyApi: 1, soulsApi: 2, lifecycleApi: 1, readinessApi: 2, spawnPreviewApi: 2, eventsApi: 2, scheduleHistoryApi: 3, scheduleApi: SCHEDULE_API, operationsApi: 2, capabilityShowApi: 1, readerApi: READER_API, boardApi: BOARD_API, sessionViewer: readSessionViewer(), package: OATS_PACKAGE_NAME }));
+    console.log(JSON.stringify({ schemaVersion: 1, name: "@awebai/oats", version: OATS_VERSION, desktopApi: 1, harnesses: ["pi", "claude", "codex"], sessionBackends: BUILTIN_SESSION_BACKENDS, launchOptions: ["yolo"], remote: ["spawn", "retire", "status", "session", "session-start", "session-restart", "launch-config", "roster", "harvest", "schedule", "session-upload", "operations", "readiness", "instance-events", "instance-git", "lifecycle-plans"], features: KERNEL_FEATURES, automationsApi: A.AUTOMATIONS_API, workspaceApi: 2, instanceGitApi: 1, spawnApplyApi: 1, soulsApi: 2, lifecycleApi: 1, readinessApi: 2, spawnPreviewApi: 2, eventsApi: 2, scheduleHistoryApi: 3, scheduleApi: SCHEDULE_API, operationsApi: 2, capabilityShowApi: 1, readerApi: READER_API, boardApi: BOARD_API, sessionViewer: readSessionViewer(), package: OATS_PACKAGE_NAME }));
     return;
   }
   console.log(`${OATS_PACKAGE_NAME} ${OATS_VERSION} (desktop API v1)`);
@@ -4805,7 +4826,7 @@ async function serverRouteCmd() {
   // The host's answer decides, not the flag: one that spawned is reported as the spawn it was.
   if (cmd === "spawn" && rest.includes("--preview") && r.preview === true) printSpawnPreview(r, { server: id, soulFetched: r.soulFetched === true });
   else if (cmd === "spawn") {
-    console.log(`Spawned ${r.instance} on ${id} (${r.work}${r.branch ? `, branch ${r.branch}` : ""})${r.launched ? ` — tmux window "${r.tmux?.window}" on ${r.target.sshHost}` : " — not launched"}`);
+    console.log(`Spawned ${r.instance} on ${id} (${r.work}${r.branch ? `, branch ${r.branch}` : ""})${r.launched ? (r.session ? ` — ${terminalText(r.backend)} session on ${r.target.sshHost}` : ` — tmux window "${r.tmux?.window}" on ${r.target.sshHost}`) : " — not launched"}`);
     console.log(`  remote home: ${r.home}`);
     { const line = namingLine(r.naming); if (line) console.log(`  name: ${line}`); }
     console.log(`  route snapshot: ${r.snapshot ? shortPath(r.snapshot) : "none (see the warning)"}`);
@@ -5205,7 +5226,7 @@ Usage:
                                             is a unit (a conflicting --harness is refused)
       [--model <id>|@native-default]        override the selected model; @native-default
                                             selects the harness's own model default
-      [--backend tmux] [--yolo|--no-yolo]    session backend and launch permission option
+      [--backend tmux|<provider>] [--yolo|--no-yolo]  session backend (tmux, or a session provider of the soul's capabilities) and launch permission option
       [--background|--no-background]        list the instance under Background (presentation
                                             only); default: the soul's background:, else no
       [--no-launch] [--json]                 scaffold without launching; JSON result envelope

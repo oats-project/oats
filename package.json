@@ -19,6 +19,7 @@
   "scripts": {
     "test": "node scripts/run-tests.mjs",
     "test:session": "node scripts/test-session-inheritance.mjs",
+    "test:provider-lifecycle": "node scripts/test-provider-lifecycle.mjs",
     "check": "node scripts/check-package-dry-runs.mjs --syntax-only",
     "check:pi": "node --experimental-strip-types --check packages/pi/extension/index.ts",
     "validate": "node scripts/validate-project.mjs",

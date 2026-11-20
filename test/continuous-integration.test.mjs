@@ -37,7 +37,7 @@ test("direct main pushes retain the same read-only CI gates as pull requests", (
   // One stable check name gates on BOTH the shards and the static gates.
   const gate = workflow.jobs.gate;
   assert.equal(gate.name, "Node 22 / test, validate, pack, smoke");
-  assert.deepEqual(gate.needs, ["tests", "verify", "desktop-standalone", "session-inheritance", "unsupported-node"]);
+  assert.deepEqual(gate.needs, ["tests", "verify", "desktop-standalone", "session-inheritance", "unsupported-node", "provider-lifecycle"]);
   assert.equal(gate.if, "always()");
   // `always()` runs the gate after a failed job too, so needing a job is not enough: the
   // gate must test each needed job's result itself, or that job's failure passes the gate.
@@ -121,6 +121,25 @@ test("pull-request CI runs the Desktop suite with only packages/desktop installe
   const pullRequest = read("pull-request.yml");
   assert.equal(pullRequest.on.pull_request.paths, undefined);
   assert.equal(pullRequest.on.pull_request["paths-ignore"], undefined);
+});
+
+test("pull-request CI runs every schedule of the session-provider lifecycle on every push, and the gate requires it", () => {
+  const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  const workflow = parseConfigData(read(".github/workflows/pull-request.yml")).value;
+  // The shards run a seeded sample of the explorer's schedules (test/session-provider-explorer.test.mjs);
+  // this job runs them all. It is one command, the one a developer runs locally.
+  const job = workflow.jobs["provider-lifecycle"];
+  assert.ok(job, "pull-request CI must run every schedule of the session-provider lifecycle");
+  const commands = job.steps.filter((step) => step.run).map((step) => step.run.trim());
+  assert.deepEqual(commands, ["npm ci", "npm run test:provider-lifecycle"]);
+  assert.equal(JSON.parse(read("package.json")).scripts["test:provider-lifecycle"], "node scripts/test-provider-lifecycle.mjs");
+  assert.match(read("scripts/test-provider-lifecycle.mjs"), /OATS_EXPLORER_COUNT: "all"/, "the script asks for every schedule");
+  // A red run must stay red: nothing skips the job or a step, and no failure is tolerated.
+  for (const part of [job, ...job.steps]) {
+    assert.equal(part.if, undefined, "no condition may skip the job or one of its steps");
+    assert.equal(part["continue-on-error"], undefined, "no failure may be tolerated");
+  }
+  assert.ok(workflow.jobs.gate.needs.includes("provider-lifecycle"));
 });
 
 test("pull-request CI runs the suites that followed a session variable with every one poisoned, and the gate requires it", () => {

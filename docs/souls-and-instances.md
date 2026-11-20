@@ -1550,6 +1550,51 @@ still name the old path. A child attached to one of the home's extra trees
 is handled the same way, tree by tree
 ([extra trees at retire](#extra-trees-at-retire)).
 
+#### Retiring a home on a session provider
+
+A home whose session runs on a
+[session provider](execution-targets.md#session-providers) (its
+`instance.json` records `backend` and `session`) is retired by a kernel that
+lists the feature `session-providers`, in this order:
+
+1. **The stop is recorded** (`stoppedAt` in the home's receipt): from then on
+   inspect answers stopped and every input to the home is refused
+   `E_SESSION_NOT_RUNNING`, so nothing restarts its session.
+2. **Inputs that were being sent are waited for.** An input already on its
+   way when the stop was recorded can have the provider restart the session,
+   and once the home is gone nothing could stop it. The retire waits for
+   those inputs to end (at most an input's timeout and 5 s). An input still
+   being sent after that does not hold the retire: its provider command is
+   ended, and the retire goes on, with a warning that names that input's
+   process. An input whose `oats` command was killed is not waited for: its
+   provider command is ended at once. (Every stop of a provider home waits
+   so, a plain `oats instance stop` too.)
+3. **The provider is asked to stop the session**, with the usual grace,
+   never escalated. A launch that was sent and never recorded (a command
+   killed while it launched) is settled the same way: the provider is asked
+   to stop whatever it runs for the home.
+4. **No process may work in the home**, whatever the provider answered: a
+   stop it confirms can still leave one behind (a harness that outlives its
+   server for a while), and there is no window whose absence would say
+   otherwise. With a process working in the home, or when that cannot be
+   told, the retire refuses `E_RUNTIME_QUIESCE_FAILED` at once, names the
+   processes and keeps the home; its stop stays recorded. A shell whose
+   working directory is in the home counts too, and one named in the
+   refusal may be your own: leaving the home's directory clears it.
+5. The retire hooks run (the provider's own archives its session there), the
+   work is preserved as for any home, and the home is removed.
+
+**When the provider cannot confirm the stop** (it fails, it does not answer,
+or its capability is no longer among the home's modules after an upgrade),
+the retire does not strand the home. It goes on when step 4 finds no
+process in the home, and its answer then carries a warning that the session
+was not stopped through its backend: archive or remove that session with the
+provider's own tooling.
+
+A retire's plan (`oats retire <instance> --plan`) reads the session through
+the provider, as `oats session inspect` does. A kernel without the feature
+refuses to retire such a home (`E_RUNTIME_ENDPOINT_UNKNOWN`) and keeps it.
+
 #### What `work/` is at retire
 
 The retire and its plan read what is at `<home>/work` once, by one rule
