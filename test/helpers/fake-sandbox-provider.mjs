@@ -72,10 +72,12 @@ export function fakeSandboxCapabilities({ name = FAKE_SANDBOX_CAPABILITY } = {})
     [name]: {
       manifest: {
         hooks: { sandbox: "sandbox.mjs" },
-        settings: { region: { type: "string", default: "manifest" }, tier: { type: "string", default: "manifest" }, zone: { type: "string", default: "manifest" } },
+        settings: { region: { default: "manifest" }, tier: { default: "manifest" }, zone: { default: "manifest" } },
       },
       files: { "sandbox.mjs": HOOK },
     },
+    // The seat's capability: what a soul inside a sandbox is given `identity.seat` for. It has no hooks.
+    [FAKE_SEAT_CAPABILITY]: { manifest: { settings: { identity: { default: {}, description: "the seat the host delivered (identity.seat)" } } } },
   };
 }
 
