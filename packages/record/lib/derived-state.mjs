@@ -4,8 +4,7 @@ import { statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { keysetRows } from "./sqlite-rows.mjs";
 import { ensurePrivateFile, makePrivateDir } from "./private-files.mjs";
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
+import { loadSqlite } from "./node-sqlite.mjs";
 
 export function invalidateLegacyMaps(root) {
   for (const name of ["capture-offsets.json", "capture-aw-seen.json"]) {
@@ -31,7 +30,7 @@ function fileIdentity(path) {
 
 export class DerivedState {
   constructor(root) {
-    const { DatabaseSync } = require("node:sqlite");
+    const { DatabaseSync } = loadSqlite();
     makePrivateDir(join(root, "index"));
     this.path = join(root, "index", "capture.db");
     const before = fileIdentity(this.path);

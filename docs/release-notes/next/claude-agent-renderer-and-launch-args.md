@@ -1,12 +1,14 @@
 ## Upgrade
 
-- **What users must do: move to Node.js 22.5 or later.** OATS now stops before
-  every command on Node below 22, including `version`, the reader and
-  capability commands. If you run OATS on Node 20 today, upgrade Node before continuing.
+- **What users must do: move to Node.js 22.13+ on 22.x, 23.4+ on 23.x, or
+  a newer major.** OATS now stops before every command on Node below 22,
+  including `version`, the reader and capability commands. If you run OATS
+  on Node 20 today, upgrade Node before continuing.
   Node 18 and 20 receive `E_NODE_UNSUPPORTED` with exit 1, as one failure
   envelope on stdout with `--json`, or a message on stderr without it. Remote
   probes and Desktop discovery retain the host's refusal message. The npm
-  package retains its Node 22.5.0 floor so installation warns about it.
+  package declares `^22.13.0 || >=23.4.0` so installation warns about versions
+  without the SQLite support the turn record needs.
 
 ## Added
 
