@@ -18,7 +18,7 @@ import { loadServer, alexState, A } from './helpers/workspace-views-fixture.mjs'
 import { viewContext } from './helpers/view-context.mjs';
 import * as treeShared from '../../client/instance-tree.mjs';
 import * as treeView from '../renderer/instance-tree-view.mjs';
-import * as sameWork from '../../client/same-work.mjs';
+import * as relatedWork from '../../client/related-work.mjs';
 import { captureInstanceActionMenu } from '../renderer/instance-actions.mjs';
 import { instanceActionTarget } from '../renderer/instance-action-target.mjs';
 import { instanceSplitPlan } from '../renderer/instance-split.mjs';
@@ -257,7 +257,7 @@ test('the palette\'s target offer follows the row menu: no row, a stale or held 
 
 // ── the sidebar's paint ────────────────────────────────────────────────────────────────────────────────
 
-const tree = { ...treeShared, ...treeView, ...sameWork };
+const tree = { ...treeShared, ...treeView, ...relatedWork };
 const html = readFileSync(new URL('../renderer/index.html', import.meta.url), 'utf8');
 const fn = name => shell.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`))?.[0];
 const source = ['renderContextRoster', 'needsInputMark', 'setBackgroundOpen', 'onRosterRowKey', 'setRovingRow']

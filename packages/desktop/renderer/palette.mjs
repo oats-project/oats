@@ -11,7 +11,7 @@
    its subtree puts it; never-focused nodes keep the sidebar's order after the
    rest; a child stays under its parent. A parent's children are split first,
    those that draw their parent line before the rest (#1577, packages/client
-   same-work.mjs), and recency orders each part. This supersedes Spec C's flat Recent
+   related-work.mjs), and recency orders each part. This supersedes Spec C's flat Recent
    group; the record is still instance-recency.mjs, and the sidebar keeps its
    stable spawn order, newest first. The order is decided on the full roster: a query decides
    only which rows show, each match with its non-matching ancestors as disabled

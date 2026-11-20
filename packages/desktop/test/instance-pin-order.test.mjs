@@ -7,6 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { clusterInstances, rosterGroups, instanceSiblings, instanceId, filterInstanceTree, backgroundPlacement, rowPinned, PIN_FEATURE } from "../../client/instance-tree.mjs";
+import { RELATED_WORK_FEATURE } from "../../client/related-work.mjs";
 import { rosterSections, sidebarSections } from "../../client/roster-sections.mjs";
 import { DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
 import { deploymentStatusData } from "../../client/deployment-data.mjs";
@@ -61,12 +62,12 @@ test("b. the path down to a pinned grandchild rises among its siblings at each l
 test("under one parent, the children that draw their parent line stay first; the pin decides within each part", () => {
   const roster = [
     at("p", 1),
-    at("drawn-a", 2, { parentInstance: "p", sameWork: true, sameWorkKnown: true }),
-    at("drawn-b", 3, { parentInstance: "p", sameWork: true, sameWorkKnown: true }),
-    at("plain-pinned", 4, { parentInstance: "p", sameWorkKnown: true, ...PIN }),
-    at("plain", 5, { parentInstance: "p", sameWorkKnown: true }),
+    at("drawn-a", 2, { parentInstance: "p", relatedWork: true, relatedWorkKnown: RELATED_WORK_FEATURE }),
+    at("drawn-b", 3, { parentInstance: "p", relatedWork: true, relatedWorkKnown: RELATED_WORK_FEATURE }),
+    at("plain-pinned", 4, { parentInstance: "p", relatedWorkKnown: RELATED_WORK_FEATURE, ...PIN }),
+    at("plain", 5, { parentInstance: "p", relatedWorkKnown: RELATED_WORK_FEATURE }),
   ];
-  // drawingFirst is structural: the flagged children first, then the others; the pin ranks within each part.
+  // drawingFirst is structural: the related children first, then the others; the pin ranks within each part.
   const pinnedFlagged = roster.map(r => r.instance === "drawn-a" ? { ...r, ...PIN } : r);
   assert.deepEqual(drawn(clusterInstances(pinnedFlagged, ON)), ["p@0", "drawn-a@1", "drawn-b@1", "plain-pinned@1", "plain@1"]);
 });

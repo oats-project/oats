@@ -4,6 +4,11 @@ import { JSDOM } from "jsdom";
 import { collapseKey, hasInstanceChildren, instanceRepoLabel, filterInstanceTree, instanceMatchesFilter, instanceVisibleInTree, clusterInstances,
   ROSTER_SORTS, rosterRank, groupRosterFamilies, rosterGroupKey } from "../../client/instance-tree.mjs";
 import { treeGuideSegments, captureTreeRenderState, clusterSeparator, treeConnectors, rosterResponseOwns } from "../renderer/instance-tree-view.mjs";
+import { RELATED_WORK_FEATURE } from "../../client/related-work.mjs";
+
+/** Rows of a host that declares instance-related-work, each reporting related work (to its parent, or to the
+ * sibling its siblingInstance names): every line is drawn, as every unflagged row drew before related work. */
+const related = (rows) => rows.map((row) => ({ ...row, relatedWorkKnown: RELATED_WORK_FEATURE, relatedWork: true }));
 
 const instances = [
   { instance: "root" },
@@ -28,12 +33,12 @@ test("instance tree collapse hides arbitrary-depth descendants but not peers", (
 });
 
 test("tree guides terminate final siblings and continue only real ancestor branches", () => {
-  const flat = [
+  const flat = related([
     { instance: "root", depth: 0 },
     { instance: "child-a", parentInstance: "root", depth: 1 },
     { instance: "grand", parentInstance: "child-a", depth: 2 },
     { instance: "child-b", parentInstance: "root", depth: 1 },
-  ];
+  ]);
   assert.deepEqual(treeGuideSegments(flat, flat[1]), ["branch"], "non-final child continues below its elbow");
   assert.deepEqual(treeGuideSegments(flat, flat[2]), ["continue", "end"],
     "grandchild keeps a real ancestor continuation and ends its own branch");
@@ -42,6 +47,9 @@ test("tree guides terminate final siblings and continue only real ancestor branc
   const onlyBranch = flat.slice(0, 3);
   assert.deepEqual(treeGuideSegments(onlyBranch, onlyBranch[2]), ["none", "end"],
     "descendants do not extend an exhausted parent sibling line");
+  // No flag, no line: the same rows unflagged draw no segment of their own.
+  const plain = flat.map(({ relatedWork: _flag, ...row }) => row);
+  assert.deepEqual(plain.slice(1).map((row) => treeGuideSegments(plain, row)), [["none"], ["none", "none"], ["none"]]);
 });
 
 test("instance repo label prefers roster name and falls back to path basename", () => {
@@ -130,8 +138,8 @@ test("agent-group separator: a titleless gap that still names the group for assi
 });
 
 test("tree connectors start at the dots: a parent stem from its dot, solid elbows to children, dotted links between sibling roots", () => {
-  const all = [{ instance: "a" }, { instance: "a1", parentInstance: "a" }, { instance: "a2", parentInstance: "a" },
-    { instance: "a2x", parentInstance: "a2" }, { instance: "b", siblingInstance: "a" }];
+  const all = related([{ instance: "a" }, { instance: "a1", parentInstance: "a" }, { instance: "a2", parentInstance: "a" },
+    { instance: "a2x", parentInstance: "a2" }, { instance: "b", siblingInstance: "a" }]);
   const items = clusterInstances(all)[0].instances;
   const kinds = Object.fromEntries(items.map((i) => [i.instance, treeConnectors(items, i, all).map((c) => `${c.kind}@${c.level}`)]));
   assert.deepEqual(kinds, {
@@ -141,15 +149,19 @@ test("tree connectors start at the dots: a parent stem from its dot, solid elbow
     a2x: ["elbow@1", "link-through@0"],
     b: ["link-in@0"],
   });
-  const lone = [{ instance: "solo" }];
+  const lone = related([{ instance: "solo" }]);
   assert.deepEqual(treeConnectors(lone, lone[0], lone), [], "an independent row draws no connector");
+  // No flag, no line: the same tree from a host that reports no related work draws nothing at all.
+  const plain = all.map(({ relatedWorkKnown: _gate, relatedWork: _flag, ...row }) => row);
+  const plainItems = clusterInstances(plain)[0].instances;
+  assert.deepEqual(plainItems.map((i) => treeConnectors(plainItems, i, plain)), plainItems.map(() => []));
 });
 
 // #1312: the dotted sibling link and the solid lineage sit on separate columns, so the dotted line
 // never borrows the solid one: every row between two sibling roots draws its own link-through.
 test("tree connectors: a root's children carry the dotted link through to a later sibling root, whatever their level-0 segment", () => {
-  const all = [{ instance: "a" }, { instance: "a1", parentInstance: "a" }, { instance: "a2", parentInstance: "a" },
-    { instance: "b", siblingInstance: "a" }];
+  const all = related([{ instance: "a" }, { instance: "a1", parentInstance: "a" }, { instance: "a2", parentInstance: "a" },
+    { instance: "b", siblingInstance: "a" }]);
   const items = clusterInstances(all)[0].instances;
   const at = (name) => treeConnectors(items, items.find((i) => i.instance === name), all).map((c) => `${c.kind}@${c.level}`);
   assert.deepEqual(items.map((i) => i.instance), ["a", "a1", "a2", "b"]);
@@ -164,12 +176,12 @@ test("tree connectors: a root's children carry the dotted link through to a late
   assert.ok(at("a1").includes("line@0") && !at("a1").includes("down@0"), "a branch row's vertical spans the whole row");
   assert.ok(!at("a2").some((c) => c.endsWith("@0") && /^(line|down)@/.test(c)), "the last child's vertical stops at its elbow");
 
-  const parentOnly = [{ instance: "p" }, { instance: "p1", parentInstance: "p" }, { instance: "p2", parentInstance: "p" }];
+  const parentOnly = related([{ instance: "p" }, { instance: "p1", parentInstance: "p" }, { instance: "p2", parentInstance: "p" }]);
   const lone = clusterInstances(parentOnly)[0].instances;
   assert.deepEqual(lone.map((i) => treeConnectors(lone, i, parentOnly).map((c) => c.kind)),
     [["down"], ["elbow", "line"], ["elbow"]], "a lone root with children draws no dotted link");
 
-  const roots = [{ instance: "r1" }, { instance: "r2", siblingInstance: "r1" }, { instance: "r3", siblingInstance: "r1" }];
+  const roots = related([{ instance: "r1" }, { instance: "r2", siblingInstance: "r1" }, { instance: "r3", siblingInstance: "r1" }]);
   const flat = clusterInstances(roots)[0].instances;
   assert.deepEqual(flat.map((i) => treeConnectors(flat, i, roots).map((c) => c.kind)),
     [["link-out"], ["link-in", "link-out"], ["link-in"]], "three sibling roots: one dotted line through every dot");

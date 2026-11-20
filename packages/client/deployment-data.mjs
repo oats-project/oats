@@ -236,8 +236,10 @@ export function deploymentStatusData(document, deployment) {
       // Session resume: how the instance's last session ended, one of SESSION_ENDS exactly. Any other value is
       // dropped, never checked: the row reads as one that did not say.
       if (own(instance, 'sessionEnd') && SESSION_END_VALUES.includes(instance.sessionEnd)) row.sessionEnd = instance.sessionEnd;
-      // #1577 (feature instance-same-work): the child does its parent's work, so its parent line is drawn
-      // (same-work.mjs). Boolean true only; any other value is dropped, never checked: the row reads unflagged.
+      // Related work (features instance-related-work, and instance-same-work before it): the row's work is
+      // related to its parent's, or a top-level row's to its sibling's, so the line between them is drawn
+      // (related-work.mjs). Boolean true only; any other value is dropped, never checked: the row reads unflagged.
+      if (own(instance, 'relatedWork') && instance.relatedWork === true) row.relatedWork = true;
       if (own(instance, 'sameWork') && instance.sameWork === true) row.sameWork = true;
       if (own(instance, 'modules')) row.modules = modules(instance.modules);
       if (own(instance, 'soul')) row.soul = soulSource(instance.soul);

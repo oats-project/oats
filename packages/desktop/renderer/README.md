@@ -609,11 +609,20 @@ split into sections) is `packages/client/roster-sections.mjs`.
   a row with no terminal, until Details serves any row). A held
       home keeps its state and hint on its lines (a reported one setting up its worktree adds its soul and
   `rowFactsTitle` to its tooltip); a collapsed parent's roll-up takes line 2, which its description
-  then says. No lineage or sibling lines (D26, decided): `--depth` indents a child 18px a level, `.ctx-bundle-gap`
+  then says. Lines for related work only (superseding in part D26's "no lines"; no flag, no line): the pre-D26
+  drawing, `treeConnectors` and `treeGuides` (instance-tree-view.mjs) over the cluster's drawn rows, by the shared rule
+  in packages/client/related-work.mjs. The solid elbow and stem (`--tree-stroke`, 3:1 on every row fill) reach a child
+  its host reports related to its parent (`drawsParentLine`: `relatedWork` with `instance-related-work`, `sameWork`
+  with only `instance-same-work`); the dotted link (`--tree-link`) joins the dots of top-level rows a related sibling
+  link joins (`drawsSiblingLink`, `siblingLinkSpans`: edges, not a star), passing beside the children between them. A
+  top-level row no related link joins, and its block, carry no dotted segment: the line breaks around it, and the
+  order never changes for it (the lead's choice, 2026-11-20). A row with no line carries no `.ctx-guides`. `--depth`
+  indents a child 18px a level, `.ctx-bundle-gap`
   separates bundles, `stateSpan` says its state (", running", ", stopped", ", status unknown"; a held home's line says its own),
-  and `relationSpan` (instance-tree-view.mjs) says ", under <parent>" (", same work" after it for a child its
-  host reports `sameWork`) and siblingText's
-  ", sibling of …" after the row's lines, resolved per deployment over its full roster as the palette's are.
+  and `relationSpan` (instance-tree-view.mjs) says ", under <parent>" (", related work" after it where the solid line
+  joins them) and siblingText's ", sibling of …" (", related work" after the related siblings, at both ends of a link:
+  instance-tree.mjs `relatedSiblings`) after the row's lines, resolved per deployment over its full roster as the
+  palette's are.
 - **The sidebar's width** (`sidebar-width.mjs`): one custom property, `--sidebar-w` on `#app` (288px in
   shell.css), which `#sidebar` takes as `width` and `min-width`. Its handle (`#sidebar-resizer`, the sidebar's last
   child and last Tab stop, after the foot; focus-regions counts it as the foot) is the split panes' resizer:
@@ -2210,8 +2219,8 @@ or rendered acceptance.
 
 ## Editor groups (splits) and the hideable sidebar (shell-level)
 
-The roster draws no relationship guides since slice 1 of the Desktop UI rework (D26): its rows nest by an 18px step
-and say their relations in words (`relationSpan`); the command palette's rows still draw the guides. Compact outer gutters reserve more width for instance
+The roster draws relationship guides for related work only (superseding in part slice 1's D26), with the command
+palette's builder and rules: its rows nest by an 18px step and say their relations in words (`relationSpan`). Compact outer gutters reserve more width for instance
 names without changing relationship grouping, disclosure controls, 56px row
 height or the selected row's 8px content inset.
 

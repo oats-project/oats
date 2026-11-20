@@ -8,9 +8,9 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/same-work.mjs";
+import * as relatedWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
-const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
+const tree = { ...treeShared, ...treeView, ...relatedWork }; // the renderer's client imports, shipped
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget, sameInstanceActionTarget } from '../renderer/instance-action-target.mjs';
 import { instanceSplitPlan } from '../renderer/instance-split.mjs';
@@ -27,7 +27,10 @@ const roster = [instance("root"), instance("child-a", "root"), instance("grand-a
   instance("child-b", "root"), instance("grand-b", "child-b"),
   { ...instance("unknown"), running: null }];
 
-function fixture(t, stylesheet = css) {
+/** The same roster from a host that declares instance-related-work, every child reporting related work. */
+const relatedRoster = roster.map(row => ({ ...row, relatedWorkKnown: relatedWork.RELATED_WORK_FEATURE, ...(row.parentInstance ? { relatedWork: true } : {}) }));
+
+function fixture(t, stylesheet = css, rows = roster) {
   // Default jsdom disables scripts and external resource loading in shipped HTML.
   const dom = new JSDOM(html);
   t.after(() => dom.window.close());
@@ -56,8 +59,8 @@ function fixture(t, stylesheet = css) {
     applyChordTitles() {}, updateActiveContexts() {}, getBinding: () => null, formatChord: c => c, isMac: true,
     contextRosterEl: doc.querySelector("#instance-roster"), contextWorkspace: "A",
     rosterState: { hasData: true, state: "ready" }, rosterStale: false, contextDeploymentNote: null, ...viewContext(), // loading state: a read succeeded
-    contextInstances: roster, currentWorkspace: () => "A", workspaceGeneration: () => 0, collapsedInstances: new Set(), spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} },
-    tabs: new Map([[1, { kind: "terminal", key: tree.terminalKey("A", roster[1]) }]]), activeTab: 1,
+    contextInstances: rows, currentWorkspace: () => "A", workspaceGeneration: () => 0, collapsedInstances: new Set(), spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} },
+    tabs: new Map([[1, { kind: "terminal", key: tree.terminalKey("A", rows[1]) }]]), activeTab: 1,
     tabOpenIntents: { applyFocus: fn => fn() },
     // Display-only fixture: any attempted navigation/action is a test failure.
     openTerminalTab: assert.fail, openInstanceStart: assert.fail, openLifecycleDialog: assert.fail, onRosterRowKey: assert.fail,
@@ -66,7 +69,7 @@ function fixture(t, stylesheet = css) {
   context.splitOpenState = () => ({ split: null, activeId: context.activeTab, tabs: context.tabs, workspace: 'A', visible: false });
   context.ownsInstanceTarget = target => context.contextInstances.filter(row => sameInstanceActionTarget(target, row, 'A')).length === 1;
   const render = runInNewContext(`${renderSource}\nrenderContextRoster`, context);
-  render(roster);
+  render(rows);
   // The row's context menu (#1559): a right-click at the pointer, or Shift+F10 / the Menu key (clientX = clientY = 0).
   const contextMenu = (el, { x = 0, y = 0 } = {}) => el.dispatchEvent(new dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
   return { doc, rules, rule, render, said, contextMenu, rows: [...doc.querySelectorAll(".ctx-tree-row")],
@@ -186,7 +189,8 @@ function assertConnectors(u) {
   assert.equal(u.rule(".ctx-tree-row").getPropertyValue("--tree-link-shift"), "2px", "the sibling link 2px left of the dot's centre: 7px from the lineage");
   assert.equal(u.rule(".ctx-guide").left, "calc(13.25px + var(--tree-branch-offset) + var(--guide-level) * var(--tree-step))",
     "the solid lineage sits on the offset column, right of the dot column");
-  assert.equal(u.rule(".ctx-guide").borderLeft, "1.5px solid var(--tree-line)", "a visible, tokenized stroke");
+  assert.equal(u.rule(".ctx-guide").borderLeft, "1.5px solid var(--tree-stroke)", "a visible stroke, in the token that holds 3:1 (contrast-inventory.mjs)");
+  assert.equal(u.rule(".ctx-guide.elbow").borderBottom, "1.5px solid var(--tree-stroke)", "the elbow's run, the same stroke");
   assert.equal(u.rule(".ctx-guide.line").top, "0px", "a pass-through (and a branch row's vertical) spans the whole row: no notch at the elbow");
   assert.equal(u.rule(".ctx-guide.line").bottom, "0px", "a pass-through (and a branch row's vertical) spans the whole row: no notch at the elbow");
   assert.equal(u.rule(".ctx-guide.elbow").height, "calc(50% + 2px)", "the elbow lands on the child dot's centre");
@@ -202,10 +206,11 @@ function assertConnectors(u) {
     "the dot's ring hides the line under it, in the row's own solid colour");
 }
 
-// Slice 1 of the Desktop UI rework (D26, decided): the roster draws no lineage or sibling lines; indentation (18px a
-// level) and the gap before the next bundle show the tree, and each row says its relations in words. A parent wears
-// its disclosure on its name line (#1970). The connectors' rules stay for the command palette (assertConnectors).
-test("tree (non-layout): indentation, no lines, a parent's chevron on its name line; the connector rules stay for the palette", t => {
+// The related-work lines (superseding in part slice 1's D26): the roster draws a line for related work only (no flag,
+// no line); indentation (18px a level) and the gap before the next bundle show the rest of the tree, and each row
+// says its relations in words. A parent wears its disclosure on its name line (#1970). The connectors' rules are the
+// sidebar's and the command palette's (assertConnectors).
+test("tree (non-layout): indentation, no lines without a flag, a parent's chevron on its name line; the connector rules", t => {
   const u = fixture(t);
   assertConnectors(u);
   assert.equal(u.rule(".ctx-tree-row").getPropertyValue("--tree-step"), "18px");
@@ -221,9 +226,31 @@ test("tree (non-layout): indentation, no lines, a parent's chevron on its name l
     assert.equal(line.firstElementChild.nextElementSibling.className, "ctx-disclosure", "the disclosure right after the name");
   }
   assert.deepEqual(u.rows.map(row => row.style.getPropertyValue("--depth")), ["0", "1", "2", "1", "2", "0"]);
-  assert.deepEqual(u.rows.map(row => row.querySelectorAll(".ctx-guide, .ctx-guides").length), [0, 0, 0, 0, 0, 0], "no lines on any row");
+  assert.deepEqual(u.rows.map(row => row.querySelectorAll(".ctx-guide, .ctx-guides").length), [0, 0, 0, 0, 0, 0], "no flag: no lines on any row");
   assert.deepEqual(u.rows.map(row => row.querySelector(".ctx-relation")?.textContent ?? null),
     [null, ", under root", ", under child-a", ", under root", ", under child-b", null], "each child says its parent");
+});
+
+test("tree (non-layout): every child related: the pre-D26 lines, aria-hidden before the row, and \"related work\" in words", t => {
+  const u = fixture(t, css, relatedRoster);
+  const guides = row => [...row.querySelectorAll(":scope > .ctx-guides > .ctx-guide")].map(g => `${g.className.replace("ctx-guide ", "")}@${g.style.getPropertyValue("--guide-level")}`);
+  assert.deepEqual(u.rows.map(row => row.querySelector(".ctx-name").dataset.name), ["root", "child-a", "grand-a", "child-b", "grand-b", "unknown"]);
+  assert.deepEqual(u.rows.map(guides), [
+    ["down@0"],
+    ["elbow@0", "line@0", "down@1"],
+    ["line@0", "elbow@1"],
+    ["elbow@0", "down@1"],
+    ["elbow@1"],
+    [],
+  ]);
+  for (const row of u.rows.slice(0, 5)) {
+    assert.equal(row.firstElementChild.className, "ctx-guides", "the guides lead the row, as before D26");
+    assert.equal(row.firstElementChild.getAttribute("aria-hidden"), "true");
+  }
+  assert.equal(u.rows[5].querySelector(".ctx-guides"), null, "a row with no line carries no guides");
+  assert.deepEqual(u.rows.map(row => row.querySelector(".ctx-relation")?.textContent ?? null),
+    [null, ", under root, related work", ", under child-a, related work", ", under root, related work", ", under child-b, related work", null]);
+  assert.deepEqual(u.rows.map(row => row.style.getPropertyValue("--depth")), ["0", "1", "2", "1", "2", "0"], "the indent is unchanged");
 });
 
 test("roster DOM contract: named group separators, identity, active state, hidden-but-reachable tools and closed context menus", t => {

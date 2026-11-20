@@ -13,9 +13,9 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/same-work.mjs";
+import * as relatedWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
-const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
+const tree = { ...treeShared, ...treeView, ...relatedWork }; // the renderer's client imports, shipped
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget, sameInstanceActionTarget } from "../renderer/instance-action-target.mjs";
 import { instanceSplitPlan } from "../renderer/instance-split.mjs";

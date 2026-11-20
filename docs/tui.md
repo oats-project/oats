@@ -180,7 +180,7 @@ while a terminal is open); under 80 columns it has the whole width.
   group's top instance, so starting or stopping an instance moves nothing. An instance
   that others were spawned from has them indented under it, and keeps its
   place when it gains or loses one. Under one parent, the instances that do
-  its work (the kernel's `sameWork`, from an OATS with `instance-same-work`)
+  its work (the kernel's `relatedWork`, from an OATS with `instance-related-work`)
   come first, then the others, each part newest first, as the Desktop lists
   them. Pinned instances come before all of these, at every level, and an
   instance with a pinned one below it counts as pinned
