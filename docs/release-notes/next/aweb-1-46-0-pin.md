@@ -1,3 +1,0 @@
-## Changed
-
-- **OATS pins oats.aweb 1.46.0** (from 1.45.0). It adds the view operation `messaging:mail`: an instance's own mail, read without acknowledging anything, which the Desktop's mail sheet reads (`mailApi: 1`, [Mail](../desktop-cli-api.md#mail-mailapi-1)). Floors are unchanged: OATS >=0.68.0, aw >=1.36.33, tested aw 1.36.58. The mail read alone needs aw >=1.36.53 and answers `E_AW_TOO_OLD` below it. Running instances keep the module they were spawned with: respawn them, or move a stopped one with `oats instance upgrade`, to take 1.46.0. Until then, their mail sheet shows `E_OPERATION_UNKNOWN`.

@@ -1,4 +1,0 @@
-## Documentation
-
-- **A view operation may carry one structured field.** Beside its `documents`, a view's result may hold one field named after its operation and versioned by its own `<name>Api`. The kernel validates `documents` only and relays the result unchanged, locally and through `--server`, so a client can rely on the field reaching it as the provider wrote it ([desktop-cli-api.md](../desktop-cli-api.md#oats-operation-run)).
-- **`messaging:mail`, `mailApi: 1`: an agent's own mail, read without acknowledging it.** The messaging layer's answer is described once for every messaging provider: received and sent mail, newest first across the agent's identities, with bounded bodies and answers, paging, partial long conversations, per-identity errors and how older sides answer ([desktop-cli-api.md](../desktop-cli-api.md#mail-mailapi-1)). oats.aweb is its first provider. No kernel change: an older kernel relays it the same way.

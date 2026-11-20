@@ -6,12 +6,12 @@ host that comes from it.
 
 ## Upgrading to the latest version
 
-The latest version is **OATS 0.69.22** ([release notes](release-notes/v0.69.22.md)).
-The 0.69.22 Desktop accepts OATS CLIs `>=0.26.0`, tested through 0.69: the
+The latest version is **OATS 0.69.23** ([release notes](release-notes/v0.69.23.md)).
+The 0.69.23 Desktop accepts OATS CLIs `>=0.26.0`, tested through 0.69: the
 Desktop and the CLI can be upgraded [in either order](#either-order-works).
 
 **First, read the `## Upgrade` section of every release after yours, up to
-0.69.22,** in the [release notes](release-notes/): it says what to do before
+0.69.23,** in the [release notes](release-notes/): it says what to do before
 the CLI changes, and what else must change with it (the Desktop, another
 tool, a package pin). [Coming from an older version](#coming-from-an-older-version)
 names the releases that ask for more than the steps below. `oats version`
@@ -20,8 +20,8 @@ prints the version you have.
 Then, on each host:
 
 ```sh
-                                     # 0. where the Desktop is installed: Desktop 0.69.22, in either order
-npm install -g @awebai/oats@0.69.22  # 1. the CLI
+                                     # 0. where the Desktop is installed: Desktop 0.69.23, in either order
+npm install -g @awebai/oats@0.69.23  # 1. the CLI
 oats update                          # 2. in each deployment: the plan, then it asks before it runs
 oats doctor                          # 3. in the same deployment
 ```
@@ -217,6 +217,11 @@ of the Desktop and the CLI, and an optional package pin. A change a script
 must follow is in its release's Upgrade section whether or not it is listed
 here.
 
+- **[0.69.23](release-notes/v0.69.23.md#upgrade):** the catalog pins
+  oats.framework 1.27.0, oats.aweb 1.46.0 and oats.okf 6.3.0. Respawn
+  instances, or move stopped ones with `oats instance upgrade`, to take the
+  board teaching and the mail read. A team image that ran the experimental
+  bb image is rebuilt, with the bb image from oats-project/oats-bb.
 - **[0.69.22](release-notes/v0.69.22.md#upgrade):** the catalog pins
   oats.aweb 1.45.0; `setup --install-aw` installs the tested aw by default.
   The Desktop's leader is Ctrl+Space (Ctrl+X a click away; a leader you set is
