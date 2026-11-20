@@ -1452,6 +1452,12 @@ unknown or unreported harness shows "?". Sources and licences are in
 
 ## Security posture
 
+- The window enables Electron's renderer sandbox and context isolation with
+  Node integration disabled. On Linux the AppImage's OS sandbox is active
+  where the system allows unprivileged user namespaces. Otherwise the
+  AppImage starts without the OS sandbox, as it did before. Ubuntu 23.10
+  and later restrict those namespaces by default. The bundled preload
+  requires only `electron` and provides the `window.oatsDesktop` bridge.
 - The bundled backend listens on a **private socket only the app's main
   process can reach**: a Unix domain socket in a directory of its own, owned
   by you and closed to group and others (under `$XDG_RUNTIME_DIR` on Linux
@@ -1524,10 +1530,12 @@ and the AppImage read against the version the Install section states, held in
 `packages/desktop/scripts/linux-floor.json` + node-pty ABI + a headless run of
 the bundled backend, of its liveness collector and of every module main
 imports, from `app.asar` and the `client/` directory beside it, no GUI
-launch). The Linux leg then runs the
-smoke once more with its launch phase, under a virtual display; no macOS leg
-launches the window. The GUI phase retains the empty-directory picker launch
-and adds fresh AppImage probes with `--dir <fixture> --instance smoke-probe`,
+launch). The Linux leg then runs the smoke with the launch phase under a
+virtual display. The installer workflow's macOS legs use build-verify mode.
+On Linux the GUI phase launches the AppImage with `--appimage-extract-and-run`
+and reports the preload's sandbox state and the Electron arguments. It opens
+the empty-directory picker and runs fresh probes with `--dir <fixture>
+--instance smoke-probe`,
 asserting main's selection-request diagnostic. Repeated launches of the same
 arguments reach the running app. Both launches of the running fixture must
 open its terminal tab in the main area while keeping keyboard focus on its

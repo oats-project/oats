@@ -11,9 +11,9 @@ package; its dependencies (electron, node-pty, xterm) live here only.
 
 ```bash
 cd packages/desktop
-npm install          # postinstall bundles renderer/vendor/highlight.mjs (esbuild)
+npm install          # postinstall bundles the renderer vendor file and sandboxed preload (esbuild)
 npm run rebuild      # rebuild node-pty against the Electron ABI (first install / electron upgrade)
-npm start            # launches the app; it starts the bundled backend server on a private socket
+npm start            # rebuilds both bundles, then launches the app and its backend on a private socket
 ```
 
 Flags/env:
@@ -124,9 +124,13 @@ The shell has three navigation contexts:
   own file dialog (main passes the file it saves as `--cli-choice`); a server
   started by hand may take `--oats-bin <path>` instead. What the programs it
   starts receive is [below](#the-environment-of-the-programs-desktop-starts).
-- `preload.cjs` — contextBridge surface (`window.oatsDesktop`); renderer runs
-  with contextIsolation on, nodeIntegration off. Its one constant, `isOmarchy`,
-  is a boolean read once from main's window argument `--oats-host-omarchy`
+- `preload.cjs` — contextBridge surface (`window.oatsDesktop`), bundled with
+  `terminal-bridge.cjs` by `build-preload.mjs` into `generated/preload.cjs`.
+  Only that bundle ships and main loads it with sandbox and contextIsolation
+  on, nodeIntegration off. The bundle requires only `electron`. Electron's
+  sandboxed preload supplies the `Buffer` global used by terminal writes.
+  Postinstall, `npm start` and `npm run dist` rebuild it. Its one constant,
+  `isOmarchy`, is read once from main's `--oats-host-omarchy` window argument
   (`host-theme.mjs` `OMARCHY_ARG`, `omarchyHost`); nothing sends it, and it
   picks only the font's and the terminal size's defaults (`renderer/theme.mjs`
   `initFont`).

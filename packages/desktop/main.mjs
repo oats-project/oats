@@ -1008,10 +1008,10 @@ function createWindow(workspaceId, record = null) {
     title: windowTitle(workspaceId, servedList),
     backgroundColor: "#16161e",
     webPreferences: {
-      preload: join(HERE, "preload.cjs"),
+      preload: join(HERE, "generated", "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false, // preload needs require() for contextBridge; renderer stays isolated
+      sandbox: true, // the bundled preload requires only Electron's sandbox bridge
       additionalArguments: [...omarchyArguments],
     },
   });

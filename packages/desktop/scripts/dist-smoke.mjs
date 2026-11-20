@@ -28,9 +28,9 @@
 //      imports, loaded from where main names it. No GUI, and on Linux not
 //      the AppImage's launcher or runtime;
 //   5. the packaged app bundle launches and its renderer reaches the shell
-//      (CDP probe), which also proves main spawned the bundled server and it
-//      answered — i.e. no source-checkout dependency. Linux also launches the
-//      AppImage with real CLI-created running and stopped rows, first and then
+//      and exposes its preload bridge over CDP. This proves main spawned the
+//      bundled server and it answered. On Linux all GUI launches use AppImage
+//      extract-and-run, including real CLI-created running and stopped rows, first and then
 //      into each running app: running rows open a terminal without keyboard
 //      focus or input, stopped rows only select, and viewers are reaped.
 //
@@ -42,7 +42,7 @@
 // smoke a second time that way on the Linux leg, under xvfb-run. No macOS leg
 // runs it (the workflows say why).
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, statSync, readFileSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, statSync, readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +52,7 @@ import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory,
 import { verifyAppSignature } from "./codesign-verify.mjs";
 import { checkLinuxFloor } from "./linux-floor.mjs";
 import { WATCHDOG_MS, PHASE_BUDGET_MS, boundedTail, readDevToolsPort, awaitClose } from "./launch-probe.mjs";
+import { connectProbe, probeSandbox, probeTerminal, probeWorkspace, waitForShell } from "./sandbox-probe.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = join(HERE, "..");
@@ -253,11 +254,13 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
   // deliberately uses the running app's profile.
   async function probeWindow({ instance = false } = {}) {
     const running = instance === "running";
+    const linux = process.platform === "linux";
+    const executable = linux ? artifacts.AppImage : app.exe;
     const root = mkdtempSync(join(tmpdir(), "oats-desktop-smoke-"));
     const userData = join(root, "profile");
     const env = { ...process.env };
     for (const key of Object.keys(env)) {
-      if (/^(OATS_|AWEB_)/.test(key) || ["TMUX", "TMUX_PANE", "WAYLAND_DISPLAY", "ELECTRON_RUN_AS_NODE", "APPIMAGE", "APPDIR"].includes(key)) delete env[key];
+      if (/^(OATS_|AWEB_)/.test(key) || ["TMUX", "TMUX_PANE", "WAYLAND_DISPLAY", "ELECTRON_RUN_AS_NODE", "APPIMAGE", "APPDIR", "APPIMAGE_EXTRACT_AND_RUN", "NO_CLEANUP"].includes(key)) delete env[key];
     }
     Object.assign(env, { HOME: join(root, "home"), OATS_HOME_DIR: join(root, "oats"),
       TMUX_TMPDIR: join(root, "tmux"), TMPDIR: join(root, "tmp"), XDG_CONFIG_HOME: join(root, "config"), XDG_CACHE_HOME: join(root, "cache"),
@@ -357,19 +360,18 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
           console.log(`dist:smoke source baseline: ${JSON.stringify(sourceBefore)}`);
         }
         ok(`real kernel fixture lists smoke-probe, ${running ? "running on its private tmux server" : "never launched and not running"}`);
-        // CI need not provide FUSE. This still runs the shipped AppImage runtime and AppRun launcher.
-        // The runtime caches both launches under the AppImage digest in TMPDIR. A secondary
-        // runtime must not remove that tree when its handoff process exits: the primary still
-        // loads from it. Our private TMPDIR is removed after both process groups have been reaped.
-        env.NO_CLEANUP = "1";
         const runtime = await runTracked(artifacts.AppImage, ["--appimage-version"], { cwd: env.HOME, env, timeout: fixtureTimeout() });
         if (runtime.timedOut || runtime.code !== 0) throw new Error(`AppImage runtime version failed: ${runtime.stderr}`);
         ok(`AppImage runtime: ${String(runtime.stdout + runtime.stderr).trim()}`);
-        // This runtime handles the extraction environment before --appimage-* arguments.
-        env.APPIMAGE_EXTRACT_AND_RUN = "1";
+        // The repeated launch shares the runtime's extraction. Keep it until both
+        // process groups have ended and the smoke removes its private TMPDIR.
+        env.NO_CLEANUP = "1";
       }
-      const args = [`--remote-debugging-port=0`, `--user-data-dir=${userData}`,
-        "--no-sandbox", "--disable-gpu", "--ozone-platform=x11", "--dir", instance ? deployment : userData];
+      // The AppRun launcher handles the host's user-namespace policy. No sandbox
+      // switch is supplied by the smoke, and extract-and-run does not need FUSE.
+      const args = [...(linux ? ["--appimage-extract-and-run", "--ozone-platform=x11"] : []),
+        "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${userData}`,
+        "--disable-gpu", "--dir", instance ? deployment : userData];
       if (instance) args.push("--instance", "smoke-probe");
       // Slice G resource-containment baseline: capture the `oatsdesk-*` tmux
       // viewer count before launch and assert it is RESTORED after the app is
@@ -383,7 +385,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
       }
       const viewerBaseline = await oatsdeskViewerCount(); // 0 when tmux is absent/no-server (ENOENT/nonzero → empty stdout → 0); null only on a tmux timeout
       if (running && viewerBaseline === null) throw new Error("fixture viewer baseline could not be read");
-      const child = spawnTracked(instance ? artifacts.AppImage : app.exe, args,
+      const child = spawnTracked(executable, args,
         { cwd: env.HOME, stdio: ["ignore", "pipe", "pipe"], env });
       let childLog = "", childExit = null, startupLog = "", stdoutPending = "";
       child.stdout?.on("data", (d) => {
@@ -438,7 +440,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
               expression: `new Promise((ok) => {
                 const probe = () => {
                   const nav = document.querySelectorAll("#nav .nav-item").length;
-                  if (nav > 0) ok("SHELL_OK nav=" + nav);
+                  if (nav > 0 && typeof window.oatsDesktop?.api === "function") ok("SHELL_OK nav=" + nav);
                   else setTimeout(probe, 500);
                 }; probe();
                 setTimeout(() => ok("SHELL_TIMEOUT html=" + document.body.innerHTML.slice(0, 200)), 15000);
@@ -454,17 +456,30 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
         });
         ws.close();
         if (!String(result).startsWith("SHELL_OK")) throw new Error(`renderer did not reach the shell: ${result}`);
+        if (!instance) {
+          const cdp = await connectProbe(targets.webSocketDebuggerUrl);
+          try {
+            const state = await probeSandbox(cdp, { requireSandbox: !linux });
+            await waitForShell(cdp, 15000, 'reloaded picker');
+            ok(`packaged preload process.sandboxed=${String(state.sandboxed)}, process.contextIsolated=${state.isolated}, process.argv=${JSON.stringify(state.argv)} (CDP call frame)`);
+          } finally { cdp.close(); }
+        }
         // No TCP listener but the smoke's own remote-debugging port, in main or in its backend (Linux /proc).
-        if (process.platform === "linux" && !instance) {
-          const backendPid = childPidMatching(child.pid, /server\/oats-web\.mjs start/);
+        if (linux && !instance) {
+          // The AppImage runtime can remain the parent of the extracted Electron binary.
+          const mainPid = childPidMatching(child.pid, /^[^ ]*\/oats-desktop /) ?? child.pid;
+          const backendPid = childPidMatching(mainPid, /server\/oats-web\.mjs start/);
           if (!backendPid) throw new Error(`the packaged app's backend server process was not found among its children; output tail:\n${await drainTail()}`);
-          const held = { main: listeningTcpPorts(child.pid), backend: listeningTcpPorts(backendPid) };
+          const mainArgv = readFileSync(`/proc/${mainPid}/cmdline`, "utf8").split("\0").slice(0, -1);
+          if (!mainArgv.includes(`--user-data-dir=${userData}`)) throw new Error("AppImage main process does not own the probe profile");
+          ok(`packaged AppImage effective main argv: ${JSON.stringify(mainArgv)}`);
+          const held = { main: listeningTcpPorts(mainPid), backend: listeningTcpPorts(backendPid) };
           if (held.main === null || held.backend === null) throw new Error("the listening sockets of the app or its backend could not be read from /proc");
           const extra = unexpectedTcpListeners(held, port);
           if (extra.main.length || extra.backend.length) {
             throw new Error(`the packaged app or its backend listens on TCP besides the remote-debugging port ${port}: main ${extra.main.join(", ") || "none"}, backend ${extra.backend.join(", ") || "none"}`);
           }
-          ok(`the app (pid ${child.pid}) listens on no TCP port but the smoke's remote-debugging port ${port}, and its backend (pid ${backendPid}) on none of its own (${held.backend.length ? "it holds only that inherited listener" : "it holds none"}): it is reached over its private socket`);
+          ok(`the app (pid ${mainPid}) listens on no TCP port but the smoke's remote-debugging port ${port}, and its backend (pid ${backendPid}) on none of its own (${held.backend.length ? "it holds only that inherited listener" : "it holds none"}): it is reached over its private socket`);
         }
         if (instance) {
           const expected = `oats-desktop: launch --instance smoke-probe: selecting it in ${deployment}`;
@@ -585,7 +600,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
             }
           }
           const first = await observeRenderer("first");
-          const repeated = await runTracked(artifacts.AppImage, args, { cwd: env.HOME, env, timeout: PHASE_BUDGET_MS.repeatedLaunch });
+          const repeated = await runTracked(executable, args, { cwd: env.HOME, env, timeout: PHASE_BUDGET_MS.repeatedLaunch });
           if (repeated.timedOut || repeated.code !== 0) throw new Error(`second AppImage launch failed: ${boundedTail(repeated.stderr, repeated.stdout)}`);
           const repeatedDeadline = Date.now() + 5000;
           while (startupLog.trim().split("\n").length < 2 && !childExit && Date.now() < repeatedDeadline)
@@ -618,6 +633,28 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
               throw new Error(`${label} stopped launch left Home or opened a tab`);
             }
           }
+        }
+        if (running) {
+          const cdp = await connectProbe(targets.webSocketDebuggerUrl);
+          try {
+            const dropPath = join(root, 'sandbox-drop.txt');
+            writeFileSync(dropPath, 'Sandbox attachment fixture.\n');
+            const typed = await probeTerminal(cdp, fixtureRow.tmux, dropPath);
+            const expectedInput = `${typed}'${dropPath}' `;
+            // Independently read the private server and the inert harness's receipt.
+            let after;
+            const deadline = Date.now() + 10000;
+            do {
+              after = await sourceState();
+              if (after.input === expectedInput) break;
+              await new Promise(resolve => setTimeout(resolve, 100));
+            } while (Date.now() < deadline);
+            if (after.identity !== sourceBefore.identity || after.input !== expectedInput)
+              throw new Error(`terminal input/drop did not reach the exact fixture source: ${JSON.stringify(after)}`);
+            ok('bundled terminal bridge: native typed input reaches the private tmux source, output returns through onTermData, native dropped File yields its disk path and is pasted');
+            await probeWorkspace(cdp, { port, targetId: targets.id, deployment });
+            ok('workspace claim, takeover release/answer and unbind round-trip through the packaged preload');
+          } finally { cdp.close(); }
         }
         ok(`packaged ${instance ? "AppImage instance request" : "empty-dir picker"} launched; ${result}`);
       } catch (e) {
