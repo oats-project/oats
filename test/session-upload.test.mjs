@@ -71,8 +71,8 @@ test("a routed upload streams the bytes on ssh stdin to the real receiver over t
   } };
   write(join(env.OATS_HOME_DIR, "servers.json"), JSON.stringify(servers));
   // An old remote advertises no session-upload; a lying remote stores different bytes.
-  write(join(base, "old-oats.sh"), `#!/bin/sh\necho '{"schemaVersion":1,"name":"@awebai/oats","version":"0.22.12","desktopApi":1,"harnesses":["pi"],"sessionBackends":["tmux"],"launchOptions":[],"remote":["session","session-start"],"features":["retire-home","session-start"]}'\n`);
-  write(join(base, "liar-oats.sh"), `#!/bin/sh\ncase "$1" in version) echo '{"schemaVersion":1,"name":"@awebai/oats","version":"0.22.13","desktopApi":1,"harnesses":["pi"],"sessionBackends":["tmux"],"launchOptions":[],"remote":["session","session-upload"],"features":["session-upload"]}';; *) cat >/dev/null; echo '{"schemaVersion":1,"ok":true,"result":{"path":"/srv/x/.oats-attachments/drop.bin","bytes":3,"sha256":"deadbeef"}}';; esac\n`);
+  write(join(base, "old-oats.sh"), `#!/bin/sh\necho '{"schemaVersion":1,"name":"@awebai/oats","version":"0.69.15","desktopApi":1,"harnesses":["pi"],"sessionBackends":["tmux"],"launchOptions":[],"remote":["session","session-start"],"features":["retire-home","session-start"]}'\n`);
+  write(join(base, "liar-oats.sh"), `#!/bin/sh\ncase "$1" in version) echo '{"schemaVersion":1,"name":"@awebai/oats","version":"0.69.15","desktopApi":1,"harnesses":["pi"],"sessionBackends":["tmux"],"launchOptions":[],"remote":["session","session-upload"],"features":["session-upload"]}';; *) cat >/dev/null; echo '{"schemaVersion":1,"ok":true,"result":{"path":"/srv/x/.oats-attachments/drop.bin","bytes":3,"sha256":"deadbeef"}}';; esac\n`);
   for (const f of ["old-oats.sh", "liar-oats.sh"]) chmodSync(join(base, f), 0o755);
   const h = home("dev-remote");
   for (const [server, name] of [["build", "dev-remote"], ["old", "dev-old"], ["liar", "dev-liar"]]) write(join(env.OATS_HOME_DIR, "remote", server, `${name}.json`), JSON.stringify({ serverId: server, instance: name, home: h, target: { sshHost: servers.servers[server].sshHost, workspace, oatsPath: servers.servers[server].oatsPath } }));
@@ -158,7 +158,7 @@ test("corrections: simultaneous same-name receives never clobber, a planted syml
     { remote: undefined, features: undefined },
   ];
   for (const probe of probes) {
-    const exec = (bin, argv) => JSON.stringify({ schemaVersion: 1, name: "@awebai/oats", version: "0.22.13", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], ...probe });
+    const exec = (bin, argv) => JSON.stringify({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], ...probe });
     const saved = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "h");
     try {
       const src = join(base, "local", "gate.bin"); write(src, payload);

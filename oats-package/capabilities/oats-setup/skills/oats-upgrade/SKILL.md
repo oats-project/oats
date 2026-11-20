@@ -89,6 +89,15 @@ installed copy.
 
 ## 3. The plan
 
+Include every execution host used with `--server` in the plan. The routing
+floor is 0.69.15: upgrade any older host first with
+`npm install -g @awebai/oats@latest` there. Every routed command except `status`
+refuses an older host: retire, session, schedule and operations included.
+For a spawn, a host at the floor must also advertise `spawn-task-stdin`,
+`spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2`; missing features
+are an upgrade refusal too, never a fallback that puts the task on argv or
+spawns without a retry key.
+
 Write one plan, in this order, each step with the release or the page that
 asks for it:
 

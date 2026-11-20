@@ -566,7 +566,7 @@ test("remote schedules route to the server workspace only when the host advertis
   const oatsHome = process.env.OATS_HOME_DIR; mkdirSync(oatsHome, { recursive: true });
   writeFileSync(join(oatsHome, "servers.json"), JSON.stringify({ servers: { s: { sshHost: "h", workspace: "/w" } } }));
   const calls = [];
-  const io = (features, scheduleApi) => ({ execFileSync: (b, argv) => { const a = argv.join(" "); calls.push(a); if (a.includes("version --json")) return JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.22.10", remote: ["session"], features, scheduleApi } }); return JSON.stringify({ schemaVersion: 1, ok: true, result: { schedules: [], scheduler: { installed: false, active: false, lastTick: null, maxConcurrent: 1 } } }); } });
+  const io = (features, scheduleApi) => ({ execFileSync: (b, argv) => { const a = argv.join(" "); calls.push(a); if (a.includes("version --json")) return JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.69.15", remote: ["session"], features, scheduleApi } }); return JSON.stringify({ schemaVersion: 1, ok: true, result: { schedules: [], scheduler: { installed: false, active: false, lastTick: null, maxConcurrent: 1 } } }); } });
   assert.throws(() => scheduleRemote("s", ["list"], io(["retire-home"])), (e) => e.code === "E_REMOTE_INCOMPATIBLE" && /schedules/.test(e.message));
   assert.equal(calls.filter((c) => c.includes("schedule list")).length, 0, "refused before any remote schedule command");
   const out = scheduleRemote("s", ["add", "x", "--spec-json", "{}"], io(["retire-home", "schedule"]));
@@ -586,7 +586,7 @@ test("remote host cap options require explicit support before forwarding, includ
     const mutations = [];
     return { mutations, server, execFileSync: (_bin, argv) => {
       const command = argv.at(-1);
-      if (command.includes("version --json")) return JSON.stringify({ schemaVersion: 1, desktopApi: 1, version: "0.39.4", features });
+      if (command.includes("version --json")) return JSON.stringify({ schemaVersion: 1, desktopApi: 1, version: "0.69.15", features });
       mutations.push(command);
       return JSON.stringify({ schemaVersion: 1, ok: true, result });
     } };
@@ -627,7 +627,7 @@ test("a routed host install --register-only is refused here unless the host adve
     return { sent, server, execFileSync: (_bin, argv) => {
       const command = argv.at(-1);
       sent.push(command);
-      if (command.includes("version --json")) return JSON.stringify({ schemaVersion: 1, desktopApi: 1, version: "0.69.14", features });
+      if (command.includes("version --json")) return JSON.stringify({ schemaVersion: 1, desktopApi: 1, version: "0.69.15", features });
       return JSON.stringify({ schemaVersion: 1, ok: true, result });
     } };
   };
@@ -1240,12 +1240,12 @@ test("a routed spawn refuses a wake schedule when the host lacks the feature and
   writeFileSync(join(oatsHome, "servers.json"), JSON.stringify({ servers: { s: { sshHost: "h", workspace: "/w" } } }));
   const calls = [];
   const io = (features) => ({ execFileSync: (b, argv) => { const a = argv.join(" "); calls.push(a);
-    if (a.includes("version --json")) return JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.22.10", harnesses: ["pi", "claude", "codex"], sessionBackends: ["tmux"], launchOptions: ["yolo"], remote: ["spawn", "session"], features } });
+    if (a.includes("version --json")) return JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.69.15", harnesses: ["pi", "claude", "codex"], sessionBackends: ["tmux"], launchOptions: ["yolo"], remote: ["spawn", "session"], features: ["spawn-task-stdin", "spawn-preview-2", "spawn-apply-2", "spawn-idempotency-2", ...features] } });
     if (a.includes(" status ")) return JSON.stringify({ schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "claude" }] } });
     return JSON.stringify({ schemaVersion: 1, ok: true, result: { instance: "dev-x", home: "/w/agents/dev/instances/dev-x", launched: true } }); } });
-  assert.throws(() => routeCommand("s", "spawn", ["dev", "--wake-json", "{\"cron\":\"*/5 * * * *\",\"tz\":\"UTC\",\"message\":\"hi\"}"], io(["retire-home"])), (e) => e.code === "E_REMOTE_INCOMPATIBLE" && /wake schedule/.test(e.message));
+  assert.throws(() => routeCommand("s", "spawn", ["dev", "--expect-decision", "r1", "--idempotency-key", "k1", "--wake-json", "{\"cron\":\"*/5 * * * *\",\"tz\":\"UTC\",\"message\":\"hi\"}"], io(["retire-home"])), (e) => e.code === "E_REMOTE_INCOMPATIBLE" && /wake schedule/.test(e.message));
   assert.equal(calls.filter((c) => c.includes(" spawn ")).length, 0, "refused before spawning");
-  const out = routeCommand("s", "spawn", ["dev", "--wake-json", "{\"cron\":\"*/5 * * * *\",\"tz\":\"UTC\",\"message\":\"hi\"}"], io(["retire-home", "schedule"]));
+  const out = routeCommand("s", "spawn", ["dev", "--expect-decision", "r1", "--idempotency-key", "k1", "--wake-json", "{\"cron\":\"*/5 * * * *\",\"tz\":\"UTC\",\"message\":\"hi\"}"], io(["retire-home", "schedule"]));
   assert.equal(out.envelope.ok, true);
   assert.match(calls.find((c) => c.includes(" spawn ")), /--wake-json/);
 });

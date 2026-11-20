@@ -123,7 +123,7 @@ test("oats retire: the plan's notes, the recovery line, the extra-tree line and 
 // ---- Routed: the host's answer, printed here ----
 
 const CLI = new URL("../bin/oats.mjs", import.meta.url).pathname;
-const PROBE = { schemaVersion: 1, name: "@awebai/oats", version: KERNEL, desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "retire", "status", "session"], features: ["harness", "retire-home"] };
+const PROBE = { schemaVersion: 1, name: "@awebai/oats", version: KERNEL, desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "retire", "status", "session"], features: ["harness", "retire-home", "spawn-task-stdin", "spawn-preview-2", "spawn-apply-2", "spawn-idempotency-2"] };
 const WS = "/srv/ws";
 const HOME = `${WS}/agents/dev/instances/dev-a`;
 const ROSTER = { root: `${WS}/agents`, agents: [{ name: "dev", instances: [{ instance: "dev-a", home: HOME, running: false }] }] };
@@ -149,18 +149,18 @@ function routed(t, answers) {
 }
 
 test("oats spawn --server: the host's warnings are spelled on their WARNING lines here, and its JSON is relayed as it is", (t) => {
-  const run = routed(t, { "spawn dev": ok({ instance: "dev-a", agent: "dev", home: HOME, work: "worktree", branch: "agents/dev-a", launched: false, warnings: [`the host's hook says ${HOSTILE}`] }) });
+  const receipt = { instance: "dev-a", agent: "dev", home: HOME, work: "worktree", branch: "agents/dev-a", launched: false, warnings: [`the host's hook says ${HOSTILE}`] };
+  const run = routed(t, {
+    "spawn dev --purpose a --no-launch --preview": ok({ ...receipt, spawnPreviewApi: 2, preview: true, decision: { instance: "dev-a", revision: "r1" } }),
+    "spawn dev": ok(receipt),
+  });
   const text = run(["spawn", "dev", "--server", "build", "--purpose", "a", "--no-launch"]);
   assert.equal(text.status, 0, text.stdout + text.stderr);
-  // The host of this file's probe advertises none of the keyed spawn's features, so the route adds its own warning.
-  const warnings = linesWith(text.stdout, "WARNING");
-  assert.equal(warnings.length, 2, text.stdout);
-  assert.equal(warnings[0], `  WARNING: the host's hook says ${SPELLED}`);
-  assert.match(warnings[1], /^  WARNING: remote oats \S+ at build-host does not advertise spawn-preview-2, spawn-apply-2, spawn-idempotency-2: /);
+  assert.deepEqual(linesWith(text.stdout, "WARNING"), [`  WARNING: the host's hook says ${SPELLED}`]);
   assert.doesNotMatch(text.stdout + text.stderr, RAW, "no escape and no bidi override reaches the terminal");
   const json = run(["spawn", "dev", "--server", "build", "--purpose", "a", "--no-launch", "--json"]);
   assert.equal(json.status, 0, json.stdout + json.stderr);
-  assert.ok(JSON.parse(json.stdout).result.warnings.includes(`the host's hook says ${HOSTILE}`), json.stdout);
+  assert.deepEqual(JSON.parse(json.stdout).result.warnings, receipt.warnings, json.stdout);
 });
 
 test("oats retire --server: the text prints the receipt's warnings as a local retire does, spelled, and its recovery and extra-tree lines spell what they name", (t) => {

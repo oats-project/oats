@@ -252,7 +252,7 @@ test("schedules: a definition's `runtime` is its harness at add and when stored,
   }
 });
 
-test("remote schedules and probes: a spec is sent in the host's names; a pre-0.27 host's `runtimes` is its harness list", async () => {
+test("remote schedules and probes: a spec is sent in the host's names; a host's legacy `runtimes` is its harness list", async () => {
   // short, and its OATS_HOME_DIR is <base>/h: that holds ssh's control socket (ssh/<40 hex>), which ssh needs
   // within 86 bytes, under the root run's directory of the file (docs/implementation.md, fixtures)
   const base = realpathSync(mkdtempSync(join(tmpdir(), "o-hr-")));
@@ -264,22 +264,22 @@ test("remote schedules and probes: a spec is sent in the host's names; a pre-0.2
     writeFileSync(join(process.env.OATS_HOME_DIR, "servers.json"), JSON.stringify({ servers: { s: { sshHost: "h", workspace: "/w" } } }));
     const sent = [];
     const remote = (features, extra = {}) => ({ execFileSync: (b, argv) => { const a = argv.join(" "); sent.push(argv.at(-1));
-      return a.includes("version --json") ? JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.26.0", remote: ["session"], features, scheduleApi: 2, ...extra } })
+      return a.includes("version --json") ? JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.69.15", remote: ["session"], features, scheduleApi: 2, ...extra } })
         : JSON.stringify({ schemaVersion: 1, ok: true, result: {} }); } });
     resetRuntimeNames();
     const add = (spec) => ["add", "x", "--spec-json", JSON.stringify(spec)];
     const specOf = () => { const cmd = sent.at(-1); const m = cmd.match(/--spec-json ('(?:[^']|'\\'')*'|\S+)/); return JSON.parse(m[1].startsWith("'") ? m[1].slice(1, -1).replace(/'\\''/g, "'") : m[1]); };
     scheduleRemote("s", add({ kind: "spawn", harness: "pi" }), remote(["schedule"]));
-    assert.deepEqual(specOf(), { kind: "spawn", runtime: "pi" }, "a 0.26.x host reads `runtime`");
+    assert.deepEqual(specOf(), { kind: "spawn", runtime: "pi" }, "a host without the harness feature reads `runtime`");
     scheduleRemote("s", add({ kind: "spawn", runtime: "pi" }), remote(["schedule", "harness"]));
-    assert.deepEqual(specOf(), { kind: "spawn", harness: "pi" }, "a 0.27 host reads `harness`");
+    assert.deepEqual(specOf(), { kind: "spawn", harness: "pi" }, "a host with the harness feature reads `harness`");
     assert.ok(runtimeNameWarning()?.sources.includes("runtime in the schedule spec (sent as the host's harness key)"), "the old key read here is noted");
     resetRuntimeNames();
     const before = sent.length;
     assert.throws(() => scheduleRemote("s", add({ kind: "spawn", harness: "pi", runtime: "codex" }), remote(["schedule", "harness"])), (e) => e.code === "E_SCHEDULE_INVALID" && /no request was forwarded/.test(e.message));
     assert.equal(sent.slice(before).some((c) => c.includes("schedule add")), false);
 
-    const probe = (result) => checkRemote({ sshHost: "h", workspace: "/w" }, { execFileSync: () => JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.26.0", ...result } }) });
+    const probe = (result) => checkRemote({ sshHost: "h", workspace: "/w" }, { execFileSync: () => JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.69.15", ...result } }) });
     const old = probe({ runtimes: ["pi", "claude", "codex"] });
     assert.deepEqual(old.harnesses, ["pi", "claude", "codex"]); assert.equal(old.advertised, true);
     assert.deepEqual(probe({ harnesses: ["pi", "codex"], runtimes: ["pi"] }).harnesses, ["pi", "codex"], "the new name wins");
