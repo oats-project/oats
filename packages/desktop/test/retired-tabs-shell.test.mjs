@@ -356,3 +356,19 @@ test("away and back: a remote tab is kept when its server's held rows say anothe
   await land(s, held({ missingRemotely: true }));
   assert.equal(s.c.tabs.has(tab.id), true);
 });
+
+// Session providers (spec C1, a known limit the spec owner accepted): a home that moves to a session provider while its
+// workspace is not shown. Its remembered terminal tab comes back with the workspace (the restore runs before the
+// first roster read and judges the row the tab last showed), and closes on that read's answer (retired-tabs.mjs, P).
+test("away and back: a tab whose home moved to a session provider while its workspace was away is restored, then closed on the workspace's first roster answer, quietly; the tab beside it stays", async t => {
+  const s = shell(t), a = await s.open(row("a")), b = await s.open(row("b"));
+  s.switchTo("B"); s.switchTo("A");
+  assert.equal(s.c.tabs.has(a.id), true, "restored before any roster read: its pane is the dead tmux window until the answer");
+  // The answer: the same home and incarnation, now on bb (its backend moved at a start), in any state.
+  const moved = { ...row("a"), backend: "bb", tmux: null, running: true, runtimeState: "unknown", session: { provider: "oats.bb", threadId: "thr_x" } };
+  await land(s, answer([moved, row("b")]));
+  assert.equal(s.c.tabs.has(a.id), false, "closed on the first roster answer");
+  assert.equal(s.c.tabs.has(b.id), true);
+  assert.deepEqual(s.detached, [1], "its viewer is detached, no other");
+  assert.equal(s.c.activeTab, b.id, "the tab beside it is shown");
+});

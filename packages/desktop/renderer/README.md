@@ -2347,7 +2347,10 @@ home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
   remembered tab whose last-shown row (`instanceRef`) is one; a recall runs before the
   workspace's first roster read, so a tab whose row became one while the workspace was
   away comes back and is closed by `retiredTabs` (P) on that first answer, quietly, as a
-  retired one is. An interactive open from anywhere else (the palette, a view's Open, a
+  retired one is (a known limit: a home's backend can move at a start, and until that
+  answer the restored tab shows the dead tmux pane, which takes no input; holding every
+  restored terminal for the roster read would slow every workspace switch;
+  `retired-tabs-shell.test.mjs` pins the close). An interactive open from anywhere else (the palette, a view's Open, a
   launch's `--instance`) says the sentence in a notice, never in an alert.
 
 The Schedules form keeps a schedule's `backend` when the kernel lists it
