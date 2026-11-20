@@ -2387,7 +2387,7 @@ With the kernel's board (feature `instance-board`; the shared contract module
 `packages/client/instance-board.mjs` validates the row's `board` and the
 `inspect --home --board` answer, and holds the rules both clients share: the
 three shown facts, the hidden-fact rule, the typed answer `<id>: <option>`,
-the dialog claims), a terminal tab is the agent's view. `syncTabNeedsInput`
+the dialog claims; a link the display filter would withhold is dropped from its fact), a terminal tab is the agent's view. `syncTabNeedsInput`
 calls `tabBoards.sync(tab, row, claim, workspace)` for each terminal tab, and
 gives the waiting row the claim only when that answers false: the board's own
 claim (producer `oats.board`) shows in the question zone instead. The view
@@ -2409,7 +2409,7 @@ has no local pane to read, answers `E_TERM_MODE_UNKNOWN` (`MODE_UNKNOWN_NOTE`); 
 written, and never a cancel. A remote row's view (`row.server`) never asks: its numbers are disabled from the start,
 with `remoteNote` (follow-up #2029: the remote kernel reporting the pane's mode would enable it). The frame and lease checks come before the read, so a document that holds no lease learns
 nothing about a pane. Not closed: a key the person presses into the scrollback during the read's few milliseconds. The view keeps no state about the input line: a card stays until the agent clears its
-question, and after a press the zone shows `TYPED_NOTE`, information only, which the next terminal input (`input`) or a
+question, and after a press the zone shows `TYPED_NOTE`, information only, which the next terminal input (`input`; not the terminal's own focus or mouse reports) or a
 changed board ends. While the board has a question, `sync` keeps its claim off the waiting row. The person's input is seen through its
 `onInput` observer. Before a number types, the view reads the claims again
 (`checkClaims`): only the latest claims read paints and may let the press type,

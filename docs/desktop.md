@@ -1129,7 +1129,8 @@ agent writes it with `oats instance board set` and `oats instance board ask`,
    A link shows as the agent's, with its host (`dev-a says: github.com…`). A
    press shows its whole address over the top of the terminal, wrapped, the
    host in bold, with **Open in browser** beside it: only that press opens it,
-   in your browser. Esc closes it. **×**, or
+   in your browser. Esc closes it. An address that looks like it carries a
+   secret (a token in it) is never shown: the fact shows without its link. **×**, or
    **u** on a focused fact, hides it on this computer only: the agent's board
    is unchanged, and the fact shows again when its value changes. **N hidden ·
    show** brings them all back.
