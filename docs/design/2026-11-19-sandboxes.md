@@ -658,7 +658,10 @@ sandboxes:
       atomic write under sync's own lock, only the entries whose changes are
       non-empty: an added capability or a changed source. Each such entry records its
       recorded set plus the additions, with the source changes applied, and the
-      revision. A capability the soul no longer derives stays recorded. An entry with
+      revision. A capability the soul no longer derives stays recorded, so if the
+      soul derives it again from the same source it is admitted without a new apply,
+      because it was reviewed once already; from another source it is a
+      `sourceChanged` and needs one. An entry with
       no additions or source changes keeps its recorded set and revision, so
       narrowing never edits the recorded plan. The write happens only when the whole
       sync has succeeded, with no problem in any sandbox. A sync that fails
