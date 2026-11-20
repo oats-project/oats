@@ -297,3 +297,52 @@ test("slice2b soul card type hierarchy", () => {
   assert.ok(px(".stitle") > px(".sdesc") && px(".sdesc") > px(".sfoot"), "three steps: name, body, meta");
   dom.window.close();
 });
+
+// Amendment 1, D (Pepe: "el list de capabilities m'agradaven mes com avans que et deia quins son els defaults del
+// workspace"; Joan's yes): Workspace defaults above the list again, Core slots then Additional, the list's own rows.
+test("slice2b capabilities shows workspace defaults", async () => {
+  const { renderCapabilityList, catalogCSS } = await import("../renderer/workspace-catalog.mjs");
+  const { workspaceDefaultsSections } = await import("../../client/capability-list.mjs");
+  const rows = [
+    { name: "oats.okf", kind: "package", package: "oats.okf", version: "2.1.3", layer: "knowledge", description: "Keeps knowledge." },
+    { name: "oats.aweb", kind: "package", package: "oats.aweb", version: "1.0.0", layer: "messaging", description: "Mail and chat." },
+    { name: "oats.core", kind: "package", package: "oats.framework", version: "1.4.0", layer: null, description: "How to operate inside OATS." },
+    { name: "oats.authoring", kind: "member", repoKey: "github.com/awebai/oats", layer: null },
+    { name: "own-runbook", kind: "member", repoKey: "github.com/acme/agents", layer: null },
+  ];
+  const status = { workspace: { name: "acme", key: "github.com/acme/agents" }, members: [{ key: "github.com/acme/agents", name: "agents", status: "confirmed" }],
+    packages: [{ id: "oats.okf", source: "catalog:oats.okf" }, { id: "oats.aweb", source: "catalog:oats.aweb" }, { id: "oats.framework", source: "catalog:oats.framework" }],
+    defaults: { slots: { knowledge: { name: "oats.okf", from: "package" }, messaging: null, tasks: null },
+      capabilities: [{ name: "oats.core", from: "package", off: false }, { name: "oats.authoring", off: true }] } };
+  // The shared grouping (packages/client), so the TUI draws the same.
+  const sections = workspaceDefaultsSections(rows, status);
+  assert.deepEqual(sections.core.map(({ layer, entries }) => [layer, entries.map((e) => e.row.name)]), [["knowledge", ["oats.okf"]], ["messaging", []], ["tasks", []]]);
+  assert.deepEqual(sections.additional.map((e) => [e.row.name, e.default]), [["oats.authoring", "off"], ["oats.core", "on"]]);
+  assert.equal(workspaceDefaultsSections(rows, { ...status, defaults: undefined }), null, "no reported defaults: no claim");
+  const dom = new JSDOM('<main class="oats-view"><div class="caps"></div></main>');
+  const doc = dom.window.document, host = doc.querySelector(".caps"), opened = [];
+  renderCapabilityList(host, { rows, status, query: "runbook", onOpen: (row) => opened.push(row.name) });
+  const parts = [...host.children].map((el) => el.dataset.part);
+  assert.deepEqual(parts, ["defaults", "all"], "the defaults above the list");
+  const defaults = host.querySelector("[data-part=defaults]");
+  assert.deepEqual([...defaults.querySelectorAll("h3, h4")].map((h) => h.textContent), ["Workspace defaults", "Core", "Additional"]);
+  assert.deepEqual([...defaults.querySelectorAll(".cap-slot")].map((s) => [s.dataset.slot, s.querySelector(".cap-slot-label").textContent,
+    s.querySelector(".cap-row")?.dataset.capability ?? s.querySelector(".cap-slot-none").textContent]),
+    [["knowledge", "Knowledge", "oats.okf"], ["messaging", "Messaging", "No default"], ["tasks", "Tasks", "No default"]]);
+  // Each default is the list's own row: its one line and where it comes from; never narrowed by the search.
+  const okf = defaults.querySelector('[data-capability="oats.okf"]');
+  assert.equal(okf.querySelector(".cap-row-desc").textContent, "Keeps knowledge.");
+  assert.ok(okf.querySelector(".cap-origin"), "where it comes from");
+  assert.deepEqual([...defaults.querySelectorAll(".cap-list")[1].querySelectorAll(".cap-row")].map((r) => [r.dataset.capability, [...r.querySelectorAll("[data-tag]")].map((t) => t.textContent)]),
+    [["oats.authoring", ["default · off"]], ["oats.core", ["default"]]]);
+  assert.deepEqual([...host.querySelectorAll("[data-part=all] .cap-row")].map((r) => r.dataset.capability), ["own-runbook"], "the search narrows the list only");
+  // One tab stop for the part, arrows across both groups; Enter opens the page; its focus key is its own.
+  const buttons = [...defaults.querySelectorAll("button.cap-row")];
+  assert.deepEqual(buttons.map((b) => b.tabIndex), [0, -1, -1]);
+  buttons[0].focus(); buttons[0].dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+  assert.equal(doc.activeElement, buttons[1]);
+  buttons[2].click(); assert.deepEqual(opened, ["oats.core"]);
+  assert.match(buttons[0].dataset.focusKey, /^defaults:cap:/);
+  assert.doesNotMatch(catalogCSS, /\.cap-(part|group|slot)[^{]*\{[^}]*(#[0-9a-f]{3,8}\b|rgba?\(|opacity)/i, "tokens only");
+  dom.window.close();
+});
