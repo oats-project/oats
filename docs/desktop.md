@@ -1181,10 +1181,12 @@ read the answer's first letter as its own key: the zone says "The terminal is
 in its scrollback: press q or scroll to the bottom, then press the number
 again." The Desktop checks the terminal just before it types, and types only
 when the check says it isn't in its scrollback: when it can't tell (the check
-failed, or the agent runs on another machine, whose terminal this computer can't
-check), nothing is typed and the zone says "The answer wasn't typed: the Desktop
+failed), nothing is typed and the zone says "The answer wasn't typed: the Desktop
 couldn't check the terminal's scrollback. Type it there yourself, or press the
-number again." The check and the typing are two steps a few milliseconds apart:
+number again." On an agent on another machine the numbers are disabled from the
+start, since its terminal can't be checked from this computer, and the zone says
+"This agent runs on another machine: type the answer in its terminal (for
+example q1: Yes)." (follow-up: #2029). The check and the typing are two steps a few milliseconds apart:
 if you enter the scrollback in exactly that moment, tmux can still read the
 answer's first letter as a scrollback key. That window is not closed.
 

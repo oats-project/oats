@@ -223,6 +223,7 @@ test('preload termWrite with { answer: true } asks main (term:answer) and resolv
   assert.deepEqual(calls, [], 'nothing reaches main for a refused request');
   reply = { terminalApi: 2, ok: false, code: 'E_TERM_MODE_UNKNOWN', message: 'The terminal could not be checked for its scrollback. Nothing was typed.' };
   assert.equal((await bridge.termWrite(h, 'q1: Yes', { answer: true })).code, 'E_TERM_MODE_UNKNOWN');
+  assert.equal(bridge.termWrite.length, 2, 'the option has a default: the exposed key keeps its arity (D-3)');
   // Without the option, termWrite is as before: synchronous, one-way, never an invoke.
   calls.length = 0;
   assert.deepEqual(bridge.termWrite(h, 'q'), { terminalApi: 2, ok: true, status: 'sent' });

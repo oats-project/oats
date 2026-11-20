@@ -33,6 +33,8 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
   function open(tab, row) {
     const state = { view: null, detailSeq: 0, claimsSeq: 0, detailSig: null, claimsSig: null, claims: [], alive: true, home: row.home };
     state.view = createAgentBoard({ pane: tab.paneEl, home: row.home, name: row.instance,
+      // An agent on another machine (a remote row): its pane can't be checked for the scrollback, so nothing types.
+      remote: typeof row.server === 'string' && row.server !== '',
       type: text => tab.typeText ? tab.typeText(text) : false, focusTerminal: () => tab.focusTerminal?.(), openLink, hidden, ...(now ? { now } : {}),
       // Before a number types: the claims again, read now. Only the latest read's claims reach the view (update).
       checkClaims: () => readClaims(state, state.workspace, state.row),

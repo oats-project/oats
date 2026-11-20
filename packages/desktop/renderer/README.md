@@ -2406,7 +2406,8 @@ the viewer pane's `#{pane_in_mode}` on its `=`-anchored session, synchronously, 
 loop in between. Only a read of 0 types. In a mode (tmux copy mode, where `q` is cancel and `q1: Yes` would arrive as
 `1: Yes`) it answers `E_TERM_IN_MODE` (`IN_MODE_NOTE`); a read that failed or didn't resolve, or a remote viewer, which
 has no local pane to read, answers `E_TERM_MODE_UNKNOWN` (`MODE_UNKNOWN_NOTE`); either way not one character is
-written, and never a cancel. The frame and lease checks come before the read, so a document that holds no lease learns
+written, and never a cancel. A remote row's view (`row.server`) never asks: its numbers are disabled from the start,
+with `remoteNote` (follow-up #2029: the remote kernel reporting the pane's mode would enable it). The frame and lease checks come before the read, so a document that holds no lease learns
 nothing about a pane. Not closed: a key the person presses into the scrollback during the read's few milliseconds. While
 an answer is pending (typed, no Enter yet; Ctrl+C or Ctrl+U frees it) a further press is refused (`PENDING_NOTE`).
 While the board has a question, answered on this tab or not, `sync` keeps its claim off the waiting row. The person's Enter is seen through its

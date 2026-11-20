@@ -56,7 +56,8 @@ function createTerminalBridge(ipc, webUtils) {
     termClose: h => leasedInvoke('term:close', h),
     // `{ answer: true }`: the agent view's answer (terminal-owner answer). Main types it only when the pane is in no mode
     // (tmux copy mode), so it resolves, a promise, with main's own answer: sent, or a refusal such as E_TERM_IN_MODE.
-    termWrite(h, data, options) {
+    // `options` has a default so the exposed function's length stays 2 (D-3 pins each preload key's arity).
+    termWrite(h, data, options = undefined) {
       if (options !== undefined) {
         try {
           const copy = handle(h);

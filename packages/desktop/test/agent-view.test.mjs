@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, IN_MODE_NOTE, MODE_UNKNOWN_NOTE, PENDING_NOTE, DETAIL_NOTES, BOARD_MALFORMED, boardDropped } from '../renderer/agent-board.mjs';
+import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, IN_MODE_NOTE, MODE_UNKNOWN_NOTE, PENDING_NOTE, remoteNote, DETAIL_NOTES, BOARD_MALFORMED, boardDropped } from '../renderer/agent-board.mjs';
 import { createTabBoards } from '../renderer/agent-board-tabs.mjs';
 import { boardData, boardDetailData, BOARD_FEATURE } from '../../client/instance-board.mjs';
 import { defaultBinding, TERMINAL_ALLOWLIST, DEFAULT_KEYMAPS } from '../renderer/keybindings.mjs';
@@ -852,6 +852,28 @@ test('agent view gate: after the last open question is answered, the waiting row
   f.boards.input(f.tab, '\r');
   assert.equal(f.pane.querySelector('.agent-questions'), null, 'the answered card hides');
   assert.equal(f.boards.sync(f.tab, row, claim, 'w'), true, 'the next poll keeps the claim off the waiting row');
+});
+
+// The maintainer's fail-closed condition, the lead's rule (2026-11-20): an agent on another machine has no pane this
+// computer can check for the scrollback, so its numbers are disabled from the start and say how to answer. #2029.
+test('agent view answering: on an agent on another machine the numbers are disabled from the start and type nothing', async t => {
+  const f = tabsFixture(t, { events: false });
+  const typed = []; f.tab.typeText = text => { typed.push(text); return true; };
+  const claim = { producer: 'oats.board', reason: 'attention', since: AT, message: 'Squash q1?' };
+  assert.equal(f.boards.sync(f.tab, f.row({ server: 'devbox' }), claim, 'w'), true);
+  const zone = f.pane.querySelector('.agent-questions'), note = zone.querySelector('.agent-q-note');
+  assert.ok([...zone.querySelectorAll('.agent-q-option')].every(b => b.disabled), 'every number disabled');
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, remoteNote('q1: Yes, one clean commit'));
+  assert.equal(note.textContent, 'This agent runs on another machine: type the answer in its terminal (for example q1: Yes, one clean commit).');
+  zone.focus(); zone.dispatchEvent(new zone.ownerDocument.defaultView.KeyboardEvent('keydown', { key: '1', bubbles: true, cancelable: true }));
+  zone.querySelector('.agent-q-option').click(); await f.flush();
+  assert.deepEqual(typed, [], 'nothing typed');
+  // The same agent on this computer types as before.
+  f.boards.close(f.tab);
+  assert.equal(f.boards.sync(f.tab, f.row(), claim, 'w'), true);
+  f.pane.querySelector('.agent-q-option').click(); await f.flush();
+  assert.deepEqual(typed, ['q1: Yes, one clean commit']);
 });
 
 // The round-4 delta's finding: the occurrence check fails closed.

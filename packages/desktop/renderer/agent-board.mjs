@@ -35,6 +35,10 @@ export const IN_MODE_NOTE = 'The terminal is in its scrollback: press q or scrol
 /** What the zone says when main could not tell whether the terminal is in its scrollback (a failed read, or an agent on
  * another machine, whose pane this computer can't read): it types only on a read that says no, so nothing was typed. */
 export const MODE_UNKNOWN_NOTE = "The answer wasn't typed: the Desktop couldn't check the terminal's scrollback. Type it there yourself, or press the number again.";
+/** What the zone says on an agent on another machine: its pane can't be checked for the scrollback from here (main
+ * answers an answer there E_TERM_MODE_UNKNOWN, fail closed), so the numbers are disabled from the start and the person
+ * types the answer in its terminal. `example` is the shown question's first answer. Follow-up: #2029. */
+export const remoteNote = example => `This agent runs on another machine: type the answer in its terminal (for example ${example}).`;
 export const PENDING_NOTE = 'An answer is already on the input line: send it, or clear it first.';
 /** What the view says for each outcome of the detail read (instance-board.mjs boardDetailData, and `failed`), and
  * for a row board that was not read whole: none of them reads as "no history" or "no questions". */
@@ -133,13 +137,14 @@ const observePane = (pane, fn) => {
  * @param {(url: string) => void} o.openLink   the system browser (the Desktop's external-open path)
  * @param {() => Promise<{ latest: boolean }>} [o.checkClaims]  reads the agent's live claims now; `latest`: no newer read
  *                                  began meanwhile (its claims then reached `update`)
+ * @param {boolean} [o.remote]   the agent runs on another machine: its numbers never type (remoteNote)
  * @param {() => boolean} [o.shown]  this tab's terminal is the one in view (the shell's test)
  * @param {ReturnType<typeof createHiddenFacts>} [o.hidden]
  * @param {() => number} [o.now]
  * @param {object} [o.measure]  the pane's room and what the board takes (layout; DOM by default)
  * @param {(pane: HTMLElement, fn: () => void) => () => void} [o.observe]  the pane's size (a ResizeObserver by default)
  */
-export function createAgentBoard({ pane, home, name, type, focusTerminal, openLink, checkClaims = null, shown: inView = () => true, hidden = createHiddenFacts(), now = () => Date.now(),
+export function createAgentBoard({ pane, home, name, type, focusTerminal, openLink, checkClaims = null, remote = false, shown: inView = () => true, hidden = createHiddenFacts(), now = () => Date.now(),
   measure: measured = {}, observe = observePane }) {
   const measure = { ...defaultMeasure, ...measured };
   const doc = pane.ownerDocument;
@@ -206,7 +211,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   const terminalSeen = () => { const h = measure.terminal(pane); return h === null || h >= TERMINAL_TYPE_MIN_PX; };
   async function choose(i) {
     const q = open()[index];
-    if (!q || dialog || answerText(q, i) === null || !inView() || !terminalSeen()) return false;
+    if (!q || dialog || remote || answerText(q, i) === null || !inView() || !terminalSeen()) return false;
     // One answer on the line at a time: a second press before the person's Enter would be typed onto the first.
     if (pending) { refusal = PENDING_NOTE; paint(); return false; }
     const seq = ++chooseSeq;
@@ -420,12 +425,12 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     // The same question's options are kept, nodes and focus, across repaints: only whether each is usable changes.
     const optionsKey = JSON.stringify([occurrence(q), q.options, q.optionsWithheld]);
     if (options.dataset.key === optionsKey) {
-      for (const b of options.querySelectorAll('.agent-q-option')) b.disabled = dialog || answerText(q, Number(b.dataset.option)) === null;
+      for (const b of options.querySelectorAll('.agent-q-option')) b.disabled = dialog || remote || answerText(q, Number(b.dataset.option)) === null;
     } else options.dataset.key = optionsKey, options.replaceChildren(...q.options.map((o, i) => {
       const li = node(doc, 'li');
       const b = node(doc, 'button', 'agent-q-option'); b.type = 'button'; b.dataset.option = String(i);
       b.append(node(doc, 'span', 'agent-q-num', String(i + 1)), ' ', node(doc, 'span', 'agent-q-label', q.optionsWithheld[i] ? displayLine(o) : o));
-      const usable = !dialog && answerText(q, i) !== null;
+      const usable = !dialog && !remote && answerText(q, i) !== null;
       b.disabled = !usable;
       b.setAttribute('aria-keyshortcuts', String(i + 1));
       b.addEventListener('click', () => choose(i));
@@ -435,7 +440,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     if (focusedOption) options.querySelector(`[data-option="${focusedOption}"]:not([disabled])`)?.focus();
     // A focused option that is gone or disabled now (a dialog opened) leaves the focus on the zone, never on the page.
     if (hadFocus && (!zone.contains(doc.activeElement) || doc.activeElement.disabled)) zone.focus();
-    const said = dialog ? DIALOG_NOTE : refusal;
+    const said = dialog ? DIALOG_NOTE : remote ? remoteNote(answerText(q, 0) ?? `${q.id}: …`) : refusal;
     note.hidden = !said; setText(note, said ?? '');
     zone.setAttribute('aria-label', `${count ? `${count[0].toUpperCase()}${count.slice(1)}` : 'A question'} from ${name}`);
     // The context: read with the detail (inspect --board) once the view is open; attributed, plain text, line breaks kept.
