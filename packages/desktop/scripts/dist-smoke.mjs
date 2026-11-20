@@ -537,7 +537,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
                       terminals: document.querySelectorAll('.term-wrap').length,
                       dialogs: [...document.querySelectorAll('[role="dialog"]')].filter(el => el.getClientRects().length).length,
                       mainNavigation: document.querySelector('#nav .nav-item.active')?.textContent?.trim() ?? null,
-                      // The view itself, not only its nav row (Home's row also stands for the Workspace page it opens).
+                      // The view itself, not only its nav row.
                       homeShown: !!document.querySelector('#stagehost .home [data-home-section]'),
                       notices: [...document.querySelectorAll('.app-toast-text')].map(el => el.textContent),
                     };

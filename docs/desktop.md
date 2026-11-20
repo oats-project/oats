@@ -270,7 +270,7 @@ workspace on a server: `name — server`).
 
 The sidebar, top to bottom: the **Workspace** heading, with **Add local
 workspace…** (the **+**) at its end, over the list of workspaces; a thin line;
-two pinned rows, **Home** and **Automations**, drawn like the
+three pinned rows, **Home**, **Workspace** and **Automations**, drawn like the
 instance rows (Automations shows a red dot, and says "a run failed", while a
 schedule's last run failed: see [Scheduling agents](#scheduling-agents-and-wake-messages));
 another line; **Agents**, a heading with the running count over the list of
@@ -288,36 +288,47 @@ for the keys. A window opens on **Home**: at launch, and after you choose a work
 for it. Connections is in the
 command palette (**Connections**, among its sections), and the palette opens with its
 shortcut or the leader (Ctrl+Space) then `k`.
-**Home** answers two questions on one page: what needs you, and what you
-have.
+**Home** answers two questions on one screen: what needs you, and what you
+have. Top to bottom:
 
-- **The board.** **Needs you** lists the agents waiting on you, each with its
-  message, newest first; **Running** lists the live ones, newest first. A
-  group with nobody in it isn't shown. Stopped agents aren't on the board, and
-  a live agent is "running": OATS doesn't report working or idle yet, and the
-  Desktop doesn't guess it. There is no "New" group yet either, since nothing
-  records which agents stopped or finished since you last looked. Enter (or a
-  click) on a row opens it as it does in the roster: a running agent's
-  terminal, a stopped one's Start.
-- **The overview.** Agents, Souls, Capabilities, Teams, Machines and Graph,
-  each with what you have ("You have 4 souls"). Enter opens that part of the
-  Workspace page on its tab (the Machines canvas stands in for the Graph for
-  now), and Esc there comes back to Home. Agents opens **Home › Agents**: every
-  agent, running or stopped, with its soul and machine, its state, and who
-  started it (the person it's attributed to, or the agent that spawned it).
-  An agent waiting on you wears the needs-input mark there too, and says
-  "needs you". Esc or the **‹ Home** button returns.
+- **Needs you.** The agents waiting on you, newest first: each with the
+  needs-input mark, its name, its soul and machine, and its message. Enter (or
+  a click) opens one as it does in the roster. Eight show at most, then **Show
+  all N**, which shows the rest in place. With none, one quiet line says
+  "Nothing needs you."
+- **One summary line**, such as "24 agents · 21 running · 3 need you · 0
+  stopped" (and how many have no known state, when some don't). Home doesn't
+  list the running agents: the sidebar does. A live agent is "running": OATS
+  doesn't report working or idle yet, and the Desktop doesn't guess it.
+- **The workspace, as one row of tiles**, each a button with its count:
+  **Agents**, **Souls**, **Capabilities**, **Teams**, **Machines** and
+  **Automations** (with the sidebar row's red dot while a run failed). A count
+  still being read says "Counting…", and one that couldn't be read says so;
+  nothing is guessed. Enter opens that part of the Workspace page on its tab
+  (Machines on its List), and Esc there comes back to Home; Automations opens
+  its page. Agents opens **Home › Agents**: every agent, running or stopped, in
+  the sidebar's order (pinned ones first), with its soul and machine, its
+  state, and who started it (the person it's attributed to, or the agent that
+  spawned it). An agent waiting on you wears the needs-input mark there too,
+  and says "needs you". Esc or the **‹ Home** button returns.
 - **A workspace with no agents yet** shows what OATS does in two lines and
-  three keys (New agent, the command palette, Home), then the overview.
+  three keys (New agent, the command palette, Home), then the tiles.
 
-Home has no key of its own yet: the palette's **Home** (among its sections)
-opens it. The
-board never changes the roster's order: urgency is sorted on Home only.
+Home has no key of its own yet: its row, or the palette's **Home** (among its
+sections), opens it. Home never changes the roster's order: urgency is sorted
+on Home only.
+
+**The Workspace page** has its own row, under Home's, and ⌘2 / Ctrl+2. Its
+head says where you are, such as **Workspace › Souls**, above its tabs (Souls,
+Capabilities, Teams, Machines, Setup). Every way onto it (its row, a Home
+tile, the palette, the key, a soul's or a capability's page) marks the
+Workspace row, never Home's. A soul's, a capability's or a team's page shows
+its own breadcrumb in place of the head.
 
 **The command palette** (⌘K / Alt+K) is the one place to reach everything.
 It lists, in order: the agents that need you (the newest first), your recent
 agents (the sidebar's tree, the one you used last on top), the sections
-(Home, Workspace overview and its tabs, Automations, Connections), the commands,
+(Home, Workspace and its tabs, Automations, Connections), the commands,
 and one **New agent: <soul>** row per soul. Type to narrow it; `>` keeps only
 the commands and `+` only the souls.
 
@@ -428,8 +439,8 @@ a choice saved for it is ignored.)
 - **The current workspace** has its circle filled, like a running
   instance's, and its name in bold; the others have the ring a stopped
   instance has. It has no background of its own: the selection's background
-  marks the current page (Home, whose row also stands for the Workspace page it
-  opens, or Automations), so the
+  marks the current page (Home, Workspace, whichever of its tabs or pages
+  shows, or Automations), so the
   sidebar fills one "you are here" row. A screen reader hears it as current,
   and the list's description names it, by the same name as its row.
 - **The needs-input mark.** A row has an exclamation mark (a small amber
@@ -1493,7 +1504,7 @@ then requires that launch to reactivate the retained tab with exactly
 one viewer and no terminal focus event. CDP sends a key to the window;
 independent tmux pane/output reads prove no input reached the inert harness. The stopped fixture stays selected
 only, with no tab or Start dialog, on Home (its row current and its view
-shown, since Home's row also stands for the Workspace page). The smoke also
+shown). The smoke also
 asserts that viewer cleanup restores its private tmux baseline. The fixture's
 workspace/member source, soul definition and inert harness executable are authored by the test-only
 [`launch-fixture.mjs`](../packages/desktop/test/helpers/launch-fixture.mjs).

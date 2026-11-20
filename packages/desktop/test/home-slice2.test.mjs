@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { NAV, PINNED, pinnedRowFor } from "../renderer/shell-nav.mjs";
-import { createHome, mount, OVERVIEW, overviewLine, firstRunCopy } from "../renderer/views/home.mjs";
+import { createHome, mount, TILES, tileCount, firstRunCopy } from "../renderer/views/home.mjs";
 import { homeBoard, homeAgents, startedBy } from "../../client/home-board.mjs";
 import { rosterGroups } from "../../client/instance-tree.mjs";
 
@@ -42,7 +42,6 @@ function fixture(t, { rows = [], phase = "ready", deployments = [], api = async 
     tick() { const due = [...timers.values()]; timers.clear(); for (const fn of due) fn(); },
     cliAnswered() { for (const fn of cliListeners) fn(); },
     set(next) { state = { ...state, ...next }; for (const fn of listeners) fn(); },
-    groups: () => [...el.querySelectorAll(".home-group")].map((g) => [g.querySelector("h3").textContent, [...g.querySelectorAll("[data-home-agent]")].map((b) => b.dataset.homeAgent)]),
     agentButton: (name) => buttons().find((b) => b.dataset.homeAgent === name),
     openButton: (key) => buttons().find((b) => b.dataset.homeOpen === key),
     key: (target, key) => target.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })),
@@ -51,12 +50,11 @@ function fixture(t, { rows = [], phase = "ready", deployments = [], api = async 
 }
 
 test("slice2 home is the landing surface", () => {
-  // Home is the first pinned row, then Automations; the Workspace page stays a destination without a row of its own,
-  // its row being Home's while it shows.
-  assert.deepEqual(PINNED.map((v) => v.name), ["home", "automations"]);
+  // Home is the first pinned row. Slice 2b (supersedes slice 2's "Home's row stands for the Workspace page"): the
+  // Workspace page has its own row, after Home's, then Automations.
+  assert.deepEqual(PINNED.map((v) => v.name), ["home", "spawn", "automations"]);
   assert.equal(NAV[0].name, "home"); assert.equal(NAV[0].label, "Home");
-  assert.ok(NAV.some((v) => v.name === "spawn" && v.pinned === false), "the Workspace page keeps its stage, its key and its palette command");
-  assert.equal(pinnedRowFor("spawn"), "home"); assert.equal(pinnedRowFor("automations"), "automations");
+  assert.equal(pinnedRowFor("spawn"), "spawn"); assert.equal(pinnedRowFor("automations"), "automations");
   // A workspace lands on Home: at start and when a window is bound again.
   assert.match(shell, /\nshowStage\("home"\);/);
   assert.match(shell, /void showStage\("home"\); \/\/ the landing surface: Home/);
@@ -69,6 +67,7 @@ test("slice2 home is the landing surface", () => {
 });
 
 test("slice2 board groups", async (t) => {
+  // Slice 2b: Needs you only (slice 2's Running group is gone: the sidebar lists them); the rest is the summary line.
   const rows = [
     row("waits-old", { waitingOnYou: claim("Old question", "2026-11-19T09:00:00.000Z"), createdAt: "2026-11-05T00:00:00.000Z" }),
     row("waits-new", { waitingOnYou: claim("Newer question", "2026-11-19T11:00:00.000Z"), createdAt: "2026-11-02T00:00:00.000Z" }),
@@ -79,53 +78,54 @@ test("slice2 board groups", async (t) => {
     row("unreached", { serverUnreached: true }),
   ];
   const u = fixture(t, { rows });
-  // Needs you (newest claim first, with its message), then Running (newest first). Stopped and unknown aren't listed.
-  assert.deepEqual(u.groups(), [["Needs you", ["waits-new", "waits-old"]], ["Running", ["runs-new", "runs-old"]]]);
+  const needs = () => [...u.el.querySelectorAll('[data-home-section="needs-you"] [data-home-agent]')].map((b) => b.dataset.homeAgent);
+  const summary = () => u.el.querySelector(".home-summary")?.textContent ?? null;
+  // Needs you, newest claim first, with its message; the running, stopped and unknown agents are counted, not listed.
+  assert.deepEqual(needs(), ["waits-new", "waits-old"]);
   assert.match(u.agentButton("waits-new").textContent, /Newer question/);
-  assert.match(u.agentButton("runs-new").textContent, /oats-expert · falcon/, "soul · machine, as the roster says it");
-  assert.match(u.agentButton("runs-new").textContent, /running/, "running, never working or idle: there is no such fact");
-  assert.ok(!u.groups().some(([title]) => title === "New"), "no New group: no stopped-since-you-looked fact exists");
-  // Empty groups are hidden.
+  assert.match(u.agentButton("waits-new").textContent, /oats-expert · falcon/, "soul · machine, as the roster says it");
+  assert.equal(u.agentButton("runs-new"), undefined, "no running rows on Home");
+  assert.equal(summary(), "7 agents · 2 running · 2 need you · 1 stopped · 2 status unknown");
+  // None needs you: one quiet line.
   u.set({ rows: [row("only-runs")] });
-  assert.deepEqual(u.groups(), [["Running", ["only-runs"]]]);
-  u.set({ rows: [row("only-waits", { waitingOnYou: claim() })] });
-  assert.deepEqual(u.groups(), [["Needs you", ["only-waits"]]]);
-  u.set({ rows: [row("idle-stopped", { running: false, runtimeState: "stopped" })] });
-  assert.deepEqual(u.groups(), []);
-  assert.match(u.el.textContent, /Nothing needs you, and no agent is running\./);
+  assert.deepEqual(needs(), []);
+  assert.match(u.el.textContent, /Nothing needs you\./);
+  assert.equal(summary(), "1 agent · 1 running · 0 need you · 0 stopped");
   // A stale roster's claim is unknown: the row isn't counted as needing you.
   u.set({ rows: [row("stale-wait", { waitingOnYou: claim() })], stale: () => true });
-  assert.deepEqual(u.groups(), [["Running", ["stale-wait"]]]);
+  assert.deepEqual(needs(), []);
+  assert.equal(summary(), "1 agent · 1 running · 0 need you · 0 stopped");
   // Enter (a click) opens the row as the roster does.
-  u.set({ rows: [row("open-me")], stale: () => false });
+  u.set({ rows: [row("open-me", { waitingOnYou: claim() })], stale: () => false });
   u.agentButton("open-me").click();
   assert.deepEqual(u.opened, ["open-me"]);
-  // Distinct loading and failed states.
+  // Distinct loading and failed states, with no summary line.
   u.set({ rows: [], phase: "loading" });
   assert.match(u.el.querySelector('[role="status"]').textContent, /Reading your agents…/);
+  assert.equal(summary(), null);
   u.set({ phase: "failed" });
   assert.match(u.el.textContent, /Couldn't read your agents\./);
+  assert.equal(summary(), null);
   [...u.el.querySelectorAll("button")].find((b) => b.textContent === "Retry").click();
   assert.equal(u.ctx.homeRoster().retried, true);
 });
 
 test("slice2 overview counts and enter opens section, esc returns", async (t) => {
+  // Slice 2b: the overview is one row of tiles, each its count; no Graph tile (the Graph is frozen), and Automations.
   const u = fixture(t, { rows: [row("a"), row("b", { running: false })], deployments: [{ id: "/w", machine: "falcon" }, { id: "ssh://polaris/w", machine: "polaris" }] });
-  assert.deepEqual([...u.el.querySelectorAll("[data-home-open]")].map((b) => b.dataset.homeOpen), OVERVIEW.map((o) => o.key));
-  assert.deepEqual(OVERVIEW.map((o) => o.label), ["Agents", "Souls", "Capabilities", "Teams", "Machines", "Graph"]);
+  assert.deepEqual([...u.el.querySelectorAll("[data-home-open]")].map((b) => b.dataset.homeOpen), TILES.map((o) => o.key));
+  assert.deepEqual(TILES.map((o) => o.label), ["Agents", "Souls", "Capabilities", "Teams", "Machines", "Automations"]);
   assert.match(u.openButton("souls").textContent, /Counting…/, "a count being read says so");
   await u.settle(); await u.settle();
-  assert.match(u.openButton("agents").textContent, /You have 2 agents/);
-  assert.match(u.openButton("souls").textContent, /You have 3 souls/);
-  assert.match(u.openButton("capabilities").textContent, /You have 2 capabilities/);
-  assert.match(u.openButton("machines").textContent, /You have 2 machines/);
-  assert.match(u.openButton("graph").textContent, /2 agents on 2 machines/);
-  assert.equal(overviewLine("souls", { souls: 1 }), "You have 1 soul");
-  assert.equal(overviewLine("souls", { souls: "failed" }), "Couldn't count them");
-  // Enter on a section opens the Workspace page on its tab; Machines opens the Machines tab's List, the Graph its
-  // Map (today's canvas, until slice 6).
-  u.openButton("souls").click(); u.openButton("teams").click(); u.openButton("machines").click(); u.openButton("graph").click();
-  assert.deepEqual(u.tabs, ["souls", "teams", ["machines", "list"], ["machines", "map"]]);
+  assert.equal(u.openButton("agents").getAttribute("aria-label"), "Agents, 2");
+  assert.equal(u.openButton("souls").getAttribute("aria-label"), "Souls, 3");
+  assert.equal(u.openButton("capabilities").getAttribute("aria-label"), "Capabilities, 2");
+  assert.equal(u.openButton("machines").getAttribute("aria-label"), "Machines, 2");
+  assert.equal(tileCount("souls", { souls: 1 }), "1");
+  assert.equal(tileCount("souls", { souls: "failed" }), "Couldn't count");
+  // Enter on a section opens the Workspace page on its tab; Machines opens the Machines tab's List.
+  u.openButton("souls").click(); u.openButton("teams").click(); u.openButton("machines").click();
+  assert.deepEqual(u.tabs, ["souls", "teams", ["machines", "list"]]);
   // Esc on the Workspace page comes back to Home (shell.mjs): only an Esc nothing on the page took, from no field.
   assert.match(shell, /if \(e\.key !== "Escape" \|\| e\.defaultPrevented \|\| e\.altKey \|\| e\.ctrlKey \|\| e\.metaKey \|\| e\.shiftKey \|\| stage\?\.name !== "spawn"\) return;/);
   assert.match(shell, /e\.preventDefault\(\);\n  void showStageFocused\("home"\);/);
@@ -138,7 +138,7 @@ test("slice2 overview counts and enter opens section, esc returns", async (t) =>
   // A failed count says so; the others stand.
   const v = fixture(t, { rows: [row("a")], api: async () => { throw new Error("down"); } });
   await v.settle(); await v.settle();
-  assert.match(v.openButton("souls").textContent, /Couldn't count them/);
+  assert.match(v.openButton("souls").textContent, /Couldn't count/);
 });
 
 test("slice2 home agents flat list", async (t) => {
@@ -176,8 +176,9 @@ test("slice2 first run", (t) => {
   assert.ok(first, "a workspace with no agents shows the first run");
   assert.equal(first.querySelectorAll("p").length, 2, "OATS in two lines");
   assert.deepEqual([...first.querySelectorAll("li")].map((li) => li.textContent), ["New agent: Ctrl+N", "Command palette: Ctrl+K", "Home: Home in the palette"]);
-  assert.ok(u.el.querySelector('[data-home-section="overview"]'), "then the overview");
-  assert.equal(u.el.querySelector('[data-home-section="board"]'), null);
+  assert.ok(u.el.querySelector('[data-home-section="workspace"]'), "then the tiles (slice 2b)");
+  assert.equal(u.el.querySelector('[data-home-section="needs-you"]'), null);
+  assert.equal(u.el.querySelector(".home-summary"), null);
   assert.deepEqual(firstRunCopy(() => "").keys.map((k) => k.label), ["New agent", "Command palette", "Home"]);
 });
 
@@ -205,7 +206,7 @@ test("slice2 counts follow a workspace switch; a late answer for the one left is
   pending[0](); await u.settle(); await u.settle();
   assert.match(u.openButton("souls").textContent, /Counting…/, "A's late answer is not B's count");
   pending[1](); await u.settle(); await u.settle();
-  assert.match(u.openButton("souls").textContent, /You have 1 soul$/, "B's own count");
+  assert.equal(u.openButton("souls").getAttribute("aria-label"), "Souls, 1", "B's own count");
   // Home › Agents was A's place: a switch shows B's board.
   u.openButton("agents").click(); assert.equal(u.home.view, "agents");
   u.switchWorkspace(); assert.equal(u.home.view, "board");
@@ -227,9 +228,9 @@ test("slice2 Teams waits for the CLI's probe, and a refused Teams read fails Tea
   status = { features: ["team-model-3"] }; u.cliAnswered();
   await u.settle(); await u.settle(); await u.settle();
   assert.equal(asked.filter((p) => p === "/api/workspace-teams").length, 1, "one Teams read once the CLI says it has teams");
-  assert.match(u.openButton("teams").textContent, /Couldn't count them/, "a refusal is Teams' failure");
-  assert.match(u.openButton("souls").textContent, /You have 3 souls/, "the other counts stand");
-  assert.match(u.openButton("capabilities").textContent, /You have 1 capability/);
+  assert.match(u.openButton("teams").textContent, /Couldn't count/, "a refusal is Teams' failure");
+  assert.equal(u.openButton("souls").getAttribute("aria-label"), "Souls, 3", "the other counts stand");
+  assert.equal(u.openButton("capabilities").getAttribute("aria-label"), "Capabilities, 1");
   u.cliAnswered(); await u.settle();
   assert.equal(asked.filter((p) => p === "/api/workspace-teams").length, 1, "a second CLI answer asks nothing again");
   assert.deepEqual(rejections, [], "no read rejects unhandled");
@@ -265,27 +266,28 @@ test("slice2 Souls waits for the catalog: pending is Counting…, a refusal is a
   let answer = { agents: [], refreshing: true, catalog: { reason: null } }, reads = 0;
   const u = fixture(t, { rows: [row("a")], api: async () => { reads++; return answer; } });
   await u.settle(); await u.settle();
-  assert.match(u.openButton("souls").textContent, /Counting…/, "the catalog still reading: not 'You have 0 souls'");
+  assert.match(u.openButton("souls").textContent, /Counting…/, "the catalog still reading: not 0 souls");
   answer = { agents: [{}, {}, {}], catalog: { reason: null } };
   u.set({ rows: [row("a")] }); await u.settle();
   assert.equal(reads, 1, "a roster paint is no read clock (an unchanged roster read paints nothing)");
   assert.equal(u.timers.size, 1, "Home's own retry is scheduled");
   u.tick(); // its retry asks again
   await u.settle(); await u.settle();
-  assert.match(u.openButton("souls").textContent, /You have 3 souls/);
+  assert.equal(u.openButton("souls").getAttribute("aria-label"), "Souls, 3");
   assert.equal(reads, 2);
   assert.equal(u.timers.size, 0, "a settled count schedules nothing more");
   const v = fixture(t, { rows: [row("a")], api: async () => ({ agents: [], catalog: { reason: { code: "E_UNREACHABLE", message: "Cannot read souls" } } }) });
   await v.settle(); await v.settle();
-  assert.match(v.openButton("souls").textContent, /Couldn't count them/, "a refused catalog is a failure");
+  assert.match(v.openButton("souls").textContent, /Couldn't count/, "a refused catalog is a failure");
   const w = fixture(t, { rows: [row("a")], api: async () => ({ agents: [], catalog: { reason: null } }) });
   await w.settle(); await w.settle();
-  assert.match(w.openButton("souls").textContent, /You have 0 souls/, "a settled empty catalog is zero");
+  assert.equal(w.openButton("souls").getAttribute("aria-label"), "Souls, 0", "a settled empty catalog is zero");
 });
 
 test("slice2 a repaint keeps focus and activation on the same agent when names repeat across roots and hosts", async (t) => {
-  const rows = [row("same", { home: "/one/a", createdAt: "2026-11-02T00:00:00.000Z" }), row("same", { home: "/two/a", createdAt: "2026-11-01T00:00:00.000Z" }),
-    row("same", { home: "/one/a", server: "polaris", createdAt: "2026-11-03T00:00:00.000Z" })];
+  // Each waits on you, so Home lists it (slice 2b: Home lists no running rows).
+  const rows = [row("same", { home: "/one/a", createdAt: "2026-11-02T00:00:00.000Z", waitingOnYou: claim() }), row("same", { home: "/two/a", createdAt: "2026-11-01T00:00:00.000Z", waitingOnYou: claim() }),
+    row("same", { home: "/one/a", server: "polaris", createdAt: "2026-11-03T00:00:00.000Z", waitingOnYou: claim() })];
   const opened = [];
   const u = fixture(t, { rows });
   u.ctx.openAgent = (r) => { opened.push(`${r.server ?? ""}${r.home}`); return true; };
@@ -310,8 +312,8 @@ test("slice2 an unavailable deployment is a failed read on Home, never the first
   assert.match(u.el.textContent, /Couldn't read your agents\./);
   assert.match(u.el.textContent, /E_WORKSPACE_SCHEMA\). It says: invalid workspace file/, "the sidebar's own words for why");
   assert.ok([...u.el.querySelectorAll("button")].some((b) => b.textContent === "Retry"));
-  assert.match(u.openButton("agents").textContent, /Couldn't count them/, "never 'You have 0 agents'");
-  assert.match(u.openButton("machines").textContent, /Couldn't count them/);
+  assert.match(u.openButton("agents").textContent, /Couldn't count/, "never 0 agents");
+  assert.match(u.openButton("machines").textContent, /Couldn't count/);
   // The shell says unavailable whenever it holds a deployment note (the kernel could not observe it).
   assert.match(shell, /const phase = contextDeploymentNote !== null \? "unavailable"/);
 });
@@ -331,5 +333,5 @@ test("slice2 a catalog that keeps reading stays Counting…, however many retrie
   // A remote view's answer has no catalog of its own: its list is the count, zero included.
   const v = fixture(t, { rows: [row("a")], api: async () => ({ workspace: { id: "remote:x", server: "polaris" }, agents: [], refreshing: false }) });
   await v.settle(); await v.settle();
-  assert.match(v.openButton("souls").textContent, /You have 0 souls/);
+  assert.equal(v.openButton("souls").getAttribute("aria-label"), "Souls, 0");
 });

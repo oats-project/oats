@@ -416,9 +416,9 @@ test("stage.hierarchy: registered from NAV_TABS as shipped, \"View: Workspace â€
   t.after(() => { offs.forEach(off => off()); resetAllBindings(); });
   const stages = listActions().filter(a => a.id.startsWith("stage.") && !a.id.includes(".", 6));
   assert.deepEqual(stages.map(a => [a.id, a.label, a.context]), [
-    // NAV's order (Home, Workspace overview, Automations), then NAV_TABS (Machines); each keeps its own chord (bound
+    // NAV's order (Home, Workspace, Automations), then NAV_TABS (Machines); each keeps its own chord (bound
     // by id). Home has none yet (slice 2: slice 4's table gives it one).
-    ["stage.home", "View: Home", "global"], ["stage.spawn", "View: Workspace overview", "global"], ["stage.automations", "View: Automations", "global"],
+    ["stage.home", "View: Home", "global"], ["stage.spawn", "View: Workspace", "global"], ["stage.automations", "View: Automations", "global"],
     ["stage.hierarchy", "View: Workspace â€º Machines", "global"],
   ]);
   assert.deepEqual(["stage.hierarchy", "stage.spawn", "stage.automations"].map(id => getBinding(id, false)), ["Mod+1", "Mod+2", "Mod+3"],

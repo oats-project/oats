@@ -4,7 +4,7 @@
    decisions are the kernel's spawn preview. Resolution stays CLI-owned.
    Contract: mount(el, ctx) / unmount(). Plain ES module + DOM. */
 import { createSoulInspector, inspectorCSS } from "../soul-inspector.mjs";
-import { createWorkspaceDiscovery, discoveryCSS, workspaceTabs } from "../workspace-discovery.mjs";
+import { createWorkspaceDiscovery, discoveryCSS, workspaceTabs, TAB_LABELS } from "../workspace-discovery.mjs";
 import { capabilityRow } from "../workspace-catalog.mjs";
 import { capabilityOrigin } from "../../../client/capability-origin.mjs";
 import { renderCapabilityPage, capabilityPageCSS, pageCardCSS, soulCapabilitiesCSS, catalogNotice, catalogNoticeKind, updateCatalogNotice } from "../capability-page.mjs";
@@ -63,6 +63,11 @@ const CSS = `
 .souls-bar .souls-group-title { padding:0 2px; }
 .souls-bar .ws-segmented { margin-left:2px; }
 .workspace-header .wssel { max-width:100%; min-width:0; flex:0 1 140px; }
+/* The page's head (slice 2b): "Workspace › Souls", where you are, above the tab bar, as Home's head (views/home.mjs
+   .home h1) draws it. A soul's, a capability's or a team's page hides it: each keeps its own breadcrumb. */
+.workspace-title { flex:none; margin:0; padding:24px calc(32px + var(--main-trail-inset, 0px)) 12px calc(32px + var(--main-lead-inset, 0px));
+  font-size:24px; font-weight:700; line-height:30px; color:var(--fg); font-family:var(--ui-font, system-ui); }
+.workspace-title[hidden] { display:none; }
 .souls-sum { color:var(--muted); font-size:12px; }
 /* The grid's stale line (desktop/loading-states) sits between the toolbar and the scroller; nothing when empty. */
 .souls-notice { flex:none; padding:0 20px; }
@@ -332,14 +337,21 @@ function soulCapabilityFacts(s, cap) {
   return { row, origin: capabilityOrigin(row, status, memberNames(status)) };
 }
 
+/** The page's title, "Workspace › <its tab>" (slice 2b), following the tab shown. */
+function syncWorkspaceTitle(s) {
+  const title = s.q("workspace-title");
+  if (title) title.textContent = `Workspace › ${TAB_LABELS[s.discovery?.tab ?? "souls"] ?? TAB_LABELS.souls}`;
+}
+
 /** A page (a soul's, a capability's or a team's) replaces the list it was opened from
  * while it is open: mode null | "soul" | "capability" | "team". */
 function showPage(s, mode) {
   const soulPage = s.q("workspace-soul-page"), capPage = s.q("workspace-cap-page"), teamPage = s.q("workspace-team-page");
   if (!soulPage || !capPage || !teamPage) return;
   soulPage.hidden = mode !== "soul"; capPage.hidden = mode !== "capability"; teamPage.hidden = mode !== "team";
-  // Workspace v4: a page's own bar replaces the Workspace header while it is open.
+  // Workspace v4: a page's own bar replaces the Workspace header while it is open, and its breadcrumb the page's title.
   s.q("workspace-header").hidden = !!mode;
+  s.q("workspace-title").hidden = !!mode;
   const souls = (s.discovery?.tab ?? "souls") === "souls";
   s.q("souls-grid").hidden = !!mode || !souls;
   s.q("souls-bar").hidden = !!mode || !souls;
@@ -556,6 +568,7 @@ ${spawnDialogCSS}</style>
       <div class="souls">
         <div class="souls-body">
           <section class="workspace-main" aria-label="Workspace discovery">
+            <h1 class="workspace-title">Workspace</h1>
             <header class="workspace-header"></header>
             <select class="field wssel" aria-label="Workspace" style="display:none"></select>
             <div class="workspace-recovery" hidden></div>
@@ -656,6 +669,7 @@ ${spawnDialogCSS}</style>
     onOpenTeam: label => openTeam(s, label),
     onMachinesView: () => syncMachines(s), // Map mounts the Deployments view, List unmounts it (it reads no more)
     onTab: tab => {
+      syncWorkspaceTitle(s);
       s.spawnOp++; closeSpawnModal(s); s.inspector.close(); closeCapability(s); closeTeam(s); s.page.close();
       s.q("souls-bar").hidden = tab !== "souls"; s.q("souls-notice").hidden = tab !== "souls"; s.q("souls-lede").hidden = tab !== "souls";
       syncMachines(s);
@@ -674,6 +688,7 @@ ${spawnDialogCSS}</style>
   }, true);
   s.q("workspace-header").append(s.q("wssel")); // standalone switcher stays reachable on every subtab
   applyWorkspaceTab(s);
+  syncWorkspaceTitle(s);
   // The page opens on Souls unless a handoff chose another tab: then the Souls bar and its notice wait for Souls, and
   // on Machines its view mounts (onTab runs on changes only).
   if (s.discovery.tab !== "souls") { s.q("souls-bar").hidden = true; s.q("souls-notice").hidden = true; s.q("souls-lede").hidden = true; }

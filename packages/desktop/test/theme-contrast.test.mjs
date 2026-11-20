@@ -770,7 +770,7 @@ for (const [name] of palettes) test(`${name}: the shipped sidebar paints no shor
   assert.equal(dom.window.getComputedStyle(hint).display, "none");
 });
 
-// The sidebar (the product owner, 2026-10-26; slice 1): the pinned rows (Workspace overview, Automations) sit under the
+// The sidebar (the product owner, 2026-10-26; slice 1): the pinned rows (Workspace, Automations) sit under the
 // list of workspaces on the sidebar's --surface, Automations with its --danger failure mark while a run failed. Each
 // one's ink, at rest, hovered, current
 // and under the keyboard tint, is a token pair the inventory holds to AA (so "This computer" is held too,
@@ -781,8 +781,8 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
   const doc = dom.window.document, win = dom.window; doc.documentElement.dataset.theme = name;
   const shellCss = readFileSync(new URL("shell.css", renderer), "utf8");
   for (const source of [css, shellCss]) { const style = doc.createElement("style"); style.textContent = source; doc.head.append(style); }
-  // The nav's buttons as shell.mjs builds them from NAV: an icon, then the label; Workspace overview current.
-  for (const [label, current] of [["Workspace overview", true], ["Automations", false]]) {
+  // The nav's buttons as shell.mjs builds them from NAV: an icon, then the label; Workspace current.
+  for (const [label, current] of [["Workspace", true], ["Automations", false]]) {
     const b = doc.createElement("button"); b.type = "button"; b.className = `nav-item${current ? " active" : ""}`;
     if (current) b.setAttribute("aria-current", "page");
     b.innerHTML = `<span class="icon"><svg class="shell-icon" aria-hidden="true"></svg></span><span class="label">${label}</span>`;
@@ -806,7 +806,7 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
     assert.ok(!bg || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(bg), `#${id} paints nothing of its own: the sidebar shows under it (${bg})`);
   }
   const controls = [...doc.querySelectorAll("#nav button")];
-  assert.deepEqual(controls.map(b => b.id || b.textContent), ["Workspace overview", "Automations, a run failed"]);
+  assert.deepEqual(controls.map(b => b.id || b.textContent), ["Workspace", "Automations, a run failed"]);
   assert.equal(doc.getElementById("nav-title"), null, "no title over the views");
   for (const control of controls) {
     const what = control.id || control.textContent, current = control.classList.contains("active");

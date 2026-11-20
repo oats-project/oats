@@ -112,7 +112,7 @@ body {
    its words for assistive tech and as the tooltip, so the state is never colour alone. */
 .deployment-mark { flex: none; display: inline-flex; color: var(--warn); }
 .deployment-mark > .shell-icon { width: 12px; height: 12px; }
-/* The same room above Workspace overview and below Automations, between the two lines (the product owner,
+/* The same room above Home and below Automations, between the two lines (the product owner,
    2026-10-26). */
 #nav { display: flex; flex: none; flex-direction: column; padding: 8px 8px 8px 4px; gap: 1px; }
 /* The foot (the Desktop UI rework, slice 1): one bar. "N need you" at the left, the needs-input mark and its count

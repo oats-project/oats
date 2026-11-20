@@ -71,7 +71,9 @@ test('03 (F7): a soul opens as a page in the main area — it replaces the grid,
   assert.equal(u.css('.workspace-soul-page').padding, '0px', 'Workspace v4 (W4): the page bar is flush; its body pads itself');
   assert.equal(header.hidden, true, 'the page bar replaces the Workspace header while the page is open');
   assert.ok(page.querySelector('.page-bar .inspector-back'), 'the back control lives in the page bar');
-  assert.equal(main.firstElementChild, header);
+  // The page's title (slice 2b: "Workspace › Souls") sits above the header, and hides with it under a page's own bar.
+  assert.equal(main.firstElementChild, u.get('.workspace-title')); assert.equal(main.firstElementChild.nextElementSibling, header);
+  assert.equal(u.get('.workspace-title').hidden, true, "the soul's page keeps its own breadcrumb");
   // No "On <deployment>" line under the header: the Workspace pages do not name the deployment they read (the
   // product owner, 2026-10-23; #482's rule, docs/desktop-deployment-model.md); the side panel and Deployments do.
   assert.equal(header.nextElementSibling, u.get('.workspace-recovery'));
