@@ -129,7 +129,6 @@ test("the chords: every one, per platform, and what it does", () => {
     ["group-next", "alt+shift+right", "alt+shift+right", "ctrl+alt+a"],
     ["filter", "cmd+f", "alt+f", "ctrl+alt+f"],
     ["edit-instance", "cmd+alt+r", "alt+r", "ctrl+alt+r"],
-    ["agent-view", "cmd+alt+t", "alt+t", "ctrl+alt+t"],
   ]);
   assert.ok(Object.isFrozen(CHORDS) && CHORDS.every((entry) => Object.isFrozen(entry)));
   assert.equal(new Set(CHORDS.map((entry) => entry.does)).size, CHORDS.length, "one chord per action");
@@ -298,7 +297,6 @@ test("the Desktop's chords are the module's entries, each read by one action", (
     ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tab-${i + 1}`, `tabs.goto${i + 1}`])),
     zoom: "terminal.focusMode", "close-terminal": "tabs.close", "split-right": "split.vertical", "split-down": "split.horizontal",
     "group-previous": "split.focusPrevGroup", "group-next": "split.focusNextGroup", filter: "sidebar.focusFilter", "edit-instance": "instance.edit",
-    "agent-view": "agent.viewFocus",
   });
   for (const { id, does } of CHORDS_READ) {
     assert.ok(Object.hasOwn(DEFAULT_KEYMAP, id), id);
@@ -425,7 +423,6 @@ const DEFAULTS = [
   ["workspace.previous","Alt+↑"],
   ["workspace.next","Alt+↓"],
   ["instance.edit",{"mac":"Mod+Alt+R","other":"Alt+R"}],
-  ["agent.viewFocus",{"mac":"Mod+Alt+T","other":"Alt+T"}],
   ["app.chooseSoul",{"mac":"Mod+N","other":"Ctrl+Shift+N"}],
   ["app.shortcuts","Mod+,"],
   ["app.themeToggle",null],
@@ -490,7 +487,6 @@ const CTRL_ALT_MOVED = {
   "instance.edit": "Ctrl+Alt+R",
   // New agent (the Desktop UI rework, 2026-11-19): the Desktop's own chord, not a shared row yet, family by family too.
   "app.newAgent": "Ctrl+Alt+N",
-  "agent.viewFocus": "Ctrl+Alt+T",
   "tabs.nextPage": "Alt+Shift+→",
   "tabs.prevPage": "Alt+Shift+←",
   ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tabs.goto${i + 1}`, `Ctrl+Alt+${i + 1}`])),

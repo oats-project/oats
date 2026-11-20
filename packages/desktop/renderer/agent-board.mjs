@@ -214,7 +214,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     return true;
   }
 
-  // Reaching the zone (Alt+T, a click) reads the claims again, so a dialog that opened since shows before a press. The
+  // Reaching the zone (F6, the palette's command, a click) reads the claims again, so a dialog that opened since shows before a press. The
   // read paints through its owner (update) only when it is the latest; nothing here uses its answer.
   zone.addEventListener('focusin', ev => {
     // A repaint that moves the focus to an option's replacement is not an entry into the zone.
@@ -479,7 +479,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     input(data) {
       if (pending && typeof data === 'string' && data.includes('\r')) { answered.add(pending); pending = null; paint(); }
     },
-    /** Alt+T's place: the zone from the terminal, then the facts, then back to the terminal. */
+    /** The palette's command: the zone from the terminal, then the facts, then back to the terminal. */
     cycleFocus() {
       const at = doc.activeElement;
       const inZone = zone.isConnected && zone.contains(at), inFacts = facts.isConnected && facts.contains(at);
@@ -491,6 +491,14 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       if (inZone && facts.isConnected && focusFacts()) return true;
       focusTerminal();
       return true;
+    },
+    /** The facts strip or the question zone, while it shows (the F6 regions, focus-regions.mjs). */
+    part(name) { const el = name === 'facts' ? facts : name === 'questions' ? zone : null; return el?.isConnected ? el : null; },
+    /** Focus the region's current item: the zone's first usable option (else the zone), or the first fact. */
+    focusPart(name) {
+      if (name === 'questions' && zone.isConnected) { (options.querySelector('button:not([disabled])') ?? zone).focus(); return true; }
+      if (name === 'facts' && facts.isConnected) return focusFacts();
+      return false;
     },
     /** Puts the strip and the zone either side of the terminal again. */
     place,

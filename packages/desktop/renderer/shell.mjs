@@ -3253,7 +3253,11 @@ function focusMainContent() {
   if (first) tabOpenIntents.applyFocus(() => first.focus());
   return !!first && document.activeElement === first;
 }
-const focusRegions = createFocusRegions({ doc: document, tabLayerVisible: () => tabLayerVisible, focusMainContent });
+// The agent view's two regions (S2-D): the active tab's facts and questions, around its terminal.
+const activeTerminalTab = () => { const t = activeTab == null ? null : tabs.get(activeTab); return t?.kind === "terminal" ? t : null; };
+const focusRegions = createFocusRegions({ doc: document, tabLayerVisible: () => tabLayerVisible, focusMainContent,
+  agentView: { part: name => { const t = activeTerminalTab(); return t ? tabBoards.part(t, name) : null; },
+    focus: name => { const t = activeTerminalTab(); return !!t && tabBoards.focusPart(t, name); } } });
 
 // ── a workspace switch puts the keyboard back where it was there ──────────
 // focus-place.mjs describes where the focus is; every focus outside the transit surfaces (the list of
@@ -3697,10 +3701,15 @@ for (const [id, does] of [["roster.openPrevious", "previous"], ["roster.openNext
 }
 // The instance's name and colour (#1421; CHORDS edit-instance, no leader key): the leader's target, from
 // every focus, a terminal's included. Inert under a modal dialog or the palette, as the leader is.
-// The agent view (S2-D): Alt+T moves the focus through the shown terminal tab's view: its question zone, its facts,
-// back to its terminal. Nothing when the tab shows no board. Inert under a modal dialog or the palette.
-registerAction({ id: "agent.viewFocus", label: "Agent: questions and facts (focus)", context: "global", when: () => !modalOpen(),
-  run: () => { const t = activeTab == null ? null : tabs.get(activeTab); if (!t || t.kind !== "terminal" || !tabBoards.cycleFocus(t)) sayInHint("This agent has no questions or facts to show."); } });
+// The agent view (S2-D): the palette's command moves the focus through the shown terminal tab's view: its question
+// zone, its facts, back to its terminal. No chord (Alt+T is Claude Code's extended thinking): F6 reaches the same two
+// regions (focus-regions.mjs), Ctrl+Shift+F6 from the terminal. Nothing when the tab shows no board. Inert under a
+// modal dialog or the palette.
+function focusAgentView() {
+  const t = activeTab == null ? null : tabs.get(activeTab);
+  if (!t || t.kind !== "terminal" || !tabBoards.cycleFocus(t)) sayInHint("This agent has no questions or facts to show.");
+}
+registerAction({ id: "agent.viewFocus", label: "Agent: questions and facts (focus)", context: "global", when: () => !modalOpen(), run: () => focusAgentView() });
 registerAction({ id: "instance.edit", label: "Instance: name and colour…", context: "global", when: () => !modalOpen(),
   run: (e) => openInstanceEdit(leaderTargetId(e?.target ?? document.activeElement)) });
 

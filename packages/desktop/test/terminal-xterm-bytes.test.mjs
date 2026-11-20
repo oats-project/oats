@@ -71,7 +71,6 @@ const CTRL_ALT_SENDS = {
   "sidebar.focusFilter": ctrlAlt("F"),
   "instance.edit": ctrlAlt("R"),
   "app.newAgent": ctrlAlt("N"),
-  "agent.viewFocus": ctrlAlt("T"),
 };
 // The Ctrl+Shift family's seven (below) send nothing; its other rows keep their Ctrl+Alt key.
 const SEVEN = { "app.palette": "K", "app.quickOpenSouls": "P", "app.workspaces": "S", "terminal.focusMode": "M",
@@ -97,7 +96,6 @@ const SENDS = {
     "instance.edit": alt("r"),
     // New agent's Alt+N (the Desktop UI rework): readline's and zsh's history search forward get ESC n from Esc, then n.
     "app.newAgent": alt("n"),
-    "agent.viewFocus": alt("t"),
   },
   "ctrl+alt": CTRL_ALT_SENDS,
   "ctrl+shift": Object.fromEntries(Object.entries(CTRL_ALT_SENDS).filter(([id]) => !Object.hasOwn(SEVEN, id))),
