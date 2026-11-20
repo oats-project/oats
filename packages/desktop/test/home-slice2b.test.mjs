@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { runInNewContext } from "node:vm";
 import { TAB_LABELS } from "../renderer/workspace-discovery.mjs";
-import { createHome, homeCSS, HOME_LAYOUT, NEEDS_YOU_SHOWN, RUNNING_SHOWN, TILES, summaryLine } from "../renderer/views/home.mjs";
+import { createHome, mount as mountHome, arrive as arriveHome, homeCSS, HOME_LAYOUT, NEEDS_YOU_SHOWN, RUNNING_SHOWN, TILES, summaryLine } from "../renderer/views/home.mjs";
 import { homeBoard, homeAgents } from "../../client/home-board.mjs";
 import { TEXT_PAIRS, GRAPHIC_PAIRS, TEXT_CONTRAST, GRAPHIC_CONTRAST } from "../renderer/contrast-inventory.mjs";
 
@@ -394,4 +394,30 @@ test("slice2b a count read the CLI's gate superseded never lands, on success or 
   old.resolve({ status: "ok", result: { schedules: [{ qualifiedId: "a" }, { qualifiedId: "b" }] } }); await stale.settle(); await stale.settle();
   assert.equal(stale.tile("automations").getAttribute("aria-label"), "Automations, 1", "the older answer, later, changes nothing");
   assert.equal(pending.length, asked, "and the superseded read asks for no triggers");
+});
+
+// Review r3: the Home row always returns to Home, Home › Agents included (shell.mjs showStage calls arrive()).
+test("slice2b Home's arrival shows the board from Home › Agents", (t) => {
+  const dom = new JSDOM("<!doctype html><body><main></main></body>");
+  const el = dom.window.document.querySelector("main");
+  const state = { rows: pepe(), phase: "ready", deployments: [], stale: () => false, here: "falcon" };
+  const dispose = mountHome(el, { api: async () => ({}), homeRoster: () => state, chordText: () => "" });
+  t.after(() => { dispose(); dom.window.close(); });
+  el.querySelector('[data-home-open="agents"]').click();
+  assert.equal(el.querySelector("h1").textContent, "Home › Agents");
+  arriveHome();
+  assert.equal(el.querySelector("h1").textContent, "Home", "the board again");
+  assert.ok(el.querySelector('[data-home-section="needs-you"]'));
+  arriveHome(); assert.equal(el.querySelector("h1").textContent, "Home", "on the board already: nothing changes");
+});
+
+test("slice2b a core default the catalog doesn't list is named in its slot, never No default", async () => {
+  const { renderCapabilityList } = await import("../renderer/workspace-catalog.mjs");
+  const dom = new JSDOM('<main class="oats-view"><div class="caps"></div></main>');
+  const host = dom.window.document.querySelector(".caps");
+  renderCapabilityList(host, { rows: [], status: { workspace: { name: "acme" }, defaults: { slots: { knowledge: { name: "oats.okf", from: "package" }, messaging: null, tasks: null }, capabilities: [] } }, onOpen() {} });
+  assert.deepEqual([...host.querySelectorAll(".cap-slot")].map((s) => [s.dataset.slot, s.querySelector(".cap-slot-none").textContent]),
+    [["knowledge", "oats.okf: the default, but not in this list"], ["messaging", "No default"], ["tasks", "No default"]]);
+  assert.match(host.querySelector(".cap-lead").textContent, /Also a default, but not in this list: oats\.okf\./, "the sentence agrees");
+  dom.window.close();
 });

@@ -482,6 +482,9 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   return {
     get view() { return view; },
     refresh: () => paint(),
+    /** Home as a destination (its sidebar row, the palette, a trail's Home) while it is already the stage: the board,
+     * whatever view it showed (review r3: the Home row always returns to Home). */
+    toBoard() { if (!alive || view === "board") return; view = "board"; paint(); },
     dispose() { alive = false; clearRetries(); unsubscribe(); unsubscribeWorkspace(); unsubscribeCli(); unsubscribeFailed(); root.removeEventListener("keydown", onKey); },
   };
 }
@@ -491,6 +494,8 @@ function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
 /** The stage contract: mount returns its disposer, so each mount cleans up only itself (view-lifecycle.mjs); the
  * module-wide unmount, a legacy host's fallback, disposes every Home still mounted. */
 const mounted = new Set();
+/** The shell's arrival on Home while Home is already its stage (shell.mjs showStage): each mounted Home shows its board. */
+export function arrive() { for (const home of mounted) home.toBoard(); }
 export function mount(el, ctx) {
   const home = createHome(el, ctx); mounted.add(home);
   return () => { mounted.delete(home); home.dispose(); };

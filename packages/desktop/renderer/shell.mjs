@@ -421,7 +421,9 @@ async function showStage(name) {
   setSidebarMode(stageSidebarMode(name));
   setNavActive(name);
   showTabLayer(false);
-  if (stage && stage.name === name) return;   // already on this surface
+  // Already on this surface: a page that has views of its own goes back to its first (Home › Agents to Home: its row
+  // always returns to Home; slice 2b review r3).
+  if (stage && stage.name === name) { try { stage.mod?.arrive?.(); } catch (e) { console.error(e); } return; }
   const myOp = await closeStage();
   if (myOp === null) return;                  // superseded by a faster switch
   let mod;

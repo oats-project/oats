@@ -138,10 +138,12 @@ function workspaceDefaultsPart(doc, { status, rows, onOpen }) {
   let first = true;
   const coreTitle = node(doc, 'h4', DEFAULTS_COPY.core, 'cap-group-title'); coreTitle.id = 'cap-defaults-core';
   const core = node(doc, 'ul', null, 'cap-list'); core.setAttribute('aria-labelledby', coreTitle.id);
-  for (const { layer, entries } of sections.core) {
+  for (const { layer, entries, unlisted } of sections.core) {
     const item = node(doc, 'li'); const slot = node(doc, 'div', null, 'cap-slot'); slot.dataset.slot = layer;
     slot.append(node(doc, 'span', layerLabel(layer), 'cap-slot-label'));
-    if (!entries.length) slot.append(node(doc, 'span', DEFAULTS_COPY.noDefault, 'cap-slot-none'));
+    // A declared default the catalog doesn't list is named (the lead sentence says so too); "No default" is for none.
+    if (unlisted) slot.append(node(doc, 'span', DEFAULTS_COPY.unlistedSlot(unlisted), 'cap-slot-none'));
+    else if (!entries.length) slot.append(node(doc, 'span', DEFAULTS_COPY.noDefault, 'cap-slot-none'));
     for (const entry of entries) { slot.append(row(entry, first)); first = false; }
     item.append(slot); core.append(item);
   }

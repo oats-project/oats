@@ -34,6 +34,7 @@ export const DEFAULTS_COPY = Object.freeze({
   core: 'Core',
   additional: 'Additional',
   noDefault: 'No default',
+  unlistedSlot: name => `${name}: the default, but not in this list`,
   noAdditional: 'None: every other capability is a soul\'s own choice.',
   tag: 'default',
   offTag: 'default · off',

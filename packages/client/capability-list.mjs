@@ -70,9 +70,10 @@ export function defaultsSummary(status, rows) {
 
 /** The Workspace defaults section (slice 2b, Amendment 1, D: Pepe, 2026-11-20, "el list de capabilities m'agradaven mes
  * com avans que et deia quins son els defaults del workspace"), above the flat list, never narrowed by a search: null
- * when the kernel reports no `defaults` (no claim). `core`: each core slot in CORE_LAYERS order, `{ layer, entries }`,
- * the listed rows that fill it by default (none: the slot has no default; two: the workspace's own conflict, both
- * shown). `additional`: every other listed default, on or turned off (`default` says which), in the list's order.
+ * when the kernel reports no `defaults` (no claim). `core`: each core slot in CORE_LAYERS order, `{ layer, entries,
+ * unlisted }`, the listed rows that fill it by default (two: the workspace's own conflict, both shown), and `unlisted`:
+ * the name the slot's declared default has when no row matches it (it is said, never dropped), else null. No entries
+ * and no unlisted name: the slot has no default. `additional`: every other listed default, on or turned off (`default` says which), in the list's order.
  * Entries are capabilityList's, so a row draws as it does in the list. A declared default no row matches is
  * defaultsSummary's `unlisted`, said in words, not as a row. */
 export function workspaceDefaultsSections(rows, status) {
@@ -80,7 +81,10 @@ export function workspaceDefaultsSections(rows, status) {
   const entries = capabilityList(rows, status).filter(entry => entry.default);
   const on = entries.filter(entry => entry.default === 'on');
   return {
-    core: CORE_LAYERS.map(layer => ({ layer, entries: on.filter(entry => entry.core === layer) })),
+    core: CORE_LAYERS.map(layer => {
+      const filled = on.filter(entry => entry.core === layer), slot = record(status.defaults.slots) ? status.defaults.slots[layer] : null;
+      return { layer, entries: filled, unlisted: !filled.length && record(slot) && text(slot.name) ? slot.name : null };
+    }),
     additional: entries.filter(entry => !(entry.default === 'on' && entry.core)),
   };
 }

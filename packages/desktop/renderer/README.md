@@ -1610,7 +1610,8 @@ workspace is observed through its server and never synced from here.
   own rows and, since slice 2b's Amendment 1 (D), a **Workspace defaults** part above the list
   (`workspace-catalog.mjs` `workspaceDefaultsPart`, from `packages/client/capability-list.mjs`
   `workspaceDefaultsSections`: Core, one slot each for Knowledge, Messaging, Tasks, its default's row or "No default";
-  then Additional, every other default, on or off), opened by one sentence (`p.cap-lead`), then **All capabilities**
+  then Additional, every other default, on or off; a slot whose declared default no row matches names it, `unlisted`,
+  never "No default"), opened by one sentence (`p.cap-lead`), then **All capabilities**
   over the list, whenever `oats workspace status` reports `defaults` (`defaultsSummary`); without it there is no part,
   no sentence and no tag, and the list is the tab's only content. The part's rows are the list's own
   (`capabilityRowElement`), one roving stop across both groups, their focus key prefixed `defaults:`. The sentence says what defaults are and what they are
@@ -2541,6 +2542,9 @@ doesn't read already:
   Back. A capability's open skill extends the trail (a MutationObserver on the skill view's `hidden`), the capability
   then a link that closes the skill. Esc goes up one level wherever focus is on a page, its trail included (a skill to
   its capability, a page to its list, the page to Home: shell.mjs `stageHost`).
+- **Arrival**: Home already the stage (its row, the palette's Home, a trail's Home; a terminal in front or not), the
+  shell's `showStage` calls the stage module's `arrive()` instead of returning silently, and Home shows its board
+  (`toBoard`), so its row always returns to Home (review r3). A module without `arrive` is left as it is.
 - **Amendment 1** (Pepe, 2026-11-20; Joan's yes): the column is centred (`.home-inner` 880px, `margin:0 auto`); a
   Running group under the tiles (`RUNNING_SHOWN`, 5, in the roster's order, "Show all N running" / "Show fewer");
   the Souls grid's cards in the information-role type scale (name 17 / 700, what it does 13 muted, the meta line 12

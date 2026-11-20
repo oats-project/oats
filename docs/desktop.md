@@ -319,7 +319,7 @@ have. It is one centred column. Top to bottom:
   three keys (New agent, the command palette, Home), then the tiles.
 
 Home has no key of its own yet: its row, or the palette's **Home** (among its
-sections), opens it. Home never changes the roster's order: urgency is sorted
+sections), opens it, and always on its board, also from **Home › Agents**. Home never changes the roster's order: urgency is sorted
 on Home only.
 
 **The Workspace page** has its own row, under Home's, and ⌘2 / Ctrl+2. Its
@@ -557,7 +557,7 @@ Above the list, **Workspace defaults** shows what the workspace gives every
 soul, so its agents share one way of working. One sentence says what defaults
 are (a soul can turn a default off and choose its own instead); then **Core**,
 one line each for Knowledge, Messaging and Tasks with the capability that fills
-it (or "No default"), and **Additional**, every other default, a turned-off one
+it (its name alone when the list doesn't hold it, or "No default"), and **Additional**, every other default, a turned-off one
 tagged so. Each default is the list's own row, with its one line and where it
 comes from, and opens its page; ↑ and ↓ move across them. The list follows,
 under **All capabilities**. The sentence also names a declared default the

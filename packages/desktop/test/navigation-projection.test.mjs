@@ -299,6 +299,24 @@ test("slice2b workspace row highlights for workspace pages", async t => {
   assert.deepEqual(s.nav(), ["spawn"]);
 });
 
+// Review r3 (slice 2b, Amendment 1, E: "the sidebar's Home row always returns to Home"): Home already the stage, in a
+// view of its own (Home › Agents), or covered by a terminal: the shipped showStage hands the arrival to its module.
+test("slice2b the Home row returns to Home's board from Home › Agents, also from a terminal over it", async t => {
+  const s = shell(t); let arrivals = 0;
+  const done = s.showStage("home"); await tick();
+  s.loads.at(-1).resolve({ mount() {}, arrive() { arrivals++; } }); await done;
+  await s.showStage("home");
+  assert.equal(arrivals, 1, "already on Home: its module hears the arrival");
+  s.seed(); terminalForeground(s);
+  await s.showStage("home");
+  assert.equal(arrivals, 2, "with a terminal in front: the stage shows again, and its module hears it");
+  assert.equal(s.c.tabLayerVisible, false); assert.deepEqual(s.nav(), ["home"]);
+  // A stage module without the hook (every other page) is left as it is.
+  const v = shell(t); const other = v.showStage("automations"); await tick();
+  v.loads.at(-1).resolve({ mount() {} }); await other;
+  await v.showStage("automations"); assert.equal(v.c.stage.name, "automations");
+});
+
 test("stage.hierarchy while the Workspace page is on screen switches its tab, without reloading the page", async t => {
   const s = await machinesFrom(t, "spawn");
   assert.deepEqual(s.preselected, ["machines"]);
