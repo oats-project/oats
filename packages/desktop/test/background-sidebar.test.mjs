@@ -11,7 +11,7 @@ import { JSDOM } from "jsdom";
 import { viewContext } from "./helpers/view-context.mjs";
 import * as treeShared from "../../client/instance-tree.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
-import * as sameWork from "../../client/related-work.mjs";
+import * as relatedWork from "../../client/related-work.mjs";
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget } from "../renderer/instance-action-target.mjs";
 import { instanceSplitPlan } from "../renderer/instance-split.mjs";
@@ -23,7 +23,7 @@ import { NO_ANSWER_CODE, unservedError } from "../renderer/deployment-header.mjs
 import { rosterKeyAction, moveTarget } from "../renderer/roster-keys.mjs";
 import { revealInScrollport } from "../renderer/reveal-in-scrollport.mjs";
 import { rosterStep } from "../renderer/leader-dispatch.mjs";
-const tree = { ...treeShared, ...treeView, ...sameWork };
+const tree = { ...treeShared, ...treeView, ...relatedWork };
 
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
 const html = read("index.html"), shell = read("shell.mjs");
@@ -273,11 +273,12 @@ test("the selected row in the closed section gives the heading the roster's tab 
   assert.deepEqual([...u.list.querySelectorAll('[tabindex="0"]')], [u.heading()]);
 });
 
-test("no relation crosses the parts: a section root is a root (no indent, no \"under\"), and the roster draws no lines", t => {
+test("no relation crosses the parts: a section root is a root (no indent, no \"under\"), and no flag draws no line", t => {
   const u = fixture(t);
   u.render(ROSTER);
   u.s.setBackgroundOpen("A", true);
-  // Slice 1 (D26): no lineage or sibling lines; indentation and the relations in words show the tree.
+  // No row reports related work, so no line is drawn (related-work.mjs: no flag, no line); indentation and the
+  // relations in words show the tree. The lines across the parts are related-work-lines.test.mjs's.
   assert.equal(u.list.querySelector(".ctx-guide, .ctx-guides"), null, "no lines");
   const depth = name => u.rowEl(name).closest(".ctx-tree-row").style.getPropertyValue("--depth");
   const words = name => u.rowEl(name).querySelector(".ctx-relation")?.textContent ?? null;

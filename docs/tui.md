@@ -179,10 +179,12 @@ while a terminal is open); under 80 columns it has the whole width.
   order, from the same code. It is in spawn order, newest first, by each
   group's top instance, so starting or stopping an instance moves nothing. An instance
   that others were spawned from has them indented under it, and keeps its
-  place when it gains or loses one. Under one parent, the instances that do
-  its work (the kernel's `sameWork`, from an OATS with `instance-same-work`)
-  come first, then the others, each part newest first, as the Desktop lists
-  them. Pinned instances come before all of these, at every level, and an
+  place when it gains or loses one. Under one parent, the instances whose
+  work is related to its own come first (the kernel's `relatedWork`, from an
+  OATS with `instance-related-work`, or `sameWork` from an older one with
+  `instance-same-work`), then the others, each part newest first, as the
+  Desktop lists them. An OATS with neither reports no related work, and the
+  order under a parent is newest first alone. Pinned instances come before all of these, at every level, and an
   instance with a pinned one below it counts as pinned
   ([Pinning](#pinning)). An empty row stands between each run
   of instances related to no other and the group before or after it. The

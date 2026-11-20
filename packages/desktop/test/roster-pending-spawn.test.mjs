@@ -8,9 +8,9 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/related-work.mjs";
+import * as relatedWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
-const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
+const tree = { ...treeShared, ...treeView, ...relatedWork }; // the renderer's client imports, shipped
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget, sameInstanceActionTarget } from "../renderer/instance-action-target.mjs";
 import { instanceSplitPlan } from "../renderer/instance-split.mjs";
@@ -74,18 +74,21 @@ test("a pending spawn shows under its parent: “Spawning…” text and a spinn
   assert.match(u.doc.querySelector(".ctx-count").textContent, /^3 running$/, "the pending row is not counted");
 });
 
-// #1577: the Desktop's spawn never passes --same-work, so a pending row is never flagged; it takes its parent's
-// gate (related-work.mjs withParentGate), which still orders it after the joined children. Slice 1 (D26): the roster
-// draws no lines on any host; a pending child keeps its indent and says "under <parent>".
-test("a pending spawn under a parent: listed after the joined children, indented, said under its parent, no line on any host", async t => {
-  const declared = roster.map(row => ({ ...row, sameWorkKnown: true, ...(row.instance === "child-a" ? { sameWork: true } : {}) }));
+// A pending row is never flagged (the Desktop's spawn records no related work); it takes its parent's gate
+// (related-work.mjs withParentGate), which orders it after the joined children. It draws no line of its own; a
+// pending child keeps its indent and says "under <parent>", without "related work".
+test("a pending spawn under a parent: listed after the joined children, indented, said under its parent, no line of its own", async t => {
+  const declared = roster.map(row => ({ ...row, relatedWorkKnown: relatedWork.RELATED_WORK_FEATURE, ...(row.instance === "child-a" ? { relatedWork: true } : {}) }));
   const u = fixture(t, () => [pending()]);
   u.render(declared);
   const names = [...u.list.querySelectorAll(".ctx-name")].map(n => n.dataset.name);
   assert.deepEqual(names.slice(0, 3), ["root", "child-a", "dev-new"], "the joined child first, the pending row after it");
-  assert.equal(u.list.querySelector(".ctx-guide, .ctx-guides"), null, "no lines");
+  const guides = name => [...u.row(name).closest(".ctx-tree-row").querySelectorAll(":scope > .ctx-guides > .ctx-guide")].map(g => g.className.replace("ctx-guide ", ""));
+  assert.deepEqual(["root", "child-a", "dev-new"].map(guides), [["down"], ["elbow"], []], "the related child's elbow ends the parent's line before the pending row");
+  assert.equal(u.row("dev-new").closest(".ctx-tree-row").querySelector(".ctx-guides"), null, "the pending row carries no guides");
   assert.equal(u.row("dev-new").closest(".ctx-tree-row").style.getPropertyValue("--depth"), "1");
   assert.equal(u.row("dev-new").querySelector(".ctx-relation").textContent, ", under root");
+  assert.equal(u.row("child-a").querySelector(".ctx-relation").textContent, ", under root, related work");
   // A host without the feature (no stamp on the parent): no lines either.
   const today = fixture(t, () => [pending()]);
   today.render(roster);

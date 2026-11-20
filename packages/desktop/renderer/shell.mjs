@@ -95,10 +95,10 @@ import { rosterRowFacts } from "../../client/roster-row-facts.mjs";
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../client/waiting-on-you.mjs";
 import { syncWaitingRow } from "./waiting-row.mjs";
 import { createPanelOwner } from "./panel-owner.mjs";
-import { collapseKey, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE, instanceSiblings, rowPinned, PIN_FEATURE } from "../../client/instance-tree.mjs";
-import { withParentGate } from "../../client/related-work.mjs";
+import { collapseKey, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE, instanceSiblings, relatedSiblings, rowPinned, PIN_FEATURE } from "../../client/instance-tree.mjs";
+import { withParentGate, drawsParentLine } from "../../client/related-work.mjs";
 import { createRetiresInFlight, retiringRows } from "../../client/retire-in-flight.mjs";
-import { captureTreeRenderState, relationSpan, stateSpan, rosterResponseOwns, clusterSeparator, renderRosterCount,
+import { treeConnectors, treeGuides, captureTreeRenderState, relationSpan, stateSpan, rosterResponseOwns, clusterSeparator, renderRosterCount,
   terminalKey, resolveTerminalOpen, createRosterLoading, rosterSignature, ROSTER_STALE_TITLE, rosterName, pinnedMark } from "./instance-tree-view.mjs";
 import {
   tabVisibleInContext, canActivateTab,
@@ -1096,9 +1096,9 @@ function renderContextRoster(instances) {
     ? { ...i, pendingSpawn: inFlight.get(instanceId(i)), reportedSpawn: true } : i);
   const spawning = decided.filter((p) => !reported.has(instanceId(p)));
   if (spawning.length) {
-    // #1577: a pending row is this window's own, so the panel stamped no same-work gate on it: it takes its parent's
-    // (related-work.mjs `withParentGate`). This Desktop's spawn never passes --same-work, so on a host that declares
-    // the feature it draws no parent line, as its reported row will not.
+    // A pending row is this window's own, so the panel stamped no related-work gate on it: it takes its parent's
+    // (related-work.mjs `withParentGate`). It carries no flag (this Desktop's spawn records no related work), so it
+    // draws no line of its own, as its reported row will not.
     const all = [...instances, ...spawning], byId = new Map(all.map((i) => [instanceId(i), i]));
     instances = [...instances, ...spawning.map((p) => withParentGate(p, byId.get(rosterParentId(all, instanceId(p))) ?? null))];
   }
@@ -1173,20 +1173,34 @@ function renderContextRoster(instances) {
   // one part's: no stem, elbow or sibling link reaches a row of the other part.
   const partGroups = (sections, level) => sections.flatMap((section) => section.groups.map((group, at) => ({ ...group, heading: at === 0 && section.deployment ? section : null, level })));
   const groups = [...partGroups(main, 3), ...(background ? [{ background }, ...partGroups(background.sections, 4)] : [])];
-  // The relations in words (slice 1, D26: the roster draws no lineage or sibling lines; indentation and the gap
-  // between bundles show the tree): "under <parent>" for a row indented under its parent and "sibling of …" for an
-  // explicit sibling link, resolved per deployment over its full roster as the command palette's are, said after
-  // the row's lines to assistive technology. Its siblings are listed pinned first with the feature (instance-pin), as
-  // the palette and the TUI list them.
+  // The lines, for related work only (no flag, no line; packages/client/related-work.mjs), as the sidebar drew them
+  // before the Desktop UI rework's D26 and as the command palette draws them, with the same builder
+  // (treeConnectors, treeGuides) over the cluster's drawn rows, so a collapsed parent draws no line into rows it
+  // hides: the solid elbow and stem to a child related to its parent, and the dotted link through the dots of
+  // top-level rows a related sibling link joins. Any other child is indented with no line; a top-level row no
+  // related link joins, and its rows, are a gap in the dotted line. A row with no line carries no guides at all.
+  const rowGuides = (items, i) => {
+    const connectors = treeConnectors(items, i, instances);
+    return connectors.length ? treeGuides(document, connectors) : null;
+  };
+  // The relations in words, said after the row's lines to assistive technology (the lines are aria-hidden):
+  // "under <parent>" for a row indented under its parent and "sibling of …" for an explicit sibling link, resolved
+  // per deployment over its full roster as the command palette's are, each with "related work" where its host
+  // reports it (the line's meaning, said at both ends of a sibling link). Its siblings are listed pinned first with
+  // the feature (instance-pin), as the palette and the TUI list them; the related ones before the rest.
   const ownRows = isMultiDeployment(contextDeployments) ? splitByDeployment(contextDeployments)(instances) : null;
   const siblingPins = { pins: pinsShown() };
-  const siblingsOf = new Map(ownRows ? [...ownRows.values()].flatMap((list) => [...instanceSiblings(list, siblingPins)]) : instanceSiblings(instances, siblingPins));
-  // A child its host reports doing its parent's work (#1577: `sameWork` where the host declares the feature, the
-  // flag the drawn line said before D26) says so too: "same work"; a child the host reports not doing it, or one
-  // whose host doesn't report the flag, says nothing more.
+  const perDeployment = (read) => new Map(ownRows ? [...ownRows.values()].flatMap((list) => [...read(list)]) : read(instances));
+  const siblingsOf = perDeployment((list) => instanceSiblings(list, siblingPins));
+  const relatedSiblingsOf = perDeployment(relatedSiblings);
   const underWords = (i) => (i.depth || 0) > 0 && i.parentInstance
-    ? `under ${i.parentInstance}${i.sameWorkKnown === true && i.sameWork === true ? ", same work" : ""}` : null;
-  const relationWords = (i) => [underWords(i), siblingText(siblingsOf.get(instanceId(i)))].filter(Boolean).join(", ");
+    ? `under ${i.parentInstance}${drawsParentLine(i) ? ", related work" : ""}` : null;
+  const siblingWords = (i) => {
+    const all = siblingsOf.get(instanceId(i)) || [], related = relatedSiblingsOf.get(instanceId(i));
+    const joined = all.filter((s) => related?.has(instanceId(s))), rest = all.filter((s) => !related?.has(instanceId(s)));
+    return [joined.length ? `${siblingText(joined)}, related work` : null, siblingText(rest)].filter(Boolean).join(", ");
+  };
+  const relationWords = (i) => [underWords(i), siblingWords(i)].filter(Boolean).join(", ");
   for (const group of groups) {
     if (group.background) {
       const head = backgroundHeading(document, group.background), toggle = head.querySelector(".ctx-background-toggle");
@@ -1215,7 +1229,7 @@ function renderContextRoster(instances) {
         // #802: a home the roster reports setting up its worktree (spawned here or anywhere) wears the pending row's treatment too.
         const held = heldHome(i);
         if (i.pendingSpawn || held?.kind === "spawning") {
-          listEl.append(pendingSpawnRow(i, spawnStart(i), relationWords(i))); continue;
+          listEl.append(pendingSpawnRow(i, spawnStart(i), relationWords(i), rowGuides(items, i))); continue;
         }
         const rowWrap = document.createElement("div");
         rowWrap.className = "ctx-tree-row";
@@ -1369,7 +1383,7 @@ function renderContextRoster(instances) {
         row.dataset.rosterCollapsed = collapsed ? "1" : "0";
         row.tabIndex = -1;
         row.addEventListener("keydown", onRosterRowKey);
-        rowWrap.append(row);
+        rowWrap.append(...[rowGuides(items, i), row].filter(Boolean));
         // Slice 1: no tools overlay. Its acts (Open pull request…, Start…) are the context menu's, for every row.
         const actionTarget = instanceActionTarget(ws, i), menuConnection = connectionGeneration;
         const menuOwner = () => currentWorkspace() === ws && workspaceGeneration() === rosterGeneration && connectionGeneration === menuConnection
@@ -1463,7 +1477,7 @@ function renderContextRoster(instances) {
    made anywhere) reads "Setting up worktree…" in the same treatment, with no tools, and "since <local
    time>" when a job of this window knows its start (`startedAt`). Its sentence is its title and description
    (slice 1: no hover card). */
-function pendingSpawnRow(i, startedAt = null, relation = "") {
+function pendingSpawnRow(i, startedAt = null, relation = "", guides = null) {
   const p = i.pendingSpawn ?? null, held = heldHome(i), settingUp = held?.kind === "spawning";
   const unknown = !settingUp && !!p && p.pending !== "spawning", checking = unknown && p.pending === "checking";
   const reported = !p || !!i.reportedSpawn;
@@ -1501,7 +1515,7 @@ function pendingSpawnRow(i, startedAt = null, relation = "") {
   row.append(mark, copy);
   row.tabIndex = -1;
   row.addEventListener("keydown", onRosterRowKey);
-  rowWrap.append(row);
+  rowWrap.append(...[guides, row].filter(Boolean));
   if (unknown) {
     const tools = document.createElement("span");
     tools.className = "ctx-row-tools ctx-spawn-tools";

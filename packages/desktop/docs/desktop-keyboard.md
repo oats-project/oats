@@ -1067,12 +1067,12 @@ control.
 - **The rows look like the sidebar's.** Each instance row draws the sidebar's
   connectors, from the sidebar's own code (`treeConnectors` and its DOM builder
   `treeGuides`, `renderer/instance-tree-view.mjs`, and the same `.ctx-guide`
-  rules): the dotted line joining the roots of one group (sibling links) on the
-  dot column, and the solid parent→child elbows and pass-throughs to its right.
-    As the sidebar's order does (the sidebar itself draws no lines since slice 1
-  of the Desktop UI rework), a solid line joins only a child that draws its parent line
-  (`drawsParentLine`, `packages/client/related-work.mjs`, #1577), and those
-  children are listed first under their parent, by recency within each part.
+  rules), for related work only, by the sidebar's rule (`packages/client/related-work.mjs`:
+  no flag, no line): the dotted line joining the dots of top-level rows a related
+  sibling link joins, on the dot column, and the solid parent→child elbows and
+  pass-throughs to its right, to a child related to its parent (`drawsParentLine`).
+  As in the sidebar, those children are listed first under their parent, by
+  recency within each part.
   Its dot is the sidebar's state dot: running, stopped or unknown. A context row
   keeps its lines; only its text is dimmed.
 - **Relations in words.** A nested row's option reads "…, under <parent>" and an

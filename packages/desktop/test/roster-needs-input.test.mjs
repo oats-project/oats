@@ -10,9 +10,9 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/related-work.mjs";
+import * as relatedWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
-const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
+const tree = { ...treeShared, ...treeView, ...relatedWork }; // the renderer's client imports, shipped
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget, sameInstanceActionTarget } from "../renderer/instance-action-target.mjs";
 import { instanceSplitPlan } from "../renderer/instance-split.mjs";
@@ -425,7 +425,7 @@ test("a collapse hides only rows of its own section: another deployment's child 
     waiting = at("waiting-d2", "/d2", "lead", { waitingOnYou: claim() }), quiet = at("quiet-d2", "/d2", "lead");
   const rows = [lead, own, waiting, quiet], collapsed = new Set();
   const u = fixture(t, { context: { contextDeployments: [deployment("/d1"), deployment("/d2")], collapsedInstances: collapsed } });
-  // Slice 1 (D26: no drawn lines): the row's place in its tree is its indent and its relation words.
+  // The row's place in its tree is its indent and its relation words (its rows report no related work: no line).
   const guides = name => [u.row(name).closest(".ctx-tree-row").style.getPropertyValue("--depth"), u.row(name).querySelector(".ctx-relation")?.textContent ?? ""].join("|");
   u.render(rows);
   const open = { waiting: guides("waiting-d2"), quiet: guides("quiet-d2") };

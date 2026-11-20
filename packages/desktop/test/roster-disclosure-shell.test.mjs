@@ -12,7 +12,7 @@ import { JSDOM } from "jsdom";
 import { viewContext } from "./helpers/view-context.mjs";
 import { spokenText } from "./helpers/spoken-text.mjs";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/related-work.mjs";
+import * as relatedWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget } from "../renderer/instance-action-target.mjs";
@@ -25,7 +25,7 @@ import { setTabTitle } from "../renderer/tab-a11y.mjs";
 import { NO_ANSWER_CODE, unservedError } from "../renderer/deployment-header.mjs";
 import { rosterKeyAction, moveTarget } from "../renderer/roster-keys.mjs";
 import { revealInScrollport } from "../renderer/reveal-in-scrollport.mjs";
-const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
+const tree = { ...treeShared, ...treeView, ...relatedWork }; // the renderer's client imports, shipped
 
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
 const css = read("shell.css"), html = read("index.html"), shell = read("shell.mjs");

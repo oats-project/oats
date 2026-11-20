@@ -19,8 +19,13 @@ import { rosterSections } from "../../client/roster-sections.mjs";
 import { pickerCycleDirection, paletteGroupDirection, paletteGroupHint, setBinding, resetBinding, setChordFamily, DEFAULT_KEYMAP } from "../renderer/keybindings.mjs";
 import { DEFAULT_CHORD_FAMILY } from "../../client/keymap.mjs";
 import { DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
+import { RELATED_WORK_FEATURE } from "../../client/related-work.mjs";
 
-const at = (instance, extra = {}) => ({ instance, agent: "dev", home: `/w/${instance}`, agentsRoot: "/w", running: true, ...extra });
+// Rows of a host that declares instance-related-work, each reporting related work (to its parent, or to the sibling
+// its siblingInstance names), so every line of the sidebar's builder is drawn (related-work.mjs: no flag, no line;
+// related-work-lines.test.mjs pins the rule's other cases, the palette's included).
+const at = (instance, extra = {}) => ({ instance, agent: "dev", home: `/w/${instance}`, agentsRoot: "/w", running: true,
+  relatedWorkKnown: RELATED_WORK_FEATURE, relatedWork: true, ...extra });
 // Two relation clusters and two unrelated instances, deliberately out of order.
 const ROSTER = [
   at("solo-y", { running: false }),
@@ -544,6 +549,9 @@ test("instance rows carry the sidebar row's connectors and state; commands carry
     [["alpha", "stopped"], ["alpha-kid", "running"], ["lead", "running"], ["child-a", "running"], ["grandchild", "running"], ["child-b", "stopped"], ["solo-x", "running"], ["solo-y", "stopped"]]);
   assert.deepEqual(paletteRows([at("maybe", { running: null })], [], "", {}).map(r => r.state), ["unknown"]);
   for (const row of rows.filter(r => !r.group)) assert.ok(!Object.hasOwn(row, "connectors") && !Object.hasOwn(row, "state"), row.label);
+  // No flag, no line: the same roster with no related work reported carries empty connectors on every row.
+  const plain = SIBLINGS.map(({ relatedWork: _flag, ...row }) => row);
+  assert.ok(instanceRows(paletteRows(plain, [], "", {})).every(r => Array.isArray(r.connectors) && r.connectors.length === 0));
 });
 
 test("under a query a row's connectors are the sidebar's over the listed cluster: context rows keep theirs", () => {
@@ -576,14 +584,15 @@ test("rendered: the sidebar's guides (one builder) and state dot on each instanc
   assert.ok(command.querySelector(".picon"), "a command keeps its chevron");
   assert.equal(command.querySelector(".ctx-guides, .ctx-dot"), null);
   assert.ok(!command.classList.contains("tree"));
-  // The one builder: the picker draws its rows' guides with it; nobody repeats the loop. The roster draws none since
-  // slice 1 of the Desktop UI rework (D26): it calls neither the builder nor the connectors.
+  // The one builder: the picker and the roster draw their rows' guides with it; nobody repeats the loop. The roster's
+  // rows draw the lines again for related work (the related-work lines), through the same connectors and builder.
   for (const file of ["../renderer/shell.mjs", "../renderer/overlay-picker.mjs"]) {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     assert.doesNotMatch(source, /className = `ctx-guide \$\{kind\}`/, file);
   }
   const shell = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
-  assert.doesNotMatch(shell, /treeGuides|treeConnectors/, "the roster draws no lines");
+  assert.match(shell, /treeConnectors\(items, i, instances\)/, "the roster's connectors: the same builder over the cluster's drawn rows");
+  assert.match(shell, /treeGuides\(document, connectors\)/, "and the same DOM builder");
   assert.match(readFileSync(new URL("../renderer/overlay-picker.mjs", import.meta.url), "utf8"), /row\.prepend\(treeGuides\(doc, it\.connectors\)\)/, "the palette's rows, through the one builder");
 });
 

@@ -1080,12 +1080,43 @@ error in the terminal. Each drop/paste accepts up to 16 files totaling 25 MB.
 
 The sidebar lists a workspace's instances as a tree: a child sits one step
 right of its parent, and related instances are grouped together, with a little
-space before the next group. The sidebar draws no lines between them: the
-indent and that space show the tree. A screen reader hears each row's state ("running", "stopped" or "status
-unknown") after its two lines, then each child "under"
-its parent, with "same work" when its host reports it doing its parent's work,
-and each instance linked as a sibling "sibling of" the other, after the row's
-two lines.
+space before the next group. The indent and that space show the tree.
+
+The sidebar draws a line only for related work: an instance its host reports
+doing work related to its parent's, or to a sibling's. No flag, no line, on
+every host. Where it draws one, it looks as it did before the Desktop's
+redesign:
+
+- **A solid line** joins a parent to a child whose work is related to its
+  parent's: the parent's line leaves its dot and ends in a rounded elbow at
+  the child's. Any other child keeps its indent with no line, and its
+  parent's line doesn't reach it.
+- **A dotted line** joins the dots of two top-level instances of one group
+  when the one linked as a sibling of the other reports related work. The
+  links are pairs: S may be linked to R and T to S, and the line then runs
+  through all three dots, passing beside the children between them. A
+  top-level instance whose work isn't related breaks the dotted line: its
+  row, and its children's, carry none, so nothing touches its dot. The order
+  doesn't change for the lines.
+
+The same lines show whether a group is open or closed: closed, the dotted
+line joins the top-level dots; open, it runs on beside the children, whose
+own lines are drawn. Both lines hold 3:1 contrast on every row fill.
+
+The flag comes from the instances' OATS ([Related work](desktop-cli-api.md#same-work-as-the-parent-oats-instance-same-work)).
+An OATS with `instance-related-work` reports it for a child and for a
+sibling. An older OATS, with `instance-same-work` only, reports it for a
+child only (set with `--same-work`), so its siblings get no dotted line. An
+OATS with neither reports none, and no line is drawn. For another machine's
+instances, its host must report the feature too, through an installed OATS
+with `server-probe-features`; a host whose features are not known (its last
+read failed) gets no line. A spawn from the Desktop never sets the flag.
+
+A screen reader hears each row's state ("running", "stopped" or "status
+unknown") after its two lines, then each child "under" its parent, with
+"related work" when the line joins them, and each instance linked as a
+sibling "sibling of" the other, with "related work" at both ends of a joined
+pair. The lines themselves are hidden from assistive technology.
 
 The sidebar shows the top-level instances only until you open one. An
 instance with children has a chevron right after its name, with the number
@@ -1116,17 +1147,11 @@ are in name order, and an instance whose spawn time can't be read comes after
 every one whose time can. Pinned instances come before all of these, at every
 level ([Pinned instances](#pinned-instances)).
 
-Children that do their parent's work come first under it. When the instances'
-OATS has the `instance-same-work` feature, a child the kernel reports as doing
-its parent's work (`sameWork: true` in its row, set with `oats spawn …
---same-work` or `oats instance same-work <instance> on`) is listed before its
-parent's other children, each part newest first. The command palette still
-draws lines: there a parent's line joins only those children (siblings by a
-dotted line through their dots), in its own recency order inside each part.
-For another machine's instances, its host must report the feature too, through
-an installed OATS with `server-probe-features`. A host without the feature, or
-one whose features are not known (its last read failed), lists every child as
-doing its parent's work. A spawn from the Desktop never sets the flag.
+Children whose work is related to their parent's come first under it, each
+part newest first, so a parent's line ends at its last joined child and never
+passes one it doesn't join. Top-level instances keep their order whatever
+their flag. The command palette draws the same lines by the same rule, in its
+own recency order inside each part.
 
 A row shows the instance's name as words: each `-` is a space, and the first
 letter is a capital, so `oats-expert-maintainer-lanes` reads "Oats expert

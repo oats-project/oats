@@ -6,7 +6,7 @@ import { waitingClaim } from './waiting-on-you.mjs';
 import { byRuntimeState } from './instance-presentation.mjs';
 import { retireData } from './retire-state.mjs';
 import { displayLine } from './display-text.mjs';
-import { drawingFirst } from './related-work.mjs';
+import { drawingFirst, drawsSiblingLink } from './related-work.mjs';
 
 export function collapseKey(workspace, instance) {
   return `${workspace || ""}\u0000${instance}`;
@@ -139,6 +139,35 @@ export function instanceSiblings(instances, { pins = false } = {}) {
   return new Map([...ids].map(([id, set]) => [id, [...set].map((s) => byId.get(s)).sort(order)]));
 }
 
+/** Each instance's siblings by a RELATED explicit link: Y is X's when X's sibling link resolves to Y and X draws it
+ * (related-work.mjs `drawsSiblingLink`: its host reports `relatedWork` on a top-level row), or the same from Y to
+ * X, so both ends of a related link name each other. The links are `instanceSiblings`' (direct links only, resolved
+ * by identity over `instances`, self excluded), kept where related. Pass one deployment's FULL roster, as there.
+ * Returns Map<instanceId, Set<instanceId>>; an instance with no related sibling is absent from the map. */
+export function relatedSiblings(instances) {
+  const byName = new Map();
+  for (const i of instances) {
+    if (!byName.has(i.instance)) byName.set(i.instance, []);
+    byName.get(i.instance).push(i);
+  }
+  const out = new Map();
+  const add = (a, b) => {
+    if (!out.has(a)) out.set(a, new Set());
+    out.get(a).add(b);
+  };
+  for (const i of instances) {
+    if (!drawsSiblingLink(i)) continue;
+    const id = instanceId(i);
+    for (const name of siblingLinksOf(i)) {
+      const other = resolveLinkId(i, name, byName);
+      if (!other || other === id) continue;
+      add(id, other);
+      add(other, id);
+    }
+  }
+  return out;
+}
+
 /** Group instances into agent CLUSTERS — connected components of the
  * undirected relation graph (parent/child spawn edges + sibling links).
  * Unrelated instances are single-node clusters. Within a cluster the
@@ -146,8 +175,9 @@ export function instanceSiblings(instances, { pins = false } = {}) {
  * cluster members related only by sibling links sit at depth 0.
  * Nodes are keyed by instanceId (composite identity), never bare name —
  * duplicate names across repos render as distinct nodes.
- * Under one parent, the children that draw their parent line come first (related-work.mjs `drawingFirst`: on a
- * host that declares instance-same-work, the flagged ones), each part in the roster's order (#1577). The product
+ * Under one parent, the children that draw their parent line come first (related-work.mjs `drawingFirst`: the
+ * ones their host reports related to their parent), each part in the roster's order (#1577). A related sibling
+ * link changes no order (the lead's choice B, 2026-11-20). The product
  * owner's contract (awebai/oats#1577, comment 6441606665) refines the roster's order inside one parent's children only: roots, clusters and groups keep it.
  * Returns [{ key, instances: [{...instance, depth}] }] with clusters ranked by
  * their first ROOT in the roster's order (`rosterOrder`; pinned clusters first, `pins` below), never by another member (#1262): a bundle sits where

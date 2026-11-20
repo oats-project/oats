@@ -274,22 +274,26 @@ body {
 /* Two columns per level, so the sibling cue and parentage never merge (#1312). The dotted sibling
    link sits on the dot's column (10px inset + 4px radius), --tree-link-shift left of its centre
    (the sidebar's 2px, so the two columns are 7px apart; still inside the dot, so it reads as
-   joining it; the palette's rows, unset, stay on the centre), and joins the depth-0 dots of one
-   group, passing beside their children. The solid lineage (a parent's stem, pass-throughs for open
-   branches, rounded elbows into children) runs --tree-branch-offset right of the centre: the stem leaves
+   joining it; the palette's rows, unset, stay on the centre), and joins the dots of the top-level rows
+   a related sibling link joins, passing beside their children. The solid lineage (a parent's stem,
+   pass-throughs for open branches, rounded elbows into children) reaches only a child related to its
+   parent, and runs --tree-branch-offset right of the centre: the stem leaves
    the parent's dot at its lower right, under the ring, and each elbow ends under the child dot's
    ring. Dots paint above every line with a ring in the row's own solid colour (--row-solid:
    surface, hover surface-2, selected sel), so every line appears to leave the dot itself and a
    running dot stays solid on the tint instead of reading hollow inside a white halo. */
-/* The guides span the row's transparent borders too, so lines cross the gap between rows. */
+/* Lines are drawn for related work only (packages/client/related-work.mjs): no flag, no line, so each line is
+   the sign of it, and both strokes hold 3:1 on every row fill (contrast-inventory.mjs: --tree-stroke solid,
+   --tree-link dotted). The sidebar's rows and the command palette's tree rows share these rules.
+   The guides span the row's transparent borders too, so lines cross the gap between rows. */
 .ctx-guides { position: absolute; inset: calc(-1 * var(--row-gap)) auto calc(-1 * var(--row-gap)) 0; width: 100%; pointer-events: none; }
 .ctx-guide { position: absolute; box-sizing: border-box; width: 0;
              left: calc(13.25px + var(--tree-branch-offset) + var(--guide-level) * var(--tree-step));
-             border-left: 1.5px solid var(--tree-line); }
+             border-left: 1.5px solid var(--tree-stroke); }
 .ctx-guide.line { top: 0; bottom: 0; }
 /* From the offset column to 1px inside the next level's dot ring (ring: 6px around the dot centre). */
 .ctx-guide.elbow { top: -2px; height: calc(50% + 2px); width: calc(var(--tree-step) - var(--tree-branch-offset) - 4.25px);
-                   border-bottom: 1.5px solid var(--tree-line); border-bottom-left-radius: 5px; }
+                   border-bottom: 1.5px solid var(--tree-stroke); border-bottom-left-radius: 5px; }
 .ctx-guide.down { top: 50%; bottom: 0; }
 .ctx-guide.link-in, .ctx-guide.link-out, .ctx-guide.link-through { left: calc(13.25px - var(--tree-link-shift, 0px) + var(--guide-level) * var(--tree-step));
                                                                    border-left: 1.5px dotted var(--tree-link); }

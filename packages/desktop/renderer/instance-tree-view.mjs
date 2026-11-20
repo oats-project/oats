@@ -2,9 +2,9 @@
  * focus and scroll it keeps across a rebuild, the roster's count line and loading state, and each row's name. The tree
  * itself (identity, relations, groups, order, visibility) is the shared packages/client/instance-tree.mjs. */
 import { createDataState, statusLine, skeleton, skeletonBlock, ROSTER_STALE_TITLE } from './loading.mjs';
-import { instanceId, resolveLinkId, findRosterInstance } from '../../client/instance-tree.mjs';
+import { instanceId, resolveLinkId, findRosterInstance, siblingLinksOf } from '../../client/instance-tree.mjs';
 import { instanceDisplayName } from '../../client/instance-display-name.mjs';
-import { drawsParentLine } from '../../client/related-work.mjs';
+import { drawsParentLine, drawsSiblingLink } from '../../client/related-work.mjs';
 import { iconElement } from './shell-icons.mjs';
 
 /** An instance row's name (0.68.1, the product owner): the words shown (instanceDisplayName: "Oats expert maintainer
@@ -33,8 +33,8 @@ export function stateSpan(doc, state) {
   return span;
 }
 
-/** A roster row's relations in words for assistive technology (the Desktop UI rework, slice 1, D26: the roster draws
- * no lineage or sibling lines), ", under p, sibling of s", visually hidden after its lines; null when it has none.
+/** A roster row's relations in words for assistive technology (the roster's lines, drawn for related work only,
+ * are aria-hidden), ", under p, related work, sibling of s", visually hidden after its lines; null when it has none.
  * The words are the command palette's ("under …", siblingText's "sibling of …"). */
 export function relationSpan(doc, words) {
   if (!words) return null;
@@ -69,18 +69,16 @@ export function clusterSeparator(doc, { label, count } = {}) {
   return gap;
 }
 
-/** Design connectors for one visible row, drawn from the dots (Redesign v3):
- * solid parent→child elbows (rounded into the child dot), solid pass-through
- * lines for open ancestor branches and beside a non-last child's elbow, and a DOTTED dot-to-dot link joining the
- * depth-0 members of one agent group (sibling relations). The dotted link
- * sits on the dot column and the solid lineage just right of it (shell.css
- * --tree-branch-offset), so a row between two roots draws its own
+/** Design connectors for one visible row, drawn from the dots (Redesign v3), for related work only (no flag, no
+ * line: packages/client/related-work.mjs): solid parent→child elbows (rounded into the child dot), solid
+ * pass-through lines for open ancestor branches and beside a non-last child's elbow, and a DOTTED dot-to-dot link
+ * between top-level rows a related sibling link joins. The dotted link sits on the dot column and the solid lineage
+ * just right of it (shell.css --tree-branch-offset), so a row between two joined roots draws its own
  * `link-through` and never lets a solid line stand in for it (#1312).
- * The solid lineage joins only a child that draws its parent line (#1577, packages/client/related-work.mjs
- * `drawsParentLine`; the gate is stamped on each row by the panel): a child that does not keeps its indent and
- * gets no elbow, and its parent's stem and vertical do not reach it. The dotted links are siblinghood, not
- * parentage, and are drawn as before. Nothing else marks the flag: the line is its only sign, aria-hidden.
- * `items` is the rendered group order. */
+ * The solid lineage joins only a child that draws its parent line (#1577, `drawsParentLine`; the gate is stamped
+ * on each row by the panel): a child that does not keeps its indent and gets no elbow, and its parent's stem and
+ * vertical do not reach it. The dotted link is `siblingLinkSpans`'. The lines are aria-hidden; the row's words say
+ * the same (`relationSpan`). `items` is the rendered group order. */
 export function treeConnectors(items, item, allInstances = items) {
   const at = items.indexOf(item), depth = item.depth || 0;
   const segments = treeGuideSegments(items, item, allInstances);
@@ -96,13 +94,46 @@ export function treeConnectors(items, item, allInstances = items) {
   // first child's elbow (the child is the very next rendered item), when that child draws its line.
   const next = at >= 0 ? items[at + 1] : null;
   if (next && (next.depth || 0) === depth + 1 && drawsParentLine(next)) out.push({ kind: "down", level: depth });
-  const rootBefore = at > 0 && items.slice(0, at).some((i) => !(i.depth || 0));
-  const rootAfter = at >= 0 && items.slice(at + 1).some((i) => !(i.depth || 0));
+  if (at < 0) return out;
+  const { spans, joined } = siblingLinkSpans(items, allInstances);
+  // A top-level row no related link joins is a gap in the line, and so are the rows of its block (its descendants,
+  // which follow it): none carries a dotted segment, so nothing touches its dot. The line above ends at the bottom
+  // edge of the row before, and starts again at the top edge of the row after (the lead's choice B, 2026-11-20:
+  // the roster's order stays as it is).
+  let block = at;
+  while (block > 0 && (items[block].depth || 0)) block--;
+  if ((items[block].depth || 0) || !joined.has(block)) return out;
   if (!depth) {
-    if (rootBefore) out.push({ kind: "link-in", level: 0 });
-    if (rootAfter) out.push({ kind: "link-out", level: 0 });
-  } else if (rootAfter) out.push({ kind: "link-through", level: 0 });
+    if (spans.some(([from, to]) => from < at && at <= to)) out.push({ kind: "link-in", level: 0 });
+    if (spans.some(([from, to]) => from <= at && at < to)) out.push({ kind: "link-out", level: 0 });
+  } else if (spans.some(([from, to]) => from < at && at < to)) out.push({ kind: "link-through", level: 0 });
   return out;
+}
+
+/** The dotted links of one rendered group: `spans`, one `[from, to]` pair of `items` indexes per related sibling
+ * link (from < to), and `joined`, the set of indexes a span ends at. A link is a top-level row that draws it
+ * (related-work.mjs `drawsSiblingLink`) whose `siblingInstance` resolves (over `allInstances`, by identity, as the
+ * tree does) to another top-level row shown in `items`. The links are edges, not a star: S may link to R and T to S.
+ * A link to a row that is hidden, filtered out, or not top-level draws nothing. */
+export function siblingLinkSpans(items, allInstances = items) {
+  const byName = new Map();
+  for (const candidate of allInstances) {
+    if (!byName.has(candidate.instance)) byName.set(candidate.instance, []);
+    byName.get(candidate.instance).push(candidate);
+  }
+  const roots = new Map();
+  items.forEach((candidate, index) => { if (!(candidate.depth || 0)) roots.set(instanceId(candidate), index); });
+  const spans = [], joined = new Set();
+  items.forEach((candidate, index) => {
+    if ((candidate.depth || 0) || !drawsSiblingLink(candidate)) return;
+    for (const name of siblingLinksOf(candidate)) {
+      const other = roots.get(resolveLinkId(candidate, name, byName));
+      if (other === undefined || other === index) continue;
+      spans.push([Math.min(index, other), Math.max(index, other)]);
+      joined.add(index).add(other);
+    }
+  });
+  return { spans, joined };
 }
 
 /** The one DOM builder for a row's connectors (`treeConnectors`' answer), shared by the sidebar's rows (a
@@ -152,7 +183,7 @@ export function resolveTerminalOpen(instances, ref, workspace) {
  * `continue` is an ancestor/sibling vertical; `branch` has a later sibling and
  * an elbow; `end` is the final sibling, stopping at its elbow; `none` suppresses
  * an exhausted ancestor line through deeper descendants, and the row's own segment when it does not draw
- * its parent line (#1577, `drawsParentLine`). A vertical counts only later siblings that draw theirs: under
+ * its parent line (#1577, `drawsParentLine`: related work only). A vertical counts only later siblings that draw theirs: under
  * one parent those come first (instance-tree.mjs `clusterInstances`), so it ends at the last one.
  * Pass the full roster as allInstances when items is a cluster/filtered subset:
  * resolve parent names there first, using the same identity rules as clustering.

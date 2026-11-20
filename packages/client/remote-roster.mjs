@@ -49,7 +49,7 @@ export function remotePanel(group, at) {
   const described = name => { const soul = (group.souls || []).find((a) => a?.name === name); return typeof soul?.description === "string" ? soul.description : null; };
   // A Herdr-recorded row is unsupported whatever the host's probe said: it cannot open or start.
   const instances = (group.instances || []).map(({ runtime: _released, runtimeErrorOrigin: _sent, retire: sentRetire, sameWork: sentSameWork,
-    sameWorkKnown: _gate, pinned: sentPinned, ...i }) => {
+    relatedWork: sentRelatedWork, relatedWorkKnown: _gate, pinned: sentPinned, ...i }) => {
     const unsupported = unsupportedSession(i);
     const origin = unsupported ? unsupportedSessionOrigin(i) : group.probe.ok || (group.probe.error?.message && madeByKernel(group.probe.error)) ? "kernel" : "roster-read";
     const row = {
@@ -69,8 +69,9 @@ export function remotePanel(group, at) {
       ...(Object.hasOwn(i, "attributedHuman") ? { attributedHuman: attributedHumanData(i.attributedHuman) } : {}),
       // #1247: the host's retire state, relayed unchanged when it is in the contract (retire-state.mjs), else absent.
       ...(retireData(sentRetire) ? { retire: retireData(sentRetire) } : {}),
-      // #1577: the host's same-work flag, true only (anything else reads unflagged). `sameWorkKnown` is this
+      // The host's related-work flags, each true only (anything else reads unflagged). `relatedWorkKnown` is this
       // client's own field (related-work.mjs), never a host's: whatever a host sent under it is dropped.
+      ...(sentRelatedWork === true ? { relatedWork: true } : {}),
       ...(sentSameWork === true ? { sameWork: true } : {}),
       // Feature instance-pin: the host's pin, true only (anything else reads unpinned; instance-tree.mjs rowPinned),
       // and only from a host whose own feature list names it (composed-gate.mjs hostAdvertises: the group's

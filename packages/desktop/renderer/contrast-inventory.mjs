@@ -47,14 +47,17 @@ export const TEXT_PAIRS = Object.freeze([
 ].map(pair => Object.freeze(pair)));
 
 /** [graphic, surface] pairs held to GRAPHIC_CONTRAST: graph connectors (the
- * Active overview's edges, Setup's tree lines) and the sidebar's dotted sibling
- * link are meaningful graphics, and a
+ * Active overview's edges, Setup's tree lines), the sidebar's dotted sibling
+ * link and its solid related-work lines are meaningful graphics, and a
  * terminal's selection fill is the one sign of what a copy will take (issue 672). */
 export const GRAPHIC_PAIRS = Object.freeze([
   ...["bg", "surface", "surface-2"].map(bg => Object.freeze(["graph-edge", bg])),
   // The sidebar's dotted sibling link (shell.css .ctx-guide.link-*), the sibling cue alone on its column (issue 1312),
   // on every row fill: plain, hovered and selected.
   ...["surface", "surface-2", "sel"].map(bg => Object.freeze(["tree-link", bg])),
+  // The roster's solid lines (shell.css .ctx-guide line, elbow, down): drawn for related work only, so the line is the
+  // sign of it (the related-work lines), on every row fill it crosses: plain, hovered and selected.
+  ...["surface", "surface-2", "sel"].map(bg => Object.freeze(["tree-stroke", bg])),
   // A native select's chevron (theme.css select.field): --muted, on the field and on a disabled field.
   ...["surface", "surface-2"].map(bg => Object.freeze(["muted", bg])),
   Object.freeze(["term-sel", "term-bg"]),
