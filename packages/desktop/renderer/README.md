@@ -2533,11 +2533,14 @@ doesn't read already:
   Home and Home › Agents only. The Workspace page's head is a trail, "Home › Workspace › <tab>", above its tab bar
   (`views/spawn.mjs` `nav.workspace-title`, the tab its `h1`, `syncWorkspaceTitle`; Home's head type), hidden while a
   soul's, capability's or team's page shows its bar. A Workspace page's bar (`capability-page.mjs` `pageBar`, crumbs
-  starting "Workspace") draws the same trail one level deeper, Home first, each part above the page a link: Home,
-  Workspace and a tab dispatch `workspace-navigate` (`workspaceNavigate`), which the Workspace page handles
-  (`navigateTrail`: Home through `ctx.openPage`; else its pages closed, then the tab, focus on its control); the part
-  just above the page is its Back. A capability's open skill extends the trail (a MutationObserver on the skill
-  view's `hidden`). Esc goes up one level (a page to its list, the page to Home: shell.mjs `stageHost`).
+  starting "Workspace") draws the same trail one level deeper, Home first, each part above the page a link, resolved
+  by its place, never its name (a soul may be called "Teams"): Home, Workspace and the tab after it dispatch
+  `workspace-navigate` (`workspaceNavigate`), which the Workspace page handles (`navigateTrail`: Home through
+  `ctx.openPage`; else its pages closed, then the tab, focus on its control); a deeper part carries its own
+  `{ label, go }` (a soul's name on its capability's page: that page's Back); a plain part just above the page is its
+  Back. A capability's open skill extends the trail (a MutationObserver on the skill view's `hidden`), the capability
+  then a link that closes the skill. Esc goes up one level wherever focus is on a page, its trail included (a skill to
+  its capability, a page to its list, the page to Home: shell.mjs `stageHost`).
 - **Amendment 1** (Pepe, 2026-11-20; Joan's yes): the column is centred (`.home-inner` 880px, `margin:0 auto`); a
   Running group under the tiles (`RUNNING_SHOWN`, 5, in the roster's order, "Show all N running" / "Show fewer");
   the Souls grid's cards in the information-role type scale (name 17 / 700, what it does 13 muted, the meta line 12

@@ -734,7 +734,9 @@ ${spawnDialogCSS}</style>
     event.preventDefault(); back();
   };
   s.q("workspace-soul-page").addEventListener("keydown", e => pageEscape(e, () => s.page.close({ restoreFocus: true })));
-  s.q("workspace-cap-page").addEventListener("keydown", e => pageEscape(e, () => closeCapability(s, { restoreFocus: true })));
+  // Esc goes up one level wherever focus is on the page (its bar's trail included): out of an open skill first.
+  s.q("workspace-cap-page").addEventListener("keydown", e => pageEscape(e, () => (s.capOpen?.contents.openSkill
+    ? s.capOpen.contents.closeSkill({ focus: true }) : closeCapability(s, { restoreFocus: true }))));
   s.q("workspace-team-page").addEventListener("keydown", e => pageEscape(e, () => closeTeam(s, { restoreFocus: true })));
   // Keyboard operability (task: keybindings wiring): `/` focuses the filter,
   // arrows rove the card grid, Enter inspects the focused soul,

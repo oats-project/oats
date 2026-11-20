@@ -539,3 +539,44 @@ test('the hidden attribute always wins over the section\'s own display rules (Ch
   // Every element the controller hides lives inside the section.
   for (const cls of ['cap-contents', 'cap-reader-head']) assert.match(capabilityContentsCSS, new RegExp(`\\.${cls} \\{[^}]*display:`), cls);
 });
+
+// The Desktop UI rework, slice 2b, Amendment 1 (E), review round 2: a skill opened from a soul's capability keeps the
+// whole trail, every part above it a link that goes where its place says (never resolved by name), and Esc goes up one
+// level wherever focus is on the page, its trail included: out of the skill first.
+test('slice2b skill trail: Home › Workspace › Souls › soul › capability › skill, each part above a link; Esc closes the skill first', async t => {
+  const u = setup(t);
+  u.go(); await flush(); await flush();
+  // The Workspace page (views/spawn.mjs) hosts the capability page in its cap-page section, with its shipped Esc.
+  const section = u.doc.createElement('section'); section.className = 'workspace-cap-page'; u.doc.body.append(section);
+  const backs = [], went = [];
+  section.addEventListener('workspace-navigate', e => went.push(e.detail.to));
+  // A soul named like a tab: its part is still the soul's, not the Teams tab.
+  renderCapabilityPage(section, { row: packageRow, status: null, instances: [], root: '/ws', backLabel: 'Teams', from: { label: 'Teams' }, onBack: () => backs.push('soul'),
+    contents: u.contents.element, skills: u.contents.skills, skillView: u.contents.skillView });
+  const { readFileSync } = await import('node:fs'), { runInNewContext } = await import('node:vm');
+  const spawnSource = readFileSync(new URL('../renderer/views/spawn.mjs', import.meta.url), 'utf8');
+  const escape = spawnSource.match(/const pageEscape = \(event, back\) => \{[^]*?\n  \};/)[0];
+  const listener = spawnSource.match(/s\.q\("workspace-cap-page"\)\.addEventListener\("keydown", e => pageEscape\(e, \(\) => \(s\.capOpen\?\.contents\.openSkill\n    \? s\.capOpen\.contents\.closeSkill\(\{ focus: true \}\) : closeCapability\(s, \{ restoreFocus: true \}\)\)\)\);/)[0];
+  const closed = [];
+  runInNewContext(`${escape}\n${listener}`, { s: { q: () => section, capOpen: { contents: u.contents } }, closeCapability: () => closed.push('capability') });
+  const trail = () => [...section.querySelectorAll('.page-crumbs > :not(.page-crumb-sep)')].map(el => [el.textContent, el.tagName === 'BUTTON' ? 'link' : 'here']);
+  const link = label => [...section.querySelectorAll('.page-crumbs button')].find(b => b.textContent === label);
+  assert.deepEqual(trail(), [['Home', 'link'], ['Workspace', 'link'], ['Souls', 'link'], ['Teams', 'link'], ['oats.aweb', 'here']]);
+  section.querySelector('button.cap-skill-row[data-skill="skills/oats-aweb"]').click(); await flush(); await flush();
+  assert.deepEqual(trail(), [['Home', 'link'], ['Workspace', 'link'], ['Souls', 'link'], ['Teams', 'link'], ['oats.aweb', 'link'], ['oats-aweb', 'here']], 'the skill one level deeper');
+  // The soul's part goes back to the soul (its page's Back), never to the Teams tab.
+  link('Teams').click(); assert.deepEqual(backs, ['soul']); assert.deepEqual(went, []);
+  link('Souls').click(); link('Home').click(); assert.deepEqual(went, ['souls', 'home'], 'Souls and Home by their place');
+  // The capability's part closes the skill.
+  link('oats.aweb').click(); await flush();
+  assert.equal(u.contents.openSkill, null); assert.deepEqual(trail().at(-1), ['oats.aweb', 'here']);
+  // Esc with focus in the skill's reader, then on the trail: the skill closes, the capability stays; Esc again leaves it.
+  for (const where of ['reader', 'trail']) {
+    section.querySelector('button.cap-skill-row[data-skill="skills/oats-aweb"]').click(); await flush(); await flush();
+    const at = where === 'reader' ? u.contents.skillView.querySelector('.skill-view-reader') : link('Home');
+    at.focus(); u.key(at, 'Escape'); await flush();
+    assert.equal(u.contents.openSkill, null, `${where}: the skill closes`); assert.deepEqual(closed, [], `${where}: the capability stays`);
+  }
+  u.key(link('Home'), 'Escape');
+  assert.deepEqual(closed, ['capability'], 'the next Esc goes up from the capability');
+});

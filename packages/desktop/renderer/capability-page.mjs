@@ -192,9 +192,11 @@ export function workspaceNavigate(from, to) {
 }
 /** The page bar: "‹ back", the breadcrumb and actions. A Workspace page's trail (its crumbs start with "Workspace")
  * is the whole way there (slice 2b, Amendment 1, E: Pepe, 2026-11-20, "no pots tornar al home"): Home › Workspace ›
- * <tab> › … › this page, each part but this page a link: Home, Workspace and a tab through workspaceNavigate, and the
- * part just above this page (`onBack`), as Back and Esc. Any other trail is plain words. `setTrail(crumbs, current,
- * { onUp })` paints it again (a sub-page: the capability page's skill), `onUp` then going to the part above. */
+ * <tab> › … › this page, each part but this page a link. By place, never by name (a soul may be called "Teams"): Home
+ * and Workspace, and the tab right after Workspace, go through workspaceNavigate; a deeper part goes where its own
+ * `{ label, go }` says (a soul's page, a capability's); a plain part just above this page goes to `onBack`. Any other
+ * trail is plain words. `setTrail(crumbs, current, { onUp })` paints it again (a sub-page: the capability page's
+ * skill), `onUp` then standing for `onBack`. */
 export function pageBar(doc, { backLabel, crumbs = [], current, onBack }) {
   const bar = el(doc, 'div', null, 'page-bar');
   const back = el(doc, 'button', null, 'page-back'); back.type = 'button';
@@ -207,12 +209,18 @@ export function pageBar(doc, { backLabel, crumbs = [], current, onBack }) {
     const all = workspace ? ['Home', ...parts] : parts;
     trail.replaceChildren();
     all.forEach((crumb, i) => {
-      const last = i === all.length - 1, to = WORKSPACE_TRAIL[crumb];
+      const label = typeof crumb === 'string' ? crumb : crumb.label;
+      // Where it goes: Home, Workspace and the tab by their place; a part's own `go`; the plain part above this page, up.
+      const go = !workspace ? null
+        : i <= 1 ? () => workspaceNavigate(part, WORKSPACE_TRAIL[label])
+        : i === 2 && WORKSPACE_TRAIL[label] && typeof crumb === 'string' && i !== all.length - 1 ? () => workspaceNavigate(part, WORKSPACE_TRAIL[label])
+        : typeof crumb?.go === 'function' ? crumb.go
+        : i === all.length - 1 ? onUp : null;
       let part;
-      if (workspace && (last || to)) {
-        part = el(doc, 'button', crumb, 'page-crumb-link'); part.type = 'button';
-        part.addEventListener('click', () => (last ? onUp() : workspaceNavigate(part, to)));
-      } else part = el(doc, 'span', crumb);
+      if (go) {
+        part = el(doc, 'button', label, 'page-crumb-link'); part.type = 'button';
+        part.addEventListener('click', () => go());
+      } else part = el(doc, 'span', label);
       trail.append(part, el(doc, 'span', workspace ? '›' : '/', 'page-crumb-sep'));
     });
     const now = el(doc, 'span', here, 'page-crumb-current'); now.setAttribute('aria-current', 'page'); trail.append(now);
@@ -318,7 +326,8 @@ export function renderCapabilityPage(host, { row, status, instances, souls = [],
   const resolved = row.resolved, names = memberNames(status);
   const page = node('div', undefined, 'capability-page'); page.dataset.capability = row.name;
   if (catalogPending) page.dataset.catalogPending = 'true';
-  const crumbs = from ? ['Workspace', 'Souls', from.label] : ['Workspace', 'Capabilities'];
+  // From a soul's page, its name is the part above: Back (and its link) returns to that soul.
+  const crumbs = from ? ['Workspace', 'Souls', { label: from.label, go: () => onBack() }] : ['Workspace', 'Capabilities'];
   const { bar, setTrail } = pageBar(doc, { backLabel, crumbs, current: row.name, onBack });
   const noticeHost = node('div', undefined, 'page-notice');
   const notice = observation ? catalogNotice(doc, observation) : null; if (notice) noticeHost.append(notice);
@@ -443,7 +452,7 @@ export function renderCapabilityPage(host, { row, status, instances, souls = [],
     // A skill open is one level down (slice 2b, E): the trail ends on it, the capability above it a link that closes it.
     const sync = () => {
       const skill = skillView.hidden ? null : skillView.querySelector('.skill-view-title')?.textContent || null;
-      if (skill) setTrail([...crumbs, row.name], skill, { onUp: () => skillView.querySelector('.skill-back')?.click() });
+      if (skill) setTrail([...crumbs, { label: row.name, go: () => skillView.querySelector('.skill-back')?.click() }], skill);
       else setTrail(crumbs, row.name);
     };
     sync();
