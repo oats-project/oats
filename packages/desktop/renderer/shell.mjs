@@ -1743,6 +1743,24 @@ const tabOpenIntents = createSelectionOwnership({ currentWorkspace, workspaceGen
 const instancePrAction = createInstancePrAction({ ctx, beginIntent: () => tabOpenIntents.begin(), currentTarget: ownsInstanceTarget,
   generation: workspaceGeneration, connectionGeneration: () => connectionGeneration, report: message => ctx.notify(message), openExternal: ctx.openExternal });
 window.addEventListener('pagehide', () => instancePrAction.dispose(), { once: true });
+/** The instance-git panel (changes, the worktree, the pull request) for Details' folded Git section (slice 6a), with
+ * the same reads the instance panel's Developer page made. */
+function createDetailsGitPanel(host) {
+  return createInstanceGitPanel(host, { applyFocus: (fn) => tabOpenIntents.applyFocus(fn),
+    generation: workspaceGeneration,
+    connectionGeneration: () => connectionGeneration, subscribeConnections,
+    connect: choice => openConnections(choice), openExternal: ctx.openExternal,
+    requestForge: (workspace, body) => api(`/api/instance-forge?ws=${encodeURIComponent(workspace)}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    }),
+    requestThreads: (workspace, body) => api(`/api/instance-review-threads?ws=${encodeURIComponent(workspace)}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    }),
+    request: (workspace, body) => api(`/api/instance-git?ws=${encodeURIComponent(workspace)}`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    }),
+  });
+}
 const contextPanel = createContextPanel({
   document, connectionGeneration: () => connectionGeneration, subscribeConnections,
   createGitPanel: (parent, focus) => createInstanceGitPanel(parent, { ...focus,
@@ -1828,19 +1846,11 @@ function updatePanelControl({ present, open, changes }) {
 /** Projection only: foreground comes from the committed active tab/stage. */
 function syncContextPanel() {
   const tab = tabLayerVisible ? tabs.get(activeTab) : null;
-  const details = tab?.kind === "details" && canActivateTab(tab, currentWorkspace());
-  // Details (the Desktop UI rework, slice 6a) is a tab for any agent, running or not: the instance panel's own
-  // content (its Instance, Soul and Developer pages, its lifecycle footer), moved into the Details tab's pane while
-  // that tab shows, and back beside the main area for a page's own panel (the Workspace page's). A terminal tab no
-  // longer brings a right-hand instance panel: its agent's Details is `i`, Ctrl+Shift+I, the row's menu or the palette.
-  if (typeof placeContextPanel === "function") placeContextPanel(details ? tab.paneEl : null);
-  const instance = details ? liveRow(tab.detailsRef) : null;
-  const terminalKey = instance ? [...tabs.values()].find((t) => t.kind === "terminal" && t.instanceRef && instanceId(t.instanceRef) === instanceId(instance))?.key ?? null : null;
-  // Its Needs input facts (slice 1: the hover card's) through the sidebar's own gate: a row held stale has no claim.
+  // The right-hand panel shows a page's own panel (the Workspace page's soul context) while that page's tab is the
+  // one shown. A terminal tab brings no instance panel since slice 6a: its agent's Details is a tab of its own
+  // (views/details.mjs: `i`, Ctrl+Shift+I, the row's menu, the palette).
   contextPanel.setContext({ workspace: currentWorkspace(), owner: tab?.kind === "page" ? tab : tabLayerVisible ? null : stage,
-    instance, key: terminalKey,
-    waiting: instance ? waitingClaim(instance, { stale: rosterStale || rowStale(instance, contextDeployments) }) : null });
-  if (details) contextPanel.setCollapsed?.(false);
+    instance: null, key: null, waiting: null });
 }
 /** The roster's current row for an agent (by identity), else the row Details was opened with. */
 function liveRow(ref) {
@@ -1848,60 +1858,61 @@ function liveRow(ref) {
   const id = instanceId(ref);
   return shownRows(contextInstances).find((row) => instanceId(row) === id) ?? ref;
 }
-const contextPanelHome = { parent: null, next: null };
-/** Put the instance panel's element in `pane` (the Details tab's), or back where the page shell keeps it. */
-function placeContextPanel(pane) {
-  const el = document.getElementById("context-panel");
-  if (!el) return;
-  if (!contextPanelHome.parent) { contextPanelHome.parent = el.parentElement; contextPanelHome.next = el.nextSibling; }
-  if (pane) { if (el.parentElement !== pane) pane.prepend(el); el.classList.add("in-details"); return; }
-  if (el.parentElement !== contextPanelHome.parent) contextPanelHome.parent.insertBefore(el, contextPanelHome.next);
-  el.classList.remove("in-details");
-}
-/** Open Details for an agent (slice 6a): one Details tab per workspace, retargeted to the agent asked for, titled by
- * its name; opened in the focused pane. */
+/** Details (slice 6a): one tab per workspace, its agent the one asked for last (retargeted in place). */
+const detailsTargets = new Map();   // workspace -> the row Details was asked for
+const detailsListeners = new Set(); // the mounted Details views: repaint on a retarget and on each roster change
+function detailsChanged() { for (const fn of detailsListeners) { try { fn(); } catch (e) { console.error(e); } } }
+/** Open Details for an agent in the focused pane, or retarget the workspace's Details tab to it; titled by its name. */
 function openDetailsTab(row, { focus = true } = {}) {
   if (!row) return false;
   const ws = currentWorkspace();
   const title = `Details · ${instanceDisplayName(row.instance) || row.instance}`;
+  detailsTargets.set(ws, row);
   const existing = [...tabs].find(([, t]) => t.kind === "details" && canActivateTab(t, ws));
   if (existing) {
     const [id, t] = existing;
-    t.detailsRef = row; t.title = title;
-    retitleTab(t.triggerEl, title);
+    t.title = title; retitleTab(t.triggerEl, title);
+    detailsChanged();
     selectTab(id, { focusContent: focus });
-    syncContextPanel();
     return true;
   }
   hideEmptyState();
-  let events = null;
-  // Keyed per workspace: addTab's dedup reads every tab's key, and another workspace's Details is not this one.
-  const made = addTab({ title, key: JSON.stringify([ws, "details"]), kind: "details", workspace: ws,
-    focusContent: () => contextPanel.focus(),
-    onClose: () => { events?.dispose?.(); placeContextPanel(null); syncContextPanel(); } });
-  if (!made) return false;
-  const t = tabs.get(made.id);
-  t.detailsRef = row;
-  // Recent events (the lead's addition to done-when 3): the instance-events view the Machines canvas's popup had, in
-  // a folded section under the panel's content, read for the agent Details shows, on its own deployment, only when
-  // asked (its Load button) and only while this tab is the one shown.
-  made.paneEl.classList.add("details-pane");
-  if (!document.querySelector("style[data-instance-events]")) {
-    const style = document.createElement("style"); style.dataset.instanceEvents = ""; style.textContent = instanceEventsCSS; document.head.append(style);
-  }
-  const fold = document.createElement("details"); fold.className = "details-events";
-  const summary = document.createElement("summary"); summary.textContent = "Recent events";
-  const host = document.createElement("div"); fold.append(summary, host); made.paneEl.append(fold);
-  events = createInstanceEventsView(host, { ctx,
-    selection: () => {
-      const r = liveRow(tabs.get(made.id)?.detailsRef);
-      return r ? { workspace: rowDeployment(r), selector: { instance: r.instance, agent: r.agent, agentsRoot: r.agentsRoot, server: r.server || null },
-        home: r.home, incarnation: r.createdAt ?? null, serverLabel: railServerLabel(r) } : null;
-    },
-    owner: () => tabs.has(made.id) && activeTab === made.id && tabLayerVisible });
-  syncContextPanel();
-  if (focus) contextPanel.focus();
+  void openViewTab("details", title, detailsContext(ws), "details", "details");
   return true;
+}
+/** What the Details view reads and does, for the workspace `ws` (views/details.mjs). */
+function detailsContext(ws) {
+  const row = () => liveRow(detailsTargets.get(ws));
+  const shown = () => { const t = tabs.get(activeTab); return tabLayerVisible && t?.kind === "details" && t.workspace === ws && currentWorkspace() === ws; };
+  return {
+    detailsRow: row,
+    subscribeDetails: (fn) => { detailsListeners.add(fn); const off = subscribeHomeRoster(fn); return () => { detailsListeners.delete(fn); off(); }; },
+    detailsStale: (r) => rosterStale || rowStale(r, contextDeployments),
+    detailsScope: () => ({ deployments: contextDeployments, here: thisHostName }),
+    detailsWorkspace: (r) => rowDeployment(r),
+    createGitPanel: (host) => createDetailsGitPanel(host),
+    createTeamsSection: (host) => createInstanceTeamsSection(host, { generation: workspaceGeneration,
+      request: (workspace, body) => api(`/api/capabilities?ws=${encodeURIComponent(workspace)}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      }) }),
+    createEventsView: (host, current) => createInstanceEventsView(host, { ctx,
+      selection: () => {
+        const r = current();
+        return r ? { workspace: rowDeployment(r), selector: { instance: r.instance, agent: r.agent, agentsRoot: r.agentsRoot, server: r.server || null },
+          home: r.home, incarnation: r.createdAt ?? null, serverLabel: railServerLabel(r) } : null;
+      },
+      owner: shown }),
+    detailsActs: {
+      openTerminal: (r) => { if (currentWorkspace() === ws) openTerminalTab(r); },
+      lifecycle: (verb, r) => {
+        if (currentWorkspace() !== ws) return;
+        if (verb === "start" || verb === "restart") openInstanceStart(r, { restart: verb === "restart" });
+        else openLifecycleDialog(verb, r, ws);
+      },
+      openPullRequest: (r) => { const target = instanceActionTarget(ws, r); if (target) instancePrAction.open(target); },
+      openFiles: (r) => { if (typeof r.agent === "string" && r.agent) openBrainTab(r.agent); },
+    },
+  };
 }
 /** The agent Details opens for: the roster's focused row, else the active terminal's agent, else the open Details'. */
 function detailsTarget() {
@@ -1910,7 +1921,7 @@ function detailsTarget() {
   if (focusedRow) { const row = rows.find((r) => instanceId(r) === focusedRow); if (row) return row; }
   const active = tabs.get(activeTab);
   if (active?.kind === "terminal" && active.instanceRef) return liveRow(active.instanceRef);
-  if (active?.kind === "details") return liveRow(active.detailsRef);
+  if (active?.kind === "details") return liveRow(detailsTargets.get(active.workspace));
   return null;
 }
 function activeTabTrigger() { return activeTab != null ? tabs.get(activeTab)?.triggerEl ?? null : null; }
@@ -1930,13 +1941,6 @@ function stableFocusTarget() {
 function refreshPanelInstance(instances, workspace) {
   syncTabNeedsInput(instances, workspace); // also on a poll whose roster signature is unchanged (no repaint)
   const tab = tabs.get(activeTab);
-  // Details (slice 6a) follows the poll for its agent the same way: by identity, unknown when not unique.
-  if (tabLayerVisible && tab?.kind === "details" && tab.workspace === workspace && tab.detailsRef) {
-    const id = instanceId(tab.detailsRef), rows = shownRows(instances).filter((row) => instanceId(row) === id);
-    tab.detailsRef = rows.length === 1 ? rows[0] : { ...tab.detailsRef, running: null };
-    syncContextPanel();
-    return;
-  }
   if (!tabLayerVisible || tab?.kind !== "terminal" || tab.workspace !== workspace) return;
   // #1247: the panel's row reads as the roster's does (this window's retires in flight held as retiring).
   const matches = shownRows(instances).filter(instance => tabShowsRow(tab, workspace, instance));

@@ -29,7 +29,6 @@ import { DESKTOP_TERMS, DESKTOP_NOUNS } from "../../renderer/desktop-terms.mjs";
 import { rosterRowFacts } from "../../../client/roster-row-facts.mjs";
 import { PINNED, pinnedRowFor } from "../../renderer/shell-nav.mjs";
 import { emptyRosterText } from "../../renderer/sidebar-foot.mjs";
-import { rowFactsTitle } from "../../renderer/row-facts-title.mjs";
 import { instanceDisplayName } from "../../../client/instance-display-name.mjs";
 import { deploymentHeading, notePanel, panelDeployments } from "../../renderer/view-deployments.mjs";
 import { createViewMembership, rehomeMap } from "../../renderer/workspace-rehome.mjs";
@@ -77,7 +76,7 @@ export const viewContext = () => ({
   // The row menu's Move to background / out of it (instance-background-menu.mjs) offers nothing here: its gate is the
   // route's check, which a suite about other behaviour never answers. instance-background.test.mjs drives the shipped one.
   backgroundMenu: { items: () => [], handles: () => false, run: async () => {} },
-  rosterRowFacts, rowFactsTitle, instanceDisplayName, thisHostName: null, DESKTOP_NOUNS, isMultiDeployment, siblingText, sidebarFoot: { paint() {} }, emptyRosterLine: () => emptyRosterText(DESKTOP_NOUNS),
+  rosterRowFacts, instanceDisplayName, thisHostName: null, DESKTOP_NOUNS, isMultiDeployment, siblingText, sidebarFoot: { paint() {} }, emptyRosterLine: () => emptyRosterText(DESKTOP_NOUNS),
   // The pinned Automations row's failure mark (automations-failure.mjs): a roster read asks it; a suite about other
   // behaviour reads nothing. automations-failure.test.mjs drives the shipped reader.
   automationsFailure: { refresh: async () => {} },

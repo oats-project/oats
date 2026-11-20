@@ -588,12 +588,10 @@ split into sections) is `packages/client/roster-sections.mjs`.
   hover card and no tools overlay: the instance panel shows the facts (Work: repository and branch; Session:
   harness, model, the reporting-gap note and the runtime error; Needs input: the claim's words, its wait and its
   message; Developer: the pull request), the row's description says its reason (an unavailable row: as its title
-  too) and its wait in absolute time, and its context menu holds every act (Open pull request…, Start…). An interim the lead agreed: the row's
-  runtime error is its title and description, and `rowFactsTitle` (row-facts-title.mjs) adds the repository, the
-  branch and the harness and model as a line of its title, never its description (a known keyboard limitation for
-  a row with no terminal, until Details serves any row). A held
-      home keeps its state and hint on its lines (a reported one setting up its worktree adds its soul and
-  `rowFactsTitle` to its tooltip); a collapsed parent's roll-up takes line 2, which its description
+  too) and its wait in absolute time, and its context menu holds every act (Open pull request…, Start…). The row's runtime error is its title and
+  description; the title adds its name and state (slice 6a: the slice 1 interim's repository, branch, harness and
+  model moved to Details, which every row has). A held
+      home keeps its state and hint on its lines (its tooltip says why it waits; its facts are its Details'); a collapsed parent's roll-up takes line 2, which its description
   then says. No lineage or sibling lines (D26, decided): `--depth` indents a child 18px a level, `.ctx-bundle-gap`
   separates bundles, `stateSpan` says its state (", running", ", stopped", ", status unknown"; a held home's line says its own),
   and `relationSpan` (instance-tree-view.mjs) says ", under <parent>" (", same work" after it for a child its
@@ -2457,3 +2455,35 @@ doesn't read already:
 - **First run** (the roster is ready and empty): two lines, three keys (`ctx.chordText`: New agent's and the
   palette's bound keys; Home's is its palette command until it has a key), then the overview.
 
+
+## Pages as tabs, Details, the rail (the Desktop UI rework's slice 6a)
+
+- **Pages are tabs** (kind `"page"`): `showStage(name)` opens a NAV page through `openViewTab(name, title, {},
+  "page:<name>", "page")`, or focuses its tab. Home mounts once per tab (a Home in the focused group is focused, else
+  one opens there); the Workspace page and Automations are one tab each per workspace (`views/spawn.mjs` and
+  `automations.mjs` hold module state), moved into the focused group when they are open in another. A page tab keeps
+  its page and module (`record.page`, `record.mod`: the nav, `pageModule`, the quick-open return, Esc to Home) and its
+  own owner of the right-hand panel (the Workspace page's soul context). The page names its tab
+  (`ctx.setPageTitle`: the Workspace page by its section, its capability or its soul). With no tab at all, the stage
+  host shows the empty state (`showEmptyState`, Open Home).
+- **Every tab kind lives in the groups** (split-layout.mjs is kind-agnostic; `splitControlsState`, `splitPane`'s
+  seed and `tabVisibleInContext` are too): a new pane opens Home (`splitPane`), focus going to the roster, then to
+  Home's tab once it opens.
+- **Tab memory keeps page tabs** (`takePageTabs`, `closePageTabs`, `reopenPageTabs`): a workspace's page tabs close
+  when another shows (they read the current workspace) and reopen when it comes back, each group's strip order and
+  active member, the focused group and the active tab restored. A handed layout (layout-handover.mjs) describes a
+  group whose active tab doesn't move by its newest terminal.
+- **Details** (`views/details.mjs`, kind `"details"`, keyed per workspace): an agent's static facts for any row,
+  from the roster model's current row (`detailsContext`: `detailsRow`, `subscribeDetails`, the stale rule, the
+  scope); its action row through today's dialogs; folded Messaging & teams (instance-teams.mjs), Git
+  (instance-git.mjs, `createDetailsGitPanel`) and Recent events (instance-events-view.mjs). One per workspace,
+  retargeted by `openDetailsTab(row)` (`i` on a row, `panel.toggle`, the row's menu item, marked `always` and
+  `secondary`, and the palette, which reads its captured target). A terminal tab brings no instance panel.
+- **The row's act** (`activateRosterRow`): one model-level act, with the row's gates, for the row's click, Home
+  (`ctx.openAgent`) and the rail; no sidebar DOM is read.
+- **Home's roster signal** (`rosterModelChanged`): each paint of the roster model tells Home, the rail and Details,
+  batched to one call per task; nothing observes the sidebar's DOM.
+- **The rail** (`sidebar-rail.mjs`, `#app.sidebar-rail`): `sidebar.toggle` cycles full ↔ rail; the palette's
+  Sidebar: hide hides it. Pinned icons, one native button per agent in the roster's order (`railAgents`: its
+  sections, pins first) named by its name and state, its needs-input mark, the need-you count; focus kept by
+  identity across repaints.

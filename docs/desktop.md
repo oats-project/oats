@@ -489,24 +489,29 @@ Machines or Setup, or the capability it shows), **Automations**, an agent's
 `|` and `-` from a terminal, and the new pane opens **Home** as its first tab, so you pick
 what goes there; Home can sit beside a terminal, or Details beside Home.
 Home opens one tab per pane; the Workspace page and Automations are one tab
-each, which a pinned row focuses where it is, and opens in the focused pane
-when it isn't open. With no tab at all, the main area says so and offers
+each per workspace (a stated limit for now: two soul pages side by side come
+later), which a pinned row brings into the focused pane, moving it there when
+it is open in another. With no tab at all, the main area says so and offers
 **Open Home**. Each workspace keeps its own tabs: its page tabs close when
 another workspace shows, and come back, each in its pane, when it shows
 again.
 
 **Details** is an agent's facts, for any agent, running or stopped: `i` on
 its row in the sidebar, ⌘I / Ctrl+Shift+I, **Details** in the row's menu, or
-the palette's **Agent: Details**. It is the instance panel's content in a
-tab: the Instance page (its work, paths, session, lineage, messaging and
-teams, and Needs input while it waits on you), the Soul page and the
-Developer page (its Git state and pull request), with Start, Stop and Retire
-at the foot, and under them a folded **Recent events** section, its reported
-lifecycle activity, read when you ask (it was the Machines canvas's popup). One Details tab per workspace follows the agent you asked for,
-and is titled by its name. A terminal tab no longer opens a panel beside it:
-its agent's Details is `i` or ⌘I / Ctrl+Shift+I away. A row's tooltip still
-gives its repository, branch, harness and model to the mouse; the keyboard
-reads them in Details.
+the palette's **Agent: Details**. It shows what OATS reports about the agent:
+its soul, harness and model, its work and where it runs (machine,
+repository, branch), who started it and when, whether it does its parent's
+work ("same work as …"), its session and its messaging address, and Needs
+input while it waits on you. One row of buttons opens its terminal, starts,
+restarts, stops or retires it with today's dialogs, opens its pull request,
+and opens its soul's files. Folded under them: **Messaging & teams**, **Git**
+(its changes, its worktree and its pull request) and **Recent events** (its
+reported lifecycle activity, read when you ask; it was the Machines
+canvas's popup). Its kernel name, home and address close it, on one dim
+line. One Details tab per workspace follows the agent you asked for, titled
+by its name. A terminal tab no longer opens a panel beside it, and a row's
+tooltip is its name and state: the keyboard and the mouse both read the rest
+in Details.
 
 **The rail.** ⌘B / Ctrl+Shift+B collapses the sidebar to a rail about 48 px
 wide: the pinned destinations as icons, then one dot per agent in the
@@ -1116,16 +1121,13 @@ Workspace page's tabs), the sidebar's **Automations** while a last run failed,
 and an automation that doesn't run here or a scheduler that is off.
 The row keeps its soul and machine on its second line. A screen reader
 hears "Needs input" after the name, then the reason and when it started
-waiting; the instance panel's **Needs input** section gives the reason, how
+waiting; its Details' **Needs input** gives the reason, how
 long it has waited and the agent's message. A collapsed parent shows "! N
 below" on its second line for the rows it hides that need input, beside its
 own mark when it waits too. Rows never move or grow, and nothing animates. The
-row has no hover card: its facts are the instance panel's, and a row's error
-("OATS says: the last start failed") is its tooltip and its description. Until
-the panel serves a row with no terminal open, the row's tooltip also says its
-repository, branch, harness and model; a screen reader doesn't hear these on
-the row, so with the keyboard alone they show once the row's terminal is
-open.
+row has no hover card: its facts are its Details tab's, for any row (`i`), and a
+row's error ("OATS says: the last start failed") is its tooltip and its
+description, beside its name and state.
 
 A row has no ⋯ button. Its actions (Open in split, Open pull request…,
 Knowledge & capabilities…, Start…, Restart with…, Stop…, Retire instance…,

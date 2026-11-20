@@ -11,7 +11,7 @@ import { requestSplit, groupOfTab, removeSplitTab } from "../renderer/split-layo
 import { splitControlsState } from "../renderer/split-controls.mjs";
 import { tabVisibleInContext, canActivateTab } from "../renderer/workspace-tabs.mjs";
 import { createSidebarRail } from "../renderer/sidebar-rail.mjs";
-import { createContextPanel, contextPanelCSS } from "../renderer/context-panel.mjs";
+import { createDetails } from "../renderer/views/details.mjs";
 import { createHome } from "../renderer/views/home.mjs";
 import { homeAgents } from "../../client/home-board.mjs";
 import { PIN_FEATURE } from "../../client/instance-tree.mjs";
@@ -87,64 +87,74 @@ test("slice6a new pane opens Home", async () => {
   assert.deepEqual(c.asked, ["home"], "the new pane opens Home as its first tab");
 });
 
-function panel(t) {
-  const dom = new JSDOM(`<!doctype html><body><div id="app"><main id="main"><div class="tab-pane"></div></main><aside id="context-panel"></aside></div></body>`);
-  const document = dom.window.document, style = document.createElement("style"); style.textContent = contextPanelCSS; document.head.append(style);
-  const p = createContextPanel({ document, root: document.getElementById("context-panel"), createTeamsSection: () => ({ update() {}, dispose() {} }), openSoul() {} });
-  t.after(() => { p.dispose(); dom.window.close(); });
-  return { document, p, q: (s) => document.querySelector(s), row: (id) => document.querySelector(`#context-panel [data-row="${id}"]`),
-    field: (id) => document.querySelector(`[data-context-field="${id}"]`) };
+/** The Details view (views/details.mjs) over a row the roster reports, with doubles for its acts and its folded panels. */
+function details(t, row, { stale = false } = {}) {
+  const dom = new JSDOM("<!doctype html><body><main></main></body>"), doc = dom.window.document, el = doc.querySelector("main");
+  const acts = [], listeners = new Set(); let current = row;
+  const view = createDetails(el, { detailsRow: () => current, subscribeDetails: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+    detailsStale: () => stale, detailsScope: () => ({ deployments: [], here: "falcon" }), detailsWorkspace: () => "A",
+    createGitPanel: (host) => { host.append(Object.assign(doc.createElement("div"), { className: "git-double" })); return { update(u) { acts.push(["git", u.active]); }, dispose() {} }; },
+    createTeamsSection: () => ({ update() {}, dispose() {} }), createEventsView: () => ({ dispose() {} }),
+    detailsActs: { openTerminal: (r) => acts.push(["terminal", r.instance]), lifecycle: (verb, r) => acts.push([verb, r.instance]),
+      openPullRequest: (r) => acts.push(["pr", r.instance]), openFiles: (r) => acts.push(["files", r.agent]) } }, { doc, now: () => Date.parse("2026-11-19T12:00:00.000Z") });
+  t.after(() => { view.dispose(); dom.window.close(); });
+  return { doc, el, acts, view, fact: (id) => el.querySelector(`[data-details-fact="${id}"]`)?.textContent ?? null,
+    buttons: () => [...el.querySelectorAll(".details-actions button")].map((b) => [b.dataset.detailsKey, b.textContent, b.disabled]),
+    retarget(next) { current = next; for (const fn of listeners) fn(); } };
 }
 const stopped = (extra = {}) => ({ instance: "web-developer-1", agent: "web-developer", agentsRoot: "/w/agents", home: "/w/agents/web-developer/instances/web-developer-1",
   repoName: "northwind", branch: "feat/checkout", harness: "claude", model: "opus", modelFrom: "soul", work: "worktree", running: false,
   createdAt: "2026-11-19T10:00:00.000Z", attributedHuman: "Joan", parentInstance: "lead-1", tmux: { session: "oats-agents" }, ...extra });
 
 test("slice6a details for a stopped agent", (t) => {
-  // Details shows the roster's row for the agent asked for: no terminal is needed (key: an open terminal's, or none).
-  const sync = fn("syncContextPanel");
-  assert.match(sync, /const details = tab\?\.kind === "details" && canActivateTab\(tab, currentWorkspace\(\)\);/);
-  assert.match(sync, /const instance = details \? liveRow\(tab\.detailsRef\) : null;/);
-  assert.match(sync, /instance, key: terminalKey,/);
-  const u = panel(t);
-  u.p.setContext({ workspace: "A", instance: stopped(), key: null });
-  const text = u.q("#context-panel").textContent;
-  assert.match(text, /web-developer/, "soul");
-  assert.match(u.field("harness").textContent, /Claude/); assert.match(u.field("model").textContent, /opus/, "harness · model");
-  assert.match(u.q("[data-context-work]").textContent, /northwind/, "repository"); assert.match(u.q("[data-context-work]").textContent, /feat\/checkout/, "branch");
-  assert.match(u.row("attributedHuman").textContent, /Joan/, "started by");
-  assert.match(u.field("createdAt").textContent.trim(), /\S/, "created");
-  assert.match(text, /Stopped/);
-  // Every way in: i on a row, Ctrl+Shift+I (panel.toggle), the row's menu and the palette.
+  // Details is a tab of its own (views/details.mjs) for the roster's row: no terminal is needed.
+  const u = details(t, stopped());
+  assert.equal(u.fact("soul"), "web-developer");
+  assert.equal(u.fact("harness"), "Claude · opus", "harness · model");
+  assert.equal(u.fact("repository"), "northwind"); assert.equal(u.fact("branch"), "feat/checkout");
+  assert.equal(u.fact("startedBy"), "Joan", "started by: the attributed human");
+  assert.ok(u.fact("createdAt"), "created");
+  assert.match(u.el.querySelector(".details-sub").textContent, /stopped · instance of web-developer/);
+  // A stopped agent: no Open terminal; Start, Stop and Retire as its menu offers them; the PR and its Files.
+  const keys = u.buttons().map(([key]) => key);
+  assert.equal(keys.includes("terminal"), false); assert.ok(keys.includes("start")); assert.ok(keys.includes("pr")); assert.ok(keys.includes("files"));
+  u.el.querySelector('[data-details-key="start"]').click();
+  assert.deepEqual(u.acts.at(-1), ["start", "web-developer-1"], "today's Start dialog");
+  // Every way in: i on a row, Ctrl+Shift+I (panel.toggle), the row's menu and the palette (its captured target).
   assert.match(shell, /if \(e\.key !== "i" \|\| e\.altKey \|\| e\.ctrlKey \|\| e\.metaKey \|\| e\.shiftKey \|\| typeof openDetailsTab !== "function"\) return;\n          e\.preventDefault\(\); openDetailsTab\(i\);/);
   assert.match(shell, /registerAction\(\{ id: "panel\.toggle", label: "Agent: Details"/);
   assert.match(shell, /\{ action: 'details', actionId: 'panel\.toggle', label: 'Details', reason: '', always: true, secondary: true \},/);
   assert.match(shell, /if \(action === 'details'\) \{ openDetailsTab\(instance\); return; \}/);
-  assert.match(shell, /\{ label: "Agent: Details", detail: chordDetail\("panel\.toggle"\)/);
+  assert.match(shell, /const row = paletteTargetId \? shownRows\(contextInstances\)\.find\(\(r\) => instanceId\(r\) === paletteTargetId\) : null;\n      if \(row\) openDetailsTab\(row\);/);
+  assert.match(fn("openDetailsTab"), /void openViewTab\("details", title, detailsContext\(ws\), "details", "details"\);/, "a tab with its own mounted view");
+  assert.match(fn("syncContextPanel"), /instance: null, key: null, waiting: null/, "a terminal brings no instance panel");
 });
 
 test("slice6a details keeps every old panel fact", (t) => {
-  // Details is the old instance panel's own content in a tab (placeContextPanel moves it into the Details pane), so
-  // each fact the panel showed is where it was, for any row. One assertion per fact, at its place in Details.
-  const u = panel(t);
-  u.p.setContext({ workspace: "A", instance: stopped({ running: true, startedAt: "2026-11-19T11:00:00.000Z", siblingInstance: "web-developer-2", identityAddress: "oats.aweb.ai/web-developer-1" }), key: null,
-    waiting: { since: "2026-11-19T11:30:00.000Z", producer: "agent", reason: "attention", message: "Pick the copy" } });
-  const q = u.q;
-  assert.ok(q('[data-context-tab="instance"]'), "the Instance page"); assert.ok(q('[data-context-tab="soul"]'), "the Soul page");
-  assert.ok(q('[data-context-tab="git"]'), "the Developer page (Git, the pull request): the folded Git section");
-  assert.ok(q(".context-panel-identity-name"), "the name"); assert.ok(q('[data-context-section="waiting"]'), "Needs input");
-  assert.ok(q("[data-context-work]"), "Work: the mode and its sentence"); assert.ok(u.row("workFolder"), "Paths: the folder"); assert.ok(u.row("home"), "Paths: the home");
-  assert.ok(u.field("harness"), "Session: the harness"); assert.ok(u.field("model"), "the model"); assert.ok(u.field("modelFrom"), "where the model came from");
-  assert.match(q(".context-panel-session-tmux").textContent, /oats-agents/, "the tmux session"); assert.ok(u.field("startedAt"), "started"); assert.ok(u.field("createdAt"), "created");
-  assert.ok(u.row("attributedHuman"), "the owning human"); assert.ok(u.row("parentInstance"), "the parent"); assert.ok(u.row("siblingInstance"), "the sibling");
-  assert.ok(u.row("identity"), "the messaging ID"); assert.ok(q('[data-context-section="teams"]'), "Teams");
-  assert.ok(q("[data-context-status-note]"), "the runtime error's note"); assert.ok(q(".context-panel-session-note"), "the reporting gap's note");
-  assert.ok([...q("#context-panel").querySelectorAll("button")].some((b) => /Stop…|Start…/.test(b.textContent)), "the lifecycle footer");
-  // In a tab it fills the pane.
-  assert.match(contextPanelCSS, /#context-panel\.context-panel\.in-details \{ flex:1 1 auto; width:auto;/);
-  assert.match(fn("placeContextPanel"), /if \(pane\) \{ if \(el\.parentElement !== pane\) pane\.prepend\(el\); el\.classList\.add\("in-details"\); return; \}/);
-  // Recent events (the lead's addition): the instance-events view, folded, under the panel's content.
-  assert.match(fn("openDetailsTab"), /summary\.textContent = "Recent events";/);
-  assert.match(fn("openDetailsTab"), /events = createInstanceEventsView\(host, \{ ctx,/);
+  // Each fact the old instance panel showed, at its place in Details (one assertion each).
+  const u = details(t, stopped({ running: true, startedAt: "2026-11-19T11:00:00.000Z", siblingInstance: "web-developer-2", identityAddress: "oats.aweb.ai/web-developer-1",
+    sameWorkKnown: true, sameWork: true, waitingOnYou: { since: "2026-11-19T11:30:00.000Z", producer: "agent", reason: "attention", message: "Pick the copy" },
+    runtimeError: "the last start failed", runtimeErrorOrigin: "kernel" }));
+  assert.match(u.el.querySelector("h1").textContent, /Web developer 1/, "the name");
+  assert.match(u.el.querySelector(".details-sub").textContent, /running/, "its state");
+  assert.match(u.el.querySelector('[data-details-section="waiting"]').textContent, /Needs input · Asked for your attention · .*Pick the copy/s, "Needs input");
+  assert.equal(u.fact("work"), "its own worktree", "Work: its mode"); assert.equal(u.fact("repository"), "northwind"); assert.equal(u.fact("branch"), "feat/checkout");
+  assert.match(u.el.querySelector(".details-tech").textContent, /\/w\/agents\/web-developer\/instances\/web-developer-1/, "Paths: the home, on the technical line");
+  assert.equal(u.fact("harness"), "Claude · opus", "Session: the harness and the model"); assert.equal(u.fact("modelFrom"), "the soul's choice", "where the model came from");
+  assert.equal(u.fact("session"), "tmux · oats-agents", "the tmux session"); assert.ok(u.fact("startedAt"), "started"); assert.ok(u.fact("createdAt"), "created");
+  assert.equal(u.fact("startedBy"), "Joan", "the owning human"); assert.equal(u.fact("parent"), "Lead 1", "the parent"); assert.equal(u.fact("sibling"), "Web developer 2", "the sibling");
+  assert.equal(u.fact("sameWork"), "same work as Lead 1", "same work as its parent");
+  assert.equal(u.fact("identity"), "oats.aweb.ai/web-developer-1", "the messaging ID");
+  assert.ok(u.el.querySelector('[data-details-section="teams"] > summary'), "Teams, folded");
+  assert.match(u.el.querySelector(".details-note").textContent, /the last start failed/, "the runtime error's note");
+  assert.ok(u.el.querySelector('[data-details-section="git"] > summary'), "Git (the Developer page: changes, the worktree, the pull request), folded");
+  assert.ok(u.el.querySelector('[data-details-section="events"] > summary'), "Recent events, folded");
+  assert.deepEqual(u.buttons().map(([key]) => key).filter((k) => k === "terminal" || k === "pr" || k === "files"), ["terminal", "pr", "files"], "the action row");
+  // Folding Git open reads it; a retarget repaints for the new agent.
+  u.el.querySelector('[data-details-section="git"]').open = true; u.el.querySelector('[data-details-section="git"]').dispatchEvent(new u.doc.defaultView.Event("toggle"));
+  assert.deepEqual(u.acts.at(-1), ["git", true]);
+  u.retarget(stopped({ instance: "other", agent: "other-soul" }));
+  assert.equal(u.fact("soul"), "other-soul");
 });
 
 test("slice6a rail", (t) => {
