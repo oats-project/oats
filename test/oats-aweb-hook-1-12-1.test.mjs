@@ -233,7 +233,8 @@ test("binding-check reports one v2 problem per missing root/team and ready once 
     assert.equal(r.doc.result.status, "needs-configuration");
     assert.deepEqual(r.doc.result.problems.map((p) => p.message), [
       "no teams configured: run `oats aweb setup`",
-      `no messaging root at ${workspace}: run oats aweb setup there or set settings.oats.aweb.root`,
+      // oats.aweb 1.44.0 (awebai/oats-aweb#291) names where the root came from.
+      `no messaging root at ${workspace} (from the workspace directory): run oats aweb setup there or set settings.oats.aweb.root`,
     ]);
     assert.deepEqual(r.calls, ["version"], "with a configuration problem the broker is not read");
     awRoot(workspace);

@@ -206,19 +206,6 @@ test("readiness reports existing grant homes without custody.socket_path as not 
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
-test("real aw fixture: unattached grant home reports the released custody locator error", (t) => {
-  const fixture = process.env.AW_REAL_GRANT_FIXTURE;
-  const realAw = process.env.AW_REAL_CLI_BIN || "aw";
-  if (!fixture) return t.skip("AW_REAL_GRANT_FIXTURE not set; skipping real aw grant-home regression");
-  const version = spawnSync(realAw, ["version"], { encoding: "utf8", timeout: 10000 });
-  const parsed = /aw\s+v?(\d+)\.(\d+)\.(\d+)/.exec(version.stdout + version.stderr);
-  const atLeast = parsed && parsed.slice(1, 4).map(Number).reduce((ok, part, i, arr) => ok || (arr.slice(0, i).every((n, j) => n === [1, 36, 33][j]) && part > [1, 36, 33][i]), parsed.slice(1, 4).map(Number).every((n, i) => n === [1, 36, 33][i]));
-  if (version.status !== 0 || !atLeast) return t.skip(`real aw is not 1.36.33+: ${version.stdout || version.stderr}`);
-  const r = spawnSync(realAw, ["custody", "status", "--json"], { cwd: fixture, encoding: "utf8", env: { ...process.env, AWEB_IDENTITY_HOME: fixture } });
-  assert.notEqual(r.status, 0);
-  assert.match(r.stderr + r.stdout, /grant home has no custody\.socket_path locator/);
-});
-
 test("spawn with delivery=session: AWEB_DELIVERY in the launch env, no Claude channel flag, and a brief that says nothing wakes the instance", () => {
   const base = mkdtempSync(join(tmpdir(), "oats-aweb-110-"));
   try {

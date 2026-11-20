@@ -27,9 +27,15 @@ export function registryOrigin(settings={}) {
 export function registryCommand(args) {
   args=[...args];
   if(args[0]==='aw') args.shift();
-  while(args[0]?.startsWith('--')) {
-    const flag=args.shift();
-    if(!flag.includes('=')) args.shift(); // --identity-home <path>
+  while (args[0]?.startsWith('-')) {
+    const flag = args.shift();
+    if (flag === '--identity-home') {
+      if (!args[0] || args[0].startsWith('-')) return true;
+      args.shift();
+    } else if (!flag.startsWith('--identity-home=')) {
+      // An unknown flag may take no value: never consume the command after it.
+      return true;
+    }
   }
   if(args.includes('--help')) return false;
   // aw rc.3 doctor_identity.go addRegistryPinningCheck uses the live pin

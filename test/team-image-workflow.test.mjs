@@ -35,6 +35,25 @@ test("team image verification builds the exact PR head and runs real acceptance 
   assert.doesNotMatch(read(".github/workflows/team-image.yml"), /secrets\.|packages: write|pull_request_target/);
 });
 
+test("team image verification builds the bb image from the accepted image and accepts it with its fragment", () => {
+  const job = workflow("team-image.yml").jobs.verify;
+  const accepts = job.steps.map((s, i) => [s, i]).filter(([s]) => s.run === "bash .github/scripts/team-image-accept.sh");
+  assert.equal(accepts.length, 2, "the base image and the bb image each take the same acceptance");
+  const [[base, baseAt], [bb, bbAt]] = accepts;
+  assert.equal(base.env, undefined, "the base acceptance runs without the fragment");
+  assert.equal(base.id, "accept", "export and digest binding stay on the base image");
+  assert.equal(bb.id, undefined);
+  const build = job.steps.findIndex((s) => s.run?.includes("container/agent-bb"));
+  assert.ok(baseAt < build && build < bbAt, "built after the base is accepted, accepted after it is built");
+  const image = "oats-team-agent-bb:${{ github.event.pull_request.head.sha || github.sha }}";
+  assert.equal(job.steps[build].run, 'docker build --platform linux/amd64 --build-arg "AGENT_IMAGE=$AGENT_IMAGE" --tag "$AGENT_BB_IMAGE" container/agent-bb');
+  assert.deepEqual(job.steps[build].env, { AGENT_BB_IMAGE: image });
+  assert.deepEqual(bb.env, { AGENT_IMAGE: image, AGENT_BB: "1" });
+  const script = read(".github/scripts/team-image-accept.sh");
+  assert.match(script, /if \[ "\$\{AGENT_BB:-\}" = 1 \]; then\n  compose\+=\(-f container\/agent\/compose\.agent\.bb\.yaml\)\n/);
+  assert.doesNotMatch(read(".github/workflows/release.yml"), /agent-bb|AGENT_BB/, "publication does not include the bb image");
+});
+
 test("the shared acceptance fixture runs the image owner's acceptance against Compose", () => {
   const script = read(".github/scripts/team-image-accept.sh");
   assert.match(script, /docker compose/);
@@ -294,4 +313,33 @@ test("PR verification uses the available Skopeo package and records its version"
   assert.match(install.run, /apt-get install -y --no-install-recommends skopeo\s/);
   assert.match(install.run, /dpkg-query/);
   assert.match(install.run, />> "\$GITHUB_STEP_SUMMARY"/);
+});
+
+
+test("real image acceptance exercises optional inputs and refuses missing host sources", () => {
+  const script = read(".github/scripts/team-image-accept.sh");
+  const base = script.indexOf('container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64');
+  const fragment = script.indexOf("compose.agent.inputs.yaml");
+  const input = script.indexOf('container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64', base + 1);
+  assert.ok(base >= 0 && fragment > base && input > fragment, "base is accepted before the input fragment is added and accepted");
+  assert.match(script, /unset TEAM_WORK_DIR TEAM_INPUT_DIR AGENT_CA_FILE AGENT_MIRRORS_DIR/);
+  assert.match(script, /export TEAM_INPUT_DIR="\$fixture\/inputs"/);
+  assert.match(script, /sudo install -d -o 0 -g "\$AGENT_GID" -m 750 "\$TEAM_INPUT_DIR"/);
+  assert.match(script, /printf 'synthetic input\\n' \| sudo tee "\$TEAM_INPUT_DIR\/example.txt"/);
+  assert.match(script, /TEAM_INPUT_DIR="\$fixture\/missing-inputs"/);
+  assert.match(script, /if "\$\{compose\[@\]\}" up -d[^;]*; then/);
+  assert.match(script, /test ! -e "\$TEAM_INPUT_DIR"/);
+  assert.match(script, /test ! -L "\$TEAM_INPUT_DIR"/);
+});
+
+
+test("real image acceptance exercises the setgid outbox and refuses its missing source", () => {
+  const script = read(".github/scripts/team-image-accept.sh");
+  assert.match(script, /export TEAM_OUTBOX_DIR="\$fixture\/outbox" TEAM_OUTBOX_GID=20002/);
+  assert.match(script, /sudo install -d -o "\$AGENT_UID" -g "\$TEAM_OUTBOX_GID" -m 2750 "\$TEAM_OUTBOX_DIR"/);
+  assert.match(script, /compose\+=\(-f container\/agent\/compose.agent.outbox.yaml\)/);
+  assert.match(script, /TEAM_OUTBOX_DIR="\$fixture\/missing-outbox"/);
+  assert.match(script, /mkdirSync\("\/outbox\/private", \{mode: 0o700\}\)/);
+  assert.match(script, /test ! -e "\$TEAM_OUTBOX_DIR"/);
+  assert.match(script, /test ! -L "\$TEAM_OUTBOX_DIR"/);
 });

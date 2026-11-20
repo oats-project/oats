@@ -53,6 +53,19 @@ jobs:
         id: accept
         run: bash .github/scripts/team-image-accept.sh
 
+      # The opt-in bb image is built from the image accepted above, never from a
+      # registry, and takes the same unmodified acceptance with its fragment.
+      - name: Build the bb image from the reviewed image
+        run: docker build --platform linux/amd64 --build-arg "AGENT_IMAGE=$AGENT_IMAGE" --tag "$AGENT_BB_IMAGE" container/agent-bb
+        env:
+          AGENT_BB_IMAGE: oats-team-agent-bb:${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Accept the real container with the bb fragment
+        run: bash .github/scripts/team-image-accept.sh
+        env:
+          AGENT_IMAGE: oats-team-agent-bb:${{ github.event.pull_request.head.sha || github.sha }}
+          AGENT_BB: "1"
+
       # Wrapper, policy/proxy and probes all come from the reviewed checkout.
       # Local image content IDs bind the disposable proof to these exact builds.
       - name: Build the reviewed egress image

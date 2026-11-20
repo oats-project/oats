@@ -30,7 +30,7 @@ import { createSoulTeamsHere, soulTeamsHereCSS } from './soul-teams-here.mjs';
 import { teamsAnswer } from './computer-teams.mjs';
 import { relayedFailure, serverLabel } from '../../client/remote-address.mjs';
 import { ageText } from './age-text.mjs';
-import { pageBar, pageCard, pageSection, isCoreCapability, compositionEntries, coreEntries, coreNote, whyElement, renderSoulCore } from './capability-page.mjs';
+import { pageBar, pageSection, isCoreCapability, compositionEntries, coreEntries, coreNote, whyElement, whyTag } from './capability-page.mjs';
 import { layerLabel } from '../../client/capability-rows.mjs';
 import { launchHarnessName, launchModelText, launchFromText, declaredText } from '../../client/launch-view.mjs';
 import { soulFacts, desktopFacts, workText, cantSpawnLine } from '../../client/soul-facts.mjs';
@@ -40,22 +40,12 @@ import { createSoulInstructions } from './soul-instructions.mjs';
 import { composedSupported, routedComposedSupported, skillsSupported, routedSkillsSupported, composedSkillsSupported, routedComposedSkillsSupported } from '../../client/composed-gate.mjs';
 import { warningsOf } from '../../client/capability-warnings-contract.mjs';
 import { createWarningsList, WARNINGS_COPY } from './capability-warnings.mjs';
-import { DESKTOP_TERMS } from './desktop-terms.mjs';
+import { DESKTOP_TERMS, DESKTOP_NOUNS } from './desktop-terms.mjs';
+import { capabilityLine, capabilityLines, capabilityLineCSS } from './capability-row.mjs';
 
 const record = v => !!v && typeof v === 'object' && !Array.isArray(v);
 /** Why a stale inspector's mutations wait (the sidebar roster's rule, instance-tree-view.mjs ROSTER_STALE_TITLE). */
 export const INSPECTION_STALE_TITLE = 'Unavailable: inspection is not current';
-/** What a core capability does for this soul, from its own declarations and teams. */
-function coreDetail(slot, declared, teams, mapped) {
-  if (slot === 'knowledge' && record(declared.knowledge)) {
-    const reads = Array.isArray(declared.knowledge.reads) ? declared.knowledge.reads.length : 0;
-    const parts = [typeof declared.knowledge.owns === 'string' && declared.knowledge.owns ? 'Owns 1 node' : null, reads ? `reads ${reads}` : null].filter(Boolean);
-    const text = parts.join(' · ');
-    return text ? text[0].toUpperCase() + text.slice(1) : null;
-  }
-  if (slot === 'messaging' && teams) return mapped.length ? `Default team · can join ${mapped.map(t => t.label).join(', ')}` : 'Default team only';
-  return null;
-}
 /** An instance's build against its soul, from the roster's drift rows: older
  * when the soul or a module moved since; current only when every row says so. */
 export function buildState(instance) {
@@ -93,14 +83,9 @@ ${soulTeamsHereCSS}
 .soul-page .inspector-main .skeleton-detail-sections { gap:22px; }
 .soul-page .inspector-main .skeleton-detail-section { margin:0; }
 .soul-page .inspector-main .skeleton-detail-section .skeleton-block { --skeleton-block-h:150px; }
-/* The side column's card skeleton: a page-card at its size with a title line and a body block. */
-.skeleton-page-card { display:flex; flex-direction:column; gap:10px; min-width:0; padding:12px 14px; box-sizing:border-box; background:var(--surface); border:1px solid var(--border); border-radius:10px; }
-.skeleton-page-card .skeleton-title { height:11px; width:40%; }
-.skeleton-page-card .skeleton-block { height:56px; width:100%; border-radius:8px; }
 .oats-view .soul-inspector button.primary:not(:disabled) { background:var(--primary-bg); color:var(--primary-fg); border-color:var(--primary-bg); }
-/* The soul page (Workspace v4 W4): the page bar in place of the Workspace
-   tabs, then identity, core capabilities and the composition table beside a
-   300px column of cards (pageCardCSS). */
+/* The soul page: the page bar in place of the Workspace tabs, then one column (slice 3a): identity, the top block, the
+   capabilities and the instruction tabs. */
 .workspace-page { flex:1; min-height:0; min-width:0; overflow-y:auto; padding:0; box-sizing:border-box; container-type:inline-size; background:var(--bg); }
 .workspace-page[hidden] { display:none; }
 .oats-view .workspace-page button.primary:not(:disabled) { background:var(--primary-bg); color:var(--primary-fg); border-color:var(--primary-bg); }
@@ -117,23 +102,29 @@ ${soulTeamsHereCSS}
 .soul-page .page-facts-row:empty { display:none; }
 .soul-page .inspector-main { display:flex; flex-direction:column; gap:22px; padding:0; }
 .soul-page .inspector-main:empty { display:none; }
-.soul-page .soul-page-side { display:flex; flex-direction:column; gap:14px; min-width:0; }
-.soul-page .soul-page-side:empty { display:none; }
 .soul-page .page-sr { display:inline-block; width:1px; height:1px; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-/* Side cards: teams, knowledge nodes, instances. */
-.soul-team { display:flex; flex-direction:column; gap:3px; padding:8px 0; border-top:1px solid var(--tag-bg); }
-.soul-team-name { display:flex; align-items:center; gap:8px; color:var(--fg); font-size:13px; font-weight:650; }
-.soul-team-name .page-tag { height:18px; padding:0 6px; border-radius:4px; font-size:10.5px; }
-.soul-team-note { color:var(--muted); font-size:12px; }
-.knowledge-role { margin-left:auto; flex:none; color:var(--muted); font-weight:600; font-size:11px; line-height:normal; font-family:var(--ui-font,system-ui); }
-.knowledge-role.owns { color:var(--accent); }
-.oats-view .soul-page button.inspector-instance { display:flex; align-items:center; gap:8px; width:100%; min-height:28px; height:auto; margin:0; padding:0 4px; box-sizing:border-box; border:0; border-radius:6px; background:var(--surface); color:var(--fg); text-align:left; font:inherit; font-size:12.5px; font-weight:500; white-space:nowrap; }
-.oats-view .soul-page button.inspector-instance:hover:not(:disabled) { background:var(--surface-2); color:var(--fg); }
-.oats-view .soul-page button.inspector-instance:focus-visible { background:var(--sel); }
-.soul-page .instance-dot { width:7px; height:7px; border-radius:50%; box-sizing:border-box; border:1.5px solid var(--muted); flex:none; }
-.soul-page .instance-dot.running { border-color:var(--live); background:var(--live); }
-.soul-page .instance-name { min-width:0; overflow:hidden; text-overflow:ellipsis; }
-.soul-page .instance-build { margin-left:auto; flex:none; color:var(--muted); font-size:11px; }
+/* The soul page (the Desktop UI rework, slice 3a): one column at a readable width; the top block is a two-column
+   list of facts; its Ready row is a word, or the problem's sentence, then its Details disclosure. */
+.soul-page .soul-page-body { display:block; }
+.soul-page .soul-page-body > .page-main { max-width:960px; }
+.soul-top { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:8px 20px; margin:0; font-size:13px; line-height:1.45; }
+.soul-top dt { color:var(--muted); }
+.soul-top dd { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 6px; min-width:0; margin:0; color:var(--fg); overflow-wrap:anywhere; }
+.soul-top dd .strong { font-weight:600; }
+.soul-top dd .muted, .soul-top .soul-top-note { color:var(--muted); }
+.soul-top .soul-top-note { flex-basis:100%; font-size:12px; }
+.soul-top .runtime-badge { align-self:center; width:18px; height:18px; font-size:10px; }
+.soul-ready { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.soul-ready-line.problem { color:var(--warn); font-weight:600; }
+.soul-ready-details > summary, .soul-teams-details > summary { cursor:pointer; color:var(--muted); font-size:12px; }
+.soul-ready-details[open] > summary, .soul-teams-details[open] > summary { margin-bottom:8px; }
+.soul-ready-problems { display:flex; flex-direction:column; gap:8px; font-size:12px; }
+.soul-ready-problems p { margin:0; }
+.soul-ready-checks .readiness-view { margin:8px 0 0; }
+.soul-teams-details { flex-basis:100%; }
+.soul-capabilities .cap-lines { margin-top:4px; }
+.soul-capabilities-note { margin:8px 0 0; color:var(--muted); font-size:12px; }
+${capabilityLineCSS}
 /* The readiness title reads as a section title, like every other card's. */
 .soul-inspector .readiness-view h2 { font-size:10.5px; font-weight:650; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 var(--title-gap); }
 .inspector-head { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
@@ -207,7 +198,7 @@ ${soulTeamsHereCSS}
 
 /** presentation is an optional host lease. Presence belongs to this controller;
  * effective visibility/collapse belongs to the host, not request completions. */
-export function createSoulInspector(container, { ctx, presentation, openSoul = null, layout = 'sidebar', backLabel = 'Souls', openInstance = null, capabilityTable = null, coreTable = null, openCapability = null, launch, schedule, files, canFiles = () => false, canLaunch = () => true, spawnRefusal = () => null, launchReason = () => 'Requires a compatible installed OATS CLI.', available = () => true, instances = () => [], instancesState = () => 'ready', workspace = () => null, closed, clock = {} }) {
+export function createSoulInspector(container, { ctx, presentation, openSoul = null, layout = 'sidebar', backLabel = 'Souls', openInstance = null, currentRow = null, capabilityFacts = null, openCapability = null, launch, schedule, files, canFiles = () => false, canLaunch = () => true, spawnRefusal = () => null, launchReason = () => 'Requires a compatible installed OATS CLI.', available = () => true, instances = () => [], instancesState = () => 'ready', workspace = () => null, closed, clock = {} }) {
   const doc = container.ownerDocument;
   // `serial` is the latest read (a Refresh bumps it: a superseded inspection paints nothing); `subject` is
   // the shown subject (bumped by a new selection or reset only): the frame's and the content's controls
@@ -220,6 +211,9 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   // `instructionCapabilities`: the shown inspection's capabilities by id, each with its core or composition entry, so a
   // composed part's "Open capability" takes the tables' own path.
   let instructionsSection = null, instructionCapabilities = new Map();
+  // The soul page's top block parts that outlive a repaint (one per subject): its Ready row's details disclosure (the
+  // problem's detail and the soul's readiness checks, read when first opened) and its Teams row's disclosure ("Teams here").
+  let readyBlock = null, teamsBlock = null, shownInspection = null, shownFor = null, capabilityWords = null;
   // `warningTargets`: the same lookup for a capability warning's Open capability (the soul's own list, an instance's
   // readiness), from the shown inspection; empty where the host opens no capability.
   let warningTargets = new Map();
@@ -254,7 +248,7 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   const request = (body, query = scopeQuery()) => postJson(ctx, `/api/capabilities${query}`, body);
   const valid = (id, gen) => alive && id === serial && gen === workspaceGeneration();
   const ownsSubject = (id, gen) => id === subject && valid(serial, gen);
-  let status, content, summary, readiness, headActions = null, facts$ = null, side = null, notice = null;
+  let status, content, summary, readiness, headActions = null, facts$ = null, notice = null;
   // The Refresh control (focus fallback when a repaint drops the focused control) and the
   // roster-derived block's host and signature (repainted on every show(), kept when unchanged).
   let refreshControl = null, rosterColumn = null, rosterSignature = null;
@@ -262,27 +256,12 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   const subjectKey = sel => sel?.instance || sel?.selector?.home ? `home:${sel.instance?.home ?? sel.selector?.home ?? ''}|${sel.instance?.server ?? ''}`
     : sel?.agent ? `soul:${sel.agent.name}|${sel.agent.agentsRoot ?? ''}|${sel.agent.server ?? ''}` : JSON.stringify(sel?.selector ?? null);
   const noun = () => selection?.agent ? 'soul' : 'instance';
-  /** One skeleton of the final content's shape: the sidebar's three sections; the page's two, with a card beside. */
+  /** One skeleton of the final content's shape: the sidebar's three sections; the page's two. */
   const contentSkeleton = () => skeletonBlock(doc, 'detail-section', { count: layout === 'page' ? 2 : 3 });
-  function sideSkeleton() {
-    const card = node('div', undefined, 'skeleton-item skeleton-page-card'); card.setAttribute('aria-hidden', 'true'); card.dataset.skeleton = 'page-card';
-    const title = skeleton(doc, 'line'); title.classList.add('skeleton-title');
-    const block = skeleton(doc, 'line'); block.classList.add('skeleton-block');
-    card.append(title, block); return card;
-  }
-  /** The subject's controllers: the content's (status, indicator, notice, Retry) and, on the page, the side column's skeleton. */
+  /** The subject's loading controller: the content's (status, indicator, notice, Retry). */
   function createLoading(indicatorHost) {
-    const main = createDataState({ doc, noun: noun(), region: content, skeleton: contentSkeleton, status, indicatorHost, noticeHost: notice,
+    return createDataState({ doc, noun: noun(), region: content, skeleton: contentSkeleton, status, indicatorHost, noticeHost: notice,
       onRetry: () => { void show(selection, { user: true }); }, ...timers });
-    const aside = side ? createDataState({ doc, noun: noun(), region: side, skeleton: sideSkeleton, noticeHost: null, ...timers }) : null;
-    return {
-      get state() { return main.state; }, get settled() { return main.settled; }, get hasData() { return main.hasData; }, get busy() { return main.busy; },
-      begin(o) { const first = !main.hasData && main.state !== 'failed'; main.begin(o); if (first) aside?.begin(o); },
-      succeed(o) { main.succeed(o); aside?.succeed(); },
-      fail(e) { main.fail(e); aside?.reset(); },
-      bindRefresh: main.bindRefresh, touch: main.touch, say: main.say,
-      dispose() { main.dispose(); aside?.dispose(); },
-    };
   }
   function syncReadiness() {
     const w = workspace();
@@ -303,7 +282,7 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
     container.hidden = false;
     if (presentation) presentation.setPresent(true);
     else if (layout !== 'page') container.parentElement?.classList.add('inspecting'); // the page replaces the list; no side column
-    subject++; warningTargets = new Map(); scopeLine?.dispose(); scopeLine = layout === 'page' ? null : createDeploymentScopeLine(doc); readiness?.dispose(); readiness = null; loading?.dispose(); loading = null; painted = null; teamsHere?.dispose(); teamsHere = null; instructionsSection?.dispose(); instructionsSection = null;
+    subject++; warningTargets = new Map(); readyBlock?.dispose(); readyBlock = null; teamsBlock = null; shownInspection = null; shownFor = null; capabilityWords = null; scopeLine?.dispose(); scopeLine = layout === 'page' ? null : createDeploymentScopeLine(doc); readiness?.dispose(); readiness = null; loading?.dispose(); loading = null; painted = null; teamsHere?.dispose(); teamsHere = null; instructionsSection?.dispose(); instructionsSection = null;
     container.replaceChildren();
     const head = node('div', undefined, 'inspector-head');
     container.classList.toggle('soul-page', layout === 'page');
@@ -328,13 +307,15 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
       facts$ = node('div', undefined, 'page-facts-row');
       if (selection.agent) head.append(createSoulMark(doc, selection.agent));
       copy.append(heading, facts$); head.append(copy); summary.append(head);
-      side = node('div', undefined, 'soul-page-side');
-      const body = node('div', undefined, 'page-body'), main = node('div', undefined, 'page-main'), column = node('div', undefined, 'page-side');
-      main.append(summary, status, notice, content); column.append(side); body.append(main, column);
+      // One column (the Desktop UI rework, slice 3a): the identity, then the top block, the capabilities and the two
+      // instruction tabs, all from the inspection (content); nothing beside it.
+      const body = node('div', undefined, 'page-body soul-page-body'), main = node('div', undefined, 'page-main');
+      main.append(summary, status, notice, content); body.append(main);
       container.append(bar.bar, body);
       loading = createLoading(refreshing); loading.bindRefresh(refresh, () => { void show(selection, { user: true }); });
-      rosterColumn = column;
-      if (selection.agent) { renderSoulActions(column); renderSoulRoster(); }
+      rosterColumn = main;
+      if (selection.agent) { readyBlock = createReadyBlock(); teamsBlock = createTeamsBlock(); }
+      if (selection.agent) { renderSoulActions(main); renderSoulRoster(); }
       // "Teams here" reads `oats soul teams` in parallel with `inspect`, not after it.
       if (selection.agent) ensureTeamsHere();
       if (selection.agent) {
@@ -348,7 +329,7 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
       }
       return;
     }
-    headActions = null; facts$ = null; side = null;
+    headActions = null; facts$ = null;
     // Hosted X hides the slot without deselecting or rebuilding an editor.
     const closeControl = button('', () => {
       if (!alive) return;
@@ -381,7 +362,7 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
     if (alive) reset(restoreFocus);
   }
   function reset(restoreFocus = false) {
-    serial++; subject++; warningTargets = new Map(); scopeLine?.dispose(); scopeLine = null; selection = null; selectionGen = null; data = null; teamsPanel = null; teamsHere?.dispose(); teamsHere = null; instructionsSection?.dispose(); instructionsSection = null; container.hidden = true;
+    serial++; subject++; warningTargets = new Map(); readyBlock?.dispose(); readyBlock = null; teamsBlock = null; shownInspection = null; shownFor = null; capabilityWords = null; scopeLine?.dispose(); scopeLine = null; selection = null; selectionGen = null; data = null; teamsPanel = null; teamsHere?.dispose(); teamsHere = null; instructionsSection?.dispose(); instructionsSection = null; container.hidden = true;
     readiness?.dispose(); readiness = null; loading?.dispose(); loading = null; painted = null;
     container.replaceChildren();
     if (presentation) presentation.setPresent(false);
@@ -482,15 +463,18 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   }
   function render(inspected) {
     operationSerial++; teamsPanel = null;
+    // Every accepted paint replaces what a later paint may reuse: only a soul page that paints this inspection holds it
+    // again (renderSoulPage), so an empty answer or an instance is never painted over by an older one.
+    shownInspection = null; shownFor = null; capabilityWords = null;
     // Instructions is re-appended below: detaching it drops its focus and scroll, so hold them first.
     const keepInstructions = instructionsSection?.hold();
     content.replaceChildren();
-    // The side column keeps "Teams here" (created with the frame; its own read); the rest is repainted.
-    if (side) for (const child of [...side.children]) if (child !== teamsHere?.element) child.remove();
     // What the last inspection added beside the identity (page): the harness fact and the launch notes.
     facts$?.querySelector('[data-fact="harness"]')?.remove(); facts$?.parentElement?.querySelector('[data-launch-notes]')?.remove();
-    for (const p of inspected.problems) problem(p);
     const soul = inspected.souls[0] ?? null;
+    // A soul's page says its problems in its Ready row (the first as one sentence, every one behind Details).
+    const pageSoul = layout === 'page' && inspected.subject.kind === 'soul' && !!soul;
+    if (!pageSoul) for (const p of inspected.problems) problem(p);
     // Capability warnings (0.49.0): a soul's, below its problems (an instance's are its readiness view's, which reads this lookup).
     warningTargets = typeof openCapability === 'function' && soul && pageScoped() ? capabilityTargets(coreEntries(inspected, { layersFrom: layersFrom(), facts: desktopFacts(cliStatus()) }),
       compositionEntries(inspected, soul, { facts: desktopFacts(cliStatus()) })) : new Map();
@@ -620,7 +604,8 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
       control.classList.add(cls); control.dataset.focusKey = key; return control;
     };
     // The soul page's primary action is Spawn (human, 2026-09-26; it opens the spawn dialog).
-    const launchButton = action(column ? 'Spawn' : 'Launch…', 'spawn-act', 'spawn', canLaunch, launch); launchButton.classList.add('primary'); launchButton.dataset.launch = '1';
+    const launchButton = action(column ? `New ${DESKTOP_NOUNS.instance}` : 'Launch…', 'spawn-act', 'spawn', canLaunch, launch);
+    if (column) launchButton.setAttribute('aria-label', `New ${DESKTOP_NOUNS.instance} of ${selection.agent.name}`); launchButton.classList.add('primary'); launchButton.dataset.launch = '1';
     const scheduleButton = action('Schedule…', 'schedule-act', 'schedule', canLaunch, schedule); scheduleButton.dataset.launch = '1';
     const filesButton = action('Files', 'brain-act', 'files', canFiles, files); filesButton.dataset.files = '1';
     actions.append(filesButton, scheduleButton, launchButton);
@@ -659,31 +644,14 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
       if (typeof openInstance === 'function') openInstance(instance); else void show({ instance, selector: { home: instance.home } });
     };
     if (column) {
-      // Identity: what it does, then where it works (the harness joins once inspected).
+      // Identity: what it does, then where it comes from and works. Its agents are counted on the Souls grid and
+      // table, not listed here (slice 3a); whether it is ready is the top block's Ready row, which follows the roster.
       if (agent.description) facts$.before(node('p', agent.description, 'inspector-lede'));
-      // Kernel #217: a soul a spawn here would refuse says why, beside the disabled Spawn.
-      if (refusal) { const note = node('p', cantSpawnLine(refusal), 'inspector-refusal'); note.setAttribute('role', 'note'); facts$.before(note); }
-      const harness = facts$.querySelector('[data-fact="harness"]');
-      const place = fact => harness ? harness.before(fact) : facts$.append(fact);
-      if (typeof agent.repoName === 'string' && agent.repoName) place(pageFact('repo', agent.repoName, 'mono'));
+      if (typeof agent.repoName === 'string' && agent.repoName) facts$.append(pageFact('repo', agent.repoName));
       if (typeof agent.work === 'string' && agent.work) facts$.append(pageFact('branch', workText(agent.work), 'muted'));
       // Kernel #217: the soul's file. Without a web address (a non-GitHub repo) its path shows instead.
       if (facts && typeof agent.file?.path === 'string' && agent.file.path && !(typeof agent.file.url === 'string' && /^https:\/\//.test(agent.file.url))) facts$.append(pageFact('file', agent.file.path, 'mono'));
-      const card = pageCard(doc, 'Instances', { count: rosterState === 'ready' || rosterState === 'empty' ? homes.length : null }); card.card.classList.add('inspector-instances');
-      if (!homes.length) card.card.append(emptyInstances(rosterState, 'No instances yet.', 'page-note'));
-      for (const instance of homes) {
-        const control = node('button', undefined, 'inspector-instance'); control.type = 'button'; control.dataset.focusKey = `instance:${instance.home || instance.instance}`;
-        const state = runtimeState(instance), build = buildState(instance);
-        const dot = node('span', undefined, `instance-dot ${state}`); dot.setAttribute('aria-hidden', 'true');
-        control.append(dot, node('span', instance.instance, 'instance-name'));
-        if (build) control.append(node('span', build, 'instance-build'));
-        control.setAttribute('aria-label', [instance.instance, state, build].filter(Boolean).join(', '));
-        control.addEventListener('click', () => openHome(instance, control));
-        control.disabled = !instance.home;
-        control.title = instance.home ? `${state} — open its details` : 'No instance home reported';
-        card.card.append(control);
-      }
-      column.append(card.card);
+      if (shownCurrent()) readyBlock?.paint(shownInspection);
       restore(); return;
     }
     const roster = node('div', undefined, 'inspector-content inspector-roster');
@@ -720,85 +688,152 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
     const fact = node('span', undefined, 'page-fact');
     fact.dataset.fact = icon; fact.append(iconElement(doc, icon, { size: 15 }), node('span', value, cls)); return fact;
   }
-  // Workspace v4 (W4): the soul's harness joins its identity; core capabilities
-  // and its composition as two tables of one grammar; its composition (host-injected table) with why each is there;
-  // teams and knowledge beside. Only reported facts: what the kernel does not
-  // say (which default a capability came from) is said as not reported.
+  // The soul's page (the Desktop UI rework, slice 3a): one column. A top block (harness · model, teams, knowledge,
+  // ready), its warnings, its capabilities as one list of rows (core first, tagged), then its two prompts as two tabs
+  // (soul-instructions.mjs). Only reported facts: what the kernel does not say is not claimed.
   function renderSoulPage(inspected, soul) {
-    const harness = harnessOf(soul), said = soulFacts(selection?.agent, inspected, cliStatus(), DESKTOP_TERMS), launch = said.launch;
-    if (launch) {
-      // 0.30 launch preferences: the effective harness and model with where that came from; below the
-      // facts, the soul's own preference when this computer runs something else, where to change it,
-      // and a problem a spawn would hit (launchProblem: the Desktop's line, then the kernel's words under its name).
-      const e = launch.effective, fact = node('span', undefined, 'page-fact'); fact.dataset.fact = 'harness';
-      fact.append(createRuntimeBadge(doc, e.harness), node('span', launchHarnessName(e.harness), 'strong'),
-        node('span', [launchModelText(e), e.launchConfig ? `launch configuration ${e.launchConfig}` : null, launchFromText(launch.from)].filter(Boolean).join(' · '), 'muted'));
-      const work = facts$.querySelector('[data-fact="branch"]'); if (work) work.before(fact); else facts$.append(fact);
-      const notes = node('div', undefined, 'launch-notes'); notes.dataset.launchNotes = '';
-      const differs = declaredText(launch);
-      if (differs) notes.append(node('p', differs, 'launch-declared'));
-      for (const at of said.notes) notes.append(node('p', at, 'launch-at'));
-      if (said.problem) notes.append(launchProblem(said.problem));
-      if (notes.childElementCount) facts$.after(notes);
-    } else if (typeof harness === 'string' && harness) {
-      const fact = node('span', undefined, 'page-fact'); fact.dataset.fact = 'harness';
-      fact.append(createRuntimeBadge(doc, harness), node('span', launchHarnessName(harness), 'strong'));
-      if (typeof soul.model === 'string' && soul.model) fact.append(node('span', `${soul.model} by default`, 'muted'));
-      const work = facts$.querySelector('[data-fact="branch"]'); if (work) work.before(fact); else facts$.append(fact);
-    }
+    // The inspection this page shows, bound to its subject and workspace generation: a later paint that does not read it
+    // again (a catalog update, a roster poll) uses it only for that same subject (shownCurrent).
+    shownInspection = inspected; shownFor = { subject, gen: selectionGen };
+    const said = soulFacts(selection?.agent, inspected, cliStatus(), DESKTOP_TERMS);
     const declared = record(soul.declarations) ? soul.declarations : {};
     const teams = soulTeams(inspected.teams), mapped = (teams || []).filter(t => t.mapped);
-    // Core capabilities: the three slots, in the composition table's row grammar (host-injected, like it,
-    // for the workspace's repository names): the provider, what it does for this soul, and why.
-    const core = pageSection(doc, 'Core capabilities', 'one of each per soul');
-    const coreHost = node('div', undefined, 'inspector-core-table'); core.append(coreHost); content.append(core);
-    const coreRows = coreEntries(inspected, { layersFrom: layersFrom(), facts: desktopFacts(cliStatus()) })
-      .map(entry => ({ ...entry, detail: entry.id ? coreDetail(entry.slot, declared, teams, mapped) : null }));
-    const openCore = typeof openCapability === 'function' ? entry => { if (alive && coreHost.isConnected) openCapability(entry.cap, selection.agent, entry); } : null;
-    if (typeof coreTable === 'function') coreTable(coreHost, coreRows, { soul: selection.agent, onOpen: openCore });
-    else renderSoulCore(coreHost, { entries: coreRows, status: null, onOpen: openCore });
-    // Composition: every other capability with its source and why it is here.
-    const entries = compositionEntries(inspected, soul, { facts: desktopFacts(cliStatus()) });
-    const composition = pageSection(doc, 'Capabilities', 'workspace defaults → team defaults → this soul · later wins');
-    const table = node('div', undefined, 'inspector-capability-table'); composition.append(table); content.append(composition);
-    if (typeof capabilityTable === 'function') capabilityTable(table, entries, { soul: selection.agent });
-    // Instructions (spec D): what the soul tells its instances, from this inspection (no read of its own).
-    instructionCapabilities = capabilityTargets(coreRows, entries);
-    if (instructionsSection) { instructionsSection.update(soul); content.append(instructionsSection.element); }
-    // Beside: its teams (joining is per instance) and its knowledge nodes. Team model v2
-    // (kernel feature team-model-2): "Teams here", this computer's membership, editable — created
-    // with the frame so its read ran beside `inspect`; ensured here for a CLI probe that settled since.
+    const top = node('dl', undefined, 'soul-top');
+    const row = (key, label, ...values) => {
+      const dt = node('dt', label), dd = node('dd'); dd.dataset.fact = key; dd.append(...values); top.append(dt, dd); return dd;
+    };
+    // Harness · model: what a spawn here runs (0.30 launch preferences), with where that choice came from; else the
+    // harness the soul declares and its model; else that there is no default. The notes (the soul's own preference
+    // when it differs, where the choice is set) are small lines under it.
+    const launch = said.launch, harness = harnessOf(soul);
+    const harnessCell = [];
+    // The harness, then (muted) its model, a launch configuration and what chose it: one phrase, " · " between its parts.
+    if (launch) {
+      const e = launch.effective;
+      harnessCell.push(createRuntimeBadge(doc, e.harness), node('span', launchHarnessName(e.harness), 'strong'),
+        node('span', [launchModelText(e), e.launchConfig ? `launch configuration ${e.launchConfig}` : null, launchFromText(launch.from)].filter(Boolean).join(' · '), 'muted'));
+    } else if (typeof harness === 'string' && harness) {
+      harnessCell.push(createRuntimeBadge(doc, harness), node('span', launchHarnessName(harness), 'strong'));
+      if (typeof soul.model === 'string' && soul.model) harnessCell.push(node('span', `${soul.model} by default`, 'muted'));
+    }
+    const harnessValue = row('harness', 'Harness · model', ...harnessCell);
+    // Under it, small: the soul's own preference when this computer runs something else, and where the choice is set
+    // (a launch problem is the Ready row's). The notes carry the side panel's classes (launch-declared, launch-at).
+    const notes = [...(launch ? [declaredText(launch)].filter(Boolean).map(text => [text, 'launch-declared']) : []), ...said.notes.map(text => [text, 'launch-at'])];
+    for (const [text, cls] of notes) harnessValue.append(node('span', text, `soul-top-note ${cls}`));
+    if (notes.length) harnessValue.dataset.launchNotes = '';
+    // Teams: the ones it may join (mapped here), the default marked; "Teams here" (this computer's, editable) folded under it.
     const { teamModel, soulKey } = teamsHereConditions();
+    const labels = mapped.length ? mapped.map(t => t.default === true ? `${t.label} (default)` : t.label).join(' · ')
+      : teams ? 'Default team only' : rosterTeams(selection?.agent);
+    const teamsValue = row('teams', 'Teams', node('span', labels || 'Not reported', labels ? '' : 'muted'));
     if (teamsHere && !teamModel) { teamsHere.element.remove(); teamsHere.dispose(); teamsHere = null; } // the CLI lost the feature since the frame
-    if (teamModel && !soulKey) {
-      const { card: note } = pageCard(doc, 'Teams here', { lead: 'on this computer' });
-      note.append(node('p', teamModel === 3 ? "This Desktop's server does not report the soul's key: oats soul teams shows its teams."
-        : "Set this soul's teams with the CLI (oats soul teams): this Desktop's server does not report the soul's key.", 'page-note'));
-      side.append(note);
-    } else if (teamModel) ensureTeamsHere();
-    else if (teams) {
-      const card = pageCard(doc, 'Teams', { lead: 'organise · add defaults · never restrict' });
-      if (!mapped.length) card.card.append(node('p', 'Default team only: this soul has access to no other team.', 'page-note'));
-      for (const team of mapped) {
-        const row = node('div', undefined, 'soul-team'), name = node('span', undefined, 'soul-team-name');
-        name.append(node('span', team.label)); if (team.default === true) name.append(node('span', 'default', 'page-tag'));
-        row.title = `${team.label} (${team.team})`;
-        row.append(name, node('span', `Instances can join the ${team.label} team chat`, 'soul-team-note'));
-        card.card.append(row);
-      }
-      side.append(card.card);
-    }
+    if (teamModel && !soulKey) teamsValue.append(node('span', teamModel === 3 ? "This Desktop's server does not report the soul's key: oats soul teams shows its teams."
+      : "Set this soul's teams with the CLI (oats soul teams): this Desktop's server does not report the soul's key.", 'soul-top-note'));
+    else if (teamModel && ensureTeamsHere() && teamsBlock) teamsValue.append(teamsBlock.element);
+    // Knowledge: the nodes it owns and reads, when it declares any.
     const knowledge = record(declared.knowledge) ? declared.knowledge : null;
-    const nodes = knowledge ? [...(typeof knowledge.owns === 'string' && knowledge.owns ? [[knowledge.owns, 'owns']] : []),
-      ...(Array.isArray(knowledge.reads) ? knowledge.reads.filter(r => typeof r === 'string' && r).map(r => [r, 'reads']) : [])] : [];
-    if (nodes.length) {
-      const card = pageCard(doc, 'Knowledge');
-      for (const [path, role] of nodes) {
-        const row = node('div', undefined, 'page-list-item'); row.append(node('span', path), node('span', role, `knowledge-role ${role}`));
-        card.card.append(row);
-      }
-      side.append(card.card);
-    }
+    const owns = knowledge && typeof knowledge.owns === 'string' && knowledge.owns ? knowledge.owns : null;
+    const reads = knowledge && Array.isArray(knowledge.reads) ? knowledge.reads.filter(r => typeof r === 'string' && r) : [];
+    if (owns || reads.length) row('knowledge', 'Knowledge', node('span', [owns ? `owns ${owns}` : null, reads.length ? `reads ${reads.join(', ')}` : null].filter(Boolean).join(' · ')));
+    // Ready: one word, or the one problem in one sentence with its detail behind Details.
+    if (readyBlock) { readyBlock.paint(inspected); row('ready', 'Ready', readyBlock.element); }
+    content.prepend(top);
+    // Capabilities: one list, core first with its tag, then the rest in the kernel's composition order. A row opens the
+    // capability's page. What the soul turns off, and a core slot left empty, are one muted line under the list.
+    const coreRows = coreEntries(inspected, { layersFrom: layersFrom(), facts: desktopFacts(cliStatus()) });
+    const entries = compositionEntries(inspected, soul, { facts: desktopFacts(cliStatus()) });
+    instructionCapabilities = capabilityTargets(coreRows, entries);
+    const shown = [...coreRows.filter(entry => entry.id).map(entry => ({ entry, cap: entry.cap, name: entry.id, core: true })),
+      ...entries.filter(entry => entry.why !== 'off' && entry.cap).map(entry => ({ entry, cap: entry.cap, name: entry.cap.id, core: false }))];
+    const section = pageSection(doc, 'Capabilities', shown.length ? `${shown.length} · core first` : '');
+    section.classList.add('soul-capabilities');
+    const id = subject, gen = selectionGen;
+    const lines = shown.map(({ entry, cap, name, core }) => {
+      const said = cap ? describeCapability(cap) : {};
+      const why = entry.why ? whyTag(entry)[1] : null;
+      return capabilityLine(doc, { name, by: said.by ?? null, description: said.description ?? null, core, focusKey: `capability:${name}`,
+        title: [name, core ? `core: ${layerLabel(entry.slot)}` : null, why].filter(Boolean).join(' · '),
+        onOpen: cap && typeof openCapability === 'function' ? () => { if (ownsSubject(id, gen)) openCapability(cap, selection.agent, entry); } : null });
+    });
+    capabilityWords = JSON.stringify(shown.map(({ cap }) => cap ? describeCapability(cap) : null));
+    if (lines.length) section.append(capabilityLines(doc, lines, { label: `Capabilities of ${selection.agent?.name ?? soul.name}` }));
+    else section.append(node('p', 'No capabilities resolved.', 'page-note'));
+    const off = entries.filter(entry => entry.why === 'off').map(entry => entry.name);
+    const empty = coreRows.filter(entry => !entry.id && entry.reported).map(entry => `no ${entry.slot} capability`);
+    if (off.length || empty.length) section.append(node('p', [off.length ? `Turned off: ${off.join(', ')}` : null, ...empty].filter(Boolean).join(' · '), 'soul-capabilities-note'));
+    content.append(section);
+    // Its two prompts, as two tabs, and its skills (soul-instructions.mjs), from this inspection (no read of its own).
+    if (instructionsSection) { instructionsSection.update(soul); content.append(instructionsSection.element); }
+  }
+  /** A capability's "by <source>" and one line of what it does: the host's (the workspace's catalog, its member
+   * names), else where the inspection says it comes from and no line. */
+  function describeCapability(cap) {
+    if (typeof capabilityFacts === 'function') { const said = capabilityFacts(cap); if (said) return said; }
+    const from = record(cap?.from) ? cap.from : {};
+    const by = typeof from.package === 'string' && from.package ? from.package
+      : typeof from.repoKey === 'string' && from.repoKey ? from.repoKey.split('/').filter(Boolean).at(-1) : null;
+    return { by, description: null };
+  }
+  /** The teams a roster row names (team model v2 rows, the default first; 0.29's labels), in words; null when none. */
+  function rosterTeams(agent) {
+    const v2 = Array.isArray(agent?.teams) && agent.teams.every(t => typeof t?.label === 'string' && t.label) ? agent.teams : null;
+    if (v2) return v2.length ? [...v2].sort((x, y) => (y.default === true) - (x.default === true)).map(t => t.default === true ? `${t.label} (default)` : t.label).join(' · ') : null;
+    return Array.isArray(agent?.labels) && agent.labels.length ? agent.labels.join(' · ') : null;
+  }
+  /** The Ready row's value, kept across repaints (one per subject): the word or the sentence, then a closed native
+   * disclosure with the problem's detail and the soul's readiness checks (readiness-view.mjs, a soul selector), read
+   * when the disclosure is first opened, so a page that is only looked at costs no extra read. */
+  function createReadyBlock() {
+    const element = node('div', undefined, 'soul-ready');
+    const line = node('span', '', 'soul-ready-line');
+    const details = node('details', undefined, 'soul-ready-details');
+    const summaryEl = node('summary', 'Details'); summaryEl.dataset.focusKey = 'ready-details';
+    const problems = node('div', undefined, 'soul-ready-problems'), checks = node('div', undefined, 'soul-ready-checks');
+    details.append(summaryEl, problems, checks); element.append(line, details);
+    let view = null;
+    const id = subject, gen = selectionGen;
+    details.addEventListener('toggle', () => {
+      if (!details.open || view || !alive || !ownsSubject(id, gen)) return;
+      view = readiness = createReadinessView(checks, { ctx, clock: timers,
+        canOpenCapability: name => typeof openCapability === 'function' && warningTargets.has(name),
+        openCapability: typeof openCapability === 'function' ? name => { const found = warningTargets.get(name); if (found && ownsSubject(id, gen)) openCapability(found.cap, selection.agent, found.entry); } : null });
+      syncReadiness();
+    });
+    return {
+      element,
+      /** The row from the inspection and the CURRENT roster row (a spawn refusal follows the roster poll). */
+      paint(inspected) {
+        const agent = selection?.agent, cli = cliStatus();
+        const refusal = spawnRefusal(agent);
+        const said = soulFacts(agent, inspected, cli, DESKTOP_TERMS);
+        // Any problem the inspection reports is one: a problem without words says the generic sentence (problem()'s).
+        // An entry counts whatever its shape (null too, as problem() shows it), so existence is the list's length.
+        const firstProblem = inspected.problems.length ? inspected.problems[0] : undefined;
+        const problemText = inspected.problems.length ? (typeof firstProblem?.message === 'string' && firstProblem.message ? firstProblem.message : 'The kernel reported a problem.') : null;
+        const sentence = refusal ?? problemText ?? said.problem?.lines?.[0] ?? said.problem?.lead ?? null;
+        line.textContent = sentence ?? 'Ready';
+        line.classList.toggle('problem', !!sentence);
+        element.dataset.ready = String(!sentence);
+        // Behind Details: every problem in full, with its code; then (once opened) the readiness checks.
+        problems.replaceChildren();
+        if (refusal) {
+          const box = node('div', undefined, 'inspector-problem'); box.append(node('p', cantSpawnLine(refusal)));
+          if (typeof agent?.problem?.code === 'string' && agent.problem.code) box.append(node('p', agent.problem.code, 'muted'));
+          problems.append(box);
+        }
+        for (const p of inspected.problems) problem(p, problems);
+        if (said.problem) problems.append(launchProblem(said.problem));
+      },
+      dispose() { if (view) { if (readiness === view) readiness = null; view.dispose(); view = null; } },
+    };
+  }
+  /** The Teams row's disclosure: "Teams here", this computer's membership of the soul (soul-teams-here.mjs). */
+  function createTeamsBlock() {
+    const element = node('details', undefined, 'soul-teams-details');
+    const summaryEl = node('summary', 'Teams on this computer'); summaryEl.dataset.focusKey = 'teams-here';
+    element.append(summaryEl);
+    return { element, host: element };
   }
   // `oats soul teams` takes the kernel's soul key, on every roster row as `key` (#275, #276): the
   // bare name for a member or external soul, <package>/<soul> for a package soul. A row without one
@@ -810,13 +845,13 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   /** The page's "Teams here" card, once per subject, first in the side column; its `oats soul teams`
    * read starts when it is created (with the frame), not after `inspect` answers. */
   function ensureTeamsHere() {
-    if (teamsHere || !side) return teamsHere;
+    if (teamsHere || !teamsBlock) return teamsHere;
     const { teamModel, soulKey } = teamsHereConditions();
     if (!teamModel || !soulKey) return null;
     const soulTeamsRoute = async body => teamsAnswer(await postJson(ctx, `/api/workspace-soul-teams${wsQuery()}`, body), 'soulTeams', 'The teams of this soul could not be read.');
     const teamsRoute = async () => teamsAnswer(await postJson(ctx, `/api/workspace-teams${wsQuery()}`, { action: 'list' }), 'teams', 'The teams on this computer could not be read.');
     teamsHere = createSoulTeamsHere(doc, { soul: soulKey, request: soulTeamsRoute, listTeams: teamsRoute, clock: timers });
-    side.prepend(teamsHere.element);
+    teamsBlock.host.append(teamsHere.element);
     return teamsHere;
   }
   // Core capabilities name their origin only when the CLI advertises layers-from.
@@ -922,8 +957,36 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   }
   /** The host's roster changed or its read settled (a poll): the roster-derived block — lede, refusal, facts, the
    * Instances card and its empty / pending / no-claim state — follows, behind its signature (focus kept). */
-  function syncRoster() { if (alive && selection?.agent && !container.hidden) renderSoulRoster(); }
-  return { show, close, syncAvailability, syncRoster,
+  /** Whether the held inspection is the shown subject's, in the current workspace generation. */
+  function shownCurrent() {
+    return !!shownInspection && shownFor?.subject === subject && shownFor.gen === selectionGen && selectionGen === workspaceGeneration();
+  }
+  /** The host's capability facts changed (its catalog was read): the page's rows follow, in place (focus kept), only
+   * when what they say changed. */
+  function syncCatalog() {
+    // Also while a capability page covers this one (hidden): Back then shows the rows as they are now.
+    if (!alive || layout !== 'page' || !shownCurrent() || !selection?.agent) return;
+    const soul = shownInspection.souls[0]; if (!soul) return;
+    const coreRows = coreEntries(shownInspection, { layersFrom: layersFrom(), facts: desktopFacts(cliStatus()) });
+    const entries = compositionEntries(shownInspection, soul, { facts: desktopFacts(cliStatus()) });
+    const caps = [...coreRows.filter(e => e.id).map(e => e.cap), ...entries.filter(e => e.why !== 'off' && e.cap).map(e => e.cap)];
+    if (JSON.stringify(caps.map(cap => cap ? describeCapability(cap) : null)) === capabilityWords) return;
+    // Hidden, nothing in it holds focus: repaint without moving any.
+    if (container.hidden) { render(shownInspection); return; }
+    const restore = captureFocusState(content, { scroller: container, fallback: refreshControl });
+    render(shownInspection); restore();
+  }
+  /** The host's roster read settled: the subject's row is re-read from it (`currentRow`: the one current row of the
+   * same soul, by its composite identity, else null), so what the row says (a spawn refusal, the lede, the facts) and
+   * the actions that read it (New agent) follow a poll. A soul that left the roster, or became ambiguous, keeps its
+   * last row; the host's own checks (canLaunch) refuse its actions. The page follows while a capability page covers it. */
+  function syncRoster() {
+    if (!alive || !selection?.agent || (container.hidden && (layout !== 'page' || selectionGen !== workspaceGeneration()))) return;
+    const fresh = typeof currentRow === 'function' ? currentRow(selection.agent) : null;
+    if (fresh && fresh !== selection.agent) { selection = { ...selection, agent: fresh }; syncAvailability(); }
+    renderSoulRoster();
+  }
+  return { show, close, syncAvailability, syncRoster, syncCatalog,
     focusLaunch(agent) {
       const selected = selection?.agent;
       if (!alive || container.hidden || (presentation && !presentation.isVisible())

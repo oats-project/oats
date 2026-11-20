@@ -78,10 +78,13 @@ test('03 (F7): a soul opens as a page in the main area — it replaces the grid,
   assert.equal(main.querySelector('.deployment-scope'), null);
   assert.equal(u.get('.workspace-recovery').hidden, true, 'compatible CLI adds no visible row before the cards');
   // Workspace v4 (human decision 2026-09-26; replaces the header-placed filter): the
-  // search and Team/Repo control are the view's own toolbar, directly above the cards.
+  // search and the Grid | Table control are the view's own toolbar, directly above the cards.
   assert.equal(u.get('.workspace-recovery').nextElementSibling, u.get('.souls-bar'), 'the Souls toolbar sits in the view, before the cards');
-  // Between the toolbar and the cards only the grid's stale-line host (desktop/loading-states), empty and display:none while the read is good.
-  assert.equal(u.get('.souls-bar').nextElementSibling, u.get('.souls-notice'), 'no repo-heading row before the cards');
+  // Between the toolbar and the cards: the page's first line (what a soul is; slice 3a, in place of About souls), then
+  // the grid's stale-line host (desktop/loading-states), empty and display:none while the read is good.
+  assert.equal(u.get('.souls-bar').nextElementSibling, u.get('.souls-lede'), 'the first line under the toolbar');
+  assert.equal(u.get('.souls-lede').textContent, spawn.SOULS_LEDE);
+  assert.equal(u.get('.souls-lede').nextElementSibling, u.get('.souls-notice'), 'no repo-heading row before the cards');
   assert.equal(u.get('.souls-notice').childElementCount, 0); assert.equal(u.css('.souls-notice').display, 'none');
   assert.equal(u.get('.souls-notice').nextElementSibling, u.get('.souls-grid'));
   assert.equal(u.get('.repo-head'), null);
@@ -101,14 +104,13 @@ test('03 (F7): a soul opens as a page in the main area — it replaces the grid,
   page.querySelector('.inspector-back').click(); await tick();
   assert.equal(u.get('.souls-grid').hidden, false); assert.equal(header.hidden, false, 'back restores the Workspace header');
   assert.equal(u.css('.souls-grid').padding, '0px 20px 16px', 'Workspace v4: groups start under the view toolbar');
-  // Workspace v4.1 (board 3): search first, then Group by (Repo, Team), then the "About souls" i (2026-10-23);
-  // every group header opens its own section.
-  assert.deepEqual([...u.get('.souls-bar').children].map(el => el.className), ['ws-search', 'ws-toolbar-lead souls-bar-lead', 'ws-toolbar-label', 'ws-segmented souls-group-by', 'ws-info-button', 'souls-sum workspace-sr-only', 'loading-status loading-sr souls-status']);
-  assert.deepEqual([...u.get('.souls-group-by').querySelectorAll('button')].map(b => [b.textContent, b.getAttribute('aria-pressed')]), [['Repo', 'true'], ['Team', 'false']], 'Repo is the default');
+  // Slice 3a: search first, then Grid | Table (v); no Group by and no "About souls" i. Every group header opens its own section.
+  assert.deepEqual([...u.get('.souls-bar').children].map(el => el.className), ['ws-search', 'ws-toolbar-lead souls-bar-lead', 'ws-segmented souls-view', 'souls-sum workspace-sr-only', 'loading-status loading-sr souls-status']);
+  assert.deepEqual([...u.get('.souls-view').querySelectorAll('button')].map(b => [b.textContent, b.getAttribute('aria-pressed'), b.getAttribute('aria-keyshortcuts')]), [['Grid', 'true', 'V'], ['Table', 'false', 'V']], 'the grid is the default');
   assert.equal(u.get('.souls-bar-lead').childElementCount, 0, 'no group heading in the toolbar');
   const first = u.get('.souls-grid .souls-group');
   assert.equal(first.firstElementChild, first.querySelector('.souls-group-title')); assert.equal(first.getAttribute('aria-labelledby'), first.firstElementChild.id);
-  assert.equal(u.css('.souls-group-cards').gap, '14px');
+  assert.equal(u.css('.souls-group-cards').gap, '12px');
   assert.equal(u.get('.souls-bar').parentElement, main, 'the toolbar belongs to the view, not the header');
   assert.equal(header.querySelector('.souls-bar, input'), null, 'the header keeps only the tabs');
   assert.equal(u.get('.wssel').parentElement, header);
@@ -122,68 +124,35 @@ test('03 (F7): a soul opens as a page in the main area — it replaces the grid,
   assert.doesNotMatch(inspectorCSS, /display:\s*contents|order:\s*-1|position:\s*absolute/);
 });
 
-test('03: cards have one semantic Details entry with compact identity, description, teams and a foot (the harness only as reported)', async t => {
+test('03 (slice 3a): a card is one button: its name, what it does, its agents and its kind; it opens the soul page, which has New agent', async t => {
   const u = await fixture(t);
   const card = u.get('.soul-card');
   assert.equal(card.tagName, 'BUTTON'); assert.equal(card.type, 'button');
-  assert.equal(card.getAttribute('aria-label'), 'Inspect dev');
+  assert.equal(card.getAttribute('aria-label'), 'dev');
+  assert.equal(card.getAttribute('aria-description'), 'Build and review. No agents running. other soul');
   assert.equal(u.doc.getElementById(card.getAttribute('aria-controls')), u.get('.workspace-soul-page'), 'a card opens its soul\'s page');
-  // Workspace v4.1 (board 3): a body (head: mark, name, harness; the description; labelled chips) and a foot.
-  assert.deepEqual([...card.children].map(el => el.className), ['sbody', 'sfoot']);
-  // No team reported: no team chip invented; and no work-mode chip (human, 2026-09-29), so no chip row at all.
-  assert.deepEqual([...card.querySelector('.sbody').children].map(el => el.className), ['sname', 'sdesc']);
-  assert.doesNotMatch(card.textContent, /Works in|worktree/, 'the card does not say where the soul works');
-  assert.equal(card.querySelector('button, .sactions'), null, 'no control nested inside the card button');
-  // Workspace v4 (human, 2026-09-26; replaces "launch only from an opened soul"): each
-  // spawnable card has a Spawn button beside it in one grid cell, which roves with its card.
-  const tile = card.parentElement, spawn = tile.querySelector(':scope > .soul-spawn');
-  assert.equal(tile.className, 'soul-tile can-spawn'); assert.equal(u.css('.soul-tile').display, 'grid');
-  assert.equal(spawn.textContent, 'Spawn'); assert.equal(spawn.getAttribute('aria-label'), 'Spawn dev');
-  assert.equal(spawn.tabIndex, card.tabIndex, 'Spawn enters the tab order with its card');
-  assert.equal(spawn.disabled, false);
-  spawn.click(); await tick(); assert.ok(u.get('.spawn-dialog'), 'Spawn opens the spawn dialog for that soul, without opening its page');
-  assert.equal(u.get('.workspace-soul-page').hidden, true);
-  // Board 6: scoped to that soul — its preview column, no soul picker, "Spawn dev" and Change soul.
-  const dialog = u.get('.spawn-dialog');
-  assert.equal(dialog.dataset.layout, 'scoped'); assert.equal(dialog.querySelector('.spawn-chooser').hidden, true); assert.equal(dialog.querySelector('.spawn-preview').hidden, false);
-  assert.equal(dialog.querySelector('#spawn-dialog-title').textContent, 'Spawn dev'); assert.equal(dialog.querySelector('.spawn-change-soul').hidden, false);
-  assert.equal(u.doc.activeElement, dialog.querySelector('.ftask'), 'the first field, the Opening instruction, takes the focus');
-  u.get('.spawn-dialog').dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await tick();
-  assert.equal(u.get('.spawn-dialog'), null, 'Escape closes it');
-  assert.equal(u.doc.activeElement, u.get('.soul-tile > .soul-spawn'), 'focus returns to the Spawn button that opened it');
-  assert.equal(u.css('.soul-card').padding, '0px');
+  // The name, what it does, then a foot: its agents and its kind. No mark, no harness, no team chips, no Spawn.
+  assert.deepEqual([...card.children].map(el => el.className), ['stitle', 'sdesc', 'sfoot']);
+  assert.equal(card.querySelector('.stitle').textContent, 'dev'); assert.equal(card.querySelector('.sdesc').textContent, 'Build and review');
+  assert.deepEqual([...card.querySelector('.sfoot').children].map(el => [el.className, el.textContent]), [['sactivity', 'No agents running'], ['skind', '· other']]);
+  assert.doesNotMatch(card.textContent, /Works in|worktree|Pi\b/, 'the card does not say where the soul works nor its harness');
+  assert.equal(card.querySelector('button'), null, 'no control nested inside the card button');
+  assert.equal(card.parentElement.className, 'souls-group-cards', 'no tile: the card is the grid cell');
+  assert.equal(u.get('.soul-spawn, .soul-tile, .glyph, .runtime-badge, .schip'), null);
   assert.equal(u.css('.sdesc').fontSize, '12.5px'); assert.equal(u.css('.sdesc').webkitLineClamp || u.css('.sdesc').getPropertyValue('-webkit-line-clamp'), '2', 'two lines at most');
-  assert.equal(u.css('.glyph').width, '32px'); assert.equal(u.css('.glyph').height, '32px'); assert.equal(u.css('.glyph').borderRadius, '8px');
-  // The harness appears only as the roster reports it on the soul row (this fixture: pi, no launch): no model claimed.
-  assert.equal(u.get('.scontext').textContent, 'Pi');
-  assert.equal(u.get('.soul-card .runtime-badge').getAttribute('aria-label'), 'Harness: Pi');
-  // The foot: what runs (never the bare word "none") in one 48px row under a hairline that spans the card.
-  assert.equal(u.get('.soul-card .sactivity').textContent, 'No instances');
-  const foot = u.css('.soul-card .sfoot');
-  assert.equal(foot.boxSizing, 'border-box'); assert.equal(foot.height, '49px'); assert.equal(foot.alignItems, 'center');
-  assert.equal(foot.paddingTop, '0px'); assert.equal(foot.paddingBottom, '0px');
-  const shippedCSS = [...u.doc.querySelectorAll('style')].map(style => style.textContent).join('\n');
-  assert.match(shippedCSS, /\.soul-card \.sfoot \{[^}]*border-top:1px solid var\(--border\)/, 'a 1px border hairline');
-  assert.equal(u.css('.soul-card .sfoot').marginTop, 'auto');
-  // The button (human, 2026-09-29: smaller, on the instances' line, clear of the hairline): 24px,
-  // secondary (surface + 1px border), centred in the 48px row: 12px above it, 12px + the card's
-  // 1px edge below it.
-  const button = u.css('.soul-tile > .soul-spawn');
-  assert.equal(button.boxSizing, 'border-box'); assert.equal(button.height, '24px'); assert.equal(button.marginBottom, '13px'); assert.equal(button.background, 'var(--surface)');
-  assert.equal((48 - parseInt(button.height)) / 2 + 1, parseInt(button.marginBottom), 'the button shares the row\'s centre line');
-  assert.match(shippedCSS, /button\.soul-spawn \{[^}]*border:1px solid var\(--border\)/);
-
-  const fresh = u.get('.soul-card'); // closing the dialog repaints the grid
-  fresh.focus(); fresh.dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await tick();
-  for (const text of ['Spawn', 'Files', 'Schedule…']) assert.ok([...u.get('.workspace-soul-page').querySelectorAll('button')].find(b => b.textContent === text), text);
-  for (const text of ['Edit defaults', 'Edit instructions']) assert.equal([...u.get('.workspace-soul-page').querySelectorAll('button')].some(b => b.textContent === text), false, `${text}: a v2 soul is edited in its repository`);
+  card.focus(); card.dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await tick();
+  for (const text of ['New agent', 'Files', 'Schedule…']) assert.ok([...u.get('.workspace-soul-page').querySelectorAll('button')].find(b => b.textContent === text), text);
+  for (const text of ['Edit defaults', 'Edit instructions', 'Spawn']) assert.equal([...u.get('.workspace-soul-page').querySelectorAll('button')].some(b => b.textContent === text), false, `no ${text}`);
   assert.equal(u.get('.inspector-repository'), null, 'no "Edit this soul" block (human, F7)');
   assert.equal(u.get('.spawn-dialog'), null, 'keyboard inspection does not launch');
-  // The soul page's Spawn opens the same scoped dialog.
-  [...u.get('.workspace-soul-page').querySelectorAll('button')].find(b => b.textContent === 'Spawn').click(); await tick();
+  // The soul page's New agent opens the scoped dialog; Escape closes it and focus returns to New agent.
+  const newAgent = [...u.get('.workspace-soul-page').querySelectorAll('button')].find(b => b.textContent === 'New agent');
+  assert.equal(newAgent.getAttribute('aria-label'), 'New agent of dev');
+  newAgent.click(); await tick();
   assert.equal(u.get('.spawn-dialog').dataset.layout, 'scoped'); assert.equal(u.get('.spawn-dialog #spawn-dialog-title').textContent, 'Spawn dev');
   u.get('.spawn-dialog').dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await tick();
   assert.equal(u.get('.spawn-dialog'), null);
+  assert.equal(u.doc.activeElement, newAgent, 'focus returns to New agent');
   u.click('Schedule…'); assert.deepEqual(u.views, ['automations'], 'Automations, on its Schedules subtab');
   u.get('.workspace-soul-page .inspector-back').click();
   assert.equal(u.doc.activeElement, u.get('.soul-card'), 'back returns to the roving card');
@@ -393,42 +362,46 @@ test('v4.1: a row shows one line of its description and the page the whole of it
   assert.equal(u.doc.activeElement.dataset.capability, 'nw-release-tooling');
 });
 
-// Replaces the F7 test that pinned the Capabilities view's table on the soul
-// page: Workspace v4 (W4) shows core capabilities and the rest as two tables of
-// one grammar (Core capability / Capability | Source | Why it's here).
-test('W4: a soul page shows its core capabilities and the rest in one row grammar with why each is there; a row opens the capability as the soul resolves it, back returns to the soul', async t => {
-  const u = await fixture(t, { cli: V2_CLI, sync: () => catalogReply() });
+// The Desktop UI rework, slice 3a (replaces W4's two tables): a soul's capabilities are one list of rows, core first
+// with a dim "core" tag, each its name, "by <source>" and one line of what it does; a row opens the capability as the
+// soul resolves it, and back returns to that row.
+test('slice 3a: a soul page lists its capabilities as one list of rows, core first; a row opens the capability as the soul resolves it, back returns to the soul', async t => {
+  const described = f2('capabilities').result.capabilities.map(r => ({ ...r, description: `About ${r.name}.` }));
+  const u = await fixture(t, { cli: V2_CLI, sync: () => catalogReply(described) });
   u.get('.soul-card').click(); await tick(); await tick();
   const soulPage = u.get('.workspace-soul-page');
-  const coreTable = soulPage.querySelector('.inspector-core-table .soul-caps.soul-core');
-  assert.ok(coreTable, 'the Core capabilities table, in the composition table\'s grid');
-  assert.deepEqual([...coreTable.querySelectorAll('.soul-cap-row:not(.head)')].map(c => c.dataset.layer), ['knowledge', 'messaging', 'tasks'], 'one row per core slot');
-  assert.equal(soulPage.querySelector('.core-card'), null, 'no cards');
-  assert.ok(coreTable.querySelector('.soul-cap-row[data-layer="knowledge"] .source-chip.boxed'), 'the same source chip');
-  const coreIds = new Set(Object.values(inspection.layers).map(l => l?.id).filter(Boolean));
-  const table = soulPage.querySelector('.inspector-capability-table .soul-caps');
-  assert.ok(table, 'the composition table');
-  assert.deepEqual([...table.querySelectorAll('.soul-cap-row.head span')].map(s => s.textContent), ['Capability', 'Source', "Why it's here"]);
-  const others = inspection.capabilities.filter(c => !coreIds.has(c.id)).map(c => c.id);
-  assert.deepEqual([...table.querySelectorAll('.soul-cap-row:not(.head)')].map(r => r.dataset.capability).sort(), [...others].sort(), 'every non-core capability, once');
-  assert.equal(soulPage.querySelector('.catalog-table, .inspector-cap-row'), null, 'neither the catalog table nor the old per-soul list');
-  for (const row of table.querySelectorAll('.soul-cap-row:not(.head)')) assert.ok(row.querySelector('.why-tag, .why-note'), `${row.dataset.capability} says why it is here`);
-  const first = others[0];
-  table.querySelector(`.soul-cap-row[data-capability="${first}"]`).click();
+  assert.equal(soulPage.querySelector('.inspector-core-table, .inspector-capability-table, .soul-caps, .core-card'), null, 'no tables and no cards');
+  const lists = soulPage.querySelectorAll('.soul-capabilities ul.cap-lines');
+  assert.equal(lists.length, 1);
+  const rows = [...lists[0].querySelectorAll('.cap-line')];
+  const coreIds = ['knowledge', 'messaging', 'tasks'].map(slot => inspection.layers[slot]?.id).filter(Boolean);
+  const others = inspection.capabilities.filter(c => !coreIds.includes(c.id) && !['knowledge', 'messaging', 'tasks'].includes(c.layer)).map(c => c.id);
+  assert.deepEqual(rows.slice(0, coreIds.length).map(r => r.dataset.capability), coreIds, 'core first, in slot order');
+  assert.deepEqual(rows.slice(coreIds.length).map(r => r.dataset.capability).sort(), [...others].sort(), 'then every other capability, once');
+  for (const row of rows) {
+    const core = coreIds.includes(row.dataset.capability);
+    assert.equal(row.querySelector('.cap-line-tag')?.textContent ?? null, core ? 'core' : null, `${row.dataset.capability}: the core tag on core rows only`);
+    // Until 3b's official rule: the workspace's own repository (agents.git, the host) goes unsaid, any other source is named.
+    const cap = inspection.capabilities.find(c => c.id === row.dataset.capability);
+    if (cap.from?.kind === 'member' && cap.from.repoKey === 'local//fixture/base/fx/remotes/agents.git') assert.equal(row.querySelector('.cap-line-by'), null, `${cap.id}: the host repository`);
+    else assert.match(row.querySelector('.cap-line-by').textContent, /^by \S/, `${cap.id}: where it comes from`);
+  }
+  const first = others[0], line = rows.find(r => r.dataset.capability === first);
+  const listed = described.filter(r => r.name === first);
+  if (listed.length === 1) assert.equal(line.querySelector('.cap-line-desc').textContent, `About ${first}.`, 'one line of what it does, from the catalog');
+  line.click();
   const cap = u.get('.workspace-cap-page');
   assert.equal(cap.hidden, false); assert.equal(soulPage.hidden, true);
   assert.equal(cap.querySelector('.page-back').textContent, 'dev');
   assert.deepEqual([...cap.querySelectorAll('.page-crumbs > span:not(.page-crumb-sep)')].map(s => s.textContent), ['Workspace', 'Souls', 'dev', first]);
-  const resolved = [...cap.querySelectorAll('.page-card')].find(c => c.dataset.card === 'As dev resolves it');
-  assert.ok(resolved, 'what the soul resolves');
-  assert.match(resolved.textContent, /Missing/);
+  assert.ok([...cap.querySelectorAll('.page-card')].find(c => c.dataset.card === 'As dev resolves it'), 'what the soul resolves');
   key(u, u.doc.activeElement, 'Escape');
   assert.equal(cap.hidden, true); assert.equal(soulPage.hidden, false, 'back to the soul\'s page');
   assert.equal(u.doc.activeElement.dataset.capability, first);
 });
 
-// Spec A: with layers-from and desktop-facts the soul page's Core rows say why, and the capability page
-// opened from either table repeats it in its "As <soul> resolves it" card; focus comes back to the row.
+// Spec A: with layers-from and desktop-facts, the capability page opened from a soul's row repeats why it is there in
+// its "As <soul> resolves it" card; focus comes back to the row. A slot the soul empties is said under the list.
 test('a core row and a capability row open their page with the soul page\'s reason as a "Why" row', async t => {
   const facts = structuredClone(inspection);
   facts.layers = { knowledge: { id: 'oats.okf', from: 'workspace' }, messaging: { id: null, from: null }, tasks: { id: null, from: null } };
@@ -437,25 +410,22 @@ test('a core row and a capability row open their page with the soul page\'s reas
   const u = await fixture(t, { cli: { ...V2_CLI, features: [...V2_CLI.features, 'layers-from', 'desktop-facts'] }, inspect: () => facts, sync: () => catalogReply() });
   u.get('.soul-card').click(); await tick(); await tick();
   const soulPage = u.get('.workspace-soul-page');
-  const knowledge = soulPage.querySelector('.soul-core .soul-cap-row[data-layer="knowledge"]');
-  assert.equal(knowledge.querySelector('.why-tag').textContent, 'workspace');
-  assert.equal(knowledge.querySelector('.soul-cap-why-note').textContent, "Resolves the workspace default: this soul doesn't choose a knowledge capability");
-  const messaging = soulPage.querySelector('.soul-core .soul-cap-row[data-layer="messaging"]');
-  assert.equal(messaging.querySelector('.soul-cap-id').textContent, 'None'); assert.equal(messaging.querySelector('.soul-cap-why-note').textContent, 'This soul empties the messaging slot; the workspace default is oats.aweb');
-  assert.equal(messaging.querySelector('.why-note').textContent, 'turned off by soul');
-  assert.equal(soulPage.querySelector('.soul-core .soul-cap-row[data-layer="tasks"] .why-note').textContent, 'No default');
-  const caps = soulPage.querySelector('.inspector-capability-table .soul-caps');
-  assert.equal(caps.querySelector('[data-capability="oats.aweb"]'), null, 'the emptied slot is not a Capabilities row');
+  const list = soulPage.querySelector('.soul-capabilities .cap-lines');
+  const knowledge = list.querySelector('.cap-line[data-capability="oats.okf"]');
+  assert.equal(knowledge.querySelector('.cap-line-tag').textContent, 'core');
+  assert.match(knowledge.title, /Resolves the workspace default|A workspace default|workspace/i, 'why it is here, in its title');
+  assert.equal(list.querySelector('[data-capability="oats.aweb"]'), null, 'the emptied slot is not a row');
+  assert.equal(soulPage.querySelector('.soul-capabilities-note').textContent, 'no messaging capability · no tasks capability');
   const why = () => { const row = u.get('.workspace-cap-page [data-fact="why"]'); return row && [row.querySelector('.page-why-label').textContent, row.querySelector('.page-why-note').textContent]; };
   knowledge.focus(); knowledge.click();
   assert.equal(u.get('.workspace-cap-page').hidden, false);
   assert.deepEqual(why(), ['Workspace default · knowledge', "dev doesn't choose a knowledge capability; it resolves the workspace's default."]);
   key(u, u.doc.activeElement, 'Escape');
-  assert.equal(u.doc.activeElement.dataset.focusKey, 'core:knowledge', 'back to the core row');
-  caps.querySelector('[data-capability="nw-release-tooling"]').click();
+  assert.equal(u.doc.activeElement.dataset.capability, 'oats.okf', 'back to the core row');
+  u.get('.soul-capabilities .cap-line[data-capability="nw-release-tooling"]').click();
   assert.deepEqual(why(), ['Declared by the soul', 'dev declares it.']);
   key(u, u.doc.activeElement, 'Escape');
-  caps.querySelector('[data-capability="nw-house-style"]').click();
+  u.get('.soul-capabilities .cap-line[data-capability="nw-house-style"]').click();
   assert.deepEqual(why(), ['Workspace default', "dev doesn't declare it; it resolves the workspace's default."]);
 });
 
@@ -475,25 +445,29 @@ const factsSouls = JSON.parse(readFileSync(new URL('./fixtures/workspace-v2/desk
 const factsRow = (name, extra = {}) => { const k = factsSouls.find(r => r.name === name); return { ...soul, name, spawnable: k.spawnable, problem: k.problem, file: k.file, ...extra }; };
 const FACTS_CLI = { ...CLI, features: ['operations', 'desktop-facts'] };
 
-test('kernel #217: a soul a spawn here would refuse says why on its card and page; Spawn is disabled', async t => {
+test('kernel #217: a soul a spawn here would refuse says why on its card and on its page (Ready); New agent is disabled', async t => {
   const refused = factsRow('campaign-writer'), message = refused.problem.message;
   assert.equal(refused.problem.code, 'E_SOUL_DISABLED', 'the capture disables campaign-writer on this machine');
-  const u = await fixture(t, { cli: FACTS_CLI, agents: [soul, refused], instances: [{ instance: 'campaign-writer-1', agent: 'campaign-writer', agentsRoot: refused.agentsRoot, running: true, home: '/h/cw-1' }] });
-  const tile = name => u.get(`.soul-card[data-agent="${name}"]`).parentElement;
-  assert.equal(tile('dev').querySelector('.sproblem'), null);
-  assert.equal(tile('campaign-writer').querySelector('.sproblem').textContent, `Can't spawn here · ${message}`);
-  // The refusal does not hide what runs: its count is a second, muted line in the same fixed-height foot.
-  const lines = tile('campaign-writer').querySelector('.sfoot > .sfoot-lines');
-  assert.deepEqual([...lines.children].map(el => [el.className, el.textContent]), [['sproblem', `Can't spawn here · ${message}`], ['sactivity running', '1 instance running']]);
-  const cw = '.soul-card[data-agent="campaign-writer"]';
-  assert.equal(u.css(`${cw} .sfoot-lines .sactivity`).color, 'var(--muted)'); assert.equal(u.css(`${cw} .sfoot-lines`).flexDirection, 'column');
-  assert.equal(u.css(`${cw} .sfoot`).height, '49px', 'the foot keeps its height, so a row of cards does not jump');
-  assert.equal(u.css('.soul-card[data-agent="dev"] .sfoot').height, '49px');
-  const button = tile('campaign-writer').querySelector('.soul-spawn');
-  assert.equal(button.disabled, true); assert.equal(button.title, `Can't spawn here: ${message}`);
-  assert.equal(tile('dev').querySelector('.soul-spawn').disabled, false);
-  u.get('.soul-card[data-agent="campaign-writer"]').click(); await tick(); await tick();
-  assert.equal(u.get('.inspector-refusal').textContent, `Can't spawn here · ${message}`);
+  const u = await fixture(t, { cli: FACTS_CLI, agents: [soul, refused], inspect: body => soulInspection(body.selector.soul),
+    instances: [{ instance: 'campaign-writer-1', agent: 'campaign-writer', agentsRoot: refused.agentsRoot, running: true, home: '/h/cw-1' }] });
+  const card = name => u.get(`.soul-card[data-agent="${name}"]`);
+  assert.equal(card('dev').querySelector('.sproblem'), null);
+  assert.equal(card('campaign-writer').querySelector('.sproblem').textContent, `Can't spawn here · ${message}`);
+  assert.match(card('campaign-writer').getAttribute('aria-description'), new RegExp(`Can't spawn here · ${message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  // Refusing new agents stops none already running: the card keeps their count, under the refusal.
+  assert.deepEqual([...card('campaign-writer').children].map(el => el.className), ['stitle', 'sdesc', 'sproblem', 'sfoot']);
+  assert.equal(card('campaign-writer').querySelector('.sfoot .sactivity').textContent, '1 agent running');
+  assert.match(card('campaign-writer').getAttribute('aria-description'), /1 agent running/);
+  // The table says it in its Ready column; a soul a spawn would not refuse is Ready.
+  u.get('.souls-view [data-view="table"]').click();
+  const ready = name => u.get(`.soul-row-open[data-agent="${name}"]`).closest('tr').cells[5];
+  assert.equal(ready('dev').textContent, 'Ready'); assert.equal(ready('campaign-writer').textContent, message);
+  assert.equal(ready('campaign-writer').className, 'problem');
+  u.get('.souls-view [data-view="grid"]').click();
+  card('campaign-writer').click(); await tick(); await tick();
+  assert.equal(u.get('.soul-ready-line').textContent, message, 'Ready: the one problem, in one sentence');
+  assert.ok(u.get('.soul-ready-line').classList.contains('problem'));
+  assert.match(u.get('.soul-ready-problems').textContent, /E_SOUL_DISABLED/, 'its code behind Details');
   const spawnAct = u.get('.spawn-act'); assert.equal(spawnAct.disabled, true); assert.equal(spawnAct.title, `Can't spawn here: ${message}`);
 });
 
@@ -513,7 +487,10 @@ test("kernel #217: a soul's file opens as its web page, or shows its path when t
 
 test('kernel #217 facts are ignored from a CLI that does not report desktop-facts', async t => {
   const u = await fixture(t, { agents: [factsRow('campaign-writer')] });
-  assert.equal(u.get('.sproblem'), null); assert.equal(u.get('.soul-spawn').disabled, false);
+  assert.equal(u.get('.sproblem'), null);
+  u.get('.souls-view [data-view="table"]').click();
+  const ready = u.get('.soul-row-open').closest('tr').cells[5];
+  assert.equal(ready.textContent, '—', 'no claim either way'); assert.equal(ready.className, 'muted');
 });
 
 test("kernel #217: a capability opened from a soul page adds the catalog's facts for it (description)", async t => {
@@ -523,8 +500,37 @@ test("kernel #217: a capability opened from a soul page adds the catalog's facts
   const coreIds = new Set(Object.values(inspection.layers).map(l => l?.id).filter(Boolean));
   const other = inspection.capabilities.find(c => !coreIds.has(c.id) && described.filter(r => r.name === c.id).length === 1);
   assert.ok(other, 'a composed capability the catalog lists once');
-  u.get(`.soul-cap-row[data-capability="${other.id}"]`).click();
+  u.get(`.soul-capabilities .cap-line[data-capability="${other.id}"]`).click();
   const cap = u.get('.workspace-cap-page');
   assert.equal(cap.querySelector('.page-lede').textContent, `About ${other.id}.`);
   assert.ok([...cap.querySelectorAll('.page-card')].some(c => c.dataset.card === 'As dev resolves it'), 'the soul\'s resolution still leads');
+});
+
+// Review round 1: one readiness rule for the card, the table and the page: the kernel's refusal holds for an attached
+// soul too; only its own launch report is not what runs it.
+test('soulReadiness: a refusal holds for an attached soul; an attached soul\'s launch report is not its problem; no claim without desktop-facts', () => {
+  const facts = { features: ['desktop-facts'] };
+  const refused = { name: 'reviewer', work: 'attached', spawnable: false, problem: { message: 'Requires an owning instance.', code: 'E_SOUL_ATTACHED' } };
+  assert.deepEqual(spawn.soulReadiness(refused, facts), { ready: false, text: 'Requires an owning instance.' });
+  assert.deepEqual(spawn.soulProblem(refused, facts), { text: 'Requires an owning instance.', line: "Can't spawn here · Requires an owning instance." });
+  assert.deepEqual(spawn.soulReadiness({ name: 'reviewer', work: 'attached', spawnable: true }, facts), { ready: true, text: 'Ready' });
+  assert.equal(spawn.soulReadiness(refused, { features: [] }), null, 'this OATS does not say: no claim');
+});
+
+// Review round 2: a catalog read that lands while a capability page covers the soul page still reaches its rows: Back
+// shows each capability's one line, and focus returns to the row that opened the capability.
+test('a catalog that lands while a capability page covers the soul page: Back shows the rows\' descriptions, focus on the row', async t => {
+  const held = deferred();
+  const described = f2('capabilities').result.capabilities.map(r => ({ ...r, description: `About ${r.name}.` }));
+  const u = await fixture(t, { cli: V2_CLI, sync: () => held.promise });
+  u.get('.soul-card').click(); await tick(); await tick();
+  const soulPage = u.get('.workspace-soul-page');
+  assert.equal(soulPage.querySelectorAll('.cap-line-desc').length, 0, 'no catalog yet: no line');
+  soulPage.querySelector('.cap-line[data-capability="nw-house-style"]').click(); await tick();
+  assert.equal(soulPage.hidden, true, 'the capability page covers it');
+  held.resolve(catalogReply(described)); await tick(); await tick(); await tick();
+  key(u, u.doc.activeElement, 'Escape'); await tick();
+  assert.equal(soulPage.hidden, false);
+  assert.equal(soulPage.querySelector('.cap-line[data-capability="nw-house-style"] .cap-line-desc')?.textContent, 'About nw-house-style.');
+  assert.equal(u.doc.activeElement?.dataset.capability, 'nw-house-style', 'focus back on the row');
 });

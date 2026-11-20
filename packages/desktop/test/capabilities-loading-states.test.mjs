@@ -185,7 +185,7 @@ test('opened from a soul before the catalog is read: the page stands with the ca
   const u = await setup(t, { holdReads: true });
   u.q('.soul-card').click(); await settle();
   assert.equal(u.q('.workspace-soul-page').hidden, false, 'the soul page');
-  const row = u.q('.workspace-soul-page .soul-caps [data-capability="nw-house-style"]'); assert.ok(row, 'the soul lists it'); row.click(); await settle();
+  const row = u.q('.workspace-soul-page .soul-capabilities .cap-line[data-capability="nw-house-style"]'); assert.ok(row, 'the soul lists it'); row.click(); await settle();
   const before = pageOf(u); assert.ok(before); assert.equal(before.dataset.capability, 'nw-house-style'); assert.equal(before.dataset.catalogPending, 'true');
   assert.ok(before.querySelector('.page-lede.skeleton'), 'a lede-sized line where the description goes');
   assert.ok(before.querySelector('.page-facts-skeleton[aria-hidden=true]'), 'a facts-sized block in Comes from'); assert.equal(before.querySelector('.page-notice').childElementCount, 0);
@@ -305,7 +305,7 @@ test('a catalog that failed with nothing held shows the failed treatment on the 
   await u.resolveRead(0, failedRead()); await u.tab('capabilities');
   // Open a page from a soul (the table has nothing to open from).
   u.doc.getElementById('workspace-tab-souls').click(); await settle(); u.q('.soul-card').click(); await settle();
-  u.q('.workspace-soul-page .soul-caps [data-capability="nw-house-style"]').click(); await settle();
+  u.q('.workspace-soul-page .soul-capabilities .cap-line[data-capability="nw-house-style"]').click(); await settle();
   const failed = pageOf(u).querySelector('.page-notice .loading-failed'); assert.ok(failed, 'the failed block under the bar');
   assert.equal(failed.querySelector('.loading-failed-message').textContent, 'The workspace command exceeded its time limit.'); assert.equal(failed.querySelector('.loading-failed-code').textContent, 'E_CLI_TIMEOUT');
   const retry = failed.querySelector('.loading-retry'); retry.focus(); retry.click(); await settle();

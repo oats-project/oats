@@ -6,28 +6,29 @@
 import { createSoulInspector, inspectorCSS } from "../soul-inspector.mjs";
 import { createWorkspaceDiscovery, discoveryCSS, workspaceTabs } from "../workspace-discovery.mjs";
 import { capabilityRow } from "../workspace-catalog.mjs";
-import { renderCapabilityPage, renderSoulCapabilities, renderSoulCore, capabilityPageCSS, pageCardCSS, soulCapabilitiesCSS, catalogNotice, catalogNoticeKind, updateCatalogNotice } from "../capability-page.mjs";
+import { renderCapabilityPage, capabilityPageCSS, pageCardCSS, soulCapabilitiesCSS, catalogNotice, catalogNoticeKind, updateCatalogNotice } from "../capability-page.mjs";
 import { sameRepo } from "../../../client/repo-moves.mjs";
-import { spawnRefusal, cantSpawnLine, soulMatches } from "../../../client/soul-facts.mjs";
+import { spawnRefusal, cantSpawnLine, soulMatches, desktopFacts, soulFacts } from "../../../client/soul-facts.mjs";
+import { soulRole, compareSoulsByRole, SOUL_ROLE_WORDS } from "../../../client/soul-role.mjs";
 import { createCapabilityContents, capabilityContentsCSS } from "../capability-contents.mjs";
 import { sourceQuoteCSS } from "../source-quote.mjs";
+import { sourceText } from "../source-chip.mjs";
+import { memberNames } from "../../../client/capability-rows.mjs";
 import { soulInstructionsCSS } from "../soul-instructions.mjs";
 import { capabilitySelector, sameSelector } from "../../../client/capability-show-contract.mjs";
 import { MARKDOWN_CSS } from "./markdown.mjs";
-import { runtimeState } from "../../../client/instance-presentation.mjs";
 import { deploymentUnavailableText } from "../../../client/deployment-facts.mjs";
-import { DESKTOP_TERMS } from "../desktop-terms.mjs";
+import { DESKTOP_TERMS, DESKTOP_NOUNS } from "../desktop-terms.mjs";
 import { createSpawnDialog, spawnDialogCSS } from "../spawn-dialog.mjs";
 import { SPAWN_DIALOG_KEYS, SPAWN_JUMPS, registerSpawnDialogKeys, ariaKeyShortcuts } from "../spawn-dialog-keys.mjs";
 import { pendingPlacement } from "../spawn-jobs.mjs";
 import { spawnProblem, catalogProblem, soulCatalogFailure } from "../../../client/spawn-messages.mjs";
 import { spawnText } from "../spawn-words.mjs";
-import { createSoulMark, createRuntimeBadge, identityCSS } from "../identity-marks.mjs";
+import { identityCSS } from "../identity-marks.mjs";
 import { shownLaunch, launchHarnessName } from "../../../client/launch-view.mjs";
 import { harnessOf } from "../../../client/harness-names.mjs";
 import { memberState } from "../workspace-catalog.mjs";
 import { iconElement } from "../shell-icons.mjs";
-import { ABOUT_COPY, createAboutDialog } from "../about-dialog.mjs";
 import { groupHeading, groupHeadingCSS } from "../group-heading.mjs";
 import {
   apiJson, postJson, ensureTheme,
@@ -65,6 +66,8 @@ const CSS = `
 .souls-sum { color:var(--muted); font-size:12px; }
 /* The grid's stale line (desktop/loading-states) sits between the toolbar and the scroller; nothing when empty. */
 .souls-notice { flex:none; padding:0 20px; }
+.souls-lede { flex:none; margin:0 0 12px; padding:0 20px; max-width:80ch; color:var(--muted); font-size:12.5px; line-height:1.45; }
+.souls-lede[hidden] { display:none; }
 .souls-notice:empty, .souls-notice[hidden] { display:none; }
 .souls-notice .loading-notice { margin:0 0 10px; }
 .souls-bar .loading-refreshing { margin-left:auto; }
@@ -75,59 +78,54 @@ const CSS = `
 /* Visually hidden, announced; anchored at its containing block's origin so it can never stretch a scroller or the document (spec G). */
 .workspace-sr-only { position:absolute; top:0; left:0; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 .souls-bar .souls-bar-lead { flex:1 1 auto; }
-/* Workspace v4.1 (board 3): cards grouped by repository (the default) or team; each group
-   opens with its header (icon, monospace name, a muted qualifier). Souls of a member that
-   has not joined are listed apart, with the reason. */
+/* Souls (the Desktop UI rework, slice 3a): grouped by where a soul comes from (the workspace's repository,
+   then each package), each group in kind order (packages/client/soul-role.mjs), as cards or as a table
+   (v, or the toolbar's Grid | Table). Souls of a member that has not joined are listed apart, with the reason. */
 .souls-grid { position:relative; flex:1; min-height:0; min-width:0; overflow-y:auto; overscroll-behavior:contain; padding:0 20px 16px; display:flex; flex-direction:column; gap:14px; border-top:1px solid transparent; }
 /* The bar above is outside this scroller, so it never moves; once cards scroll under it, a 1px edge (spec G, sticky-top.mjs). */
 .souls-grid.is-scrolled { border-top-color:var(--border); }
-.souls-group { display:flex; flex-direction:column; gap:14px; min-width:0; }
-.souls-group + .souls-group { padding-top:10px; }
+.souls-group { display:flex; flex-direction:column; gap:12px; min-width:0; }
+.souls-group + .souls-group { padding-top:12px; }
 /* The group heading (icon, monospace name, muted qualifier) is group-heading.mjs's, shared with Capabilities. */
 ${groupHeadingCSS}
-.souls-group-cards { display:grid; gap:14px; grid-template-columns:repeat(auto-fill, minmax(min(240px, 100%), 1fr)); align-content:start; }
-.soul-card { display:flex; flex-direction:column; min-width:0; padding:0; overflow:hidden; background:var(--surface); border:1px solid var(--border); border-radius:10px;
+.souls-group-cards { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(min(240px, 100%), 1fr)); align-content:start; }
+/* A card: the name, what it does (two lines at most; the soul's page has the whole text), then its agents and kind. */
+.soul-card { display:flex; flex-direction:column; gap:6px; min-width:0; padding:14px 16px; box-sizing:border-box; background:var(--surface); border:1px solid var(--border); border-radius:10px;
              cursor:pointer; text-align:left; font:inherit; color:var(--fg); }
+.oats-view .souls button.soul-card { height:auto; min-height:0; font-weight:400; line-height:normal; }
 .soul-card:hover { border-color:var(--sel-border); }
 .soul-card.open { border-color:var(--sel-border); box-shadow:0 0 0 1px var(--sel-border); }
 .soul-card.unavailable { cursor:default; }
+.soul-card .stitle { font-size:13.5px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .soul-card.unavailable .stitle { color:var(--muted); }
-.soul-card .sbody { display:flex; flex-direction:column; gap:10px; padding:14px 14px 12px; min-width:0; }
-.soul-card .sname { display:flex; align-items:center; gap:10px; min-width:0; }
-.soul-card .sidentity { display:flex; flex-direction:column; min-width:0; flex:1; }
-.soul-card .stitle { font-size:13px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.soul-card .scontext { color:var(--muted); font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.soul-card .sname .glyph { width:32px; height:32px; flex:none; border-radius:8px; font-size:13px; font-weight:700; }
-.soul-card .sname .runtime-badge { width:20px; height:20px; font-size:10px; }
-/* Two lines at most; the soul's page carries the whole text. */
 .soul-card .sdesc { margin:0; color:var(--fg); font-size:12.5px; line-height:1.45; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow-wrap:anywhere; }
 .soul-card .sdesc:empty { display:none; }
-/* Chips say what they are: a muted label, then the value. */
-.soul-card .schips { display:flex; flex-wrap:wrap; gap:6px; min-width:0; }
-.soul-card .schip { display:inline-flex; align-items:center; gap:5px; max-width:100%; height:22px; padding:0 7px; border-radius:5px; background:var(--tag-bg); color:var(--fg); font-size:11px; white-space:nowrap; box-sizing:border-box; }
-.soul-card .schip-key { color:var(--muted); }
-.soul-card .schip b { font-weight:650; overflow:hidden; text-overflow:ellipsis; }
-/* Foot: a hairline that spans the card, then one 48px row whose centre line the Spawn button
-   shares (24px high: 12px clear of the hairline and of the card's edge). */
-.soul-card .sfoot { display:flex; align-items:center; gap:10px; box-sizing:border-box; height:49px; margin-top:auto; padding:0 14px; border-top:1px solid var(--border); font-size:12px; line-height:16px; }
-.soul-card .sactivity { display:inline-flex; align-items:center; gap:6px; min-width:0; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.soul-card .sfoot { display:flex; align-items:center; gap:0; min-width:0; margin-top:auto; padding-top:4px; color:var(--muted); font-size:12px; line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.soul-card .sactivity { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .soul-card .sactivity.running { color:var(--fg); font-weight:600; }
-.soul-card .sactivity.running::before { content:""; flex:none; width:7px; height:7px; border-radius:50%; background:var(--live); }
-.soul-card .sproblem { min-width:0; color:var(--warn); font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-/* A refused soul says why, then (a muted second line inside the same 48px row) what still runs. */
-.soul-card .sfoot-lines { display:flex; flex-direction:column; gap:2px; min-width:0; }
-.soul-card .sfoot-lines .sactivity { font-size:11.5px; line-height:15px; color:var(--muted); font-weight:400; }
-.soul-card .schip-note { color:var(--muted); font-weight:400; }
-/* A card and its Spawn button share one grid cell (no nested buttons); the
-   button sits in the card's foot, whose facts leave it room. Its bottom margin
-   is the card's 1px edge plus the 12px under a 24px button in the 48px row. */
-.soul-tile { display:grid; min-width:0; }
-.soul-tile > .soul-card { grid-area:1/1; }
-.soul-tile.can-spawn > .soul-card .sfoot { padding-right:100px; }
-.oats-view .souls .soul-tile > button.soul-spawn { grid-area:1/1; align-self:end; justify-self:end; display:inline-flex; align-items:center; gap:4px; box-sizing:border-box; height:24px; min-height:24px; margin:0 14px 13px 0; padding:0 9px;
-  border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--fg); font-weight:600; font-size:12px; line-height:normal; font-family:var(--ui-font,system-ui); }
-.oats-view .souls .soul-tile > button.soul-spawn:hover:not(:disabled) { background:var(--surface-2); }
-.oats-view .souls .soul-tile > button.soul-spawn:disabled { color:var(--muted); }
+.soul-card .sactivity.running::before { content:""; display:inline-block; width:7px; height:7px; margin-right:6px; border-radius:50%; background:var(--live); vertical-align:1px; }
+.soul-card .skind { flex:none; margin-left:.35em; }
+.soul-card .sproblem { display:block; min-width:0; margin-top:auto; padding-top:4px; color:var(--warn); font-size:12px; font-weight:600; line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.soul-card .sproblem + .sfoot { margin-top:0; padding-top:2px; }
+/* The table: the same souls as rows, the same groups as heading rows. The name is the row's one button. */
+.souls-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12.5px; color:var(--fg); }
+.souls-table th, .souls-table td { padding:7px 10px; text-align:left; vertical-align:top; border-bottom:1px solid var(--border); overflow:hidden; text-overflow:ellipsis; }
+.souls-table thead th { position:sticky; top:0; z-index:1; background:var(--bg); color:var(--muted); font-size:11.5px; font-weight:600; }
+.souls-table col.c-name { width:22%; } .souls-table col.c-kind { width:10%; } .souls-table col.c-agents { width:9%; }
+.souls-table col.c-launch { width:17%; } .souls-table col.c-ready { width:14%; }
+.souls-table tbody th.souls-table-group { padding-top:16px; border-bottom:0; color:var(--fg); font-weight:400; }
+.souls-table tbody th.souls-table-group .souls-group-title { padding:0; }
+.souls-table tbody tr.soul-row:hover td { background:var(--surface); }
+.souls-table td.what { color:var(--fg); white-space:normal; overflow-wrap:anywhere; }
+.souls-table td.muted, .souls-table td .muted { color:var(--muted); }
+.souls-table td.problem { color:var(--warn); font-weight:600; white-space:normal; overflow-wrap:anywhere; }
+/* Two lines at most: the full sentence is the cell's title and the soul's page. */
+.souls-table td.problem .clamp { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+.oats-view .souls .souls-table button.soul-row-open { display:block; max-width:100%; height:auto; min-height:0; margin:0; padding:0; border:0; background:none; color:var(--fg); font:inherit; font-weight:650; text-align:left;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+.oats-view .souls .souls-table button.soul-row-open:hover { text-decoration:underline; }
+.souls-table tr.open td { background:var(--sel); }
+.souls-table tr.unavailable td { color:var(--muted); }
 .oats-view .souls button.spawn-act:not(:disabled), .oats-view .souls button.fspawn:not(:disabled) { background:var(--primary-bg); color:var(--primary-fg); border-color:var(--primary-bg); }
 .souls-grid[hidden] { display:none; }
 /* The Machines tab (the Deployments page of before, views/hierarchy.mjs): its view fills the panel, as it filled the page. */
@@ -142,6 +140,10 @@ ${groupHeadingCSS}
 `;
 
 let state = null;
+
+/** The Souls page's first line: what a soul is, and how the page is ordered (it replaces "About souls"). */
+export const SOULS_LEDE = `A soul is what an ${DESKTOP_NOUNS.instance} is made of: its instructions, its skills and capabilities, and the knowledge it keeps. `
+  + "Grouped by where each comes from; maintainers first, then experts, developers and operations.";
 
 /* Quick Open selects a soul for inspection; launch remains explicit. */
 let pendingPreselect = null;
@@ -318,6 +320,19 @@ function applyCapability(s) {
   openCapability(s, matches[0], null);
 }
 
+/** What a soul page's capability row says besides its name: "by <source>" (the source chip's words: a package, a
+ * member repository by its name; nothing for the workspace's own repository) and the one line of the catalog's row of
+ * that name, when exactly one is listed. */
+function soulCapabilityFacts(s, cap) {
+  const { catalog, status } = s.discovery?.context() ?? {};
+  const row = capabilityRow(cap);
+  const listed = Array.isArray(catalog) ? catalog.filter(r => r?.name === row.name) : [];
+  const description = listed.length === 1 && typeof listed[0].description === "string" && listed[0].description ? listed[0].description : null;
+  // Until a rule establishes "official" (slice 3b), the workspace's own repository goes unsaid and every other source is named.
+  const own = row.kind === "member" && !!row.repoKey && sameRepo(row.repoKey, hostKey(s));
+  return { by: own ? null : sourceText(row, memberNames(status)).name || null, description };
+}
+
 /** A page (a soul's, a capability's or a team's) replaces the list it was opened from
  * while it is open: mode null | "soul" | "capability" | "team". */
 function showPage(s, mode) {
@@ -330,6 +345,7 @@ function showPage(s, mode) {
   s.q("souls-grid").hidden = !!mode || !souls;
   s.q("souls-bar").hidden = !!mode || !souls;
   s.q("souls-notice").hidden = !!mode || !souls; // the grid's stale line belongs to the grid
+  s.q("souls-lede").hidden = !!mode || !souls;
   const machines = s.discovery?.tab === "machines";
   s.q("workspace-machines-panel").hidden = !!mode || !machines;
   s.q("workspace-discovery").hidden = !!mode || souls || machines;
@@ -520,7 +536,7 @@ function closeCapability(s, { restoreFocus = false } = {}) {
 export function mount(el, ctx) {
   ensureTheme(el.ownerDocument);
   // ctx.spawnTiming (optional, harness only): { previewDelay, busyDelay, suggestDelay, wait } — never set by the shell.
-  const s = state = { el, ctx, souls: { agents: [] }, panelInstances: [], filterText: "", groupBy: "repo", sel: null, timers: [], unsubWs: null, alive: true, spawnOp: 0, rosterReq: 0, rosterGen: null,
+  const s = state = { el, ctx, souls: { agents: [] }, panelInstances: [], filterText: "", view: rememberedSoulsView(currentWorkspace()), sel: null, timers: [], unsubWs: null, alive: true, spawnOp: 0, rosterReq: 0, rosterGen: null,
     waitOpts: ctx.spawnTiming?.wait };
   el.innerHTML = `
     <div class="oats-view" style="display:block">
@@ -545,10 +561,10 @@ ${spawnDialogCSS}</style>
             <div class="souls-bar ws-toolbar">
               <label class="ws-search"><span class="workspace-sr-only">Search souls</span><input class="field filter" type="search" placeholder="Search souls" autocomplete="off"></label>
               <div class="ws-toolbar-lead souls-bar-lead"></div>
-              <span class="ws-toolbar-label" aria-hidden="true">Group by</span>
-              <div class="ws-segmented souls-group-by" role="group" aria-label="Group souls by"><button type="button" data-group-by="repo" aria-pressed="true">Repo</button><button type="button" data-group-by="team" aria-pressed="false">Team</button></div>
+              <div class="ws-segmented souls-view" role="group" aria-label="Show souls as"><button type="button" data-view="grid" aria-pressed="true" aria-keyshortcuts="V" title="Grid (V)">Grid</button><button type="button" data-view="table" aria-pressed="false" aria-keyshortcuts="V" title="Table (V)">Table</button></div>
               <span class="souls-sum workspace-sr-only" role="status"></span>
             </div>
+            <p class="souls-lede">${SOULS_LEDE}</p>
             <div class="souls-notice"></div>
             <div class="souls-grid"></div>
             <div class="workspace-machines-panel" hidden></div>
@@ -588,6 +604,11 @@ ${spawnDialogCSS}</style>
       inspectSoul(s, matches[0]); return true;
     },
     canLaunch: agent => canLaunchSoul(s, agent),
+    // The one current roster row of a soul, by its composite identity (a poll replaces the rows), else null.
+    currentRow: agent => {
+      const rows = s.souls.agents.filter(x => x.name === agent.name && (x.agentsRoot || "") === (agent.agentsRoot || "") && (x.server || "") === (agent.server || ""));
+      return rows.length === 1 && s.rosterGen === workspaceGeneration() ? rows[0] : null;
+    },
     spawnRefusal: agent => spawnRefusal(agent, cliStatus()),
     launchReason: agent => spawnRefusal(agent, cliStatus()) ? `Can't spawn here: ${spawnRefusal(agent, cliStatus())}` : cliProbePending() ? "Checking for a compatible oats CLI — spawning enables once it is verified" : "Requires a compatible installed OATS CLI and a current standalone soul.",
     available: () => cliAvailable() && inspectSupported(cliStatus()),
@@ -609,12 +630,10 @@ ${spawnDialogCSS}</style>
   s.page = createSoulInspector(s.q("workspace-soul-page"), {
     ...inspectorOptions, layout: "page", backLabel: "Souls",
     openInstance: instance => s.inspector.show({ instance, selector: { home: instance.home } }),
-    // A soul's capabilities: the Capabilities view's own table; a row opens the capability's page.
-    capabilityTable: (host, entries, { soul }) => renderSoulCapabilities(host, { entries, ...s.discovery.context(),
-      onOpen: (row, entry) => openCapability(s, row, soul, entry) }),
-    // Its core capabilities: the same row grammar and source chips; a filled row opens as a table row does.
-    coreTable: (host, entries, { onOpen }) => renderSoulCore(host, { entries, ...s.discovery.context(), onOpen }),
-    openCapability: (cap, soul, entry) => openCapability(s, capabilityRow(cap), soul, entry),
+    // A capability row's "by <source>" and one line (the catalog's description of the one row of that name).
+    capabilityFacts: cap => soulCapabilityFacts(s, cap),
+    // A row opens the capability's page; a capability of the soul's own repository keeps that mark there.
+    openCapability: (cap, soul, entry) => openCapability(s, { ...capabilityRow(cap), ...(entry?.repoOwned ? { private: true } : {}) }, soul, entry),
     closed: ({ restoreFocus } = {}) => {
       const ref = s.inspectRef; s.inspectRef = null;
       if (!s.alive) return;
@@ -629,15 +648,14 @@ ${spawnDialogCSS}</style>
   s.discovery = createWorkspaceDiscovery(s.q("workspace-header"), s.q("workspace-discovery"), {
     ctx, soulsPanel: s.q("souls-grid"), machinesPanel: s.q("workspace-machines-panel"), onIntent: () => { if (!s.handoffTab) nextSelectionIntent(); },
     // A catalog read settled (or began, or was reset): the open page follows, and a capability handoff waiting for it opens.
-    onCatalog: () => { syncCapabilityPage(s); applyCapability(s); },
+    onCatalog: () => { syncCapabilityPage(s); applyCapability(s); s.page?.syncCatalog(); },
     rosterState: () => rosterSettledState(s), // "Used by" claims are roster-derived: none while the roster is not settled-good
     onOpenCapability: row => openCapability(s, row, null),
     onTeamMember: (action, member) => void teamMemberAction(s, action, member),
     onOpenTeam: label => openTeam(s, label),
     onTab: tab => {
-      if (tab !== "souls") s.aboutSouls?.close({ focus: "none" }); // leaving Souls closes its dialog, moving no focus
       s.spawnOp++; closeSpawnModal(s); s.inspector.close(); closeCapability(s); closeTeam(s); s.page.close();
-      s.q("souls-bar").hidden = tab !== "souls"; s.q("souls-notice").hidden = tab !== "souls";
+      s.q("souls-bar").hidden = tab !== "souls"; s.q("souls-notice").hidden = tab !== "souls"; s.q("souls-lede").hidden = tab !== "souls";
       syncMachines(s);
     },
   });
@@ -656,20 +674,14 @@ ${spawnDialogCSS}</style>
   applyWorkspaceTab(s);
   // The page opens on Souls unless a handoff chose another tab: then the Souls bar and its notice wait for Souls, and
   // on Machines its view mounts (onTab runs on changes only).
-  if (s.discovery.tab !== "souls") { s.q("souls-bar").hidden = true; s.q("souls-notice").hidden = true; }
+  if (s.discovery.tab !== "souls") { s.q("souls-bar").hidden = true; s.q("souls-notice").hidden = true; s.q("souls-lede").hidden = true; }
   syncMachines(s);
   applyCapability(s); // a handoff made before the mount: its tab now, its page when the catalog lands
   s.q("filter").addEventListener("input", (e) => { s.filterText = e.target.value; renderGrid(s); });
   s.q("filter").before(iconElement(el.ownerDocument, "search", { size: 14 }));
-  // "About souls": the Souls toolbar's "i" (about-dialog.mjs), at the row's end after Group by; built once.
-  s.aboutSouls = createAboutDialog(el.ownerDocument, { copy: ABOUT_COPY.souls, id: "workspace-souls-about", onIntent: () => nextSelectionIntent() });
-  s.q("souls-group-by").after(s.aboutSouls.button);
-  for (const button of s.q("souls-group-by").querySelectorAll("button")) button.addEventListener("click", () => {
-    if (s.groupBy === button.dataset.groupBy) return;
-    s.groupBy = button.dataset.groupBy;
-    for (const other of s.q("souls-group-by").querySelectorAll("button")) other.setAttribute("aria-pressed", String(other === button));
-    renderGrid(s);
-  });
+  // Grid | Table (v): the souls as cards or as rows, remembered per view (rememberSoulsView).
+  for (const button of s.q("souls-view").querySelectorAll("button")) button.addEventListener("click", () => setSoulsView(s, button.dataset.view));
+  syncViewSwitch(s);
   // Esc on a page goes back (never from a text field, a disclosure's summary, or the spawn modal).
   const pageEscape = (event, back) => {
     if (event.key !== "Escape" || event.defaultPrevented || event.target.closest?.(".spawn-modal")) return;
@@ -689,6 +701,7 @@ ${spawnDialogCSS}</style>
   s.viewActions = [
     { id: "spawn.filter", defaultChord: "/", run: () => s.q("filter").focus() },
     { id: "spawn.brain", defaultChord: "B", run: () => brainOfFocusedCard(s) },
+    { id: "spawn.view", defaultChord: "V", run: () => setSoulsView(s, s.view === "table" ? "grid" : "table", { keepFocus: true }) },
   ];
   const viewRoot = el.querySelector(".souls");
   viewRoot.addEventListener("keydown", (e) => {
@@ -702,7 +715,8 @@ ${spawnDialogCSS}</style>
     // selector must not focus the filter behind the open dialog, and 'B'
     // must not open a card's Brain underneath it.
     const editable = e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable;
-    if (s.discovery.tab !== "souls" || editable || e.target.closest?.(".soul-inspector") || e.target.closest?.(".soul-card") || e.target.closest?.(".spawn-modal")) return; // card keys are onGridKey's
+    // A page open over the grid (a soul's, a capability's) has its own keys: v never turns the hidden grid under it.
+    if (s.discovery.tab !== "souls" || editable || e.target.closest?.(".soul-inspector") || e.target.closest?.(".workspace-page") || e.target.closest?.(".soul-item") || e.target.closest?.(".spawn-modal")) return; // card keys are onGridKey's
     const hit = resolveViewKey(e, s.viewActions);
     if (hit) { e.preventDefault(); s.viewActions.find((a) => a.id === hit)?.run(); }
   });
@@ -713,6 +727,7 @@ ${spawnDialogCSS}</style>
   s.disposers = [
     registerAction({ id: "spawn.filter", label: "Souls: focus the filter", context: "view:spawn", defaultChord: "/", run: () => s.q("filter").focus() }),
     registerAction({ id: "spawn.brain", label: "Souls: open files of focused card", context: "view:spawn", defaultChord: "B", run: () => brainOfFocusedCard(s) }),
+    registerAction({ id: "spawn.view", label: "Souls: show as a grid or a table", context: "view:spawn", defaultChord: "V", run: () => setSoulsView(s, s.view === "table" ? "grid" : "table", { keepFocus: true }) }),
   ];
   // CLI degradation: refresh once on mount and re-render the grid whenever
   // availability flips — spawn buttons disable consistently with the card.
@@ -733,7 +748,9 @@ ${spawnDialogCSS}</style>
     // immediately, remove its DOM before B loads, and clear A's agentsRoot.
     s.spawnOp++;
     s.rosterReq++; s.rosterGen = null; s.souls = { agents: [] }; s.panelInstances = []; s.spawnDeployments = []; s.spawnViews = [];
-    s.discovery.reset(); s.aboutSouls.close({ focus: "none" });
+    s.discovery.reset();
+    // The grid or table this view was left in (rememberSoulsView).
+    s.view = rememberedSoulsView(currentWorkspace()); syncViewSwitch(s);
     s.inspector.close(); closeCapability(s); closeTeam(s, { gone: true }); s.page.close();
     closeSpawnModal(s, { repaint: false }); // the switch replaces the grid below
     // Another workspace's cards leave at once; the new one is pending (a skeleton after 150ms, never a text block nor an empty message).
@@ -769,7 +786,7 @@ export function unmount() {
   state.presentation?.dispose();
   state.gridState?.dispose();
   if (state.machines) { state.machines = false; unmountMachines(); }
-  state.discovery.dispose(); state.aboutSouls?.dispose();
+  state.discovery.dispose();
   state.timers.forEach(clearInterval);
   (state.disposers || []).forEach((off) => { try { off(); } catch {} });
   if (state.unsubWs) state.unsubWs();
@@ -877,16 +894,17 @@ function settleGridState(s, souls) {
   if (!agents.length && !souls.catalog && s.deployment?.status === "observed") { load.defer({ keepSkeleton: true }); return; }
   load.succeed({ observedAt, empty: !agents.length });
 }
-/** Pending: one group's worth of card skeletons at the real card size — one row plus one. */
+/** Pending: one group's worth of card skeletons at the real card size — one row plus one; in the table, its rows. */
 function gridSkeleton(s) {
   const grid = s.q("souls-grid"), doc = grid.ownerDocument;
-  const width = grid.clientWidth || 0, columns = Math.max(1, Math.floor((width - 40 + 14) / (240 + 14)));
+  const width = grid.clientWidth || 0, columns = Math.max(1, Math.floor((width - 40 + 12) / (240 + 12)));
   const section = doc.createElement("section"); section.className = "souls-group skeleton-souls-group";
   const title = doc.createElement("div"); title.className = "souls-group-title";
   const bone = doc.createElement("span"); bone.className = "skeleton skeleton-line skeleton-group-title"; title.append(bone);
-  const cards = doc.createElement("div"); cards.className = "souls-group-cards";
-  for (let i = 0; i < columns + 1; i++) cards.append(skeleton(doc, "soul-card"));
-  section.append(title, cards); section.setAttribute("aria-hidden", "true"); section.dataset.skeleton = "soul-cards";
+  const table = s.view === "table";
+  const items = doc.createElement("div"); items.className = table ? "souls-table-skeleton" : "souls-group-cards";
+  for (let i = 0; i < (table ? 6 : columns + 1); i++) items.append(table ? skeleton(doc, "table-row", { columns: SOULS_TABLE_COLUMNS.length }) : skeleton(doc, "soul-card"));
+  section.append(title, items); section.setAttribute("aria-hidden", "true"); section.dataset.skeleton = table ? "soul-rows" : "soul-cards";
   return section;
 }
 
@@ -912,7 +930,7 @@ function renderGrid(s, { restoreFocus = true } = {}) {
   if (noCli && s.sel) closeSpawnModal(s, { repaint: false });
   // capture the focused card's identity before the rebuild wipes the DOM
   const active = s.el?.ownerDocument?.activeElement;
-  const focused = grid.contains?.(active) ? active?.closest?.(".soul-card") : null;
+  const focused = grid.contains?.(active) ? active?.closest?.(".soul-item") : null;
   const focusedRef = focused ? { name: focused.dataset.agent, agentsRoot: focused.dataset.root, server: focused.dataset.server } : null;
   // Recovery is shared by every Workspace section, not hidden inside the
   // Souls tab. Its action/focus owner survives routine roster repaints.
@@ -954,12 +972,13 @@ function renderGrid(s, { restoreFocus = true } = {}) {
     s.gridSignature = null; return;
   }
   // Skip unchanged repaints: an identical poll never rebuilds the cards under focus or a hover.
-  const signature = JSON.stringify([hasData, unobserved && s.deployment, s.souls.agents, s.filterText, s.groupBy, noCli, cliKnownUnavailable(), cliProbePending(), cliStatus()?.features ?? null,
+  const signature = JSON.stringify([hasData, unobserved && s.deployment, s.souls.agents, s.filterText, s.view, noCli, cliKnownUnavailable(), cliProbePending(), cliStatus()?.features ?? null,
     s.panelInstances.map((i) => [i.instance, i.agent, i.agentsRoot, i.running === true]), s.deployment?.workspaceStatus?.members ?? null,
     s.selAgent && [s.selAgent.name, s.selAgent.agentsRoot, s.selAgent.server], s.inspectRef && [s.inspectRef.name, s.inspectRef.agentsRoot, s.inspectRef.server]]);
   if (signature === s.gridSignature && grid.childElementCount) return;
   s.gridSignature = signature;
   grid.innerHTML = "";
+  grid.dataset.view = s.view;
   if (!list.length) {
     const empty = grid.ownerDocument.createElement("div");
     empty.className = "empty"; empty.style.gridColumn = "1/-1";
@@ -970,40 +989,27 @@ function renderGrid(s, { restoreFocus = true } = {}) {
     grid.append(empty);
     return;
   }
-  // Workspace v4.1 (board 3): grouped by where the soul comes from (a member repository,
-  // a package, an external source; the default) or by its default team (team model v2
-  // `defaultTeam`, else 0.29's `team`); groups ranked, cards in name order. Souls of a
-  // member that is not confirmed are listed last, apart, with the member's reason
-  // (workspace status).
-  const doc = grid.ownerDocument;
-  const byRepo = s.groupBy === "repo";
+  // Grouped by where the soul comes from (the workspace's own repository first, its other members, each package,
+  // the external souls), and inside a group in kind order: maintainers, experts, developers, operations, then the
+  // rest, each by name (packages/client/soul-role.mjs). Souls of a member that is not confirmed are listed last,
+  // apart, with the member's reason (workspace status).
   const groups = new Map();
-  for (const a of [...list].sort((a, b) => String(a.name).localeCompare(String(b.name)))) {
-    const g = byRepo ? repoGroup(s, a) : { key: `team:${teamGroup(a)}`, rank: 0, icon: "users", name: teamGroup(a), qualifier: "", mono: false };
+  for (const a of [...list].sort(compareSoulsByRole)) {
+    const g = repoGroup(s, a);
     if (!groups.has(g.key)) groups.set(g.key, { ...g, souls: [] });
     groups.get(g.key).souls.push(a);
   }
-  const group = (g, cards, { warn = false } = {}) => {
-    const section = doc.createElement("section"); section.className = "souls-group";
-    // A team label reads as words (mono: false).
-    const heading = groupHeading(doc, { icon: g.icon, name: g.name, note: g.qualifier, mono: g.mono !== false, warn });
-    heading.id = `souls-group-${grid.querySelectorAll(".souls-group").length}`; section.setAttribute("aria-labelledby", heading.id);
-    const body = doc.createElement("div"); body.className = "souls-group-cards";
-    section.append(heading, body); body.append(...cards); grid.append(section);
-  };
   const count = (n) => `${n} ${n === 1 ? "soul" : "souls"}`;
-  for (const g of [...groups.values()].sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))) {
-    group({ ...g, qualifier: [g.qualifier, count(g.souls.length)].filter(Boolean).join(" · ") }, g.souls.map((a) => soulCard(s, a, byRepo ? null : g.name)));
-  }
-  for (const { member, state: why, souls } of unavailableMembers(s)) {
-    const shown = souls.filter((name) => matches(s, { name }));
-    if (s.filterText && !shown.length) continue;
-    group({ icon: "warning", name: "Not available", qualifier: `${member.name || member.key} ${why.why}`, mono: false }, shown.map((name) => unavailableCard(s, name, member)), { warn: true });
-  }
+  const shown = [...groups.values()].sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
+    .map((g) => ({ ...g, qualifier: [g.qualifier, count(g.souls.length)].filter(Boolean).join(" · ") }));
+  const unavailable = unavailableMembers(s).map(({ member, state: why, souls }) => ({ member, why, names: souls.filter((name) => matches(s, { name })) }))
+    .filter(({ names }) => !s.filterText || names.length);
+  if (s.view === "table") renderTable(s, grid, shown, unavailable);
+  else renderCards(s, grid, shown, unavailable);
   // Roving tabindex across the rebuilt grid: keep the previously focused
-  // card's identity tabbable (and focused) when it survives the repaint,
-  // else the first card enters the tab order.
-  const rebuilt = [...grid.querySelectorAll(".soul-card")];
+  // item's identity tabbable (and focused) when it survives the repaint,
+  // else the first item enters the tab order.
+  const rebuilt = gridCards(s);
   if (rebuilt.length) {
     const restored = focusedRef && rebuilt.find((c) => cardMatches(c, focusedRef));
     rove(restored || rebuilt[0], true);
@@ -1011,17 +1017,60 @@ function renderGrid(s, { restoreFocus = true } = {}) {
   }
 }
 
+/** The grid: a section per group, its heading, then its cards. */
+function renderCards(s, grid, groups, unavailable) {
+  const doc = grid.ownerDocument;
+  const group = (g, cards, { warn = false } = {}) => {
+    const section = doc.createElement("section"); section.className = "souls-group";
+    // Group names read as words (D2: monospace only in terminals).
+    const heading = groupHeading(doc, { icon: g.icon, name: g.name, note: g.qualifier, mono: false, warn });
+    heading.id = `souls-group-${grid.querySelectorAll(".souls-group").length}`; section.setAttribute("aria-labelledby", heading.id);
+    const body = doc.createElement("div"); body.className = "souls-group-cards";
+    section.append(heading, body); body.append(...cards); grid.append(section);
+  };
+  for (const g of groups) group(g, g.souls.map((a) => soulCard(s, a)));
+  for (const { member, why, names } of unavailable) {
+    group({ icon: "warning", name: "Not available", qualifier: `${member.name || member.key} ${why.why}` }, names.map((name) => unavailableCard(s, name, member)), { warn: true });
+  }
+}
+
+/** The table's columns, in order: [class of its <col>, header]. */
+export const SOULS_TABLE_COLUMNS = Object.freeze([["c-name", "Name"], ["c-what", "What it does"], ["c-kind", "Kind"],
+  ["c-agents", `${DESKTOP_NOUNS.instances[0].toUpperCase()}${DESKTOP_NOUNS.instances.slice(1)} running`], ["c-launch", "Harness · model"], ["c-ready", "Ready"]]);
+/** The table: the same souls as rows, a heading row per group. The name cell holds the row's one control, a
+ * button that opens the soul's page; the other cells are read as the table's cells. */
+function renderTable(s, grid, groups, unavailable) {
+  const doc = grid.ownerDocument;
+  const node = (tag, text, cls) => { const el = doc.createElement(tag); if (text !== undefined && text !== null) el.textContent = text; if (cls) el.className = cls; return el; };
+  const table = node("table", undefined, "souls-table"); table.setAttribute("aria-label", "Souls");
+  const cols = node("colgroup"); for (const [cls] of SOULS_TABLE_COLUMNS) cols.append(node("col", undefined, cls));
+  const head = node("thead"), headRow = node("tr");
+  for (const [, label] of SOULS_TABLE_COLUMNS) { const th = node("th", label); th.scope = "col"; headRow.append(th); }
+  head.append(headRow); table.append(cols, head);
+  const groupRows = (g, rows, { warn = false } = {}) => {
+    const body = node("tbody", undefined, "souls-table-body"), row = node("tr", undefined, "souls-table-group-row");
+    const th = node("th", undefined, "souls-table-group"); th.colSpan = SOULS_TABLE_COLUMNS.length; th.scope = "colgroup";
+    th.append(groupHeading(doc, { icon: g.icon, name: g.name, note: g.qualifier, mono: false, warn, level: 3 }));
+    row.append(th); body.append(row, ...rows); table.append(body);
+  };
+  for (const g of groups) groupRows(g, g.souls.map((a) => soulRow(s, a)));
+  for (const { member, why, names } of unavailable) {
+    groupRows({ icon: "warning", name: "Not available", qualifier: `${member.name || member.key} ${why.why}` }, names.map((name) => {
+      const row = node("tr", undefined, "soul-row unavailable"); row.dataset.unavailable = name;
+      row.append(node("td", name), node("td", "Hidden until membership is confirmed", "what"), ...Array.from({ length: SOULS_TABLE_COLUMNS.length - 2 }, () => node("td", "—", "muted")));
+      return row;
+    }), { warn: true });
+  }
+  grid.append(table);
+}
+
 /* ── grid keyboard: roving focus over cards ──────────────────────── */
 function cardMatches(card, ref) {
   return card.dataset.agent === ref.name && (card.dataset.root || "") === (ref.agentsRoot || "") && (card.dataset.server || "") === (ref.server || "");
 }
-function gridCards(s) { return [...s.q("souls-grid").querySelectorAll(".soul-card")]; }
-/** Roving tabindex: a card's Spawn button enters the tab order with its card. */
-function rove(card, on) {
-  card.tabIndex = on ? 0 : -1;
-  const spawn = card.parentElement?.classList?.contains("soul-tile") ? card.parentElement.querySelector(".soul-spawn") : null;
-  if (spawn) spawn.tabIndex = on ? 0 : -1;
-}
+/** The souls' controls, cards or table rows' name buttons: one roving tab stop over them. */
+function gridCards(s) { return [...s.q("souls-grid").querySelectorAll(".soul-item")]; }
+function rove(card, on) { card.tabIndex = on ? 0 : -1; }
 
 function canFocusCard(s, card) {
   if (!s.alive || s.rosterGen !== workspaceGeneration() || s.discovery?.tab !== "souls"
@@ -1035,9 +1084,7 @@ function canFocusCard(s, card) {
 }
 
 function focusedCard(s) {
-  const active = s.el.ownerDocument.activeElement;
-  // A card's Spawn button moves with its card: arrow keys from it rove the grid.
-  return active?.closest?.(".soul-card") || active?.closest?.(".soul-tile")?.querySelector(".soul-card") || null;
+  return s.el.ownerDocument.activeElement?.closest?.(".soul-item") || null;
 }
 
 function soulInstances(s, agent) {
@@ -1074,6 +1121,9 @@ function onGridKey(s, e) {
   } else if (["ArrowLeft", "ArrowUp"].includes(e.key)) {
     e.preventDefault();
     focusCard(s, cards, Math.max(0, at - 1));
+  } else if (e.key === "Home" || e.key === "End") {
+    e.preventDefault();
+    focusCard(s, cards, e.key === "Home" ? 0 : cards.length - 1);
   } else if (["Enter", " "].includes(e.key) && cur && e.target === cur) {
     e.preventDefault();
     cur.click();
@@ -1082,10 +1132,7 @@ function onGridKey(s, e) {
     // non-editable surface (review 93ff03d: '/' must reach the filter
     // from the roving card, not just 'b').
     const hit = resolveViewKey(e, s.viewActions);
-    if (hit === "spawn.brain") {
-      e.preventDefault();
-      brainOfFocusedCard(s);
-    } else if (hit) {
+    if (hit) {
       e.preventDefault();
       s.viewActions.find((a) => a.id === hit)?.run();
     }
@@ -1100,6 +1147,48 @@ function focusCard(s, cards, index) {
   target.focus();
 }
 
+/* ── grid ⇄ table ───────────────────────────────────────────────── */
+/** Where the Souls view (grid or table) is kept: localStorage, one entry per workspace view (a window shows one
+ * view, so this is the window's choice, and it survives a restart), only views left in the table, at most
+ * SOULS_VIEW_MAX of them (the most recent kept). Ids only: no workspace content is written. */
+export const SOULS_VIEW_KEY = "oats.desktop.soulsView";
+export const SOULS_VIEW_MAX = 32;
+const viewStorage = () => { try { return globalThis.localStorage ?? null; } catch { return null; } };
+function readViews(storage) {
+  try {
+    const value = JSON.parse(storage?.getItem(SOULS_VIEW_KEY) || "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
+/** The view a workspace view was left in: "grid" (the default) or "table". */
+export function rememberedSoulsView(viewId, storage = viewStorage()) {
+  return readViews(storage)[String(viewId ?? "")] === "table" ? "table" : "grid";
+}
+/** Keep a workspace view's choice. A storage that refuses (full, disabled) keeps nothing: the choice still holds here. */
+export function rememberSoulsView(viewId, view, storage = viewStorage()) {
+  if (!storage) return;
+  const id = String(viewId ?? ""), map = readViews(storage);
+  delete map[id];
+  if (view === "table") map[id] = "table";
+  const kept = Object.fromEntries(Object.entries(map).slice(-SOULS_VIEW_MAX));
+  try { if (Object.keys(kept).length) storage.setItem(SOULS_VIEW_KEY, JSON.stringify(kept)); else storage.removeItem(SOULS_VIEW_KEY); } catch { /* the choice holds in memory */ }
+}
+function syncViewSwitch(s) {
+  for (const button of s.q("souls-view")?.querySelectorAll("button") || []) button.setAttribute("aria-pressed", String(button.dataset.view === s.view));
+}
+/** Show the souls as `view` ("grid" | "table"), remember it, and keep the focused soul focused in the other form
+ * (`keepFocus`: v from a card or a row; a click on Grid | Table keeps focus on that button). */
+function setSoulsView(s, view, { keepFocus = false } = {}) {
+  if (!s.alive || (view !== "grid" && view !== "table") || view === s.view) return;
+  const cur = keepFocus ? focusedCard(s) : null;
+  const ref = cur ? { name: cur.dataset.agent, agentsRoot: cur.dataset.root, server: cur.dataset.server } : null;
+  s.view = view; rememberSoulsView(currentWorkspace(), view); syncViewSwitch(s);
+  renderGrid(s, { restoreFocus: false });
+  if (!keepFocus) return;
+  const items = gridCards(s), target = (ref && items.find((c) => cardMatches(c, ref))) || items.find((c) => c.tabIndex === 0);
+  if (target && canFocusCard(s, target)) { for (const c of items) rove(c, c === target); target.focus({ preventScroll: false }); }
+}
+
 function canLaunchSoul(s, agent) {
   return !spawnRefusal(agent, cliStatus()) && s.alive && s.rosterGen === workspaceGeneration() && cliAvailable() && !!agent?.agentsRoot
     && s.souls.agents.filter(current => current.name === agent.name
@@ -1111,8 +1200,8 @@ function canLaunchSoul(s, agent) {
 const repoLabel = (a) => a.repoName || (a.repo ? String(a.repo).split("/").filter(Boolean).at(-1) : "") || "workspace";
 /** The workspace's host member (the repository holding oats-workspace.yaml), from workspace status. */
 const hostKey = (s) => s.deployment?.status === "observed" ? s.deployment.workspaceStatus?.workspace?.key ?? null : null;
-/** The Repo group a soul sits in (board 3): its member repository (the host first), its package
- * with the pinned version, or the external souls; icon, monospace name and qualifier as reported. */
+/** The group a soul sits in: its member repository (the host first), its package with the pinned version, or the
+ * external souls; icon, name and qualifier as reported. */
 function repoGroup(s, a) {
   if (a.soulKind === "package" && a.package) {
     const name = [a.package, a.version].filter(Boolean).join(" ");
@@ -1123,104 +1212,96 @@ function repoGroup(s, a) {
   if (a.soulKind === "member") return { key: `member:${a.repo || repoLabel(a)}`, rank: host ? 0 : 1, icon: "repo", name: repoLabel(a), qualifier: host ? "member repo · host" : "member repo" };
   return { key: `repo:${a.server || ""}:${repoLabel(a)}`, rank: 1, icon: "repo", name: repoLabel(a), qualifier: a.server ? `on ${a.server}` : "" };
 }
-/** A soul's team labels, its default first. Team model v2 (0.30) rows carry `teams`
- * [{label, team|null, default, from, mapped}]; 0.29 rows carried `labels` (default
- * first) and `team`, which 0.30 removed. */
-const v2Teams = (a) => Array.isArray(a.teams) && a.teams.every((t) => typeof t?.label === "string" && t.label);
-const soulTeams = (a) => v2Teams(a) ? [...a.teams].sort((x, y) => (y.default === true) - (x.default === true)).map((t) => t.label)
-  : Array.isArray(a.labels) && a.labels.length ? a.labels : a.team ? [a.team] : [];
-/** The group a soul sits in by team: its default team's label. A v2 soul with no default
- * team configured on this computer says so; a 0.29 soul with none reads "No team". */
-const teamGroup = (a) => {
-  if (typeof a.defaultTeam?.label === "string" && a.defaultTeam.label) return a.defaultTeam.label;
-  if (v2Teams(a)) return a.teams.find((t) => t.default === true)?.label || "No default team";
-  return a.team || "No team";
-};
-/** A card's running/stopped line (never the bare word "none"). */
-function activityText(running, total) {
-  if (running) return `${running} ${running === 1 ? "instance" : "instances"} running`;
-  return total ? `${total} stopped` : "No instances";
+/** How many of a soul's agents run, in words: "2 agents running", "No agents running · 1 stopped". */
+export function agentsText(running, total) {
+  const noun = (n) => n === 1 ? DESKTOP_NOUNS.instance : DESKTOP_NOUNS.instances;
+  if (running) return `${running} ${noun(running)} running`;
+  return total ? `No ${DESKTOP_NOUNS.instances} running · ${total} stopped` : `No ${DESKTOP_NOUNS.instances} running`;
 }
-/** A labelled chip: "Team oats", "Repo agents". */
-function chip(doc, key, value) {
-  const el = doc.createElement("span"); el.className = "schip"; el.title = `${key} ${value}`;
-  const k = doc.createElement("span"); k.className = "schip-key"; k.textContent = key;
-  const v = doc.createElement("b"); v.textContent = value;
-  el.append(k, v); return el;
-}
-
-/** One soul card (board 3). groupTeam: the Team group it is drawn in, whose label the card then
- * leaves out (it shows its Repo instead); null in Repo grouping. */
-function soulCard(s, a, groupTeam = null) {
-  const attached = a.work === "attached";
-  const doc = s.el.ownerDocument;
-  const card = doc.createElement("button");
-  card.type = "button";
-  card.className = "soul-card inspect-act" + (attached ? " attached" : "") + (((s.selAgent?.name === a.name && s.selAgent?.agentsRoot === a.agentsRoot && s.selAgent?.server === a.server) || (s.inspectRef?.name === a.name && s.inspectRef?.agentsRoot === a.agentsRoot && s.inspectRef?.server === a.server)) ? " open" : "");
-  card.dataset.agent = a.name; card.dataset.root = a.agentsRoot || ""; card.dataset.server = a.server || "";
-  card.tabIndex = -1; // roving tabindex — renderGrid elects the tabbable card
-  card.setAttribute("aria-label", `Inspect ${a.name}`);
-  card.setAttribute("aria-controls", "workspace-soul-page"); // a card opens the soul's page
-  // (No aria-pressed: a card opens its soul's page, which replaces the grid while open.)
-  card.title = attached ? "Attached only — select for details and files" : `Inspect ${a.name} — Launch, Files, Schedule and reported defaults`;
-  card.addEventListener("click", () => inspectSoul(s, a));
-  const span = (cls, text) => { const el = doc.createElement("span"); el.className = cls; if (text !== undefined) el.textContent = text; return el; };
-  // Head: mark, name and what it launches (harness · model); the harness badge only when the kernel reports one.
-  const body = span("sbody");
-  const name = span("sname");
-  const avatar = createSoulMark(doc, a); avatar.classList.add("glyph");
-  const identity = span("sidentity");
-  identity.append(span("stitle", a.name));
-  // 0.30: the harness and model a spawn here runs (launch preferences); a kernel before it reports
-  // the soul's harness only, and then no model is claimed.
+/** What a spawn of this soul here runs: "<harness> · <model>" (0.30 launch preferences), the declared harness alone
+ * (an older kernel), else null. */
+function launchText(a) {
   const launch = shownLaunch(a.launch, cliStatus())?.effective ?? null;
   const harness = launch?.harness ?? harnessOf(a);
-  if (typeof harness === "string" && harness) identity.append(span("scontext", launch ? `${launchHarnessName(harness)} · ${launch.model ?? "default model"}` : launchHarnessName(harness)));
-  name.append(avatar, identity);
-  if (typeof harness === "string" && harness) name.append(createRuntimeBadge(doc, harness));
-  body.append(name);
-  if (a.description) { const desc = doc.createElement("p"); desc.className = "sdesc"; desc.textContent = a.description; body.append(desc); }
-  // Chips say what they are: its teams on this computer (or, grouped by team, its repository).
-  // No work-mode chip (human, 2026-09-29): where a soul works is the soul page's and the spawn preview's.
-  const chips = span("schips");
-  if (groupTeam !== null) chips.append(chip(doc, "Repo", repoGroup(s, a).name));
-  soulTeams(a).forEach((team, index) => {
-    if (team === groupTeam) return;
-    const c = chip(doc, "Team", team);
-    // The default leads (soulTeams puts it first); marked for assistive tech and tests, not painted.
-    if (index === 0 && teamGroup(a) === team) {
-      // The default is said, not painted: "Team oats · default", the word muted (no new colour).
-      c.dataset.default = "true"; c.title = `Team ${team}: this soul's default team`;
-      const note = doc.createElement("span"); note.className = "schip-note"; note.textContent = "· default"; c.append(note);
-    }
-    chips.append(c);
-  });
-  if (chips.childElementCount) body.append(chips);
-  // Foot: what runs now, or why a spawn here would be refused (the Spawn button sits at its right).
+  if (typeof harness !== "string" || !harness) return null;
+  return launch ? `${launchHarnessName(harness)} · ${launch.model ?? "default model"}` : launchHarnessName(harness);
+}
+/** What stops a spawn of this soul here, from its row, in the soul page's order: the kernel's refusal (kernel #217
+ * desktop-facts), else the launch problem its launch report carries (0.30 launch preferences: the kernel's own
+ * message); null when neither is reported. `line` is the card's, `text` the table's and the page's sentence. */
+export function soulProblem(a, cli) {
+  // The kernel's refusal holds for every soul, an attached one too; an attached soul's own launch report is not what
+  // runs it (its owner's is), so only a standalone soul says a launch problem.
+  const refusal = spawnRefusal(a, cli);
+  if (refusal !== null) return { text: refusal, line: cantSpawnLine(refusal) };
+  if (a?.work === "attached") return null;
+  const problem = soulFacts(a, null, cli, DESKTOP_TERMS).problem;
+  const said = problem ? problem.lines[0] ?? problem.lead : null;
+  return said ? { text: said, line: said } : null;
+}
+/** Whether the soul is ready here, from its row: "Ready", or what stops a spawn here (soulProblem); null when this CLI
+ * does not report whether a spawn here would be refused (no claim is made). */
+export function soulReadiness(a, cli) {
+  if (!desktopFacts(cli)) return null;
+  const problem = soulProblem(a, cli);
+  return problem === null ? { ready: true, text: "Ready" } : { ready: false, text: problem.text };
+}
+const isOpen = (s, a) => (s.selAgent?.name === a.name && s.selAgent?.agentsRoot === a.agentsRoot && s.selAgent?.server === a.server)
+  || (s.inspectRef?.name === a.name && s.inspectRef?.agentsRoot === a.agentsRoot && s.inspectRef?.server === a.server);
+/** A soul's control (a card, or a table row's name): it opens the soul's page. */
+function soulControl(s, a, cls) {
+  const control = s.el.ownerDocument.createElement("button");
+  control.type = "button"; control.className = `${cls} soul-item inspect-act`;
+  control.dataset.agent = a.name; control.dataset.root = a.agentsRoot || ""; control.dataset.server = a.server || "";
+  control.tabIndex = -1; // roving tabindex — renderGrid elects the tabbable one
+  control.setAttribute("aria-controls", "workspace-soul-page"); // it opens the soul's page
+  control.addEventListener("click", () => inspectSoul(s, a));
+  return control;
+}
+
+/** One soul card: its name, what it does, how many of its agents run, and its kind. Spawning is the palette's and
+ * New agent's (and the soul's page's); the card opens the page. */
+function soulCard(s, a) {
+  const doc = s.el.ownerDocument;
+  const card = soulControl(s, a, "soul-card" + (a.work === "attached" ? " attached" : "") + (isOpen(s, a) ? " open" : ""));
+  const span = (cls, text) => { const el = doc.createElement("span"); el.className = cls; if (text !== undefined) el.textContent = text; return el; };
+  card.append(span("stitle", a.name));
+  if (a.description) card.append(span("sdesc", a.description));
   const instances = soulInstances(s, a);
   const running = instances.filter(i => i.running === true).length;
   const foot = span("sfoot");
-  const refusal = attached ? null : spawnRefusal(a, cliStatus());
-  const activity = span("sactivity" + (running ? " running" : ""), activityText(running, instances.length));
-  activity.title = `${running} running · ${instances.length} ${instances.length === 1 ? "instance" : "instances"}`;
-  if (refusal) {
-    // Both facts: why a spawn here is refused, and what of it already runs (the row's height is fixed).
-    const note = span("sproblem", cantSpawnLine(refusal)); note.title = refusal;
-    const lines = span("sfoot-lines"); lines.append(note, activity); foot.append(lines);
-  } else foot.append(activity);
-  card.append(body, foot);
-  if (attached) return card;
-  // Workspace v4 (human, 2026-09-26): every spawnable card offers Spawn directly.
-  const tile = doc.createElement("div"); tile.className = "soul-tile can-spawn";
-  const spawn = doc.createElement("button"); spawn.type = "button"; spawn.className = "act soul-spawn"; spawn.tabIndex = -1;
-  spawn.append(iconElement(doc, "plus", { size: 11 }), span("", "Spawn"));
-  spawn.setAttribute("aria-label", `Spawn ${a.name}`);
-  const can = canLaunchSoul(s, a); spawn.disabled = !can;
-  spawn.title = can ? `Spawn a new ${a.name} instance` : refusal ? `Can't spawn here: ${refusal}` : cliAvailable() ? `${a.name} cannot be spawned from here` : "Spawn needs a compatible installed OATS CLI";
-  // Board 6: a card's Spawn opens the dialog scoped to this soul (its preview, no picker).
-  spawn.addEventListener("click", () => { if (!spawn.disabled && canLaunchSoul(s, a)) { openSpawnModal(s, a); s.spawnFromCard = !!s.modalEl; } });
-  tile.append(card, spawn);
-  return tile;
+  const problem = soulProblem(a, cliStatus());
+  // A soul a spawn here would refuse says why, on a line of its own above the foot: refusing new agents stops none
+  // already running, so the foot keeps their count.
+  if (problem) { const note = span("sproblem", problem.line); note.title = problem.text; card.append(note); }
+  foot.append(span("sactivity" + (running ? " running" : ""), agentsText(running, instances.length)));
+  foot.append(span("skind", `· ${SOUL_ROLE_WORDS[soulRole(a)]}`));
+  card.append(foot);
+  // Its name names it; what it does, its agents and its kind describe it.
+  card.setAttribute("aria-label", a.name);
+  card.setAttribute("aria-description", [a.description, problem?.line, agentsText(running, instances.length), `${SOUL_ROLE_WORDS[soulRole(a)]} soul`].filter(Boolean).join(". "));
+  card.title = [a.name, a.description].filter(Boolean).join("\n");
+  return card;
+}
+
+/** One soul as a table row: name (its button), what it does, kind, agents running, harness · model, ready. */
+function soulRow(s, a) {
+  const doc = s.el.ownerDocument;
+  const node = (tag, text, cls) => { const el = doc.createElement(tag); if (text !== undefined && text !== null) el.textContent = text; if (cls) el.className = cls; return el; };
+  const row = node("tr", undefined, "soul-row" + (isOpen(s, a) ? " open" : ""));
+  const name = node("td", undefined, "name"), open = soulControl(s, a, "soul-row-open");
+  open.textContent = a.name; open.title = a.name; name.append(open);
+  const what = node("td", a.description || "—", a.description ? "what" : "what muted");
+  const instances = soulInstances(s, a), running = instances.filter(i => i.running === true).length;
+  const agents = node("td", String(running), running ? "agents" : "agents muted");
+  agents.title = agentsText(running, instances.length);
+  const launch = launchText(a);
+  const ready = soulReadiness(a, cliStatus());
+  const readyCell = node("td", ready?.ready === false ? undefined : ready ? ready.text : "—", ready ? (ready.ready ? "ready" : "problem") : "muted");
+  if (ready?.ready === false) { readyCell.append(node("span", ready.text, "clamp")); readyCell.title = ready.text; }
+  if (!ready) readyCell.title = "This OATS does not report whether a spawn here would be refused.";
+  row.append(name, what, node("td", SOUL_ROLE_WORDS[soulRole(a)], "kind"), agents, node("td", launch ?? "—", launch ? "launch" : "launch muted"), readyCell);
+  return row;
 }
 
 /** Members whose handshake is not confirmed, with the souls workspace status
@@ -1235,14 +1316,10 @@ function unavailableCard(s, name, member) {
   const doc = s.el.ownerDocument;
   const card = doc.createElement("div"); card.className = "soul-card unavailable"; card.dataset.unavailable = name;
   const span = (cls, text) => { const el = doc.createElement("span"); el.className = cls; if (text !== undefined) el.textContent = text; return el; };
-  const body = span("sbody");
-  const head = span("sname"); const avatar = createSoulMark(doc, { name }); avatar.classList.add("glyph");
-  const identity = span("sidentity"); identity.append(span("stitle", name), span("scontext", member.name || member.key));
-  head.append(avatar, identity); body.append(head);
-  if (member.team) { const chips = span("schips"); chips.append(chip(doc, "Team", member.team)); body.append(chips); }
-  // Why it cannot open: the foot's left slot, in the warning colour.
+  card.append(span("stitle", name), span("sdesc", member.name || member.key));
+  // Why it cannot open: the foot, in the warning colour.
   const foot = span("sfoot"); foot.append(span("sproblem", "Hidden until membership is confirmed"));
-  card.append(body, foot);
+  card.append(foot);
   return card;
 }
 
@@ -1257,7 +1334,7 @@ function unavailableCard(s, name, member) {
  * a same-named twin (review 41059e0). */
 function closeSpawnModal(s, { restoreFocus = false, repaint = true } = {}) {
   const hadModal = !!s.modalEl;
-  const agentRef = s.selAgent, fromCard = s.spawnFromCard, dismissed = s.spawnReturn; s.spawnFromCard = false; s.spawnReturn = null;
+  const agentRef = s.selAgent, dismissed = s.spawnReturn; s.spawnReturn = null;
   if (hadModal) s.spawnOp++; // closing ends the form operation ownership
   s.sel = null; s.selAgent = null;
   s.modalCleanup?.(); s.modalCleanup = null;
@@ -1268,12 +1345,11 @@ function closeSpawnModal(s, { restoreFocus = false, repaint = true } = {}) {
   if (!restoreFocus || !agentRef) return;
   // Opened from Quick Open: back to where the operator was before it, unless they have moved on.
   if (dismissed) { let returned = false; try { returned = dismissed() === true; } catch { /* fall back */ } if (returned) return; }
-  if (!fromCard && s.page?.focusLaunch(agentRef)) return;
+  if (s.page?.focusLaunch(agentRef)) return;
   const card = gridCards(s).find(card => cardMatches(card, agentRef));
   if (!canFocusCard(s, card)) return;
-  // Opened from a card's Spawn button: focus returns to that button.
-  const spawn = fromCard ? card.parentElement?.querySelector?.(".soul-spawn:not(:disabled)") : null;
-  if (spawn) { for (const c of gridCards(s)) rove(c, c === card); spawn.focus(); } else card.focus();
+  for (const c of gridCards(s)) rove(c, c === card);
+  card.focus();
 }
 
 /** "Where to run" (one-deployment views): every remote roster group's facts (reached, registered), whichever

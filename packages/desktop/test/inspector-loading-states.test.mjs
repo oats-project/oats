@@ -314,30 +314,26 @@ const withTeamModel2 = async t => {
   t.after(() => resetCliStateForTests());
   await refreshCli({ api: async () => ({ ...fixture('version'), features: [...fixture('version').features, 'team-model-2'], ok: true, bin: '/fixture/bin/oats' }) });
 };
-test('soul page: the soul teams read is dispatched before inspect answers; main and side skeletons; the card is kept, not recreated', async t => {
+test('soul page: the soul teams read is dispatched before inspect answers; the page skeleton; the card, folded under the Teams row, is kept, not recreated', async t => {
   await withTeamModel2(t);
   const u = mount(t, { layout: 'page' });
   void u.inspector.show(keyedSelection);
   assert.deepEqual(u.calls.map(c => [c.path, c.body.action]).sort(), [['/api/capabilities', 'inspect'], ['/api/workspace-soul-teams', 'show']], 'both reads in flight at once');
   assert.deepEqual(u.calls.find(u.teamsHere).body, { soul: 'release-manager', action: 'show' });
-  const card = u.q('[data-card="Teams here"]'); assert.ok(card, 'the card is there before either reply');
-  assert.equal(card.parentElement, u.q('.soul-page-side')); assert.equal(card.previousElementSibling, null, 'first in the side column');
+  assert.equal(u.q('[data-card="Teams here"]'), null, 'its place is the Teams row, painted with the inspection (slice 3a: one column)');
   assert.equal(u.status().textContent, 'Loading soul…');
   assert.equal(u.q('.page-main > .inspector-notice'), u.status().nextElementSibling, 'the stale line has its place above the content');
-  assert.equal(card.querySelector('.sth-body').getAttribute('aria-busy'), 'true');
-  assert.doesNotMatch(card.textContent, /Reading the teams/, "'Reading …' is retired");
   u.c.advance(PENDING_DELAY_MS);
-  assert.equal(u.content().querySelectorAll('.skeleton-detail-section').length, 2, 'the main column: two sections');
-  const sideSkeleton = u.q('.soul-page-side .skeleton-page-card'); assert.ok(sideSkeleton, 'the side column: a card skeleton');
-  assert.equal(sideSkeleton.previousElementSibling, card, 'after the Teams here card');
-  assert.equal(card.querySelectorAll('.skeleton-lines .skeleton-line').length, 3, "the card's own skeleton");
+  assert.equal(u.content().querySelectorAll('.skeleton-detail-section').length, 2, 'the page: two sections');
+  assert.equal(u.q('.skeleton-page-card, .soul-page-side'), null, 'no side column');
   await u.resolve({ status: 'ok', soulTeams: soulTeamsDoc }, u.teamsHere);
-  assert.equal(card.querySelector('.skeleton'), null); assert.equal(card.querySelector('.sth-body').hasAttribute('aria-busy'), false);
-  assert.equal(card.querySelector('.sth-default').textContent, "Default: mine (the workspace's default on this computer)");
-  assert.ok(u.q('.skeleton-page-card'), 'inspect still pending: the side skeleton stays');
   await u.resolve(soul);
-  assert.equal(u.q('.skeleton'), null); assert.equal(u.q('[data-card="Teams here"]'), card, 'the same card instance');
-  assert.equal(u.q('[data-card="Teams"]'), null); assert.equal(u.q('.soul-page-side').firstElementChild, card);
+  const card = u.q('[data-card="Teams here"]'); assert.ok(card, 'the card, once the page is painted');
+  assert.equal(card.parentElement, u.q('.soul-top [data-fact="teams"] details.soul-teams-details'), 'folded under the Teams row');
+  assert.equal(card.querySelector('.skeleton'), null); assert.equal(card.querySelector('.sth-body').hasAttribute('aria-busy'), false);
+  assert.equal(card.querySelector('.sth-default').textContent, "Default: mine (the workspace's default on this computer)", 'the read that ran beside inspect');
+  assert.equal(u.q('.skeleton'), null);
+  assert.equal(u.q('[data-card="Teams"]'), null);
   assert.equal(u.calls.filter(u.teamsHere).length, 1, 'inspect landing does not re-read the teams');
   // A user Refresh refreshes both; the card and its rows stay.
   const rows = card.querySelectorAll('.sth-row').length; assert.ok(rows > 0);
@@ -357,7 +353,8 @@ test('soul page: "Teams here" failing with no document is the failed block (caus
   await withTeamModel2(t);
   const u = mount(t, { layout: 'page' });
   void u.inspector.show(keyedSelection);
-  const card = u.q('[data-card="Teams here"]');
+  await u.resolve(soul);
+  const card = u.q('[data-card="Teams here"]'); card.closest('details').open = true;
   u.c.advance(PENDING_DELAY_MS); assert.ok(card.querySelector('.skeleton-lines'));
   await u.resolve({ status: 'refused', reason: { code: 'E_SOUL_UNKNOWN', message: 'no soul release-manager here' } }, u.teamsHere);
   assert.equal(card.querySelector('.skeleton'), null);
@@ -372,7 +369,6 @@ test('soul page: "Teams here" failing with no document is the failed block (caus
   assert.equal(card.querySelector('.loading-failed'), null); assert.ok(card.querySelector('.sth-row'));
   assert.equal(u.doc.activeElement, card.querySelector('.page-card-title'), 'the focused Retry that went with the block hands focus to the card title, not <body>');
   assert.equal(card.querySelector('.loading-status').textContent, 'Teams updated');
-  await u.resolve(soul);
   assert.equal(u.q('[data-card="Teams here"]'), card);
 });
 
@@ -405,9 +401,9 @@ test('CLI and deployment states keep their own copy: no CLI is said on the statu
 /* ── review round 1: the roster-derived header follows a refresh; focus is captured before the repaint and re-found by key ── */
 const homesOf = (n, running = true) => Array.from({ length: n }, (_, i) => ({ instance: `release-manager-${i + 1}`, agentsRoot, home: `${agentsRoot}/release-manager/instances/release-manager-${i + 1}`, running }));
 
-for (const layout of ['page', 'sidebar']) test(`${layout}: a same-subject Refresh repaints the roster-derived block from the CURRENT roster row; an unchanged roster keeps its nodes; actions read the row at click time`, async t => {
-  let list = homesOf(1), refusal = null; const launched = [];
-  const u = mount(t, { layout, instances: () => list, spawnRefusal: () => refusal, launch: agent => launched.push(agent) });
+test('sidebar: a same-subject Refresh repaints the roster-derived block from the CURRENT roster row; an unchanged roster keeps its nodes; actions read the row at click time', async t => {
+  let list = homesOf(1); const launched = [];
+  const u = mount(t, { layout: 'sidebar', instances: () => list, launch: agent => launched.push(agent) });
   void u.inspector.show(keyedSelection); await u.resolve(soul);
   const count = () => u.all('.inspector-instance').length;
   assert.equal(count(), 1);
@@ -416,14 +412,38 @@ for (const layout of ['page', 'sidebar']) test(`${layout}: a same-subject Refres
   u.refresh().click(); await u.resolve(soul);
   assert.equal(u.q('.inspector-instance'), before); assert.equal(u.doc.activeElement, before);
   // A second instance appears, one stops; a refresh repaints the block and re-finds the focused instance by key.
-  list = [...homesOf(1, false), ...homesOf(2).slice(1)]; refusal = layout === 'page' ? 'no default team here' : null;
+  list = [...homesOf(1, false), ...homesOf(2).slice(1)];
   u.refresh().click(); await u.resolve(soul);
-  assert.equal(count(), 2, 'the Instances block followed the roster'); assert.match(layout === 'page' ? u.all('.inspector-instance')[0].getAttribute('aria-label') : u.all('.inspector-instance')[0].textContent, /stopped/);
+  assert.equal(count(), 2, 'the Instances block followed the roster'); assert.match(u.all('.inspector-instance')[0].textContent, /stopped/);
   assert.equal(u.doc.activeElement.dataset.focusKey, `instance:${list[0].home}`, 'focus stays on the same instance, by key');
-  if (layout === 'page') { assert.equal(u.q('.inspector-refusal').textContent, "Can't spawn here · no default team here"); assert.equal(u.q('.page-card-count')?.textContent ?? u.q('.inspector-instances .page-card-count')?.textContent, '2'); }
-  else assert.match(u.q('.inspector-roster h3').textContent, /Instances · 2/);
+  assert.match(u.q('.inspector-roster h3').textContent, /Instances · 2/);
   assert.equal(u.all('.inspector-lede').length, 1, 'the lede is not doubled');
   // The action handlers act on the current selection row, not the one captured at frame time.
+  const renamed = { ...keyedSelection, agent: { ...keyedSelection.agent, description: 'Ships the releases, faster.' } };
+  void u.inspector.show(renamed); await u.resolve(soul);
+  assert.equal(u.q('.inspector-lede').textContent, 'Ships the releases, faster.');
+  const spawn = u.q('.spawn-act'); assert.equal(spawn.dataset.focusKey, 'spawn'); spawn.click();
+  assert.equal(launched.at(-1)?.description, 'Ships the releases, faster.');
+});
+
+// Slice 3a: the soul page lists no instances (the Souls grid and table count them); what the roster row says there
+// is its lede, its facts and whether a spawn here would be refused (the top block's Ready row), followed in place.
+test('page: a same-subject Refresh repaints the roster-derived block from the CURRENT roster row (the Ready row follows a refusal); actions read the row at click time', async t => {
+  let refusal = null; const launched = [];
+  const u = mount(t, { layout: 'page', instances: () => homesOf(2), spawnRefusal: () => refusal, launch: agent => launched.push(agent) });
+  void u.inspector.show(keyedSelection); await u.resolve(soul);
+  assert.equal(u.q('.inspector-instance, .inspector-instances'), null, 'no instances on the soul page');
+  assert.equal(u.q('.soul-ready-line').textContent, 'Ready');
+  const ready = u.q('.soul-ready-line');
+  refusal = 'no default team here';
+  u.refresh().click(); await u.resolve(soul);
+  assert.equal(u.q('.soul-ready-line').textContent, 'no default team here', 'the one problem, in one sentence');
+  assert.equal(u.q('.soul-ready-line'), ready, 'repainted in place');
+  assert.match(u.q('.soul-ready-problems').textContent, /Can't spawn here · no default team here/, 'behind Details');
+  // A poll's roster change alone (no inspection) reaches the Ready row too.
+  refusal = null; u.inspector.syncRoster();
+  assert.equal(u.q('.soul-ready-line').textContent, 'Ready');
+  assert.equal(u.all('.inspector-lede').length, 1, 'the lede is not doubled');
   const renamed = { ...keyedSelection, agent: { ...keyedSelection.agent, description: 'Ships the releases, faster.' } };
   void u.inspector.show(renamed); await u.resolve(soul);
   assert.equal(u.q('.inspector-lede').textContent, 'Ships the releases, faster.');
@@ -457,7 +477,7 @@ test('soul page, Teams here: focus on "Remove gamma" survives a refresh that ins
   const team = (label, via = ['soul']) => ({ label, team: `t:${label}`, default: false, from: 'local', via });
   const docOf = teams => ({ ...soulTeamsDoc, teams: [{ ...soulTeamsDoc.teams[0] }, ...teams.map(l => team(l))] });
   await u.resolve({ status: 'ok', soulTeams: docOf(['beta', 'gamma']) }, u.teamsHere); await u.resolve(soul);
-  const card = u.q('[data-card="Teams here"]');
+  const card = u.q('[data-card="Teams here"]'); card.closest('details').open = true;
   const remove = label => [...card.querySelectorAll('button')].find(b => b.dataset.focusKey === `remove:${label}`);
   remove('gamma').focus();
   u.refresh().click(); await tick();

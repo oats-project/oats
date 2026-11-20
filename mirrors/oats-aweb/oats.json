@@ -1,7 +1,7 @@
 {
   "capability": "oats.aweb",
   "command": "aweb",
-  "version": "1.43.0",
+  "version": "1.45.0",
   "compatibility": {
     "oats": ">=0.68.0"
   },
@@ -121,7 +121,7 @@
         "channel",
         "session"
       ],
-      "description": "channel (default): Claude Code selects the aweb-channel plugin (admission/connection unverified) and pi selects the @awebai/pi extension for in-session delivery; Codex and any other runtime without an aweb channel go through the host wake broker (AWEB_DELIVERY=session). Every start re-decides by runtime and leaves the home on exactly one path. session: every runtime goes through the host wake broker (AWEB_DELIVERY=session), no channel flag."
+      "description": "channel (default): Claude Code selects the aweb-channel plugin (admission/connection unverified) and pi selects the @awebai/pi extension for in-session delivery; Codex and any other runtime without an aweb channel go through the host wake broker (AWEB_DELIVERY=session). Every start re-decides by runtime and leaves the home on exactly one path. session: every runtime goes through the host wake broker (AWEB_DELIVERY=session), no channel flag. A launch on a session provider (OATS_BACKEND is neither tmux nor unset) goes through the host wake broker under either value."
     },
     "claudeChannelMode": {
       "hostOnly": true,

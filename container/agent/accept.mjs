@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
@@ -12,13 +12,21 @@ function required(env, name) {
 
 const ids = (env) => ({ uid: env.AGENT_UID || "20001", gid: env.AGENT_GID || "20001" });
 
-// The optional public-CA mount is the only deployment environment exception.
-// Both settings reach the broker before it starts, including its Node child.
-export function agentEnvironment(imageEnv, publicCA = false) {
-  if (!publicCA) return imageEnv;
-  const trust = ["SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS"];
-  return [...imageEnv.filter(entry => !trust.includes(entry.split("=", 1)[0])),
-    ...trust.map(name => `${name}=/etc/agent-trust/ca.pem`)];
+// The acceptance host says whether the bb fragment was included: AGENT_BB=1,
+// the entry compose.agent.bb.yaml sets. Nothing else selects it.
+export function bbSelected(env) {
+  assert.ok(env.AGENT_BB === undefined || env.AGENT_BB === "" || env.AGENT_BB === "1", "AGENT_BB must be 1 (compose.agent.bb.yaml is included) or unset");
+  return env.AGENT_BB === "1";
+}
+
+// The optional public-CA mount and the bb fragment's one fixed entry are the
+// only deployment environment exceptions.
+// Both trust settings reach the broker before it starts, including its Node child.
+export function agentEnvironment(imageEnv, publicCA = false, bb = false) {
+  const fixed = [...(publicCA ? ["SSL_CERT_FILE=/etc/agent-trust/ca.pem", "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem"] : []), ...(bb ? ["AGENT_BB=1"] : [])];
+  if (!fixed.length) return imageEnv;
+  const names = fixed.map(entry => entry.split("=", 1)[0]);
+  return [...imageEnv.filter(entry => !names.includes(entry.split("=", 1)[0])), ...fixed];
 }
 
 // Compare only reviewed settings, never dump Config.Env or credential contents.
@@ -55,7 +63,12 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
   equal("OOM killer disabled", !!h.OomKillDisable, false);
   equal("device cgroup rules", h.DeviceCgroupRules || [], []);
   equal("shared memory size", h.ShmSize, 67108864);
-  equal("supplementary groups added", h.GroupAdd || [], []);
+  const outboxGid = env.TEAM_OUTBOX_DIR ? required(env, "TEAM_OUTBOX_GID") : null;
+  if (outboxGid !== null) {
+    assert.match(outboxGid, /^[1-9]\d*$/, "TEAM_OUTBOX_GID must be a non-root numeric GID");
+    assert.ok(Number(outboxGid) < 4294967295 && outboxGid !== gid, "TEAM_OUTBOX_GID must be a dedicated GID distinct from AGENT_GID");
+  } else assert.ok(!env.TEAM_OUTBOX_GID, "TEAM_OUTBOX_GID requires TEAM_OUTBOX_DIR and the outbox fragment");
+  equal("supplementary groups added", h.GroupAdd || [], outboxGid === null ? [] : [outboxGid]);
   equal("user namespace override", h.UsernsMode || "", "");
   equal("UTS namespace override", h.UTSMode || "", "");
   equal("cgroup namespace", h.CgroupnsMode, "private");
@@ -70,7 +83,10 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
   equal("agent IP", info.NetworkSettings.Networks[network].IPAddress, required(env, "AGENT_IP"));
   const names = (entries) => entries.map((entry) => entry.split("=", 1)[0]);
   assert.ok(Array.isArray(image?.Config?.Env), "image environment baseline is required");
-  const actualEnv = info.Config.Env || [], expectedEnv = agentEnvironment(image.Config.Env, !!env.AGENT_CA_FILE);
+  const bb = bbSelected(env);
+  const actualEnv = info.Config.Env || [], expectedEnv = agentEnvironment(image.Config.Env, !!env.AGENT_CA_FILE, bb);
+  // An image that sets the switch itself is refused too: only the fragment turns bb on.
+  if (!bb) assert.ok(!names(actualEnv).includes("AGENT_BB"), "AGENT_BB is set in the container: include compose.agent.bb.yaml and export AGENT_BB=1 for acceptance, or recreate the container without it");
   const allNames = new Set([...names(actualEnv), ...names(expectedEnv)]);
   const entriesFor = (entries, name) => entries.filter((entry) => entry.split("=", 1)[0] === name).sort();
   const changedNames = [...allNames].filter((name) => !isDeepStrictEqual(entriesFor(actualEnv, name), entriesFor(expectedEnv, name)));
@@ -103,6 +119,8 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
     ["RESOLV_CONF_FILE", "/etc/resolv.conf", false],
     ...(env.AGENT_CA_FILE ? [["AGENT_CA_FILE", "/etc/agent-trust/ca.pem", false]] : []),
     ...(env.AGENT_MIRRORS_DIR ? [["AGENT_MIRRORS_DIR", "/mirrors", false]] : []),
+    ...(env.TEAM_INPUT_DIR ? [["TEAM_INPUT_DIR", "/inputs", false]] : []),
+    ...(env.TEAM_OUTBOX_DIR ? [["TEAM_OUTBOX_DIR", "/outbox", true]] : []),
     ...(env.TEAM_WORK_DIR ? [["TEAM_WORK_DIR", "/work", true]] : []),
   ].map(([name, target, rw]) => {
     const source = required(env, name);
@@ -110,16 +128,18 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
     assert.ok(!source.includes("docker.sock"), "no Docker socket source");
     return { source: resolve(source), target, rw, type: "bind" };
   });
-  for (const input of mounts.filter(m => m.target === "/etc/agent-trust/ca.pem" || m.target === "/mirrors")) {
-    for (const writable of mounts.filter(m => m.rw)) {
+  for (const input of mounts.filter(m => m.target === "/etc/agent-trust/ca.pem" || m.target === "/mirrors" || m.target === "/inputs" || m.target === "/outbox")) {
+    for (const writable of mounts.filter(m => m.target !== input.target && (m.rw || input.target === "/outbox"))) {
       let source, protectedSource;
       try { source = hostPath(input.source); protectedSource = hostPath(writable.source); }
-      catch { assert.fail("public CA and mirrors require resolvable Docker-host sources (paths withheld)"); }
+      catch { assert.fail("optional inputs and outbox require resolvable Docker-host sources (paths withheld)"); }
       const overlaps = source === protectedSource || source.startsWith(protectedSource.endsWith("/") ? protectedSource : protectedSource + "/")
         || protectedSource.startsWith(source.endsWith("/") ? source : source + "/");
-      assert.ok(!overlaps,"public CA and mirrors must stay outside agent-writable sources");
+      assert.ok(!overlaps,"optional inputs and outbox must stay outside agent-writable sources");
     }
   }
+  equal("writable bind destinations", info.Mounts.filter(m => m.Type === "bind" && m.RW).map(m => m.Destination).sort(),
+    ["/state", ...(env.TEAM_WORK_DIR ? ["/work"] : []), ...(env.TEAM_OUTBOX_DIR ? ["/outbox"] : [])].sort());
   const sort = (v) => v.sort((a, b) => a.target.localeCompare(b.target));
   equal("exact approved mounts (no extra home, socket or service-account mount)", sort(info.Mounts.map((m) => ({ source: m.Source, target: m.Destination, rw: m.RW, type: m.Type }))), sort(mounts));
   equal("legacy auto-creating binds", h.Binds || [], []);
@@ -127,14 +147,18 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
   return evidence;
 }
 
-function runtimeCheck(uid, gid) {
+function runtimeCheck(uid, gid, outboxGid) {
   const fs = require("node:fs");
   const assert = require("node:assert/strict");
   const status = fs.readFileSync("/proc/self/status", "utf8");
   assert.equal(process.getuid(), Number(uid));
   assert.equal(process.getgid(), Number(gid));
   assert.match(status, new RegExp(`^Gid:\\s+${gid}\\s+${gid}\\s+${gid}\\s+${gid}$`, "m"));
-  assert.match(status, new RegExp(`^Groups:[\\t ]*(?:${gid}[\\t ]*)?$`, "m"));
+  const groups = status.match(/^Groups:[\t ]*(.*)$/m);
+  assert.ok(groups, "process supplementary groups are required");
+  const actualGroups = groups[1].trim().split(/\s+/).filter(Boolean);
+  assert.ok(actualGroups.every(group => group === gid || group === outboxGid), "only primary and approved outbox groups are allowed");
+  if (outboxGid) assert.ok(actualGroups.includes(outboxGid), "outbox supplementary group is required");
   assert.match(status, /^CapEff:\s+0+$/m);
   assert.match(status, /^NoNewPrivs:\s+1$/m);
   console.log(`process uid=${process.getuid()} gid=${process.getgid()}; ${status.match(/^Gid:.*$/m)[0]}; ${status.match(/^Groups:.*$/m)[0]}; CapEff=0; NoNewPrivs=1`);
@@ -142,9 +166,16 @@ function runtimeCheck(uid, gid) {
   assert.match(pid, /^\d+$/);
   const daemon = fs.readFileSync(`/proc/${pid}/status`, "utf8");
   assert.match(daemon, new RegExp(`^Uid:\\s+${uid}\\s+${uid}\\s+${uid}\\s+${uid}$`, "m"));
+  if (outboxGid) {
+    const daemonGroups = daemon.match(/^Groups:[\t ]*(.*)$/m);
+    assert.ok(daemonGroups, "sshd supplementary groups are required");
+    const actualDaemonGroups = daemonGroups[1].trim().split(/\s+/).filter(Boolean);
+    assert.ok(actualDaemonGroups.includes(outboxGid) && actualDaemonGroups.every(group => group === gid || group === outboxGid),
+      "sshd requires the approved outbox group and no extra groups");
+  }
   assert.match(fs.readFileSync(`/proc/${pid}/cmdline`, "utf8"), /sshd/);
   console.log(`sshd pid=${pid}; ${daemon.match(/^Uid:.*$/m)[0]}`);
-  for (const path of ["/state/home", "/state/ssh", "/state/deploy"]) {
+  for (const path of ["/state", "/state/home", "/state/ssh", "/state/deploy"]) {
     const st = fs.statSync(path);
     assert.equal(st.mode & 0o777, 0o700, path);
     assert.equal(st.uid, Number(uid), path);
@@ -155,6 +186,42 @@ function runtimeCheck(uid, gid) {
   socket.setTimeout(5000, () => { console.error("SSH banner timed out"); process.exit(1); });
   socket.once("data", (chunk) => { assert.match(chunk.toString(), /^SSH-2\.0-OpenSSH_/); console.log(`SSH banner: ${chunk.toString().trim()}`); socket.destroy(); });
   socket.once("error", (err) => { console.error(err.message); process.exit(1); });
+}
+
+// Serialized inside the agent, with the bb fragment only. /proc/net lists every
+// listening socket of the container's network namespace, whoever owns it.
+// bb's API has no login, so nothing but sshd may listen beyond loopback.
+export function listenerCheck(fs = require("node:fs"), endianness = require("node:os").endianness()) {
+  // The kernel prints each 32-bit word of an address in host byte order.
+  const bytes = (hex) => (hex.match(/.{8}/g) || []).flatMap((word) => {
+    const pairs = word.match(/../g).map((pair) => parseInt(pair, 16));
+    return endianness === "LE" ? pairs.reverse() : pairs;
+  });
+  const listeners = [];
+  for (const [file, length] of [["/proc/net/tcp", 8], ["/proc/net/tcp6", 32]]) {
+    let text;
+    try { text = fs.readFileSync(file, "utf8"); }
+    catch (error) { if (length === 32 && error.code === "ENOENT") continue; throw error; } // IPv6 is off
+    for (const line of text.split("\n").slice(1)) {
+      const fields = line.trim().split(/\s+/);
+      if (fields.length < 4) continue;
+      if (fields[3] !== "0A") continue; // TCP_LISTEN
+      const local = fields[1].match(/^([0-9A-Fa-f]+):([0-9A-Fa-f]{4})$/);
+      if (!local || local[1].length !== length) throw new Error("unreadable listening socket entry");
+      const address = bytes(local[1]), port = parseInt(local[2], 16);
+      const mapped = length === 32 && address.slice(0, 10).every((byte) => byte === 0) && address[10] === 255 && address[11] === 255;
+      const v4 = length === 8 ? address : mapped ? address.slice(12) : null;
+      const loopback = v4 ? v4[0] === 127 : address.slice(0, 15).every((byte) => byte === 0) && address[15] === 1;
+      const name = v4 ? v4.join(".") : "[" + address.map((byte) => byte.toString(16).padStart(2, "0")).join("").replace(/(.{4})(?=.)/g, "$1:") + "]";
+      listeners.push({ name: name + ":" + port, port, loopback });
+    }
+  }
+  const exposed = listeners.filter((listener) => !listener.loopback && listener.port !== 2222).map((listener) => listener.name);
+  if (exposed.length) throw new Error("listening beyond loopback: " + exposed.join(", ") + " (only sshd's port 2222 may)");
+  for (const port of [38886, 38887]) {
+    if (!listeners.some((listener) => listener.port === port)) throw new Error("bb is not listening on 127.0.0.1:" + port);
+  }
+  return "listening TCP sockets: " + listeners.map((listener) => listener.name).sort().join(", ") + "; all on loopback except sshd's port 2222";
 }
 
 // Serialized inside the agent: CA bytes are public, but private-key mistakes
@@ -188,6 +255,53 @@ export function mirrorsCheck(fs = require("node:fs")) {
     if (wrote) { fs.unlinkSync(probe); throw new Error("writable mirrors"); }
     return "mirrors: readable read-only directory; source freshness is operator-qualified";
   } catch { throw new Error("mirrors must be a readable read-only directory (contents withheld)"); }
+}
+
+// Serialized inside the container: input names and filesystem diagnostics stay private.
+export function inputsCheck(enabled, fs = require("node:fs")) {
+  const root = "/inputs";
+  try {
+    if (!enabled) {
+      try { fs.lstatSync(root); }
+      catch (error) {
+        if (error.code === "ENOENT") return "inputs: absent without the optional fragment";
+        throw error;
+      }
+      throw new Error("unexpected inputs");
+    }
+    if (!fs.statSync(root).isDirectory()) throw new Error("not a directory");
+    fs.readdirSync(root);
+    const probe = `${root}/.oats-read-only-probe-${process.pid}`;
+    let wrote = false;
+    try { fs.writeFileSync(probe, "probe", {flag: "wx", mode: 0o600}); wrote = true; }
+    catch (error) { if (error.code !== "EROFS" && error.code !== "EACCES") throw error; }
+    if (wrote) { fs.unlinkSync(probe); throw new Error("writable inputs"); }
+    return "inputs: readable read-only directory; contents withheld";
+  } catch { throw new Error("inputs must match the optional readable read-only directory (contents withheld)"); }
+}
+
+export function outboxCheck(enabled, uid, gid, fs = require("node:fs")) {
+  try {
+    if (!enabled) {
+      try { fs.lstatSync("/outbox"); }
+      catch (error) {
+        if (error.code === "ENOENT") return "outbox: absent without the optional fragment";
+        throw error;
+      }
+      throw new Error("unexpected outbox");
+    }
+    const root = fs.statSync("/outbox"), state = fs.statSync("/state");
+    if (!root.isDirectory() || root.uid !== Number(uid) || root.gid !== Number(gid)
+      || (root.mode & 0o7777) !== 0o2750 || !state.isDirectory() || (state.mode & 0o7777) !== 0o700) {
+      throw new Error("queue or state metadata");
+    }
+    const probe = `/outbox/.oats-write-probe-${process.pid}`;
+    fs.writeFileSync(probe, "probe", {flag: "wx", mode: 0o600});
+    try {
+      if (fs.statSync(probe).gid !== Number(gid)) throw new Error("probe group");
+    } finally { fs.unlinkSync(probe); }
+    return `outbox: setgid queue writable with group ${gid}; state remains private`;
+  } catch { throw new Error("outbox must match the optional setgid writable queue with private state (contents withheld)"); }
 }
 
 // Validate the mount even before a token is provisioned; never create a placeholder.
@@ -234,7 +348,7 @@ function credentialScan(roots, excluded = []) {
   console.log(`no .credentials.json: searched ${roots.join(", ")}${excluded.length ? ` excluding ${excluded.join(", ")}` : ""}; ${files} entries; no contents read`);
 }
 
-function main(args, env) {
+export function main(args, env, { spawnSync: run = spawnSync } = {}) {
   const container = args.shift();
   let label, home;
   while (args.length) {
@@ -247,7 +361,7 @@ function main(args, env) {
   assert.ok(["local", "target-amd64", "live-lab"].includes(label), "an explicit --evidence label is required");
   const report = (s) => console.log(`[${label}] ${s}`);
   const docker = (argv, input, timeout = 60000) => {
-    const r = spawnSync("docker", argv, { encoding: "utf8", input, timeout, maxBuffer: 8 * 1024 * 1024 });
+    const r = run("docker", argv, { encoding: "utf8", input, timeout, maxBuffer: 8 * 1024 * 1024 });
     assert.equal(r.status, 0, `docker ${argv[0]} failed: ${r.error?.message || r.stderr || r.stdout}`);
     return r.stdout.trim();
   };
@@ -260,14 +374,22 @@ function main(args, env) {
   const arch = docker(["exec", container, "node", "-p", "process.arch"]);
   if (label !== "local") assert.equal(arch, "x64", "target evidence requires amd64");
   report(`PASS architecture=${arch}; image=${info.Image}`);
-  report(`PASS ${program(runtimeCheck, [uid, gid]).replaceAll("\n", `\n[${label}] PASS `)}`);
+  report(`PASS ${program(runtimeCheck, [uid, gid, env.TEAM_OUTBOX_DIR ? env.TEAM_OUTBOX_GID : null]).replaceAll("\n", `\n[${label}] PASS `)}`);
   const token = JSON.parse(program(tokenCheck, [gid, label !== "local"]));
   for (const line of token.evidence) report(line);
   if (env.AGENT_CA_FILE) report(`PASS ${JSON.parse(program(publicCACheck, []))}`);
   if (env.AGENT_MIRRORS_DIR) report(`PASS ${JSON.parse(program(mirrorsCheck, []))}`);
-  report(`PASS ${program(credentialScan, [["/"], ["/proc", "/sys", "/dev", "/state", "/tmp", "/run", "/work"]], true)}`);
-  const writableRoots = ["/state", "/tmp", "/run", "/work", "/dev/shm", "/dev/mqueue"];
-  report(`PASS ${program(credentialScan, [writableRoots])}`);
+  if (bbSelected(env)) {
+    report(`PASS ${JSON.parse(program(listenerCheck, []))}`);
+    const pinned = JSON.parse(readFileSync(new URL("../agent-bb/package.json", import.meta.url), "utf8")).dependencies["bb-app"];
+    assert.equal(docker(["exec", container, "bb", "--version"]), pinned, "bb --version must equal container/agent-bb's pinned bb-app");
+    report(`PASS bb: ${pinned} (container/agent-bb's pin)`);
+  }
+  report(`PASS ${JSON.parse(program(inputsCheck, [!!env.TEAM_INPUT_DIR]))}`);
+  report(`PASS ${JSON.parse(program(outboxCheck, [!!env.TEAM_OUTBOX_DIR, uid, env.TEAM_OUTBOX_GID || null]))}`);
+  report(`PASS ${program(credentialScan, [["/"], ["/proc", "/sys", "/dev", "/state", "/tmp", "/run", "/work", "/inputs", "/outbox"]], true)}`);
+  const writableRoots = [...(env.TEAM_OUTBOX_DIR ? ["/outbox"] : []), "/state", "/tmp", "/run", "/work", "/dev/shm", "/dev/mqueue"];
+  report(`PASS ${program(credentialScan, [[...writableRoots, ...(env.TEAM_INPUT_DIR ? ["/inputs"] : [])]])}`);
   const denied = docker(["exec", container, "sh", "-eu", "-c", `
     test "$(npm prefix -g)" = /usr/local
     probe=$(mktemp -d /tmp/oats-npm-probe.XXXXXX)
@@ -289,7 +411,7 @@ function main(args, env) {
   if (home && token.present) {
     // Keep project hooks/instructions away from the named live instance.
     // Never record Claude's raw output: authentication failures may echo data.
-    const r = spawnSync("docker", ["exec", container, "sh", "-eu", "-c", `
+    const r = run("docker", ["exec", container, "sh", "-eu", "-c", `
       test -f "$1/instance.json"
       probe=$(mktemp -d /tmp/oats-claude-probe.XXXXXX)
       trap 'rm -rf "$probe"' EXIT

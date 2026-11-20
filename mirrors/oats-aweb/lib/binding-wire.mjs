@@ -258,7 +258,10 @@ async function readinessDetails(settings,{deployment,env=process.env,retainedSea
     const label=typeof env.OATS_DEFAULT_TEAM==='string'&&env.OATS_DEFAULT_TEAM.trim()?env.OATS_DEFAULT_TEAM.trim():'';
     problems.push({code:'needs-configuration',message:label?unmappedDefaultMessage(label):NO_TEAMS_MESSAGE});
   }
-  if(!retainedSeat && needsMintingRoot(settings) && (!candidate.root || !isAbsolute(candidate.root) || !existsSync(join(resolve(candidate.root),'.aw')))) problems.push({code:'needs-configuration',message:`no messaging root at ${candidate.root?resolve(candidate.root):process.cwd()}: run oats aweb setup there or set ${candidate.key}`});
+  if(!retainedSeat && needsMintingRoot(settings) && (!candidate.root || !isAbsolute(candidate.root) || !existsSync(join(resolve(candidate.root),'.aw')))) {
+    const source=candidate.declared?candidate.key:env.OATS_WORKSPACE||deployment?'the workspace directory':'the current directory';
+    problems.push({code:'needs-configuration',message:`no messaging root at ${candidate.root?resolve(candidate.root):process.cwd()} (from ${source}): run oats aweb setup there or set ${candidate.key}`});
+  }
   return {team,candidate,awVersion:aw.version,warnings,result:checkProblems(problems) || {status:'ready',problems:[]}};
 }
 function runAw(argv,cwd,{timeout=60000,settings={}}={}) {
@@ -374,7 +377,8 @@ async function workspaceReadinessPhase(req,{env=process.env}={}) {
       if(channel) {receiveProblems.push(...channel.problems);warnings.push(...channel.warnings);}
       if(expected.native) warnings.push({code:'native-receive-unproven',message:channel?.receiveMessage??'native receive connection is unproven: plugin/extension configuration and confirmation do not establish connected receive'});
       // req.settings is the home's captured payload, its origins the captured ones.
-      if(expected.capturedDelivery==='channel' && expected.runtime==='claude' && claudeChannelModeUnset(req.settings,settingsOrigins(env))) warnings.push({...CLAUDE_CHANNEL_MODE_DEFAULT});
+      // A session provider's Claude home runs no channel, so it has no mode to choose.
+      if(expected.capturedDelivery==='channel' && expected.runtime==='claude' && !expected.primaryBroker && claudeChannelModeUnset(req.settings,settingsOrigins(env))) warnings.push({...CLAUDE_CHANNEL_MODE_DEFAULT});
       if(expected.brokerRequired) {
         let status;
         try {status=JSON.parse(localAw(['aw','wake','status','--json'],ctx.home));} catch { /* unavailable below */ }

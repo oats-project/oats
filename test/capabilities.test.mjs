@@ -2384,9 +2384,7 @@ test("the SHIPPED aweb hook is fatal on every terminal pre-mint path (reviewer-5
   // past the root check and reaches team resolution — the paths that used to
   // warn-and-exit-0 while minting nothing.
   const bin = join(base, "bin"); mkdirSync(bin, { recursive: true });
-  // CURRENT aw shape: memberships, not teams. Using the stale key here is what
-  // let a real field drift pass review (reviewer-602627c).
-  fakeAw(bin, `#!/bin/sh\nif [ "$1" = "version" ]; then ${AW_VERSION_SHELL}; exit 0; fi\nif [ "$1" = "team" ] && [ "$2" = "list" ]; then echo '{"memberships":[],"active_team":null}'; exit 0; fi\nexit 0\n`);
+  fakeAw(bin, `#!/bin/sh\nif [ "$#" -eq 1 ] && [ "$1" = "version" ]; then ${AW_VERSION_SHELL}; exit 0; fi\necho "unexpected aw $*" >&2\nexit 2\n`);
   const root = join(base, "awroot"); mkdirSync(join(root, ".aw"), { recursive: true });
   const run = (env) => spawnSync(process.execPath, [hook, "spawn"], {
     encoding: "utf8",

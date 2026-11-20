@@ -1,0 +1,10 @@
+# The operator provisions agentUID:outboxGID mode 2750 under an operator-owned parent.
+services:
+  agent:
+    group_add:
+      - "${TEAM_OUTBOX_GID:?Set TEAM_OUTBOX_GID}"
+    volumes:
+      - type: bind
+        source: ${TEAM_OUTBOX_DIR:?Set TEAM_OUTBOX_DIR}
+        target: /outbox
+        bind: { create_host_path: false }

@@ -14,7 +14,8 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const CLI = { ok: true, operationsApi: 2, features: ['operations'], relations: true };
 const soul = (name, agentsRoot = '/a/agents') => ({ name, agentsRoot, runtime: 'pi', work: 'worktree', description: `${name} soul`, repoName: 'r' });
-const ROSTER = [soul('dev'), soul('ops')];
+// Two souls of one kind (other: packages/client/soul-role.mjs), so the grid lists them by name.
+const ROSTER = [soul('dev'), soul('pm')];
 const observed = { status: 'observed', root: '/a', workspaceStatus: { members: [] } };
 
 function clock(win) {
@@ -83,8 +84,8 @@ test('pending: no empty message, no "Loading souls…" block; card skeletons at 
   u.timers.advance(1);
   const sk = u.skeleton(); assert.ok(sk, 'the skeleton after 150ms'); assert.equal(sk.getAttribute('aria-hidden'), 'true');
   assert.ok(sk.classList.contains('souls-group'), 'shaped like a group'); assert.ok(sk.querySelector('.souls-group-cards'));
-  const cardBones = sk.querySelectorAll('.soul-tile > .soul-card'); assert.ok(cardBones.length >= 2, 'one row plus one (jsdom: one column)');
-  for (const card of cardBones) { assert.ok(card.querySelector('.sbody .sname .glyph.skeleton')); assert.ok(card.querySelector('.sbody .sdesc')); assert.ok(card.querySelector('.sfoot .skeleton')); }
+  const cardBones = sk.querySelectorAll('.skeleton-soul-card > .soul-card'); assert.ok(cardBones.length >= 2, 'one row plus one (jsdom: one column)');
+  for (const card of cardBones) { assert.ok(card.querySelector(':scope > .stitle.skeleton')); assert.ok(card.querySelector(':scope > .sdesc')); assert.ok(card.querySelector('.sfoot .skeleton')); }
   assert.equal(sk.textContent, '', 'no text in a skeleton');
   assert.equal(u.cards().length, 0);
   await u.resolve(0, { agents: ROSTER, catalog: { reason: null, ambiguous: [] } });
@@ -242,29 +243,30 @@ test('a workspace switch drops the other workspace\'s cards at once and is pendi
   assert.equal(u.cards().map(c => c.dataset.agent).join(), 'qa'); assert.equal(u.skeleton(), null);
 });
 
-test('the soul page\'s Instances card follows the host roster: a skeleton line while pending, no claim while failed or stale, "No instances yet." only after a good read', async t => {
+// Slice 3a: the soul page lists no agents (the grid and table count them), so it makes no claim about them, whatever the
+// roster's state: not after a good read, not over a stale roster, not while a re-read runs.
+test('the soul page makes no claim about the soul\'s agents in any roster state; the grid keeps its counts over a stale roster', async t => {
   const u = await setup(t);
   await u.resolve(0, { agents: ROSTER, catalog: { reason: null, ambiguous: [] } });
+  const counts = () => u.cards().map(c => c.querySelector('.sactivity')?.textContent);
+  assert.deepEqual(counts(), ['No agents running', 'No agents running']);
   u.cards()[0].click(); await tick(); await tick();
-  const card = () => u.q('.workspace-soul-page .inspector-instances');
-  assert.ok(card()); assert.equal(card().querySelector('.page-note')?.textContent, 'No instances yet.', 'a good read with none: the empty copy');
-  assert.equal(card().querySelector('.page-card-count')?.textContent, '0');
-  // A failed poll: the roster is stale — the card makes no claim and shows no count.
+  const page = () => u.q('.workspace-soul-page');
+  const none = when => { assert.equal(page().querySelector('.inspector-instances, .inspector-instance'), null, when); assert.equal(page().textContent.includes('No instances'), false, when); };
+  none('a good read');
   u.poll(); await tick(); await u.reject(1, new Error('down')); await tick();
-  assert.equal(card().querySelector('.page-note'), null, 'no "No instances yet." over a stale roster');
-  assert.ok(card().querySelector('.inspector-instances-unknown[data-roster-state=stale]')); assert.equal(card().querySelector('.page-card-count'), null, 'no count either');
-  // The maintainer's repro (#326): a poll or Retry over the stale roster is 'refreshing' while settled stays 'stale' — Back, open the
-  // card again: still no claim, no "0" (the settled state rules, as for the catalog's notice).
+  none('a stale roster');
   u.poll(); await tick();
-  u.q('.workspace-soul-page .inspector-back').click(); await tick(); u.cards()[0].click(); await tick(); await tick();
-  assert.equal(card().querySelector('.page-note'), null, 'no "No instances yet." while a re-read runs over a stale roster');
-  assert.ok(card().querySelector('.inspector-instances-unknown[data-roster-state=stale]')); assert.equal(card().querySelector('.page-card-count'), null);
+  u.q('.workspace-soul-page .inspector-back').click(); await tick();
+  assert.deepEqual(counts(), ['No agents running', 'No agents running'], 'the cards keep the last good counts under the stale line');
+  u.cards()[0].click(); await tick(); await tick();
+  none('a re-read over a stale roster');
   await u.resolve(2, { agents: ROSTER, catalog: { reason: null, ambiguous: [] } });
-  assert.equal(card().querySelector('.page-note')?.textContent, 'No instances yet.', 'a good read restores the claim');
-  // A workspace switch: pending — a skeleton line, no claim.
+  none('a good read again');
+  // A workspace switch: pending — a skeleton, no claim.
   setWorkspace('/other'); await tick();
   u.timers.advance(PENDING_DELAY_MS);
-  assert.ok(u.skeleton(), 'the grid is pending'); assert.equal(u.doc.body.textContent.includes('No instances yet.'), false);
+  assert.ok(u.skeleton(), 'the grid is pending'); assert.equal(u.doc.body.textContent.includes('No agents running'), false);
 });
 
 test('a roster failure discarded because the selection moved still ends the read: the grid is not left "refreshing"', async t => {

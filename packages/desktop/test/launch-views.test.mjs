@@ -72,9 +72,10 @@ test('side panel: Harness shows the effective harness and model, what chose them
   assert.equal(fromRow.facts().Harness, 'Claude Code');
 });
 
-/** The box as it reads: the Desktop's line, the kernel's lines, the code behind Details, and its elements. */
+/** The box as it reads: the Desktop's line, the kernel's lines, the code behind its own Details (the box may sit inside
+ * another disclosure: the soul page's Ready), and its elements. */
 const boxOf = box => ({ own: box.querySelector('.launch-problem-own')?.textContent, said: [...box.querySelectorAll('.launch-problem-said')].map(p => p.textContent),
-  code: box.querySelector('details p').textContent, children: [...box.children].map(c => `${c.tagName.toLowerCase()}${c.className ? `.${c.className}` : ''}`) });
+  code: box.querySelector(':scope > details p').textContent, children: [...box.children].map(c => `${c.tagName.toLowerCase()}${c.className ? `.${c.className}` : ''}`) });
 const REFUSED_HERE = 'A spawn of this soul with no launch chosen would be refused here.';
 
 test('side panel: a missing harness reads as the Desktop\'s line, then the kernel\'s message and fix under its name, the code behind Details', async t => {
@@ -91,7 +92,8 @@ test('side panel: a missing harness reads as the Desktop\'s line, then the kerne
 /* ── #1015: one rule for every launch problem, on the page and in the panel. The texts are this file's own. ── */
 const SAID = 'the file points "ghost" at a launch and no soul answers to that name', REMEDY = 'point the entry at a soul, then drop "ghost"';
 const problemOf = (code, message = SAID, fix = REMEDY) => ({ ...SOUL_PREF(), problem: { code, message, fix } });
-const BOXES = [['side panel', undefined, '.inspector-launch .launch-problem'], ['soul page', 'page', '[data-launch-notes] .launch-problem']];
+// On the soul page (slice 3a) a launch problem is its Ready row's: the sentence, and this box behind Details.
+const BOXES = [['side panel', undefined, '.inspector-launch .launch-problem'], ['soul page', 'page', '.soul-ready-problems .launch-problem']];
 
 for (const [place, layout, selector] of BOXES) test(`${place}: every launch problem reads the same way, keyed on no code: the Desktop's line, "OATS says:" before the kernel's message, its fix under it`, async t => {
   // The six codes a Launch report can carry, and one the Desktop has never seen.
@@ -155,8 +157,9 @@ test('soul page: the harness fact carries the model and what chose it; below, th
   assert.equal(pref.el.querySelector('[data-fact="harness"] .muted').textContent, "claude-opus-5-5 · launch configuration opus · the soul's preference");
   assert.equal(pref.el.querySelector('.launch-declared'), null, 'no difference, nothing more');
   const missing = await inspector(t, MISSING(), { layout: 'page' });
-  assert.deepEqual([...missing.el.querySelectorAll('[data-launch-notes] .launch-problem-said')].map(p => p.textContent), [`OATS says: ${MISSING().problem.message}`, MISSING().problem.fix]);
-  assert.equal(missing.el.querySelector('[data-launch-notes] .launch-problem-own').textContent, 'A spawn of this soul with no launch chosen would be refused here.');
+  assert.deepEqual([...missing.el.querySelectorAll('.soul-ready-problems .launch-problem-said')].map(p => p.textContent), [`OATS says: ${MISSING().problem.message}`, MISSING().problem.fix]);
+  assert.equal(missing.el.querySelector('.soul-ready-line').textContent, `OATS says: ${MISSING().problem.message}`, 'Ready: the kernel\'s sentence');
+  assert.equal(missing.el.querySelector('.soul-ready-problems .launch-problem-own').textContent, 'A spawn of this soul with no launch chosen would be refused here.');
   const host = await inspector(t, { declared: null, effective: { harness: 'pi', model: null, launchConfig: null }, from: 'host', at: null, problem: null }, { layout: 'page' });
   assert.equal(host.el.querySelector('[data-fact="harness"] .muted').textContent, "Pi's default model · no preference set: the host default");
   assert.equal(host.el.querySelector('[data-launch-notes]'), null, 'nothing to add');

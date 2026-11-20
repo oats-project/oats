@@ -260,12 +260,12 @@ test("the REAL bundled oats.aweb binding check decodes the kernel's check reques
   assert.equal(out.outcome, "result", JSON.stringify(out));
   assert.equal(out.result.problems.some((p) => ["invalid-binding", "provider-not-qualified"].includes(p.code)), false, JSON.stringify(out));
   // What the bundled 1.21.1 answers under the 0.30 env (its actual output, recorded from this run):
-  // needs-configuration for the missing messaging root only. It reads the kernel's default team
+  // needs-configuration for the missing messaging root only, named with its source since oats.aweb 1.44.0 (awebai/oats-aweb#291). It reads the kernel's default team
   // (OATS_DEFAULT_TEAM_ID), so the 1.16 "no team" problem is gone. An `aw` version problem depends on the machine.
   assert.equal(out.result.status, "needs-configuration", JSON.stringify(out));
-  const reasons = out.result.problems.filter((p) => !/^aw /.test(p.message)).map((p) => [p.code, p.message.replace(/ at \S+:/, " at <deployment>:")]);
+  const reasons = out.result.problems.filter((p) => !/^aw /.test(p.message)).map((p) => [p.code, p.message.replace(/ at \S+ \(from /, " at <deployment> (from ")]);
   assert.deepEqual(reasons, [
-    ["needs-configuration", "no messaging root at <deployment>: run oats aweb setup there or set settings.oats.aweb.root"],
+    ["needs-configuration", "no messaging root at <deployment> (from the workspace directory): run oats aweb setup there or set settings.oats.aweb.root"],
   ], JSON.stringify(out));
   assert.deepEqual(out.result.warnings, [], JSON.stringify(out));
 });

@@ -1115,7 +1115,7 @@ control.
 ## Quick Open and the spawn dialog
 
 - **⌘P / Alt+P** finds a soul, from a terminal too; picking it opens
-  the spawn dialog scoped to that soul, exactly as its card's Spawn does (the
+  the spawn dialog scoped to that soul, exactly as its page's **New agent** does (the
   Workspace stage behind it). A soul
   that can't be spawned here (attached only, refused, no verified CLI) opens
   its soul page instead, which says why. Focus lands on the dialog's first
@@ -1130,7 +1130,7 @@ control.
   press (a key other than a lone modifier, a paste, a focus move, a navigation) or
   an overlay is open (`docs/desktop-spawn-preview.md`, Background spawn).
 - **Focus on open:** the form's first field, the Opening instruction,
-  whenever the dialog opens for a chosen soul (a card, the soul page, Quick
+  whenever the dialog opens for a chosen soul (the soul page, Quick
   Open, Reopen spawn, a pick in the soul list), without scrolling, with the
   caret at the end of a restored instruction (never selected). Name is optional
   and the form's last field; its section key (Mod+6) reaches it, with the caret
@@ -1214,17 +1214,20 @@ the rig). "Fixed" marks a gap this change closed.
 | Split right / down (the only buttons after the tabs: closing the split and the instance panel are on their chords and the palette) | Tab (shown for a terminal) | Enter; their chords |
 | Split separator | Tab | Arrows resize, Home/End to the ends, **Enter resets to even (fixed: double-click only)** |
 | Empty split group | Tab; F6 (main) | Focus selects the group |
-| Workspace › Machines: Retry (no Spawn button: `S` on the canvas, the sidebar, ⌘N, Quick Open and the soul cards spawn) | First stops of the tab's panel; F6 (main) | Enter; `S` on the canvas |
+| Workspace › Machines: Retry (no Spawn button: `S` on the canvas, the sidebar, ⌘N, Quick Open and a soul's page spawn) | First stops of the tab's panel; F6 (main) | Enter; `S` on the canvas |
 | Machines' deployment tabs (All, then one per deployment) | Tab (the selected tab) | ←/→ move and select; Home/End; the choice is remembered per workspace |
 | Overview canvas | Tab | Arrows walk the tree; **Up/Down move between rows when there is no parent/child, so every Independent node is reachable (fixed)**; `[` `]` hop groups; Enter and `T` go to the instance (Start… when stopped); `S` Workspace › Souls; `O` the node popup; Esc clears; **the selected node is panned into view (fixed)** |
 | Overview zoom − + fit | Tab after the canvas; **`-` `=` `0` on the canvas (fixed: `0`)**; `F` also fits | Enter |
 | Overview node popup | Tab after the zoom buttons; `O` | Native buttons; Esc back to the canvas |
 | Workspace tabs (Souls, Capabilities, Teams, Machines, Setup) | One roving stop; F6 (main) | Left/Right/Home/End, in that order; Souls is selected first |
-| Souls search, Group by | Tab; `/` from the grid | Typing; Enter |
-| Souls: **About souls** (the round "i" after Group by) and its dialog | Tab | As About capabilities below |
-| Soul cards and their Spawn | One roving stop; the card's Spawn follows it | Arrows; Enter/Space open the soul page; `B` files; Spawn: Enter |
+| Souls search, Grid \| Table | Tab; `/` from the grid | Typing; Enter/Space choose a view |
+| Soul cards, or the table's rows (their names) | One roving stop | Arrows, Home/End; Enter/Space open the soul page; `B` files; `V` switches grid ⇄ table, focus staying on the same soul (`spawn.view`, remembered per window) |
 | Teams board cards | One Tab stop per card: its team's name | Enter/Space on the name open the team's page; a click anywhere on the card that is not another control opens it too |
 | Soul page, capability page, team page | Opening focuses Back | Esc goes back and restores focus; from a team page, Esc and Back return to the board with focus on that team's name |
+| Soul page: Capabilities rows | One roving stop | Up/Down, Home/End move; Enter/Space open the capability's page; Esc on that page returns to the row |
+| Soul page: Soul instructions \| Composed instructions | One roving stop: the shown tab | Left/Right (wrapping), Home/End switch and move focus; Tab goes on into the shown tab's section list and reader |
+| Soul page: a tab's section list, its reader | Tab | A section scrolls the reader to it; the reader is a labelled scrollable region (arrows, PgUp/PgDn) |
+| Soul page: Ready's Details, Teams on this computer, Skills | Tab (native disclosures) | Enter/Space fold out; Skills holds the Contents tree and reader (as the capability page's below) |
 | Capability page: Contents navigation (one tree: Instructions, Skills) | One roving stop: the open file, else the focused item | Up/Down move through visible items, Home/End; Right opens a skill, then enters it; Left closes it, or climbs from a file to its skill; Enter/Space open a file or toggle a skill; Esc still goes back |
 | Capability page: Contents reader | Tab (a labelled scrollable region) | Arrows/PgUp/PgDn scroll; Enter on a link: a listed file opens in place (and is selected on the left), `https:` opens in the browser, `#heading` scrolls; any other link is plain text |
 | Capabilities: Workspace owned's repository pills ("Show capabilities from") | One roving stop: the pressed pill | Left/Right (and Up/Down) move along the pills, wrapping; Home/End go to the ends; Enter/Space choose. Moving never chooses. Focus stays on the same repository's pill when the list repaints |
@@ -1239,7 +1242,7 @@ the rig). "Fixed" marks a gap this change closed.
 | Instance panel tabs | F6 (selected tab); roving | Left/Right/Home/End |
 | Show instance panel (end of the main area's top bar, while the panel is closed and has something to show) | Tab, last in the Main region; closing the panel moves focus to it | Enter/Space: `panel.toggle`, then focus on the panel's selected tab |
 | Panel sections: soul link, copy, details, Open soul page, Teams, Git, lifecycle Restart…/Start…/Stop…/Retire… | Tab | Native buttons and summaries |
-| Spawn dialog | Spawn on a card, a soul page, Quick Open | See above |
+| Spawn dialog | New agent on a soul page, Quick Open | See above |
 | Command palette, Quick Open | ⌘K / Alt+K, ⌘P / Alt+P (from a terminal too) | Type, arrows, Enter, Esc; Tab stays in the input; in the palette its chord cycles rows (⇧ + it: up), skipping context rows, and ⌘N / ⌥⌘N (Alt+Shift+↓ / ↑ on Linux/Windows) move to the next / previous group's first row, named in its footer (see "The command palette") |
 | Shortcuts editor | ⌘, / Ctrl+, (from a terminal too); focus starts in its search | Its first section, **Most useful**, is a read-only table (each row an action, then its keys) of the palette, Quick Open, the tab moves, tabs 1–9, the workspace moves, the splits, the moves between split panes, close tab, focus mode and the leader then `?`, read from the live keymap: the platform, the chord family and your rebinds as they are, and the leader's key where an action has no chord (the workspace moves in the Ctrl+Alt and Ctrl+Shift families: the leader then ↑ / ↓); a search hides it. Then the list: the **Leader** group comes first (the leader's own row, then one fixed row per key after it), then **Sidebar keys**; typing in the search filters by name, group or keys (`shift+b` and `ctrl shift b` find Ctrl+Shift+B, `ctrl+x k` finds the leader's `k`), and the count is announced; Down enters the rows, Up/Down move between them, Up from the first returns to the search; Tab reaches each row's shortcut and Reset; Enter records, Esc cancels a recording, Backspace unbinds; Esc clears the search, then closes; trapped, the search its first stop. A row shows "terminal" when its shortcut works while a terminal has focus and "changed" when it differs from the default. What has no button in the sidebar is taught by its rows, with no line of their own above them: the command palette is the Leader group's first key (the leader then K or Space) and a Global row (⌘K, Alt+K, Ctrl+Alt+K or Ctrl+Shift+K by the family); Connections, which the settings cog's menu leaves out, is the Global row **Settings: Connections…**, unbound by default and bound from that row; **Quick open a soul to spawn** (the sidebar foot's Spawn instance runs it), **View: Workspace › Machines**, **View: Workspace overview** and **View: Automations** show their chords |
 | Settings (Connections, Terminal) | The palette's **Settings: Connections…** | Trapped, through the Terminal size field too; the sign-in terminal has an explicit Shift+Tab exit; the font size stepper's − and + stay focusable at 9 and 28 (aria-disabled) and a typed size applies on Enter or on leaving the field |
