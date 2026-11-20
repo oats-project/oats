@@ -526,7 +526,7 @@ test('White, Solarized, Dark and This computer have explicit registry/palette ch
   const start = source.indexOf('// ── command palette');
   const end = source.indexOf('// ── Quick Open', start);
   const commands = runInNewContext(`${source.slice(start, end)}\npalette.commands`, {
-    ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options,
+    ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options, takePickerFocusReturn: () => null,
   });
   assert.equal(commands.find(item => item.label === 'Theme: choose…').detail(), 'Ctrl+Shift+Space', 'the bound chord');
   setBinding('app.themePicker', 'Ctrl+Alt+T');
@@ -566,7 +566,7 @@ test('Font: choose… opens the font picker from the palette, the shortcuts edit
   const start = source.indexOf('// ── command palette');
   const end = source.indexOf('// ── Quick Open', start);
   const commands = runInNewContext(`${source.slice(start, end)}\npalette.commands`, {
-    ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options,
+    ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options, takePickerFocusReturn: () => null,
   });
   const choose = commands.filter(item => item.label === 'Font: choose…');
   assert.equal(choose.length, 1, 'one palette entry opens the picker');
@@ -696,7 +696,7 @@ test('the palette keeps focus mode reachable without the bar and names the insta
   const start = source.indexOf('// ── command palette');
   const end = source.indexOf('// ── Quick Open', start);
   const commands = runInNewContext(`${source.slice(start, end)}\npalette.commands`, {
-    ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options,
+    ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options, takePickerFocusReturn: () => null,
   });
   assert.equal(commands.some(item => /context panel/i.test(item.label)), false, 'the panel is the instance panel now');
   const panelCommand = commands.find(item => item.label === 'Agent: Details'); assert.ok(panelCommand, "slice 6a: panel.toggle is Agent: Details");

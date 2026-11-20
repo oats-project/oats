@@ -73,7 +73,7 @@ test("UI spec: no deployments block in the sidebar; the workspace list sits unde
 /* ── the sidebar roster ── */
 const renderSource = shellSource.match(/function renderContextRoster\(instances\) \{[\s\S]*?\n\}/)?.[0];
 // The row's one act (slice 6a): its click runs the shipped activateRosterRow.
-const actSource = shellSource.match(/function activateRosterRow\(i, ws = contextWorkspace \|\| currentWorkspace\(\)\) \{[\s\S]*?\n\}/)?.[0];
+const actSource = shellSource.match(/function activateRosterRow\(i, ws\) \{[\s\S]*?\n\}/)?.[0];
 // `said`: what the rows' context menus said in the hint's line (sayInHint) when held.
 function roster(t, instances, deployments, said = []) {
   const dom = new JSDOM(html); t.after(() => dom.window.close());

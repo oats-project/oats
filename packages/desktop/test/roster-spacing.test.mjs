@@ -21,7 +21,7 @@ const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url
 const css = read("shell.css"), html = read("index.html");
 const renderSource = read("shell.mjs").match(/function renderContextRoster\(instances\) \{[\s\S]*?\n\}/)?.[0];
 // The row's one act (slice 6a): its click runs the shipped activateRosterRow.
-const actSource = read("shell.mjs").match(/function activateRosterRow\(i, ws = contextWorkspace \|\| currentWorkspace\(\)\) \{[\s\S]*?\n\}/)?.[0];
+const actSource = read("shell.mjs").match(/function activateRosterRow\(i, ws\) \{[\s\S]*?\n\}/)?.[0];
 assert.ok(renderSource, "exercise the shipped roster composition, not a hand-copied row");
 const instance = (name, parentInstance) => ({ instance: name, parentInstance, agent: "dev",
   home: `/synthetic/${name}`, agentsRoot: "/synthetic/agents", repoName: "desktop-repo", running: true });

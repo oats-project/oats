@@ -583,7 +583,8 @@ function subscribeHomeRoster(fn) {
  * needed): a running row's terminal, a stopped row's Start. Refused, opening nothing, for a held home, a row whose
  * state isn't known or whose remote can't be addressed, and a stopped row of a stale roster (its last read failed:
  * it may be running by now), the gates the row's own markup states (its title and description). */
-function activateRosterRow(i, ws = contextWorkspace || currentWorkspace()) {
+function activateRosterRow(i, ws) {
+  ws = ws ?? (contextWorkspace || currentWorkspace());
   if (!i || heldHome(i) || i.running == null || !canAddressRemote(i)) return false;
   if ((rosterStale || rowStale(i, contextDeployments)) && !i.running) return false;
   spawnJobs.seen?.(ws, i);

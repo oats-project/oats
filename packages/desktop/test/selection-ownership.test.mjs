@@ -1,6 +1,7 @@
 // Shipped-shell boundary: real DOM chrome, split projection, selection/open/
 // close/workspace functions and terminal lifecycle. Only IPC, xterm and module
 // loading are synthetic. No Electron, processes, sockets or operator sessions.
+import { withShellWindowGlobals } from "./helpers/shell-window-globals.mjs";
 import test from "node:test";
 import { createLaunchFocus } from "../renderer/launch-focus.mjs";
 import { createInstanceRecency, recencyIdFromTerminalKey } from "../renderer/instance-recency.mjs";
@@ -159,7 +160,7 @@ function shell(t, { shellSource = source, ownership = createSelectionOwnership, 
   }).join("\n");
   const registry = shellSource.split("\n").filter(line => /^registerAction\(/.test(line)
     && /id: "(?:tabs\.|split\.close|terminal\.focusActive)/.test(line));
-  const s = runInNewContext(`${setup}\n${functions.join("\n")}\n${registry.join("\n")}\n({ ${names.join(", ")}, tabOpenIntents${leader ? `, ${leaderNames.join(", ")}, leader` : ""} });`, c);
+  const s = runInNewContext(`${setup}\n${functions.join("\n")}\n${registry.join("\n")}\n({ ${names.join(", ")}, tabOpenIntents${leader ? `, ${leaderNames.join(", ")}, leader` : ""} });`, withShellWindowGlobals(c));
   if (leader) { c.openTerminalTabFlow = s.openTerminalTabFlow; t.after(() => s.leader.dispose()); }
   s.initContextRoster();
   // refreshContextRoster is stubbed here: the roster's loading state reads as observed, so rows paint.
