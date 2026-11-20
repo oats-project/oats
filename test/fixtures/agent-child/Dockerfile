@@ -4,7 +4,9 @@ ARG AGENT_IMAGE
 FROM ${AGENT_IMAGE}
 
 USER root
-COPY --chown=0:0 --chmod=644 child.mjs version /opt/agent-child/
+# WORKDIR makes the directory traversable: a directory COPY creates would take --chmod's 644.
+WORKDIR /opt/agent-child
+COPY --chown=0:0 --chmod=644 child.mjs version ./
 COPY --chown=0:0 --chmod=644 agent-child.json /etc/agent-child.json
 
 # The team image's entrypoint, HOME and environment stay as they are.

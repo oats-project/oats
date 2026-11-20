@@ -1842,8 +1842,8 @@ test("the fixture child image declares one tiny child and stays out of the base 
   const dockerfile = readFixtureChild("Dockerfile");
   const instructions = dockerfile.replace(/\\\n/g, " ").split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#"));
   assert.deepEqual(instructions, [
-    "ARG AGENT_IMAGE", "FROM ${AGENT_IMAGE}", "USER root",
-    "COPY --chown=0:0 --chmod=644 child.mjs version /opt/agent-child/",
+    "ARG AGENT_IMAGE", "FROM ${AGENT_IMAGE}", "USER root", "WORKDIR /opt/agent-child",
+    "COPY --chown=0:0 --chmod=644 child.mjs version ./",
     "COPY --chown=0:0 --chmod=644 agent-child.json /etc/agent-child.json",
     "WORKDIR /state", "USER agent",
   ], "the team image is a build argument without a default; no RUN, ENV, ENTRYPOINT or CMD: the team image's stay");
