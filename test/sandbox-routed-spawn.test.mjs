@@ -450,6 +450,14 @@ test("the CLI's answer to a caller-bound spawn into a sandbox carries its reason
   assert.ok(error.message.endsWith(error.details.remedy));
   assert.deepEqual(acts(fx), [], "no provider act");
   assert.deepEqual(fx.kept(), []);
+  // The client's confirmed-spawn reader (packages/client/spawn-apply-cli.mjs, #2021), given this kernel's
+  // answer as it printed it: the code, the message, the reason and the remedy cross, nothing else.
+  const { cliSpawnApply } = await import("../packages/client/spawn-apply-cli.mjs");
+  const { cli, target, data } = await import("../packages/desktop/test/helpers/spawn-preview-fixture.mjs");
+  const capable = { ...structuredClone(cli), spawnApplyApi: 1, features: [...cli.features, "spawn-apply-2", "spawn-idempotency-2"] };
+  const read = await cliSpawnApply(capable, { target: structuredClone(target), choices: {}, decision: data().decision, key: "a".repeat(64), task: "Ingest the feed." },
+    { env: { PATH: "/inert/bin", HOME: "/inert/home" }, exec: (_bin, _argv, _options, done) => done({ code: r.status }, r.stdout) });
+  assert.deepEqual(read.envelope.error, { code: "E_SANDBOX_PLACEMENT", message: error.message, details: { reason: "caller-bound", remedy: error.details.remedy } });
 });
 
 test("C4: a settled answer without one of its act's seat fields is unknown, hook-failed; a seat plan without seat.path too", async (t) => {

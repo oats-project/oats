@@ -22,9 +22,6 @@ export const CLIENT_OWN_CODES = Object.freeze([
   'E_APPLY_UNAVAILABLE', 'E_BACKEND_UNAVAILABLE', 'E_BUSY', 'E_FORBIDDEN_FRAME', 'E_INPUT_PREPARATION', 'E_INSTANCE_GONE',
   'E_INTENT_EXPIRED', 'E_OUTCOME_UNKNOWN', 'E_PREFLIGHT_INCOMPLETE', 'E_PREVIEW_UNAVAILABLE', 'E_SUPERSEDED', 'E_TARGET_CHANGED',
   'E_UNSUPPORTED_OPTION', 'E_WAKE_OUTCOME_UNKNOWN', 'E_WAKE_SAVE_FAILED',
-  // The kernel's code for a confirmed spawn into a sandbox (feature sandboxes, D-S1-4), listed only until
-  // this tree's kernel writes it: the sandboxes kernel change (S1) writes it and removes it from here.
-  'E_SANDBOX_PLACEMENT',
   // Stop, start, restart and remove, and the plan a person confirms (a spawn's plan too).
   'E_LIFECYCLE_UNAVAILABLE', 'E_OPTION_UNAVAILABLE', 'E_PLAN_CHANGED', 'E_PLAN_EXPIRED', 'E_PLAN_LIMIT', 'E_PLAN_REQUIRED',
   'E_HOME_UNVERIFIED', 'E_START_UNCONFIRMED',
