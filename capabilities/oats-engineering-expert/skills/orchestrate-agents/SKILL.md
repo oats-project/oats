@@ -39,7 +39,7 @@ fresh instance of that area's expert or developer soul.
 An effort is one goal that can land on its own. Work its "done means" needs stays in it;
 work it can finish without is another effort. In doubt, it is yours.
 
-<!-- OATS: Pepe's coordination rule (2026-11-20): a lead's children and its sibling leads get related work, the flag `--related-work` from OATS 0.69.23 (`--same-work` before). -->
+<!-- OATS: Pepe's coordination rule (2026-11-20): a lead's children and its sibling leads get related work, the flag `--related-work` from OATS 0.69.23. -->
 | Its work | Relation | Spawn with |
 |---|---|---|
 | A part of your effort: a specialist, a helper, a probe, a developer | your **child** | `--parent <your instance> --related-work` |
@@ -57,7 +57,7 @@ work it can finish without is another effort. In doubt, it is yours.
   maintainer launched you, ask it to launch the new lead. As a specialist, hand a new
   effort to your parent.
 
-<!-- OATS: Pepe's coordination rule (2026-11-20): a lead's children and its sibling leads get related work, the flag `--related-work` from OATS 0.69.23 (`--same-work` before). -->
+<!-- OATS: Pepe's coordination rule (2026-11-20): a lead's children and its sibling leads get related work, the flag `--related-work` from OATS 0.69.23. -->
 ```bash
 oats spawn <soul> --parent "$OATS_INSTANCE" --related-work --name <task>-<role> --task-file <brief.md>
 ```
