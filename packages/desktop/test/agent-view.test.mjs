@@ -7,11 +7,11 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, DETAIL_NOTES, BOARD_MALFORMED, boardDropped } from '../renderer/agent-board.mjs';
 import { createTabBoards } from '../renderer/agent-board-tabs.mjs';
-import { boardData, BOARD_FEATURE } from '../../client/instance-board.mjs';
+import { boardData, boardDetailData, BOARD_FEATURE } from '../../client/instance-board.mjs';
 import { defaultBinding, TERMINAL_ALLOWLIST, DEFAULT_KEYMAPS } from '../renderer/keybindings.mjs';
 import { createFocusRegions, REGIONS } from '../renderer/focus-regions.mjs';
 import { leaderDoes } from '../../client/keymap.mjs';
-import { NOW, fact, question, board, detail } from './helpers/board-fixture.mjs';
+import { AT, NOW, fact, question, board, detail } from './helpers/board-fixture.mjs';
 
 function memoryStorage() {
   const m = new Map();
@@ -144,7 +144,7 @@ test('agent view questions: the context fold is attributed plain text, read with
   f.view.update(boardData({ ...board(), questions: [question('q1', { hasContext: true })] }));
   const fold = f.zone().querySelector('.agent-q-context');
   assert.equal(fold.hidden, false); assert.match(fold.textContent, /Reading the context/);
-  f.view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'Three commits:\nfix, <b>test</b>, docs.' }]]) });
+  f.view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'Three commits:\nfix, <b>test</b>, docs.', since: AT }]]) });
   assert.equal(fold.querySelector('.agent-q-says').textContent, 'dev-a says:');
   assert.equal(fold.querySelector('.agent-q-context-text').textContent, 'Three commits:\nfix, <b>test</b>, docs.');
   assert.equal(fold.querySelector('b'), null, 'never markup');
@@ -425,7 +425,7 @@ test('board read condition 2: the view says which outcome it has; none of them h
 test('board read condition 3: the context is the agent\'s plain text, attributed, never markup', t => {
   const f = fixture(t);
   f.view.update(boardData({ ...board(), questions: [question('q1', { hasContext: true })] }));
-  f.view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: '<img src=x onerror=alert(1)> and\nmore' }]]) });
+  f.view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: '<img src=x onerror=alert(1)> and\nmore', since: AT }]]) });
   const fold = f.zone().querySelector('.agent-q-context');
   assert.equal(fold.querySelector('img'), null);
   assert.equal(fold.querySelector('.agent-q-says').textContent, 'dev-a says:');
@@ -510,7 +510,7 @@ test('r1: a press while the view is off screen types nothing, even with no claim
 test('r1: with several questions, the keyboard reaches the Context fold (c), and Tab moves within it', t => {
   const f = fixture(t);
   f.view.update(boardData({ ...board(), questions: [question('q1', { hasContext: true }), question('q2')] }));
-  f.view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'Why: three commits.' }]]) });
+  f.view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'Why: three commits.', since: AT }]]) });
   f.terminal.focus();
   f.view.cycleFocus(); // the leader's t: an option of the zone
   assert.ok(f.zone().contains(f.doc.activeElement));
@@ -613,7 +613,7 @@ test('r3: an open context gives up the rest of the room, so what the board takes
   const view = createAgentBoard({ pane, home: '/h', name: 'dev-a', now: () => NOW, type: () => true, focusTerminal: () => {}, openLink: () => {},
     hidden: createHiddenFacts(memoryStorage()), measure: { room: () => room, used, height: () => contextPx() }, observe: () => () => {} });
   view.update(boardData({ facts: [fact('a')], questions: [question('q1', { hasContext: true })] }));
-  view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'line\n'.repeat(300) }]]) });
+  view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'line\n'.repeat(300), since: AT }]]) });
   const fold = pane.querySelector('.agent-q-context');
   fold.open = true; fold.dispatchEvent(new dom.window.Event('toggle'));
   assert.ok(used() <= room, `used ${used()} within ${room}`);
@@ -639,7 +639,7 @@ test('r3: an id cleared and asked again shows its own context, read afresh, neve
   const f = tabsFixture(t, { events: false });
   const asked = (text, since) => boardData({ facts: [], questions: [question('q1', { question: text, since, hasContext: true })] });
   f.boards.sync(f.tab, f.row({ board: asked('Deploy version one?', '2026-11-19T10:00:00.000Z') }), null, 'w');
-  f.pending[0].resolve({ instance: { board: { facts: [], questions: [{ id: 'q1', context: 'Version one passed all tests.' }] } } });
+  f.pending[0].resolve({ instance: { board: { facts: [], questions: [{ id: 'q1', since: '2026-11-19T10:00:00.000Z', context: 'Version one passed all tests.' }] } } });
   await f.flush(); await f.flush();
   const fold = () => f.pane.querySelector('.agent-q-context-body').textContent;
   assert.match(fold(), /Version one passed/);
@@ -647,7 +647,7 @@ test('r3: an id cleared and asked again shows its own context, read afresh, neve
   assert.equal(f.calls.filter(c => c.path.startsWith('/api/capabilities')).length, 2, 'a new occurrence reads the detail again');
   assert.doesNotMatch(fold(), /Version one passed/, 'the earlier context is not shown');
   assert.match(fold(), /Reading the context/);
-  f.pending[1].resolve({ instance: { board: { facts: [], questions: [{ id: 'q1', context: 'This deletes everything.' }] } } });
+  f.pending[1].resolve({ instance: { board: { facts: [], questions: [{ id: 'q1', since: '2026-11-19T11:00:00.000Z', context: 'This deletes everything.' }] } } });
   await f.flush(); await f.flush();
   assert.match(fold(), /This deletes everything/);
 });
@@ -705,5 +705,18 @@ test('r4: an unchanged repaint keeps the focus on the control that had it', t =>
     f.view.update(boardData(board())); f.view.detail({ state: 'ok', facts: new Map(), questions: new Map() });
     assert.equal(f.doc.activeElement.className, part, `${part} keeps it`);
     assert.equal(f.doc.activeElement.closest('li').dataset.key, 'pr');
+  }
+});
+
+// The round-4 delta's finding: the occurrence check fails closed.
+test('r4 delta: an answer that does not prove its question\'s since (absent, null, not a time) shows no context', t => {
+  for (const since of [undefined, null, 'invalid']) {
+    const f = fixture(t);
+    f.view.update(boardData({ facts: [], questions: [question('q1', { question: 'Delete production data?', since: '2026-11-19T11:00:00.000Z', hasContext: true })] }));
+    const asked = { id: 'q1', context: 'Version one passed all tests.', ...(since === undefined ? {} : { since }) };
+    f.view.detail({ ...boardDetailData({ instance: { board: { facts: [], questions: [asked] } } }), occurrences: new Set(['q1@2026-11-19T11:00:00.000Z']) });
+    const body = f.zone().querySelector('.agent-q-context-body').textContent;
+    assert.doesNotMatch(body, /Version one/, `since ${String(since)}`);
+    assert.match(body, /Reading the context/, `since ${String(since)}`);
   }
 });
