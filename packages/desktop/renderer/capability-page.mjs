@@ -25,6 +25,12 @@ export const pageCardCSS = `
 .oats-view .page-bar button.page-back:hover { background:var(--surface-2); }
 .page-crumbs { display:flex; align-items:center; gap:8px; min-width:0; color:var(--muted); white-space:nowrap; overflow:hidden; }
 .page-crumbs .page-crumb-current { color:var(--fg); font-weight:650; overflow:hidden; text-overflow:ellipsis; }
+/* A Workspace page's trail (slice 2b, Amendment 1, E): Home › Workspace › Souls › <name>, each part but the last a
+   link; a quiet text button, its focus the shell's tint. */
+.oats-view .page-crumbs button.page-crumb-link, .page-crumbs button.page-crumb-link { appearance:none; height:auto; min-height:0; margin:0; padding:2px 4px; border:0; border-radius:4px; background:transparent; color:var(--muted);
+  font:inherit; font-weight:500; line-height:normal; cursor:pointer; flex:none; }
+.oats-view .page-crumbs button.page-crumb-link:hover, .page-crumbs button.page-crumb-link:hover { color:var(--fg); text-decoration:underline; }
+.page-crumbs .page-crumb-sep { flex:none; }
 .page-bar-actions { margin-left:auto; display:flex; align-items:center; gap:8px; flex:none; }
 .oats-view .page-bar-actions button.act { height:30px; min-height:30px; padding:0 12px; border-radius:7px; font-size:12.5px; font-weight:600; }
 .oats-view .page-bar-actions button.act.primary:not(:disabled) { background:var(--primary-bg); color:var(--primary-fg); border-color:var(--primary-bg); font-weight:650; }
@@ -177,7 +183,18 @@ function el(doc, tag, value, cls) {
   return node;
 }
 
-/** The page bar: "‹ back", the breadcrumb (Workspace / section / this page) and actions. */
+/** Where a Workspace trail's named parts go (workspaceNavigate): the Workspace page, and its tabs by their words. */
+export const WORKSPACE_TRAIL = Object.freeze({ Home: 'home', Workspace: 'workspace', Souls: 'souls', Capabilities: 'capabilities', Teams: 'teams', Machines: 'machines', Setup: 'sources' });
+/** Ask the Workspace page (views/spawn.mjs, which listens on its root) to go to `to`: 'home', 'workspace' or a tab. */
+export function workspaceNavigate(from, to) {
+  const View = from.ownerDocument.defaultView;
+  from.dispatchEvent(new View.CustomEvent('workspace-navigate', { bubbles: true, detail: { to } }));
+}
+/** The page bar: "‹ back", the breadcrumb and actions. A Workspace page's trail (its crumbs start with "Workspace")
+ * is the whole way there (slice 2b, Amendment 1, E: Pepe, 2026-11-20, "no pots tornar al home"): Home › Workspace ›
+ * <tab> › … › this page, each part but this page a link: Home, Workspace and a tab through workspaceNavigate, and the
+ * part just above this page (`onBack`), as Back and Esc. Any other trail is plain words. `setTrail(crumbs, current,
+ * { onUp })` paints it again (a sub-page: the capability page's skill), `onUp` then going to the part above. */
 export function pageBar(doc, { backLabel, crumbs = [], current, onBack }) {
   const bar = el(doc, 'div', null, 'page-bar');
   const back = el(doc, 'button', null, 'page-back'); back.type = 'button';
@@ -185,11 +202,25 @@ export function pageBar(doc, { backLabel, crumbs = [], current, onBack }) {
   back.setAttribute('aria-label', `Back to ${backLabel}`); back.title = `Back to ${backLabel} (Esc)`;
   back.addEventListener('click', () => onBack());
   const trail = el(doc, 'nav', null, 'page-crumbs'); trail.setAttribute('aria-label', 'Breadcrumb');
-  for (const crumb of crumbs) trail.append(el(doc, 'span', crumb), el(doc, 'span', '/', 'page-crumb-sep'));
-  const here = el(doc, 'span', current, 'page-crumb-current'); here.setAttribute('aria-current', 'page'); trail.append(here);
+  function setTrail(parts, here, { onUp = onBack } = {}) {
+    const workspace = parts[0] === 'Workspace';
+    const all = workspace ? ['Home', ...parts] : parts;
+    trail.replaceChildren();
+    all.forEach((crumb, i) => {
+      const last = i === all.length - 1, to = WORKSPACE_TRAIL[crumb];
+      let part;
+      if (workspace && (last || to)) {
+        part = el(doc, 'button', crumb, 'page-crumb-link'); part.type = 'button';
+        part.addEventListener('click', () => (last ? onUp() : workspaceNavigate(part, to)));
+      } else part = el(doc, 'span', crumb);
+      trail.append(part, el(doc, 'span', workspace ? '›' : '/', 'page-crumb-sep'));
+    });
+    const now = el(doc, 'span', here, 'page-crumb-current'); now.setAttribute('aria-current', 'page'); trail.append(now);
+  }
+  setTrail(crumbs, current);
   const actions = el(doc, 'div', null, 'page-bar-actions');
   bar.append(back, trail, actions);
-  return { bar, back, actions };
+  return { bar, back, actions, setTrail };
 }
 /** Kept for callers of the F7 page chrome: a bare back control. */
 export function pageBack(doc, label, onBack) {
@@ -287,7 +318,8 @@ export function renderCapabilityPage(host, { row, status, instances, souls = [],
   const resolved = row.resolved, names = memberNames(status);
   const page = node('div', undefined, 'capability-page'); page.dataset.capability = row.name;
   if (catalogPending) page.dataset.catalogPending = 'true';
-  const { bar } = pageBar(doc, { backLabel, crumbs: from ? ['Workspace', 'Souls', from.label] : ['Workspace', 'Capabilities'], current: row.name, onBack });
+  const crumbs = from ? ['Workspace', 'Souls', from.label] : ['Workspace', 'Capabilities'];
+  const { bar, setTrail } = pageBar(doc, { backLabel, crumbs, current: row.name, onBack });
   const noticeHost = node('div', undefined, 'page-notice');
   const notice = observation ? catalogNotice(doc, observation) : null; if (notice) noticeHost.append(notice);
   const body = node('div', undefined, 'page-body'), main = node('div', undefined, 'page-main');
@@ -406,7 +438,21 @@ export function renderCapabilityPage(host, { row, status, instances, souls = [],
   if (contents) fold('files', 'Files').append(contents);
   body.append(main); page.append(bar, noticeHost, body);
   // The whole skill, in place of the body while it is open (the controller shows and hides both).
-  if (skillView) { if (!skillView.hidden) body.hidden = true; page.append(skillView); }
+  if (skillView) {
+    if (!skillView.hidden) body.hidden = true; page.append(skillView);
+    // A skill open is one level down (slice 2b, E): the trail ends on it, the capability above it a link that closes it.
+    const sync = () => {
+      const skill = skillView.hidden ? null : skillView.querySelector('.skill-view-title')?.textContent || null;
+      if (skill) setTrail([...crumbs, row.name], skill, { onUp: () => skillView.querySelector('.skill-back')?.click() });
+      else setTrail(crumbs, row.name);
+    };
+    sync();
+    const View = doc.defaultView;
+    if (View?.MutationObserver) {
+      const watch = new View.MutationObserver(() => { if (!page.isConnected) { watch.disconnect(); return; } sync(); });
+      watch.observe(skillView, { attributes: true, attributeFilter: ['hidden'] });
+    }
+  }
   host.append(page);
   return page;
 }

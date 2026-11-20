@@ -132,10 +132,11 @@ test("slice2b tiles visible without scrolling", async (t) => {
 });
 
 test("slice2b workspace page title", () => {
-  // Above the tab bar, "Workspace › <its tab>", styled as Home's head; a soul's, capability's or team's page hides it.
-  const markup = spawnSource.match(/<h1 class="workspace-title">Workspace<\/h1>\s*<header class="workspace-header"><\/header>/);
-  assert.ok(markup, "the title is the page's first line, above the tab bar");
-  assert.match(spawnSource, /function syncWorkspaceTitle\(s\) \{\n  const title = s\.q\("workspace-title"\);\n  if \(title\) title\.textContent = `Workspace › \$\{TAB_LABELS\[s\.discovery\?\.tab \?\? "souls"\] \?\? TAB_LABELS\.souls\}`;\n\}/);
+  // Above the tab bar, where you are: "Home › Workspace › Souls" (Amendment 1, E: the title is the trail), the section
+  // the page's h1, in Home's head type; a soul's, capability's or team's page hides it (its own bar has the trail).
+  // test/workspace-composition.test.mjs runs it mounted ("slice2b breadcrumb on every workspace page").
+  assert.match(spawnSource, /<nav class="workspace-title" aria-label="Breadcrumb">.*<h1 aria-current="page">Souls<\/h1><\/nav>\s*<header class="workspace-header"><\/header>/,
+    "the page's first line, above the tab bar");
   assert.match(spawnSource, /onTab: tab => \{\n      syncWorkspaceTitle\(s\);/, "it follows the tab");
   assert.match(spawnSource, /applyWorkspaceTab\(s\);\n  syncWorkspaceTitle\(s\);/, "and says the tab the page opened on");
   assert.match(spawnSource, /s\.q\("workspace-header"\)\.hidden = !!mode;\n  s\.q\("workspace-title"\)\.hidden = !!mode;/, "a page keeps its own breadcrumb");
@@ -145,13 +146,14 @@ test("slice2b workspace page title", () => {
     assert.ok(title.includes(rule) && head.includes(rule), `the same head as Home's: ${rule}`);
   }
   // Run the shipped function on the page's own markup, for each tab.
-  const dom = new JSDOM(`<div class="souls"><h1 class="workspace-title">Workspace</h1><header class="workspace-header"></header></div>`);
+  const markup = spawnSource.match(/<nav class="workspace-title"[^]*?<\/nav>/)[0];
+  const dom = new JSDOM(`<div class="souls">${markup}<header class="workspace-header"></header></div>`);
   const fn = spawnSource.match(/function syncWorkspaceTitle\(s\) \{[^]*?\n\}/)[0];
   const sync = runInNewContext(`${fn}\nsyncWorkspaceTitle`, { TAB_LABELS });
   const s = { q: (cls) => dom.window.document.querySelector(`.${cls}`), discovery: { tab: "souls" } };
   for (const [tab, said] of [["souls", "Souls"], ["capabilities", "Capabilities"], ["teams", "Teams"], ["machines", "Machines"], ["sources", "Setup"]]) {
     s.discovery.tab = tab; sync(s);
-    assert.equal(s.q("workspace-title").textContent, `Workspace › ${said}`);
+    assert.equal(s.q("workspace-title").textContent, `Home›Workspace›${said}`);
   }
   dom.window.close();
 });
@@ -212,7 +214,7 @@ test("slice2b Home › Agents follows the roster's order, pinned first where the
 // WCAG AA in every theme: each colour Home paints is a token (never a raw colour, no opacity), and each ink on each
 // fill it is drawn on (at rest, hovered, focused) is a pair of the contrast inventory, which theme-contrast.test.mjs
 // holds to AA in every built-in palette and the "This computer" derivation.
-test("slice2b Home's colours are inventory pairs in every theme", () => {
+test("slice2b Home's colours are inventory pairs in every theme", async () => {
   assert.doesNotMatch(homeCSS, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i, "no raw colour");
   assert.doesNotMatch(homeCSS, /opacity/, "no opacity compositing over text");
   const rule = (sel) => { const m = homeCSS.match(new RegExp(`(?:^|\\n)${sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`)); assert.ok(m, sel); return m[1]; };
@@ -235,9 +237,19 @@ test("slice2b Home's colours are inventory pairs in every theme", () => {
   const has = (list, [fg, bg]) => list.some(([f, b]) => f === fg && b === bg);
   for (const pair of text) assert.ok(has(TEXT_PAIRS, pair), `--${pair[0]} on --${pair[1]} is held to ${TEXT_CONTRAST}:1`);
   for (const pair of graphic) assert.ok(has(TEXT_PAIRS, pair) || has(GRAPHIC_PAIRS, pair), `--${pair[0]} on --${pair[1]} is held to ${GRAPHIC_CONTRAST}:1`);
-  // The Workspace page's title: --fg on the page's --bg.
-  assert.match(spawnSource.match(/\.workspace-title \{[^}]*\}/)[0], /color:var\(--fg\)/);
-  assert.ok(has(TEXT_PAIRS, ["fg", "bg"]));
+  // The Workspace page's trail on the page's --bg: its links --muted (--fg hovered), its section --fg; focused, --sel.
+  assert.match(spawnSource.match(/\.workspace-title \{[^}]*\}/)[0], /color:var\(--muted\)/);
+  assert.match(spawnSource, /\.workspace-title h1 \{ margin:0; font:inherit; color:var\(--fg\); \}/);
+  for (const pair of [["muted", "bg"], ["fg", "bg"], ["muted", "sel"], ["fg", "sel"]]) assert.ok(has(TEXT_PAIRS, pair), pair.join(" on "));
+  // A page bar's trail (capability-page.mjs) on the bar's --surface: links --muted, --fg hovered.
+  const { pageCardCSS } = await import("../renderer/capability-page.mjs");
+  assert.match(pageCardCSS, /button\.page-crumb-link \{[^}]*color:var\(--muted\)/);
+  for (const pair of [["muted", "surface"], ["fg", "surface"]]) assert.ok(has(TEXT_PAIRS, pair), pair.join(" on "));
+  // The Workspace defaults part (workspace-catalog.mjs): titles on --bg, slot words on the list's --surface.
+  const { catalogCSS } = await import("../renderer/workspace-catalog.mjs");
+  assert.match(catalogCSS, /\.cap-part-title \{[^}]*color:var\(--fg\)/); assert.match(catalogCSS, /\.cap-group-title \{[^}]*color:var\(--muted\)/);
+  assert.match(catalogCSS, /\.cap-slot-label \{[^}]*color:var\(--muted\)[^}]*background:var\(--surface\)/);
+  for (const pair of [["fg", "bg"], ["muted", "bg"], ["muted", "surface"]]) assert.ok(has(TEXT_PAIRS, pair), pair.join(" on "));
 });
 
 // Amendment 1, B (Pepe, 2026-11-20: "que la llista de running agents estigui cropped i sigui expandible").

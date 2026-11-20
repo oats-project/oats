@@ -193,6 +193,8 @@ test('the team page: its card first (the label as the page\'s h2, no foot, not a
   const yours = page.querySelector('[data-section=yours]');
   assert.equal(yours.querySelector('h3.ct-section-title').textContent, 'Your agents on this team');
   assert.equal(yours.querySelector('.ct-section-lead').textContent, 'On this computer and the machines you added to this workspace. Agents other people run on alex are not listed here.');
-  assert.deepEqual([...u.host.querySelectorAll('.page-bar .page-crumbs span')].map(s => s.textContent), ['Workspace', '/', 'Teams', '/', 'alex']);
+  // Slice 2b (E): Home › Workspace › Teams › alex, each part above the page a link.
+  assert.deepEqual([...u.host.querySelectorAll('.page-bar .page-crumbs > *')].map(s => s.textContent), ['Home', '›', 'Workspace', '›', 'Teams', '›', 'alex']);
+  assert.deepEqual([...u.host.querySelectorAll('.page-bar .page-crumbs button.page-crumb-link')].map(s => s.textContent), ['Home', 'Workspace', 'Teams']);
   assert.equal(u.p('.page-back').getAttribute('aria-label'), 'Back to Teams'); assert.equal(u.p('.page-back').title, 'Back to Teams (Esc)');
 });

@@ -391,7 +391,9 @@ test('slice 3a: a soul page lists its capabilities as one list of rows, core fir
   const cap = u.get('.workspace-cap-page');
   assert.equal(cap.hidden, false); assert.equal(soulPage.hidden, true);
   assert.equal(cap.querySelector('.page-back').textContent, 'dev');
-  assert.deepEqual([...cap.querySelectorAll('.page-crumbs > span:not(.page-crumb-sep)')].map(s => s.textContent), ['Workspace', 'Souls', 'dev', first]);
+  // Slice 2b (E): the whole way there, Home first, each part above this page a link.
+  assert.deepEqual([...cap.querySelectorAll('.page-crumbs > :not(.page-crumb-sep)')].map(s => s.textContent), ['Home', 'Workspace', 'Souls', 'dev', first]);
+  assert.deepEqual([...cap.querySelectorAll('.page-crumbs > button.page-crumb-link')].map(s => s.textContent), ['Home', 'Workspace', 'Souls', 'dev']);
   const resolved = cap.querySelector('details.cap-fold[data-fold="as-soul"]');
   assert.equal(resolved.querySelector('summary').textContent, 'As dev resolves it');
   assert.ok(resolved, 'what the soul resolves');
@@ -534,4 +536,59 @@ test('a catalog that lands while a capability page covers the soul page: Back sh
   assert.equal(soulPage.hidden, false);
   assert.equal(soulPage.querySelector('.cap-row[data-capability="nw-house-style"] .cap-row-desc')?.textContent, 'About nw-house-style.');
   assert.equal(u.doc.activeElement?.dataset.capability, 'nw-house-style', 'focus back on the row');
+});
+
+// The Desktop UI rework, slice 2b, Amendment 1, E (Pepe, 2026-11-20: "El navigation dintre de home un cop has entrat a
+// souls o algun altre es raro. En plan no pots tornar al home."): the way back is on every Workspace page.
+const trail = el => [...el.querySelectorAll(':scope > :not(.page-crumb-sep):not([aria-hidden=true])')].map(part => [part.textContent, part.tagName === 'BUTTON' ? 'link' : 'here']);
+test('slice2b breadcrumb on every workspace page', async t => {
+  const u = await fixture(t);
+  // A tab: Home › Workspace › Souls, above the tab bar; the section is the page's h1.
+  const head = u.get('.workspace-title');
+  assert.equal(head.tagName, 'NAV'); assert.equal(head.getAttribute('aria-label'), 'Breadcrumb');
+  assert.equal(head.nextElementSibling, u.get('.workspace-header'), 'above the tab bar');
+  assert.deepEqual(trail(head), [['Home', 'link'], ['Workspace', 'link'], ['Souls', 'here']]);
+  assert.equal(head.querySelector('h1').getAttribute('aria-current'), 'page');
+  u.get('#workspace-tab-capabilities').click(); await tick();
+  assert.equal(head.querySelector('h1').textContent, 'Capabilities', 'it follows the tab');
+  // Workspace goes to the page's first tab, with the focus on its control.
+  [...head.querySelectorAll('button')].find(b => b.textContent === 'Workspace').click(); await tick();
+  assert.equal(u.get('#workspace-tab-souls').getAttribute('aria-selected'), 'true'); assert.equal(u.doc.activeElement, u.get('#workspace-tab-souls'));
+  // A soul's page: its own bar carries the trail one level deeper; the head hides.
+  u.get('.soul-card').click(); await tick();
+  const page = u.get('.workspace-soul-page');
+  assert.equal(page.hidden, false); assert.equal(head.hidden, true);
+  assert.deepEqual(trail(page.querySelector('.page-crumbs')), [['Home', 'link'], ['Workspace', 'link'], ['Souls', 'link'], ['dev', 'here']]);
+  // Its Workspace link: the page closes, the Souls list shows.
+  [...page.querySelectorAll('.page-crumbs button')].find(b => b.textContent === 'Workspace').click(); await tick();
+  assert.equal(page.hidden, true); assert.equal(u.get('.souls-grid').hidden, false); assert.equal(head.hidden, false);
+  // Its Souls link is Back: one level up.
+  u.get('.soul-card').click(); await tick();
+  [...page.querySelectorAll('.page-crumbs button')].find(b => b.textContent === 'Souls').click(); await tick();
+  assert.equal(page.hidden, true); assert.equal(u.doc.activeElement, u.get('.soul-card'), 'back on the card it came from');
+  // Home, from the head.
+  [...head.querySelectorAll('button')].find(b => b.textContent === 'Home').click();
+  assert.deepEqual(u.views, ['home']);
+});
+
+test('slice2b home reachable from a soul page in one click and by esc twice', async t => {
+  const u = await fixture(t);
+  u.get('.soul-card').click(); await tick();
+  const page = u.get('.workspace-soul-page');
+  // One click: the bar's Home.
+  [...page.querySelectorAll('.page-crumbs button')].find(b => b.textContent === 'Home').click();
+  assert.deepEqual(u.views, ['home']);
+  // Esc twice: the soul's page, then the Workspace page (the shell's shipped listener on its stage host: Esc nothing on
+  // the page took goes to Home).
+  const shell = readFileSync(new URL('../renderer/shell.mjs', import.meta.url), 'utf8');
+  const listener = shell.match(/stageHost\.addEventListener\("keydown", \(e\) => \{[^]*?\n\}\);/)[0];
+  const went = [];
+  const { runInNewContext } = await import('node:vm');
+  runInNewContext(listener, { stageHost: u.get('#host'), stage: { name: 'spawn' }, Element: u.dom.window.Element, showStageFocused: name => went.push(name) });
+  u.get('.soul-card').click(); await tick();
+  key(u, u.doc.activeElement, 'Escape'); await tick();
+  assert.equal(page.hidden, true, 'the first Esc: up to Souls'); assert.deepEqual(went, []);
+  assert.equal(u.doc.activeElement, u.get('.soul-card'));
+  key(u, u.doc.activeElement, 'Escape');
+  assert.deepEqual(went, ['home'], 'the second Esc: Home');
 });

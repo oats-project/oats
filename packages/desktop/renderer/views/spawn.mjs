@@ -63,11 +63,18 @@ const CSS = `
 .souls-bar .souls-group-title { padding:0 2px; }
 .souls-bar .ws-segmented { margin-left:2px; }
 .workspace-header .wssel { max-width:100%; min-width:0; flex:0 1 140px; }
-/* The page's head (slice 2b): "Workspace › Souls", where you are, above the tab bar, in Home's head type (views/home.mjs
-   .home h1), lined up with the page's own content. A soul's, a capability's or a team's page hides it: each keeps its own breadcrumb. */
-.workspace-title { flex:none; margin:0; padding:24px calc(20px + var(--main-trail-inset, 0px)) 12px calc(20px + var(--main-lead-inset, 0px));
-  font-size:24px; font-weight:700; line-height:30px; color:var(--fg); font-family:var(--ui-font, system-ui); }
+/* The page's head (slice 2b and its Amendment 1, E): "Home › Workspace › Souls", where you are and the way back, above
+   the tab bar, in Home's head type (views/home.mjs .home h1), lined up with the page's own content. Home and Workspace
+   are links (muted, the current section in --fg); a soul's, a capability's or a team's page hides it: its own bar
+   carries the same trail, one level deeper. */
+.workspace-title { flex:none; display:flex; align-items:baseline; flex-wrap:wrap; gap:0 10px; margin:0;
+  padding:24px calc(20px + var(--main-trail-inset, 0px)) 12px calc(20px + var(--main-lead-inset, 0px));
+  font-size:24px; font-weight:700; line-height:30px; color:var(--muted); font-family:var(--ui-font, system-ui); }
 .workspace-title[hidden] { display:none; }
+.oats-view .workspace-title button.workspace-crumb, .workspace-title button.workspace-crumb { appearance:none; height:auto; min-height:0; margin:0; padding:0 4px; border:0;
+  border-radius:6px; background:transparent; color:var(--muted); font:inherit; line-height:inherit; cursor:pointer; }
+.oats-view .workspace-title button.workspace-crumb:hover, .workspace-title button.workspace-crumb:hover { color:var(--fg); text-decoration:underline; }
+.workspace-title h1 { margin:0; font:inherit; color:var(--fg); }
 .souls-sum { color:var(--muted); font-size:12px; }
 /* The grid's stale line (desktop/loading-states) sits between the toolbar and the scroller; nothing when empty. */
 .souls-notice { flex:none; padding:0 20px; }
@@ -342,8 +349,22 @@ function soulCapabilityFacts(s, cap) {
 
 /** The page's title, "Workspace › <its tab>" (slice 2b), following the tab shown. */
 function syncWorkspaceTitle(s) {
-  const title = s.q("workspace-title");
-  if (title) title.textContent = `Workspace › ${TAB_LABELS[s.discovery?.tab ?? "souls"] ?? TAB_LABELS.souls}`;
+  const title = s.q("workspace-title")?.querySelector("h1");
+  if (title) title.textContent = TAB_LABELS[s.discovery?.tab ?? "souls"] ?? TAB_LABELS.souls;
+}
+/** A trail's link (this page's head, or a page's bar: capability-page.mjs workspaceNavigate) going to `to`: Home (its
+ * stage, through the shell, focus kept on a control), the Workspace page (its first tab, Souls) or a tab, each page
+ * open on it closed first, so a link one level up lands on that level's list. */
+function navigateTrail(s, to) {
+  if (!s.alive) return;
+  if (to === "home") { void (s.ctx.openPage ?? s.ctx.openView)?.("home"); return; }
+  const tab = to === "workspace" ? workspaceTabs[0] : to;
+  if (!workspaceTabs.includes(tab)) return;
+  nextSelectionIntent();
+  s.page.close(); closeCapability(s); closeTeam(s);
+  s.discovery?.setTab(tab);
+  syncWorkspaceTitle(s);
+  s.el.querySelector(`#workspace-tab-${tab}`)?.focus();
 }
 
 /** A page (a soul's, a capability's or a team's) replaces the list it was opened from
@@ -571,7 +592,7 @@ ${spawnDialogCSS}</style>
       <div class="souls">
         <div class="souls-body">
           <section class="workspace-main" aria-label="Workspace discovery">
-            <h1 class="workspace-title">Workspace</h1>
+            <nav class="workspace-title" aria-label="Breadcrumb"><button type="button" class="workspace-crumb" data-to="home">Home</button><span aria-hidden="true">›</span><button type="button" class="workspace-crumb" data-to="workspace">Workspace</button><span aria-hidden="true">›</span><h1 aria-current="page">Souls</h1></nav>
             <header class="workspace-header"></header>
             <select class="field wssel" aria-label="Workspace" style="display:none"></select>
             <div class="workspace-recovery" hidden></div>
@@ -690,6 +711,10 @@ ${spawnDialogCSS}</style>
     if (s.alive && event.target.closest?.('[role="tab"]') && ["Home", "End", "ArrowRight", "ArrowLeft"].includes(event.key)) nextSelectionIntent();
   }, true);
   s.q("workspace-header").append(s.q("wssel")); // standalone switcher stays reachable on every subtab
+  // The trail's links (slice 2b, E): this page's head, and every page's bar, which says where through an event.
+  for (const crumb of s.q("workspace-title").querySelectorAll("button.workspace-crumb")) crumb.addEventListener("click", () => navigateTrail(s, crumb.dataset.to));
+  s.onNavigate = (event) => { if (event.detail?.to) { event.stopPropagation(); navigateTrail(s, event.detail.to); } };
+  el.addEventListener("workspace-navigate", s.onNavigate);
   applyWorkspaceTab(s);
   syncWorkspaceTitle(s);
   // The page opens on Souls unless a handoff chose another tab: then the Souls bar and its notice wait for Souls, and
@@ -802,6 +827,7 @@ export function unmount() {
   pendingWorkspaceTab = null;
   selectionIntent++;
   state.alive = false;
+  state.el.removeEventListener("workspace-navigate", state.onNavigate);
   state.inspector.dispose(); state.page.dispose(); state.capOpen?.contents.dispose();
   state.presentation?.dispose();
   state.gridState?.dispose();
