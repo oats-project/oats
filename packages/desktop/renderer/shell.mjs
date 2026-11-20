@@ -2451,7 +2451,11 @@ async function openTerminalTab(ref, { quiet = false, inSplit = false, expected =
   // the tab mount) would still escape as an unhandled rejection from an
   // automated caller that does not await. runOpenFlow catches every quiet
   // rejection into notify; interactive opens keep throwing.
-  return runOpenFlow(() => openTerminalTabFlow(ref, notify, { inSplit, expected, valid, followed, refuse, focusContent }), { quiet, notify });
+  // A row on a session provider has no terminal, whoever asks (the palette, a view's Open, a launch's --instance):
+  // an interactive open says where it runs in a notice, never in a blocking alert(). A quiet open, and a caller
+  // with its own onError, keep their notify.
+  const say = onError || quiet ? undefined : (line) => notifications.notify(line);
+  return runOpenFlow(() => openTerminalTabFlow(ref, notify, { inSplit, expected, valid, followed, refuse, focusContent, say }), { quiet, notify });
 }
 
 async function openTerminalTabFlow(ref, notify, options = {}) {
@@ -2502,11 +2506,12 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
     // finds ITS instance; a bare name resolves only when unambiguous — the
     // first same-named match could be another agents root's tmux session.
     const r = resolveTerminalOpen(panel.instances, ref, ws);
+    // A row on a session provider has no terminal (resolveTerminalOpen): its sentence says where it runs, through
+    // the open's own `say` when it has one (openTerminalTab: a notice, not an alert).
+    if (r.error === "no-terminal") return (options.say || notify)(r.sentence);
     if (r.error) {
       return notify(r.error === "ambiguous"
         ? `several instances are named "${r.name}" — open it from the sidebar tree, which addresses the exact one`
-        // A row on a session provider has no terminal (resolveTerminalOpen): its sentence says where it runs.
-        : r.error === "no-terminal" ? r.sentence
         : `unknown instance "${r.name}"`);
     }
     const { inst, key } = r;

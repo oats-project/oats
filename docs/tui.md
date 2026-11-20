@@ -269,7 +269,8 @@ while a terminal is open); under 80 columns it has the whole width.
   [Open an agent's terminal](#open-an-agents-terminal) and [Tabs](#tabs).
 - **An agent that runs on a session provider** (a capability's session
   backend, such as bb) has no terminal. The list shows it in the state OATS
-  reports, and `S`, `R`, `X` and `D` act on it as on any agent. `Enter` opens
+  reports (the detail says `running` or `stopped` when OATS says which, else
+  the provider's own word), and `S`, `R`, `X` and `D` act on it as on any agent. `Enter` opens
   nothing: the line says where it runs ("Runs in a bb thread; open it in
   bb.") and, when the provider offers a link, prints it under that
   (`OATS says: Open in bb: http://…`) for you to open. The palette does not

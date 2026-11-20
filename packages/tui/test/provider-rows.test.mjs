@@ -6,9 +6,9 @@ process.env.TZ = "UTC";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { instanceActs, instanceId, openAct } from "../lib/client.mjs";
-import { openDecision, paletteItems, roster } from "../lib/model.mjs";
+import { model, openDecision, paletteItems, roster } from "../lib/model.mjs";
 import { TAB_LIMIT, reduce } from "../lib/store.mjs";
-import { DEPLOYMENT, instanceRow, observed, press, stateOf, took } from "./helpers.mjs";
+import { DEPLOYMENT, NOW, instanceRow, observed, press, stateOf, took } from "./helpers.mjs";
 
 const SENTENCE = "Runs in a bb thread; open it in bb.";
 const LINK = Object.freeze({ label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_x" });
@@ -66,4 +66,16 @@ test("A4: a remembered tab whose row is now a provider's is not restored, and no
   assert.deepEqual(opened, ["dev-b", "dev-c"], "dev-a is passed over, quietly");
   assert.deepEqual([back.state.tabs.map((tab) => tab.name), back.state.restoring, back.state.opening], [["dev-b", "dev-c"], null, null]);
   assert.equal(back.state.outcome ?? null, null, "and no line is said for it");
+});
+
+test("the detail's state of a provider row agrees with its mark: running or stopped when the kernel says so, the kernel's own word when it does not", () => {
+  const state = stateOf(observed([bbRow("dev-run"), bbRow("dev-stopped", { running: false, runtimeState: "stopped" }), bbRow("dev-idle", { running: null }),
+    bbRow("dev-lost", { running: null, runtimeState: "unreachable", runtimeError: "E_SESSION_UNAVAILABLE: bb did not answer" }), instanceRow("dev", "dev-t")]));
+  const stateOfRow = (name) => model(on(state, name), { page: 19, now: NOW, at: new Date(NOW).toISOString() }).detail.facts.find((fact) => fact.label === "state").value;
+  assert.equal(rowOf(state, "dev-run").runtimeState, "unknown", "the provider's word while it runs");
+  assert.equal(stateOfRow("dev-run"), "running");
+  assert.equal(stateOfRow("dev-stopped"), "stopped");
+  assert.equal(stateOfRow("dev-idle"), "unknown");
+  assert.equal(stateOfRow("dev-lost"), "unreachable");
+  assert.equal(stateOfRow("dev-t"), "running", "a tmux row's word is the one reported, as before");
 });

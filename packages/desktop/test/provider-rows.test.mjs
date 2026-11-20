@@ -212,3 +212,37 @@ test("the menu's handler, as shipped: open-link opens the row's own link through
     assert.deepEqual(opened, expected);
   }
 });
+
+// ── An open from anywhere else (the palette, a view's Open, a launch's --instance) ──
+test("an interactive open of a provider row says where it runs in a notice, never in an alert; a quiet open and one with its own onError keep their notify; no tab, no key, no terminal", async () => {
+  const flowSource = shell.match(/async function openTerminalTabFlow\(ref, notify, options = \{\}\) \{[\s\S]*?\n\}/)?.[0];
+  const openSource = shell.match(/async function openTerminalTab\(ref, \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(flowSource && openSource, "the shell's open and its flow are found");
+  const rows = [bb("bb-run"), local("tmux-run", { tmux: { session: "oats" } })];
+  const said = { notice: [], alert: [], warn: [], own: [] }, inner = [], keys = [];
+  const c = {
+    tabs: new Map(), activeTab: null, pendingTerms: new Set(), panelReads: 0, split: null, connectionGeneration: 0, shownRoster: null, contextRosterGen: 0,
+    currentWorkspace: () => "A", workspaceGeneration: () => 0, terminalOpening: null,
+    setSidebarMode() {}, setNavActive() {}, refreshContextRoster() {}, instanceSplitPlan() {}, instanceSplitIdentity() {}, splitOpenState() {},
+    otherIncarnation: () => false, terminalOrigin: () => ({ incarnation: null }), sameInstanceActionTarget: () => true,
+    api: async () => ({ instances: rows }), resolveTerminalOpen: treeView.resolveTerminalOpen,
+    whenKeyFree: async key => { keys.push(key); }, openTerminalTabInner: async inst => { inner.push(inst.instance); },
+    tabOpenIntents: { begin: () => () => true },
+    runOpenFlow: async (run, { quiet, notify }) => { try { return await run(); } catch (error) { if (!quiet) throw error; notify(error.message); } },
+    notifications: { notify: line => said.notice.push(line) }, alert: line => said.alert.push(line), console: { warn: line => said.warn.push(line) },
+  };
+  const open = runInNewContext(`${flowSource}\n${openSource}\nopenTerminalTab`, c);
+  // The palette's bare name, and a row's exact reference.
+  for (const ref of ["bb-run", { instance: "bb-run", home: "/synthetic/bb-run", agentsRoot: "/synthetic/agents" }]) await open(ref);
+  assert.deepEqual(said, { notice: [SENTENCE, SENTENCE], alert: [], warn: [], own: [] });
+  await open("bb-run", { quiet: true });
+  assert.deepEqual([said.notice.length, said.alert, said.warn], [2, [], [`[terminal open] ${SENTENCE}`]], "a quiet open keeps its own line");
+  await open("bb-run", { onError: line => said.own.push(line) });
+  assert.deepEqual([said.notice.length, said.alert, said.own], [2, [], [SENTENCE]], "a caller's own onError is the one told");
+  assert.deepEqual([inner, keys, c.tabs.size], [[], [], 0], "no tab, no key and no terminal for any of them");
+  // The tmux row beside it opens, and an unknown name is still an alert, as before.
+  await open("tmux-run");
+  assert.deepEqual(inner, ["tmux-run"]);
+  await open("nobody");
+  assert.deepEqual(said.alert, ['unknown instance "nobody"']);
+});

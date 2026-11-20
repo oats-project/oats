@@ -11,7 +11,8 @@ import { openAct } from "../../client/instance-acts.mjs";
 import { sessionProvider, sessionThreadId } from "../../client/instance-presentation.mjs";
 import { displayLine, DETAIL_WITHHELD } from "../../client/display-text.mjs";
 
-const shown = (value) => {
+/** A value as one display line, or null when it is no text, has nothing to show or is withheld. */
+export const shown = (value) => {
   const line = typeof value === "string" ? displayLine(value) : null;
   return line && line !== DETAIL_WITHHELD ? line : null;
 };

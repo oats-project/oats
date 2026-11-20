@@ -2342,8 +2342,12 @@ home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
   terminal and opens none after one.
 - **No terminal**: `resolveTerminalOpen` (`instance-tree-view.mjs`) answers such a
   row `no-terminal` before any key or tab is decided, so no open, split or
-  take-over restore makes a tab for it; `workspace-tab-memory.mjs` never restores a
-  remembered tab whose row is one, and `retiredTabs` (P) closes a tab left on one.
+  take-over restore makes a tab for it. `workspace-tab-memory.mjs` never restores a
+  remembered tab whose last-shown row (`instanceRef`) is one; a recall runs before the
+  workspace's first roster read, so a tab whose row became one while the workspace was
+  away comes back and is closed by `retiredTabs` (P) on that first answer, quietly, as a
+  retired one is. An interactive open from anywhere else (the palette, a view's Open, a
+  launch's `--instance`) says the sentence in a notice, never in an alert.
 
 The Schedules form keeps a schedule's `backend` when the kernel lists it
 (`packages/client/session-backends.mjs` `sessionBackendNames`: the probe's `sessionBackends` and, for a schedule that

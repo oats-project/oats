@@ -108,7 +108,11 @@ export function reachedMachines(state, at) {
  *  that was not reached (the shared home marks it) still carries the word of its last report,
  *  which is not its state now: it gets the shared word, so nothing reads as stopped, or as
  *  running, that is only not reached. */
-const stateWord = (row) => (text(row.runtimeState) && row.serverUnreached !== true ? row.runtimeState : runtimeState(row));
+const stateWord = (row) => (text(row.runtimeState) && row.serverUnreached !== true && !providerKnown(row) ? row.runtimeState : runtimeState(row));
+/** A row on a session provider (the shared openAct's `no-terminal`) whose `running` the kernel answered: its
+ *  `runtimeState` is the provider's word (`unknown` while it runs), which would contradict its mark, so its
+ *  state is the shared word for its `running`. One the kernel answered `running: null` keeps the kernel's word. */
+const providerKnown = (row) => typeof row.running === "boolean" && openAct(row)?.reason?.code === "no-terminal";
 /** The word a list row shows beside its name, or null: only what its mark cannot say. That is a
  *  held home's state (Retiring… while a retire runs, or this run's own is in flight), else the
  *  shared label of the reason the row can't be reached or opened (remote-address.mjs rowReason:

@@ -328,7 +328,7 @@ test("a provider row's link: only an http(s) url with no credentials and a label
   for (const open of [null, undefined, "http://127.0.0.1/", [], {}, { label: "Open", url: "file:///etc/passwd" }, { label: "Open", url: "javascript:alert(1)" },
     { label: "Open", url: "not a url" }, { label: "", url: "http://127.0.0.1/" }, { label: 7, url: "http://127.0.0.1/" }, { label: "Open" },
     { label: "Open", url: "http://user:pw@127.0.0.1/" }, { label: "Open", url: "http://user@127.0.0.1/" },
-    { label: "x".repeat(201), url: "http://127.0.0.1/" }, { label: "Open", url: `http://127.0.0.1/${"x".repeat(2048)}` }]) {
+    { label: "x".repeat(201), url: "http://127.0.0.1/" }, { label: "Open", url: `http://127.0.0.1/${"x".repeat(1800)}` }]) {
     assert.equal(linkOf({ open }), undefined, JSON.stringify(open)?.slice(0, 80));
     assert.deepEqual(openAct({ ...BB, running: true, open }).reason, { code: "no-terminal", sentence: BB_SENTENCE });
   }

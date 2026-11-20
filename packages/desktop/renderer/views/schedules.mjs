@@ -194,18 +194,20 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   /** Edit a local schedule from its list row: the stored definition, if this editor can preserve it.
    * Its backend is kept when the kernel lists it: its own (the probe's `sessionBackends`), or a session provider
    * of the schedule's soul, read from that soul's inspection when the schedule names one (one read, under a
-   * latest-intent ticket: a later Edit, a form opened meanwhile, a workspace switch or a closed page drops it).
+   * latest-intent ticket: a later Edit, a form opened meanwhile, a change to the list begun or a Delete asked
+   * meanwhile, a workspace switch or a closed page drops it, whether the read answers or fails).
    * A read that fails lists no provider, so the schedule is refused as one this editor cannot keep. */
   async function editRow(row) {
     const definition = localScheduleDefinition(row);
-    const request = ++editRequest, formToken = formOperation, gen = workspaceGeneration();
+    const request = ++editRequest, formToken = formOperation, mutation = mutationOperation, gen = workspaceGeneration();
     let backends = sessionBackendNames(cli());
     if (definition?.kind === "spawn" && typeof definition.backend === "string" && definition.backend && !backends.includes(definition.backend)
       && typeof definition.agent === "string" && typeof definition.agentsRoot === "string") {
       let inspection = null;
       try { inspection = await postJson(ctx, `/api/capabilities${wsQuery()}`, { action: "inspect", selector: { soul: definition.agent, agentsRoot: definition.agentsRoot } }); }
       catch { inspection = null; }
-      if (!alive || request !== editRequest || formToken !== formOperation || gen !== workspaceGeneration()) return;
+      if (!alive || request !== editRequest || formToken !== formOperation || mutation !== mutationOperation || gen !== workspaceGeneration()
+        || busy || !deleteSheet.hidden) return;
       backends = sessionBackendNames(cli(), inspection);
     }
     const draft = scheduleDraft(definition, { backends });
@@ -290,6 +292,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   let deleting = null, deleteOpener = null;
   function askDelete(row) {
     if (busy || !canMutate()) return;
+    ++editRequest; // an Edit still reading its soul's inspection opens nothing over this, or after it
     deleting = row.name; deleteOpener = doc.activeElement;
     q("#schedule-delete-text").textContent = `${row.name} is removed from this computer and stops running here.`;
     deleteSheet.hidden = false; q(".schedule-delete-cancel").focus();

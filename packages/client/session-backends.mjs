@@ -20,9 +20,12 @@ export function sessionProviderNames(inspection) {
   return [...new Set(names.filter(sessionProviderName))];
 }
 
+/** A list of backend names as a client may offer or send them: its strings, never empty, never "herdr". */
+export const listedBackends = (names) => (Array.isArray(names) ? names.filter((name) => typeof name === 'string' && name && name !== 'herdr') : []);
+
 /** Every backend name the kernel lists: its own (`cli.sessionBackends`; "tmux" alone for a probe record without the
  * list, as before the probe reported it) and then the providers of `inspection`, when one is given. */
 export function sessionBackendNames(cli, inspection = null) {
-  const own = Array.isArray(cli?.sessionBackends) ? cli.sessionBackends.filter((name) => typeof name === 'string' && name && name !== 'herdr') : ['tmux'];
+  const own = Array.isArray(cli?.sessionBackends) ? listedBackends(cli.sessionBackends) : ['tmux'];
   return [...new Set([...own, ...sessionProviderNames(inspection)])];
 }

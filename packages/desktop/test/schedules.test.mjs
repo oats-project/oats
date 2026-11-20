@@ -280,3 +280,23 @@ test("a later Edit wins: an inspection answered after another row's Edit opens n
     assert.deepEqual([...form.elements.backend.options].map(o => o.value), ["", "tmux"]);
   } finally { s.cleanup(); }
 });
+
+test("an Edit still reading its soul's inspection opens nothing once the list changes under it: a Delete asked, a removal, a workspace switch; whether the read answers or fails", async () => {
+  for (const outcome of ["answers", "fails"]) for (const meanwhile of ["delete asked", "removed", "workspace switched"]) {
+    let release; const held = new Promise((resolve, reject) => { release = () => (outcome === "answers" ? resolve({ operationsApi: 2, sessionProviders: [{ name: "bb" }] }) : reject(new Error("inspect failed"))); });
+    const s = setup({ read: async () => ({ schedules: [providerSchedule], scheduler: { installed: true, active: true, registered: true } }),
+      mutate: async (path) => (path.startsWith("/api/capabilities") ? held : { removed: true }) });
+    try {
+      await tick(); s.rowAction("bb-review", "edit").click(); await tick();
+      if (meanwhile === "workspace switched") setWorkspace("/elsewhere");
+      else {
+        s.rowAction("bb-review", "remove").click(); await tick();
+        assert.equal(s.el.querySelector(".schedule-delete-sheet").hidden, false, "the confirmation is up");
+        if (meanwhile === "removed") { s.el.querySelector(".schedule-delete-confirm").click(); await tick(); await tick(); }
+      }
+      release(); await tick(); await tick();
+      assert.equal(s.el.querySelector(".schedule-sheet:not(.schedule-delete-sheet)").hidden, true, `${outcome}, ${meanwhile}: no form`);
+      assert.doesNotMatch(s.el.textContent, /cannot keep/, `${outcome}, ${meanwhile}: and nothing is said for the dropped Edit`);
+    } finally { setWorkspace("/team"); s.cleanup(); }
+  }
+});

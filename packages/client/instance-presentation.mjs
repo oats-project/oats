@@ -80,7 +80,8 @@ export function sessionProvider(instance) {
  * when both are text and the url is an http or https one with no credentials in it: a client opens nothing
  * else in a browser. The label is the provider's own text: a client shows it through display-text.mjs
  * `displayLine`. Not on the stable surface. */
-const MAX_LINK_LABEL = 200, MAX_LINK_URL = 2048;
+// Together under display-text.mjs MAX_DISPLAY_LINE, so a client can show the label and the url as one line, whole.
+const MAX_LINK_LABEL = 200, MAX_LINK_URL = 1800;
 export function openLink(instance) {
   const open = instance?.open;
   if (open === null || typeof open !== "object" || Array.isArray(open)) return null;

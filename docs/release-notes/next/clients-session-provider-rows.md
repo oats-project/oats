@@ -15,8 +15,8 @@
     Desktop in the row's context menu, opened in your browser, and the TUI
     printed under the line after `Enter`. Neither opens, splits or restores
     a terminal tab for it;
-  - the Desktop's instance panel and the row's tooltip name the backend and
-    the provider's thread id.
+  - the row's tooltip in the Desktop names the backend and the provider's
+    thread id.
 
   An agent in tmux, and one recorded on Herdr, read as before
   ([how the clients read `backend`](../desktop-cli-api.md#row-backend-clients)).

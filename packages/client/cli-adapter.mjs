@@ -33,6 +33,7 @@ import { MACHINE_ID, machineFieldProblem } from './machine-contract.mjs';
 import { kernelMade } from './kernel-made.mjs';
 import { SOUL_COLORS } from './soul-colors.mjs';
 import { NAMING_TIMEOUT_MS } from './spawn-preview-contract.mjs';
+import { listedBackends } from './session-backends.mjs';
 
 const ENVELOPE_TIMEOUT_MS = 60_000;
 
@@ -86,7 +87,7 @@ const SPAWN_ARG_RULES = {
 /** The session backends a spawn may name: the caller's `backends`, the names the kernel lists (`oats version
  * --json` `sessionBackends`, the kernel's own, and `oats inspect --json` `sessionProviders`, the ones a soul's
  * capabilities supply). With no list, "tmux" alone, as before session providers. Never "herdr": OATS removed it. */
-const backendsListed = (backends) => (Array.isArray(backends) ? backends.filter((name) => typeof name === "string" && name !== "herdr") : ["tmux"]);
+const backendsListed = (backends) => (Array.isArray(backends) ? listedBackends(backends) : ["tmux"]);
 
 /** `opts.backends` is not an argument: it is the list `opts.backend` is held to (`backendsListed`). */
 export function spawnArgv(agent, workspaceDir, taskFile, opts = {}) {

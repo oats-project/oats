@@ -32,9 +32,12 @@ export function createWorkspaceTabMemory() {
       if (!saved) return { split: null, activeTab: null, sidebarMode: "overview", tabLayerVisible: false };
       const tabs = new Map(entries);
       let split = copySplit(saved.split);
-      // A terminal tab whose row (the one it last showed: `instanceRef`) runs on a session provider has no
-      // terminal: it is never restored, in a group or as the active tab, and nothing is said of it. The shell
-      // closes it on the next roster answer (retired-tabs.mjs, P).
+      // A terminal tab whose row runs on a session provider has no terminal: it is never restored, in a group or
+      // as the active tab, and nothing is said of it. The row judged here is the one the tab last showed
+      // (`instanceRef`: set at its open, refreshed while it is the active tab of the shown workspace), since a
+      // recall has no roster of its own: it runs before the workspace's first read. A tab whose row became a
+      // provider's while its workspace was away therefore still comes back here, and the shell closes it,
+      // quietly, on that first roster answer (retired-tabs.mjs, P), as it closes a retired one.
       const restorable = tab => canActivateTab(tab, workspace) && !(tab.kind === "terminal" && sessionProvider(tab.instanceRef));
       // Closed/foreign tabs must not be resurrected by stale layout memory.
       for (const id of saved.split?.groups.flatMap(g => g.tabs) || []) {
