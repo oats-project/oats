@@ -359,13 +359,26 @@
       "minItems": 1,
       "maxItems": 16,
       "items": {
-        "type": "object",
-        "required": ["setting"],
-        "properties": {
-          "setting": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$", "description": "The key of one of this capability's settings." },
-          "optional": { "type": "boolean", "description": "true: the session works without this host. A value the deployment does not hold is then reported and is no reason for a session provider to refuse a launch." }
-        },
-        "additionalProperties": false
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["setting"],
+            "properties": {
+              "setting": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$", "description": "The key of one of this capability's settings, whose value is a URL, a bare host, or a map from team id to one of those." },
+              "optional": { "type": "boolean", "description": "true: the session works without this host. A value the deployment does not hold is then reported and is no reason for a session provider to refuse a launch." }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["settingFile", "urls"],
+            "properties": {
+              "settingFile": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$", "description": "The key of one of this capability's settings, whose value is the path of a JSON file of the deployment (never inside an instance home; a regular file reached through no symbolic link, at most 64 KiB, strict JSON)." },
+              "urls": { "type": "string", "pattern": "^(/[^/]+){1,16}$", "maxLength": 400, "description": "A JSON pointer into that file, of which at most one segment may be `*` (every key of an object, every element of an array): each string there that is a URL or a git remote gives its host, at most 16 hosts a file." }
+            },
+            "additionalProperties": false
+          }
+        ]
       }
     },
     "settings": {

@@ -7584,11 +7584,14 @@ as the kernel computes it from the deployment's configuration. One key,
 
 - a spawn preview (`oats spawn … --backend <name> --preview --json`):
   `sandbox: {domains: [{host, capability, setting}], write: [{path, reason}],
-  missing: [{capability, setting, team, optional?}]}`. `domains`: each host with the capability and the
+  missing: [{capability, setting, team, optional?}], unread?: [{capability,
+  setting, reason}]}`. `domains`: each host with the capability and the
   setting that asked for it. `write`: each path with its reason (the
   kernel's own). `missing`: what a capability's line names and the
   deployment does not hold (`team`: a team id, or null for a setting with no
-  value; `optional: true` only on a row of an optional line).
+  value; `optional: true` only on a row of an optional line). `unread`, only
+  when there is one: a `settingFile` line's file that gave no host, or
+  values in it that were skipped.
 
 `oats capabilities show <name> --json` carries `sandboxDomains` (the
 manifest's key, exactly as declared) and, only when there is one,

@@ -3,7 +3,10 @@
 // test/session-providers-sandbox.test.mjs.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MAX_SANDBOX_LINES, sandboxAllowances, sandboxDomainsOf, sandboxHostOf } from "../lib/sandbox-allowances.mjs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { MAX_SANDBOX_LINES, SETTING_FILE_MAX_BYTES, SETTING_FILE_MAX_HOSTS, readSettingFileHosts, sandboxAllowances, sandboxDomainsOf, sandboxHostOf } from "../lib/sandbox-allowances.mjs";
 
 const EVENTS = "/srv/acme/.agents/events";
 const WRITE = [{ path: EVENTS, reason: "oats events" }];
@@ -133,4 +136,94 @@ test("a malformed declaration is a problem, and a refusal where it is used: a li
   const refused = refusal(() => allow([messaging([{ setting: "server" }, { host: "evil.example.net" }])], { "acme.msg": { server: "https://app.example.org" } }));
   assert.deepEqual([refused.code, refused.details], ["E_BACKEND_SANDBOX_HOST", { capability: "acme.msg", setting: null, host: null }]);
   assert.match(refused.message, /capability acme\.msg declares a sandboxDomains this kernel cannot use: sandboxDomains\[1\] must be/);
+});
+
+// ------------------------------------------------------------------ the `settingFile` form
+
+/** A deployment directory with `agents/` (the homes) and `.agents/events` in it. */
+function fileDeployment(t) {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "oats-sandbox-file-")));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const dep = join(base, "deployment");
+  for (const dir of ["agents/dev/instances/one", ".agents/events", "config"]) mkdirSync(join(dep, dir), { recursive: true });
+  const write = (rel, value) => { const path = join(dep, rel); writeFileSync(path, typeof value === "string" ? value : JSON.stringify(value)); return path; };
+  const read = (path, pointer = "/bases/*/repository") => readSettingFileHosts({ path, pointer, within: dep, outside: [join(dep, "agents"), join(dep, ".agents", "events")] });
+  return { base, dep, write, read };
+}
+const BASES = { bases: {
+  team: { repository: "https://github.com/acme/kb.git" }, ssh: { repository: "git@git.example.org:acme/kb.git" }, url: { repository: "ssh://git@Git.Example.org:2222/acme/kb.git" },
+  again: { repository: "https://github.com/acme/other.git" }, local: { repository: "/srv/git/kb.git" }, odd: { repository: 7 }, none: {},
+} };
+
+test("a settingFile line gives the hosts of every string at its pointer: URLs and git remotes, deduplicated, the rest skipped", (t) => {
+  const fx = fileDeployment(t);
+  const path = fx.write("config/bindings.json", BASES);
+  assert.deepEqual(fx.read(path), { hosts: ["github.com", "git.example.org", "git.example.org:2222"], skippedValues: 2 });
+  assert.deepEqual(fx.read("config/bindings.json"), fx.read(path), "a relative path is the deployment's");
+  assert.deepEqual(fx.read(path, "/bases/team/repository"), { hosts: ["github.com"], skippedValues: 0 });
+  assert.deepEqual(fx.read(path, "/nothing/here"), { hosts: [], skippedValues: 0 });
+  assert.deepEqual(fx.read(fx.write("config/list.json", { remotes: ["https://a.example.org/x", "b.example.org:8443", "https://user:pw@c.example.org"] }), "/remotes/*"), { hosts: ["a.example.org", "b.example.org:8443"], skippedValues: 1 });
+  // In the allowances: named with the capability and the setting, and what was skipped is said.
+  const allowed = sandboxAllowances({
+    modules: [{ name: "acme.kb", manifest: { layer: "knowledge", sandboxDomains: [{ settingFile: "bindings-file", urls: "/bases/*/repository" }] } }],
+    slots: { knowledge: "acme.kb" }, payloads: { "acme.kb": { "bindings-file": path } }, eventsDir: join(fx.dep, ".agents", "events"), deployment: fx.dep, outside: [join(fx.dep, "agents")],
+  });
+  assert.deepEqual(allowed.domains, ["github.com", "git.example.org", "git.example.org:2222"].map((host) => ({ host, capability: "acme.kb", setting: "bindings-file" })));
+  assert.deepEqual(allowed.unread, [{ capability: "acme.kb", setting: "bindings-file", reason: "2 values at /bases/*/repository are no URL with a plain host, and were skipped" }]);
+});
+
+test("a settingFile's path is the deployment's own, never a home's or an allowed path's, and reaches its file through no link: else refused", (t) => {
+  const fx = fileDeployment(t);
+  const good = fx.write("config/bindings.json", BASES);
+  const refusedWith = (path, why) => { const r = fx.read(path); assert.match(r.refused ?? `(not refused: ${JSON.stringify(r)})`, why, path); };
+  // Outside the deployment.
+  const outside = join(fx.base, "elsewhere.json");
+  writeFileSync(outside, JSON.stringify(BASES));
+  refusedWith(outside, /is not inside the deployment/);
+  refusedWith("../elsewhere.json", /is not inside the deployment/);
+  // Inside an instance home, or inside the events directory the allowances make writable.
+  refusedWith(fx.write("agents/dev/instances/one/bindings.json", BASES), /is inside .+\/agents, which a session's agent can write/);
+  refusedWith(fx.write(".agents/events/bindings.json", BASES), /is inside .+\/\.agents\/events, which a session's agent can write/);
+  // A link as the file, and a link in a parent directory that moves the read into a home.
+  symlinkSync(join(fx.dep, "agents", "dev", "instances", "one", "bindings.json"), join(fx.dep, "config", "linked.json"));
+  refusedWith(join(fx.dep, "config", "linked.json"), /reaches its file through a symbolic link/);
+  symlinkSync(join(fx.dep, "agents", "dev", "instances", "one"), join(fx.dep, "config", "dir"));
+  refusedWith(join(fx.dep, "config", "dir", "bindings.json"), /reaches its file through a symbolic link/);
+  // In the allowances a refused path refuses the launch, naming the capability and the setting.
+  const refused = refusal(() => sandboxAllowances({
+    modules: [{ name: "acme.kb", manifest: { layer: "knowledge", sandboxDomains: [{ settingFile: "bindings-file", urls: "/bases/*/repository" }] } }],
+    slots: { knowledge: "acme.kb" }, payloads: { "acme.kb": { "bindings-file": outside } }, eventsDir: join(fx.dep, ".agents", "events"), deployment: fx.dep, outside: [join(fx.dep, "agents")],
+  }));
+  assert.deepEqual([refused.code, refused.details], ["E_BACKEND_SANDBOX_HOST", { capability: "acme.kb", setting: "bindings-file", host: null }]);
+  assert.match(refused.message, /capability acme\.kb asks to allow the hosts in the file its setting bindings-file names, and .+ is not inside the deployment/);
+  assert.deepEqual(fx.read(good).hosts.length, 3, "and the deployment's own file is read");
+});
+
+test("a deployment's file that is missing, no regular file, too large, no strict JSON or names too many hosts gives no host and is named", (t) => {
+  const fx = fileDeployment(t);
+  const unreadWith = (path, why) => { const r = fx.read(path); assert.match(r.unread ?? `(read: ${JSON.stringify(r)})`, why, path); };
+  unreadWith(join(fx.dep, "config", "absent.json"), /does not exist/);
+  unreadWith(undefined, /the setting names no file/);
+  unreadWith(join(fx.dep, "config"), /is not a regular file/);
+  unreadWith(fx.write("config/big.json", JSON.stringify({ bases: {}, pad: "x".repeat(SETTING_FILE_MAX_BYTES) })), /is larger than 64 KiB/);
+  unreadWith(fx.write("config/loose.json", '{"bases": {"a": {"repository": "https://a.example.org"},}}'), /is not strict JSON/);
+  unreadWith(fx.write("config/twice.json", '{"bases": {}, "bases": {"a": {"repository": "https://evil.example.net"}}}'), /is not strict JSON/);
+  const many = { bases: Object.fromEntries(Array.from({ length: SETTING_FILE_MAX_HOSTS + 1 }, (_, i) => [`b${i}`, { repository: `https://h${i}.example.org/x` }])) };
+  unreadWith(fx.write("config/many.json", many), /names 17 hosts, more than the 16 one file may give/);
+  delete many.bases.b16;
+  assert.equal(fx.read(fx.write("config/sixteen.json", many)).hosts.length, SETTING_FILE_MAX_HOSTS);
+  // In the allowances: no host, named in `unread`, and the launch goes on.
+  const allowed = sandboxAllowances({
+    modules: [{ name: "acme.kb", manifest: { layer: "knowledge", sandboxDomains: [{ settingFile: "bindings-file", urls: "/bases/*/repository" }] } }],
+    slots: { knowledge: "acme.kb" }, payloads: { "acme.kb": { "bindings-file": join(fx.dep, "config", "absent.json") } }, eventsDir: join(fx.dep, ".agents", "events"), deployment: fx.dep, outside: [join(fx.dep, "agents")],
+  });
+  assert.deepEqual([allowed.domains, allowed.unread.map((u) => [u.capability, u.setting])], [[], [["acme.kb", "bindings-file"]]]);
+});
+
+test("a settingFile line is validated with the manifest: its key, its pointer, at most one * segment", () => {
+  const problemsOf = (line) => sandboxDomainsOf({ layer: "knowledge", sandboxDomains: [line] }).problems;
+  const bad = ['sandboxDomains[0] must be { "settingFile": "<one of the capability\'s setting keys>", "urls": "<a JSON pointer, at most one * segment>" }'];
+  assert.deepEqual(sandboxDomainsOf({ layer: "knowledge", sandboxDomains: [{ settingFile: "bindings-file", urls: "/bases/*/repository" }] }), { lines: [{ settingFile: "bindings-file", urls: "/bases/*/repository" }], problems: [] });
+  for (const line of [{ settingFile: "bindings-file" }, { settingFile: "bindings-file", urls: "bases/*" }, { settingFile: "bindings-file", urls: "/a/*/b/*" }, { settingFile: "bindings-file", urls: "/a//b" }, { settingFile: "bindings-file", urls: "/a/~2" }, { settingFile: 7, urls: "/a" }, { settingFile: "bindings-file", urls: "/a", optional: true }, { settingFile: "f", setting: "f", urls: "/a" }]) assert.deepEqual(problemsOf(line), bad, JSON.stringify(line));
+  assert.deepEqual(sandboxDomainsOf({ layer: "knowledge", sandboxDomains: [{ setting: "f" }, { settingFile: "f", urls: "/a" }] }).problems, ["sandboxDomains[1] names the setting f a second time"]);
 });

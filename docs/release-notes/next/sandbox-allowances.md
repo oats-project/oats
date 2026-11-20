@@ -9,9 +9,11 @@
     may declare `sandboxDomains` in its manifest: `{"setting": "<key>"}`
     (the setting's value is a URL, a bare host, or a map from team id to
     one, of which the instance's own teams' entries are taken; `"optional":
-    true` where the session works without the host). On any other capability
-    a provider launch is refused, `E_BACKEND_SANDBOX_HOST`; so is a value
-    that gives no plain host.
+    true` where the session works without the host) or `{"settingFile":
+    "<key>", "urls": "<JSON pointer>"}` (the hosts in a JSON file of the
+    deployment). On any other capability a provider launch is refused,
+    `E_BACKEND_SANDBOX_HOST`; so is a value that gives no plain host, and a
+    file that is not the deployment's own.
   - `write` is the deployment's events directory, which the kernel creates
     before the launch.
   - Values come from the deployment's configuration as a spawn preview

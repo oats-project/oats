@@ -951,7 +951,7 @@ anything is created, and shown by a spawn preview:
 | `E_BACKEND_HARNESS` | the provider does not run the launch's harness |
 | `E_BACKEND_LAUNCH_ARG` | the launch configuration declares an `executable`: a provider runs the harness itself |
 | `E_BACKEND_NOT_READY` | the provider's own readiness check, asked right before the launch, says it cannot take it |
-| `E_BACKEND_SANDBOX_HOST` | a capability asks to add a host to the session's sandbox that it may not ask for: it declares `sandboxDomains` and fills none of the instance's messaging, knowledge or tasks slots, its line is malformed, or its setting's value gives no plain host ([Sandbox allowances](capabilities.md#sandbox-allowances-sandboxdomains-the-launch-inputs-sandbox)) |
+| `E_BACKEND_SANDBOX_HOST` | a capability asks to add a host to the session's sandbox that it may not ask for: it declares `sandboxDomains` and fills none of the instance's messaging, knowledge or tasks slots, its line is malformed, its setting's value gives no plain host, or its file is not the deployment's own ([Sandbox allowances](capabilities.md#sandbox-allowances-sandboxdomains-the-launch-inputs-sandbox)) |
 
 A provider can also refuse the launch with its own `E_BACKEND_*` code (a
 launch environment entry or an argument it cannot carry), which OATS relays;

@@ -2252,6 +2252,19 @@ configuration, and handed to the provider with every launch:
   and the setting. So does the line on a capability that fills none of the
   three slots: it is never dropped. `"optional": true` says the session
   works without that host.
+
+  A line may instead name a file: `{ "settingFile": "<setting>", "urls":
+  "<JSON pointer>" }`. The setting's value is the path of a JSON file of the
+  deployment, and each string at the pointer (one segment may be `*`: every
+  key, every element) that is a URL or a git remote (`git@host:path`) gives
+  its host. The file is the deployment's own: inside the deployment, never
+  inside an instance home or a path the allowances make writable, reached
+  through no symbolic link anywhere along its path (otherwise
+  `E_BACKEND_SANDBOX_HOST`); a regular file of at most 64 KiB, strict JSON,
+  at most 16 hosts. A file that is missing or is none of that gives no host,
+  is named in the answer and in readiness (`unread`), and the launch goes on.
+  **A host of a general forge opens that whole forge to the agent**, not
+  only the repository named: say so where you document your line.
 - **`write`** are exact absolute paths, the kernel's own, never a
   capability's: the deployment's events directory, where `oats instance
   attention` appends. The kernel creates each before your launch: an
