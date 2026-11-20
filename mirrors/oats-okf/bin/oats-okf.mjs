@@ -20,9 +20,10 @@ oats okf cat --base ALIAS PATH [--from PATH] [--fresh] [--json]
 oats okf ls --base ALIAS [DIR] [--fresh] [--json]
 oats okf links --base ALIAS PATH [--fresh] [--json]
 oats okf search [--base ALIAS | --all] [--node NODE] [--regex] [--case-sensitive] TEXT [--fresh] [--json]
-oats okf propose --plan | --check | --apply --slug SLUG [--digest DIGEST] [--home PATH] [--json]
+oats okf propose --plan | --check | --apply [--slug SLUG] [--digest DIGEST] [--home PATH] [--json]
   (from the instance home: clone the owned bases, check the edits and print the
   outgoing diff and digest, then open one okf-proposal PR per changed base;
+  --apply alone prints the check and stops, then publishes what it printed;
   operator form from the deployment: --home <instance home | retirement recovery> --soul SOUL)
 Subject layout (a base whose okf-base.json lists the reserved nodes claims,
 subjects and verdicts; each reads one committed generated index):

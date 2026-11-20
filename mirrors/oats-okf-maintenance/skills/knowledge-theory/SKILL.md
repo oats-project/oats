@@ -152,9 +152,10 @@ Route every claim to ONE canonical concept; merge or supersede rather than
 copy. Consult the existing indexes first, across nodes as necessary.
 Repository-wide facts already authoritative in repository docs get pointers,
 not duplicates. A claim whose right home is a node the source does not own is
-dropped from that proposal with an explicit reason for the owner to review; it is
-never silently written into another node. There is no indefinite ownerless
-inbox queue.
+proposed there all the same (oats.okf 6.3): the check names it in a
+`W_SCOPE` row of the PR, and the maintainer moves it to its canonical home or
+drops it with a reason. It is never silently written into another node.
+There is no indefinite ownerless inbox queue.
 
 ## Human-accepted decisions
 
@@ -222,9 +223,10 @@ reads them again as the second reader; nobody else judges in between.
 ## Provenance
 
 Every promoted or merged concept cites where it came from: the proposal and
-the source notes it relied on. The proposing instance writes that citation
-itself; its PR's `okf-proposal` provenance block names the source
-incarnation and hashes each note it read (an oats.okf 4.x harvest cited the
+the source notes it relied on. The proposing PR's `okf-proposal` provenance
+block carries that citation (since oats.okf 6.3 no per-concept `Evidence:`
+line is required): it names the source incarnation and hashes each note it
+read (an oats.okf 4.x harvest cited the
 durable input id and the transcript turn ids). Provenance is what
 lets a later judge (and a human) check the claim instead of trusting it. Do
 not put copied home paths, account details, machine state or secrets in

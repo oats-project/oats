@@ -6,12 +6,13 @@ description: >-
   handed over for review, a finished task, and in a long-lived role such as
   a maintainer's a feature ready, a release or deploy shipped, or a direction
   decision taken with the human), judge durable claims yourself, write them
-  in a clone of your owned nodes with `oats okf propose --plan`, read the
-  outgoing diff `--check` prints, and open one reviewed PR per base with
-  `--apply`. Read at task start and at each checkpoint. Covers the
-  checkpoints, the soul opt-out, promotion and duplicate checks, the write
-  surface, the refusals, the checkpoint record and hand-back. The knowledge
-  maintainer gates every merge; you never shepherd the PR.
+  in a clone of the knowledge base with `oats okf propose --plan`, run
+  `--apply` (it prints the outgoing diff and stops), read the diff, and run
+  `--apply` again to open one reviewed PR per base. Read at task start and at
+  each checkpoint. Covers the checkpoints, the soul opt-out, what still
+  refuses and the warnings the maintainer resolves, the checkpoint record and
+  hand-back. The knowledge maintainer gates every merge; you never shepherd
+  the PR.
 ---
 
 # Propose knowledge at checkpoints
@@ -34,21 +35,17 @@ state the provider wrote at spawn:
 - `unknown` (`reason: spawn-state-missing`), or a command failure: do not
   propose. Report it; a new spawn with the current provider establishes the
   state. Never infer `on`, read the soul file to decide, or repair the policy
-  by hand. A restart does not recompose an old home's provider.
+  by hand.
 
-This is the one provider-owned answer. A task briefing does not decide your
-duty. The private `okf-harvest-policy.json` in home is written by the
-provider, not a user setting or a publication authorization;
-`oats okf propose` refuses an opted-out or unknown home on its own.
+A task briefing does not decide your duty, and `oats okf propose` refuses an
+opted-out or unknown home on its own.
 
 ## When to propose
 
-A **knowledge checkpoint** is any of these moments. Each one is yours to act
-on, and none waits for a task to close:
+A **knowledge checkpoint** is any of these moments:
 
 - **You hand over a PR for review:** you open it, or mark it ready, and tell
-  its reviewer or maintainer. The work it carries is done enough to know
-  what it taught.
+  its reviewer or maintainer.
 - **You finish a task,** before you hand back or retire.
 - **In a long-lived role** whose task never finishes (a maintainer, an
   expert holding an area, a support desk):
@@ -57,13 +54,10 @@ on, and none waits for a task to close:
   - **a direction decision is taken with your human.**
 
 These are not checkpoints: a commit, a review round or a new head of the
-same PR, and each decision you make while working (a direction decision taken
-with your human is the checkpoint above). Capture decisions and discoveries
-the moment they happen, in notes/; the next checkpoint carries them.
-
-**One proposal per checkpoint, carrying only what no earlier proposal
-carried.** A PR handed over and then the same task closing are two
-checkpoints, and the second proposes only what was learned since the first.
+same PR, and each decision you make while working. Capture decisions and
+discoveries the moment they happen, in notes/; the next checkpoint carries
+them. **One proposal per checkpoint, carrying only what no earlier proposal
+carried.**
 
 ## Judge first
 
@@ -71,26 +65,21 @@ At a checkpoint, first update STATE.md, log.md and the relevant notes. Then:
 
 1. **Respect the soul opt-out.** `knowledge: { harvest: off }` (also spelled
    `publish: off`) removes the duty to propose, not consultation or
-   working-memory upkeep. No task, note, host or spawn setting can turn it
-   back on, and `oats okf propose` refuses such a home (`E_OPTED_OUT`).
-2. **Read `knowledge-theory` and apply its promotion test.** Keep only what
-   changes how a future instance of this soul decides or acts and cannot be
-   recovered by reading the repository. No code descriptions, task residue,
-   secrets, personal data or tool noise. Nothing durable, no proposal.
-3. **Consult accepted knowledge first:** `oats okf search` for the claim,
-   then `cat` the relevant concept. Already accepted with nothing to add:
-   no proposal. A refinement or candidate supersession cites the accepted
-   concept and says what changes and why. A blocked read is not evidence
-   that the claim is new: record the blocker rather than inventing knowledge.
-4. **Claim only for nodes your soul owns.** Each concept is its own claim
-   within the one proposal. For a lesson whose home is a node you only read,
-   name the lesson and that node in one line in your hand-back for its owner;
-   never write it there.
-5. **Check your log for this checkpoint.** Do not propose the same work
+   working-memory upkeep. No task, note, host or spawn setting turns it back
+   on, and `oats okf propose` refuses such a home (`E_OPTED_OUT`).
+2. **Apply `knowledge-theory`'s promotion test:** keep what changes how a
+   future instance decides or acts and cannot be recovered by reading the
+   repository. No code descriptions, task residue, secrets, personal data or
+   tool noise.
+3. **When in doubt, propose: the maintainer judges.** A quick
+   `oats okf search` for the claim is enough. Duplicates, the canonical home
+   and the subject are the maintainer's to settle. A lesson goes to the node
+   or subject it belongs in, even one your soul only reads: a warning tells
+   the maintainer.
+4. **Check your log for this checkpoint.** Do not propose the same work
    again after a restart, compaction, a review fix or a hand-over
-   acknowledgment. An `--apply` that reported an error or an uncertain
-   result is never rerun: report it.
-6. **Record the checkpoint in log.md, whatever its outcome:** what the
+   acknowledgment.
+5. **Record the checkpoint in log.md, whatever its outcome:** what the
    checkpoint was (`PR #123 handed over`, `v2.4.0 shipped`), and either the
    proposal's PR URLs, or `nothing to propose` with the reason in a few
    words. A checkpoint with no line in log.md is a proposal skipped.
@@ -103,157 +92,129 @@ source you cite is fine. That covers the names you choose as well: a note's
 file name, a task ref and an instance's name are published as provenance when
 knowledge is proposed.
 
-## The three steps
+## The steps
 
-Run every step from your instance home. `<slug>` names this proposal
-(lowercase letters, digits and inner dashes).
+Run each from your instance home.
 
-### 1. Plan: `oats okf propose --plan --slug <slug>`
+1. **`oats okf propose --plan`** clones each base your soul proposes to, at
+   its accepted branch, into `proposals/<date>-<slug>/work/<alias>`, and
+   prints the slug it made, the write surface and the open proposals on each
+   base. It refuses before cloning: `E_SOURCE` (not a working OATS home),
+   `E_OPTED_OUT`, `E_PROPOSAL_EXISTS` (a slug you gave is taken), `E_OWNER`
+   (your `okf.json` and the base disagree on an owned node: report it).
+2. **Write the knowledge** in the clone with your native file tools (load
+   **okf-authoring** for the craft): one concept per Markdown file, with
+   frontmatter. Edit files only: do not commit, branch or push in the clone.
+   `proposal.md` is optional. Left as the skeleton, the PR text is built from
+   your claims' titles and descriptions. Fill it to say why and what you
+   observed: `# OKF proposal: <one-line claim>`, `## What`, `## Why`,
+   `## Evidence`, and `## Backing notes` with one `- notes/<file>.md` line per
+   note, relative to your home. No provenance block: the command writes it.
+3. **`oats okf propose --apply`** checks everything and pushes nothing: it
+   validates the proposed tree, hashes the named notes, runs the content
+   screen over everything that would leave this host (the tree delta, file
+   names, the commit text, the PR body) and prints the **complete outgoing
+   diff**, the commit text and the PR body, then stops.
+4. **Read the printed diff once, in full, as a reviewer would:** against
+   `knowledge-theory`'s reject list (no code descriptions, task residue,
+   secrets or verbatim third-party text), against the personal-data
+   sentence above (note file names, task refs and your instance name
+   included), and for private paths. A clean screen is a bounded detector, not clearance.
+   Fix what you would not merge.
+5. **`oats okf propose --apply` again** publishes exactly what the last
+   check printed: one `okf-proposal` PR per changed base, on a new
+   `okf-proposal/<date>-<uuid>` branch. If anything changed since, it
+   refuses `E_DIGEST` and pushes nothing.
 
-It clones every base your soul owns, at its accepted branch, into
-`proposals/<date>-<slug>/work/<alias>` in your home, writes the skeleton
-`proposals/<date>-<slug>/proposal.md`, and prints:
+**After you fix something in step 4, or after `E_DIGEST`,** run
+`oats okf propose --check`: it prints the new diff and records it. Read it,
+then run `--apply`. A bare `--apply` only checks when no check was recorded
+yet.
 
-- the **write surface** per base: your owned nodes' directories and the base
-  root `index.md`. Nothing else may change.
-- the open `okf-proposal` and `okf-harvest` PRs on each base: duplicate
-  candidates. Read the ones that touch the same concepts; a claim already
-  pending there is a duplicate: drop it.
+With more than one open proposal in your home, give `--slug <slug>` to each
+command. The 6.2 steps still work, with the same result:
+`oats okf propose --plan --slug <slug>`, then
+`oats okf propose --check --slug <slug>` (prints the check and a digest),
+then `oats okf propose --apply --slug <slug> --digest <digest>`.
 
-It refuses, before cloning: `E_SOURCE` (not a working OATS home, or one
-spawned before 5.2: respawn it), `E_OPTED_OUT`, `E_PROPOSAL_EXISTS` (that slug
-is taken: choose another), `E_OWNER` (your `okf.json` and the base disagree on
-an owned node: report it). A directory base is skipped: convert it to a Git
-base or edit it in a reviewed change.
+On a base with the subject layout (`layout: subjects` in the plan), write a
+claim under `claims/` with `about: [<kind>/<slug>, ...]` if your soul
+declares `subjects` (okf.json version 2). Write in your nodes if it declares
+`owns` (version 1): `about:` is then added from the subject whose
+`legacy-nodes` names the node. Never write an `id`, and never edit a
+generated index (`subjects/**/index.md`, `verdicts/index.md`, the root
+`index.md`'s `## Subjects` section): the check regenerates them. To propose
+again a claim a verdict rejected, add `reconsiders: <id>` and new evidence.
 
-### 2. Write, then check: `oats okf propose --check --slug <slug>`
+## What refuses, and what only warns
 
-Load **okf-authoring** for the craft and situate before writing: read the
-base's indexes and the neighbouring concepts in the clone, so every claim
-lands in ONE canonical home. Then, with your native file tools, in the clone:
+These refuse, and nothing is pushed:
 
-- one concept per Markdown file in an owned node, with frontmatter;
-- its `index.md` entry, and a line in the node's `log.md`;
-- supersessions explicit: the new concept names the old one, the old one says
-  it is superseded and links the new one, the log names it;
-- each concept cites its evidence, with no home, machine or account path:
-  `Evidence: OKF proposal from <soul>/<instance>, <date>; notes/<file>.md.`
-
-Edit files only: do not commit, branch or push in the clone. Then fill
-`proposal.md`: the `# OKF proposal: <one-line claim>` title, `## What` (each
-claim and its node), `## Why` (what a future instance would do differently),
-`## Evidence` (what was observed and when, task refs, the accepted concepts
-confirmed, refined or contradicted, cited `alias/node/concept.md@<oid>`) and
-`## Backing notes`, one `- notes/<file>.md` line per note, relative to your
-home. The skeleton's `<!-- -->` guidance is not published. No `Source:` line
-and no provenance block: the command writes the provenance.
-
-`--check` validates the proposed tree (`okf-validate --strict`), checks every
-changed path against the write surface, hashes the named notes, runs the
-content screen over everything that would leave this host (the tree delta,
-file names, the commit text, the PR body) and prints the **complete outgoing
-diff**, the commit text, the PR body with its provenance block, and a
-**digest**. Nothing remote changes. Its refusals:
-
-- `E_SCOPE`: a path outside the write surface (named): move or drop it.
-- `E_OWNER`: a path in a node your soul does not own: drop that claim and
-  name it in your hand-back for the node's owner.
-- `E_VALIDATION`: the base would not validate: fix the Markdown.
+- `E_SCOPE`: `okf-base.json`, a non-Markdown file (v1 anywhere; v2 under
+  `claims/` or `subjects/`), a hidden, executable, symlinked or
+  out-of-root path, or a hand-edited generated index.
+- `E_VALIDATION`: the base would be invalid (unparseable or missing
+  frontmatter, a missing `type`, a malformed list, a duplicate id, a file
+  outside every node): fix the Markdown.
 - `E_CONTENT_REFUSED` (findings name locations only; rule `host-term` is the
   host's own list): remove the content, never work around the screen.
-- `E_PROPOSAL_FORMAT`: `proposal.md` or a backing-note line is malformed.
-- A named note that is missing or unreadable is a warning (`E_NOTE`): it is
-  listed without a hash. Drop any claim that needed it.
+- `E_PROPOSAL_FORMAT`: `proposal.md` carries a provenance block, or is not
+  readable UTF-8.
+- `E_DIGEST`: the proposal changed since the check you read.
 
-**Read the printed diff once, in full, as a reviewer would**, before step 3:
-against `knowledge-theory`'s reject list (no code descriptions, task
-residue, secrets or verbatim third-party text), against the personal-data
-sentence above (note file names, task refs and your instance name included),
-and for private paths. A clean screen is a bounded detector, not clearance.
-Fix and run `--check` again until the diff is one you would merge.
+Everything else is a **warning** in `warnings[]` and a row of the PR body's
+`## Check warnings`, which the maintainer resolves before merging. Each row
+names the rule it replaces; none needs anything from you:
 
-### On a base with the subject layout (oats.okf 6.0)
+- `W_SCOPE`: a path outside your write surface (another node, `verdicts/`,
+  `subjects/workstream/`, a delete, a supersession no claim of yours makes).
+  The maintainer moves it, or removes it.
+- `W_SUBJECT`: a claim with no subject, or one naming no subject file. The
+  maintainer assigns it.
+- `W_LINT`: a broken link, a concept no index lists, a missing title or
+  description. The maintainer fixes it.
+- `W_VERDICT`: a claim carrying a rejected id without `reconsiders:`. The
+  maintainer judges whether it is the same claim.
+- `W_PROPOSAL`: `proposal.md` left unfilled, without a title or a section,
+  or with a note reference it cannot read (dropped from the evidence).
 
-When `--plan` shows `layout: subjects` for a base (its `okf-base.json` lists
-the reserved nodes `claims`, `subjects` and `verdicts`), knowledge is
-organised by **subject** (`oats okf subjects`; the okf-authoring skill has
-the craft):
+Two warnings stay out of the PR body: `E_NOTE` (a named note that is missing
+or unreadable is listed without a hash: drop any claim that needed it), and
+`W_ID_MISSING` (an accepted claim waits for the maintainer's id). A
+`W_ATTRIBUTION` warning means a trailer was left out of the commit because
+the content screen refuses its value.
 
-- **Your soul declares `owns` (okf.json version 1):** write in your owned
-  nodes as above. `--check` adds `about: [<subject>]` to every new claim from
-  the subject whose `legacy-nodes` names that node (`E_SUBJECT` when none
-  does: report it to the knowledge maintainer).
-- **Your soul declares `subjects` (okf.json version 2):** write each claim
-  under `claims/` with `about: [<kind>/<slug>, ...]` (one or more existing
-  subjects). You may also add a new system or project subject file under
-  `subjects/system/` or `subjects/project/` when a claim needs one, and set
-  `status: superseded` on a concept your claim supersedes; the claim says so
-  with `supersedes: [/<path>]` (or the concept's id). Never touch
-  `verdicts/`, `subjects/workstream/`, `okf-base.json`, the root `index.md`
-  by hand, or any other existing concept (`E_SCOPE` names the path and the
-  rule). The tool's check is advisory; the maintainer's review is the gate.
-- **Never write an `id`:** the maintainer stamps it at acceptance. To propose
-  again a claim a verdict rejected, say so with `reconsiders: <id>` and bring
-  new evidence; without it `--check` refuses `E_VERDICT` with the verdict's
-  reason. Before writing, `oats okf verdicts --check <claim file>` answers
-  the same; a title-hash candidate is listed in the PR body for you and the
-  reviewer to resolve.
-- **Never edit a generated index** (`subjects/<kind>/<slug>/index.md`,
-  `subjects/index.md`, `verdicts/index.md`, the root `index.md`'s
-  `## Subjects` section): `--check` regenerates them in the clone, and the
-  printed diff shows it.
+## Publication
 
-### 3. Apply: `oats okf propose --apply --slug <slug> --digest <digest>`
+Before it pushes anything, `--apply` checks that this host can open the PR.
+`E_GH_UNAVAILABLE`, `E_CREDENTIAL` or `E_HOST_CREDENTIAL` mean it cannot:
+nothing was pushed and the proposal is unchanged. Report the message to
+whoever runs the host, and once it is fixed run the same `--apply` again.
 
-Use the digest the last `--check` printed. If anything changed since,
-`E_DIGEST`: check again and read the new diff. On success it commits with the
-package's fixed author text and the commit text `--check` printed, whose
-trailers name you (`Proposed-by`, and where your home records them your
-messaging identity and the human it is attributed to; the maintainer's merge
-copies them into the accepted history; a `W_ATTRIBUTION` warning means one was
-left out because the content screen refuses its value, and needs nothing from
-you), pushes a new `okf-proposal/<date>-<uuid>` branch
-(create-only, never the accepted branch), labels it `okf-proposal`, opens one
-PR per changed base and prints each PR's URL, head, branch, the accepted
-commit it is parented on and `recovered` (how often an accepted branch that
-moved before the push was replayed onto; 0 normally).
-
-Before it pushes anything, `--apply` checks that `gh` on this host can open
-the PR. `E_GH_UNAVAILABLE` means it cannot (`gh` is missing, cannot read the
-repository, or its account lacks write permission): nothing was pushed and
-the proposal is unchanged. This one is not a publication error: report the
-message to whoever runs the host, and once it is fixed run the same `--apply
---digest` again.
-
-**A publication error is reported, never retried.** `E_BASE_MOVED` (the
-recovery could not replay), `E_PUSH_UNCERTAIN`, `E_GH` and `E_PR_UNCERTAIN`
-retain the clone, the commit text, the PR body and the safe result in the
-proposal directory. A remote branch or PR may exist after an uncertain one:
-never assume it does not, never clean it up. When the push went through, the
-message names the branch and the commands that finish or remove it: pass
-them on in your report, and do not run them. A second `--apply` of the same
-proposal refuses (`E_PROPOSAL_EXISTS`). Report the code and the PRs already
-opened in your hand-back.
+**A publication error is reported, never retried.** `E_BASE_MOVED`,
+`E_PUSH_UNCERTAIN`, `E_GH` and `E_PR_UNCERTAIN` retain the clone, the texts
+and the safe result in the proposal directory. A remote branch or PR may
+exist after an uncertain one: never assume it does not, never clean it up.
+When the push went through, the message names the commands that finish or
+remove it: pass them on in your report, and do not run them. A second
+publication of the same proposal refuses (`E_PROPOSAL_EXISTS`).
 
 ## After apply
 
 Record each PR URL in log.md and go back to work. You never shepherd the PR:
 the `proposal-review` trigger spawns the knowledge maintainer, which reviews,
-amends, merges or closes it on what the PR and its cited evidence show, and
-reports to no one. Where no trigger is installed, you may spawn one reviewer:
+amends, merges or closes it, and reports to no one. Where no trigger is
+installed, you may spawn one reviewer, and not wait for it:
 
 ```sh
 oats spawn oats.okf/knowledge-maintainer --task "Review knowledge-base PR <url> at <head>. Load the knowledge-review skill first." --relation unrelated
 ```
 
-That is a call, not a station: do not wait for it. Keep the backing notes
-until the PR is settled, for your own audit and any re-proposal; the
-maintainer never reads them in your home (the hashes in the provenance fix
-what you relied on).
+Keep the backing notes until the PR is settled; the maintainer never reads
+them in your home (the hashes in the provenance fix what you relied on).
 
 ## Hand-back
 
 Say which checkpoint you ran and its outcome: "done, proposed: <PR URLs>",
 "done, nothing to propose: <reason>", "done, proposal pending: <slug and
-why>" or "done, no duty to propose" (opt-out). Name any claim you dropped
-for a node you only read, with that node.
+why>" or "done, no duty to propose" (opt-out).
