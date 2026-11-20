@@ -421,7 +421,7 @@ sandboxes:
     description: Knowledge ingestors         # optional
 ```
 
-- The name matches `^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$`. `team` must be a label in
+- The name matches `^[a-z0-9]$|^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$`. `team` must be a label in
   this file's `teams:`, and no other sandbox may name it (v1).
 - `egress` is a subset of `{model, source, forge}` (`forge` behind feature
   `sandbox-egress-forge`), because those are the external roles the egress component
