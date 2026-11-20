@@ -1,0 +1,57 @@
+name: Session-provider lifecycle, every schedule (nightly)
+
+# Every schedule of the lifecycle's explorer (docs/design/2026-11-20-provider-home-lifecycle.md;
+# test/session-provider-explorer.test.mjs), on main, every night. Pull-request CI runs them all only
+# for a change that touches the lifecycle (pull-request.yml, job provider-lifecycle) and a seeded
+# sample otherwise: this run is what sees a change elsewhere that breaks an ordering.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provider-lifecycle:
+    name: Node 22 / session-provider lifecycle, every schedule
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # The token stays out of the checkout's configuration: the install and the tests run without it.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install supported-node dependencies
+        run: npm ci
+
+      # (Its own bound, under the job's: a schedule that never settles fails this step, and so the
+      # job, where the job's own timeout would only cancel it.)
+      - name: Every schedule of the session-provider lifecycle
+        timeout-minutes: 40
+        run: npm run test:provider-lifecycle
+
+  # A failure is said where people look: one open issue, commented on while it stays open. A job of
+  # its own, the only one that may write an issue, with no checkout and no code of the repository.
+  report:
+    name: Open an issue for a failed nightly run
+    needs: provider-lifecycle
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open, or add to, the issue for a failed run
+        run: |
+          title="Nightly: a schedule of the session-provider lifecycle failed on main"
+          body="The nightly run of every schedule of the session-provider lifecycle failed at ${GITHUB_SHA}: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. A failing schedule prints its seed and steps; one schedule runs with OATS_EXPLORER_ONLY, as the log shows."
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"; else gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body" --label lane:product; fi
+        env:
+          GH_TOKEN: ${{ github.token }}

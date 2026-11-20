@@ -13,8 +13,11 @@ point between two writes, and each provider call: before, during, after),
 then another verb runs, then an input, against a provider that has sessions;
 and the invariants below are checked once everything has settled. In the
 suite it runs a seeded sample, in seconds; `npm run test:provider-lifecycle`
-runs every schedule (minutes), and pull-request CI does so on every push, as
-a job of its own that the gate requires.
+runs every schedule (minutes). Pull-request CI runs every schedule, as a job
+of its own that the gate requires, for a change that touches the lifecycle
+(the files `scripts/provider-lifecycle-changed.mjs` lists: this page, the
+code and the tests named here, the workflow), and a nightly run does on
+main.
 
 **The invariants.** (1) No session runs that no record names. (2) A home
 recorded planned has no session; one recorded stopped has none but the one
