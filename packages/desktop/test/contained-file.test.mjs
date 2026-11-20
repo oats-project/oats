@@ -26,15 +26,27 @@ function fixture(t) {
 // Hooks wrap the actual filesystem boundary; every descriptor and byte is real.
 function reader(roots, hooks = {}, options = {}) {
   const descriptors = [], reads = [];
+  let opens = 0;
   const io = {
-    openSync(...args) { const fd = fs.openSync(...args); descriptors.push(fd); hooks.open?.(...args); return fd; },
+    openSync(...args) {
+      opens++;
+      hooks.beforeOpen?.();
+      const fd = fs.openSync(...args);
+      descriptors.push(fd);
+      hooks.open?.(...args);
+      return fd;
+    },
     fstatSync(fd) { const st = fs.fstatSync(fd); hooks.fstat?.(st); return st; },
-    realpathSync(path) { const real = fs.realpathSync(path); hooks.realpath?.(path, real); return real; },
+    realpathSync(path) {
+      const real = fs.realpathSync(path);
+      if (descriptors.length) hooks.realpath?.(path, real);
+      return real;
+    },
     statSync(path) { hooks.stat?.(path); return fs.statSync(path); },
     readSync(...args) { hooks.read?.(); const n = fs.readSync(...args); reads.push(n); return n; },
     closeSync(fd) { fs.closeSync(fd); },
   };
-  return { reads, read(path) {
+  return { reads, get opens() { return opens; }, read(path) {
     try {
       return readContainedFile(path, roots, { maxBytes: LIMIT, ...options, io });
     } finally {
@@ -105,7 +117,9 @@ test('contained file: directories, FIFOs, sockets and devices are refused withou
   await new Promise((ok, reject) => { server.once('error', reject); server.listen(socket, ok); });
   t.after(() => new Promise(ok => server.close(ok)));
   refused(reader([f.base]), socket, 400);
-  refused(reader([f.root]), socket, 403);
+  const outside = reader([f.root]);
+  refused(outside, socket, 403);
+  assert.equal(outside.opens, 0, 'outside sockets are refused before open');
   const link = join(f.root, 'socket-link'); fs.symlinkSync(socket, link);
   refused(reader([f.base]), link, 400);
   refused(reader(['/dev']), '/dev/null', 400);
@@ -115,7 +129,9 @@ for (const phase of ['open', 'realpath']) for (const initial of ['inside', 'outs
   test(`contained file: parent identity stays checked (${phase}, ${initial})`, t => {
     const f = fixture(t), parent = join(f.root, 'parent'), saved = join(f.root, 'saved');
     fs.mkdirSync(parent); fs.writeFileSync(join(parent, 'note.md'), 'inside');
-    if (initial === 'outside') { fs.renameSync(parent, saved); fs.symlinkSync(f.other, parent); }
+    const beforeOpen = () => {
+      if (initial === 'outside') { fs.renameSync(parent, saved); fs.symlinkSync(f.other, parent); }
+    };
     let changed = false;
     const swap = () => {
       if (changed) return;
@@ -123,7 +139,7 @@ for (const phase of ['open', 'realpath']) for (const initial of ['inside', 'outs
       if (initial === 'outside') { fs.unlinkSync(parent); fs.renameSync(saved, parent); }
       else { fs.renameSync(parent, saved); fs.symlinkSync(f.other, parent); }
     };
-    refused(reader([f.root], { [phase]: swap }), join(parent, 'note.md'), 403);
+    refused(reader([f.root], { beforeOpen, [phase]: swap }), join(parent, 'note.md'), 403);
     assert.equal(changed, true);
   });
 }
@@ -238,8 +254,8 @@ test('brain skills: shared reader contains and bounds frontmatter, including cre
   fs.unlinkSync(path); fs.symlinkSync(f.outside, path);
   assert.equal(entry(skill, [f.root]), null);
   fs.unlinkSync(path); fs.writeFileSync(path, 'inside');
-  const changedRead = (p, roots, options) => readContainedFile(p, roots, { ...options, io: {
-    ...fs, realpathSync(p) { const real = fs.realpathSync(p); fs.unlinkSync(path); fs.symlinkSync(f.outside, path); return real; },
-  } });
+  const changedRead = (p, roots, options) => reader(roots, {
+    realpath() { fs.unlinkSync(path); fs.symlinkSync(f.outside, path); },
+  }, options).read(p);
   assert.equal(make(changedRead)(skill, [f.root]), null);
 });

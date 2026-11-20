@@ -32,7 +32,8 @@ A remote (server-routed) instance grants no local roots.
   admission-to-use race: a directory swapped for a symlink between admission and the check.
 
 **The read** (`readContainedFile`, shared by `fileData` and brain skill frontmatter):
-- the server opens read-only without following the final link or waiting on a FIFO. A final
+- the server checks containment before opening the path, then opens read-only
+  without following the final link or waiting on a FIFO. A final
   symlink is resolved and opened with the same flags, preserving in-root links;
 - the descriptor's identity must match the stat of the canonical pathname checked against
   admitted roots before any content is read;

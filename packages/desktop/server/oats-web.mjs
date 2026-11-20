@@ -1136,8 +1136,12 @@ function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null
   const missing = { error: "no such file", code: 404 };
   const outside = { error: "path outside allowed roots", code: 403 };
   const notFile = { error: "not a regular file", code: 400 };
-  const flags = fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK;
+  const flags = fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK | fsConstants.O_NOCTTY;
   const path = resolve(requested);
+  // Reject paths outside the roots before opening them. Check again after open
+  // to confirm the pathname still identifies the opened descriptor.
+  const admitted = resolveGuardedFile(path, allowedRoots, io);
+  if (admitted.error) return admitted;
   let fd;
   try {
     try { fd = io.openSync(path, flags); }
