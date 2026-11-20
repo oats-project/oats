@@ -14,7 +14,7 @@
  * test/inventory.test.mjs holds that its page reaches no module that imports a Node builtin. */
 import { dirname } from 'node:path';
 import { livenessOrigin } from './liveness.mjs';
-import { knownOrigin, hasRuntimeError, byRuntimeState, instanceColor } from './instance-presentation.mjs';
+import { knownOrigin, hasRuntimeError, byRuntimeState, instanceColor, sessionProvider } from './instance-presentation.mjs';
 import { retireData } from './retire-state.mjs';
 
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -160,10 +160,15 @@ export function panelInstance(i) {
  *
  * The merged row's `runtimeErrorOrigin` is set here or removed, whatever the row carried: when the
  * answer holds the `runtimeError`, the answer's speaker; when the answer has none and the kernel's row
- * had one (a probed row the kernel reported with a text), the text is the kernel's, so "kernel". */
+ * had one (a probed row the kernel reported with a text), the text is the kernel's, so "kernel".
+ *
+ * A row on a session provider (instance-presentation.mjs `sessionProvider`) takes nothing from its answer: the
+ * collector knows nothing of it, so whatever it printed for the row, and the unknown answer written for every row
+ * when the collector failed (`livenessAnswers`), is left out. Its `running`, `runtimeState` and `runtimeError` are
+ * the kernel's, whole, and its text's speaker is the kernel. */
 export function panelInstances(rows, answers) {
   return rows.map((row, index) => {
-    const answer = answers[index], { runtimeErrorOrigin: _carried, ...merged } = { ...row, ...answer };
+    const answer = sessionProvider(row) ? undefined : answers[index], { runtimeErrorOrigin: _carried, ...merged } = { ...row, ...answer };
     const origin = record(answer) && Object.hasOwn(answer, "runtimeError") ? answer.runtimeErrorOrigin : "kernel";
     return panelInstance(hasRuntimeError(merged) ? { ...merged, runtimeErrorOrigin: origin } : merged);
   }).sort(byRuntimeState);

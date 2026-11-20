@@ -227,7 +227,7 @@ export function deploymentStatusData(document, deployment) {
         const session = { ...(text(provider) && provider.length > 0 && provider.length <= 200 ? { provider } : {}), ...(threadId !== null ? { threadId } : {}) };
         if (Object.keys(session).length) row.session = session;
       }
-      if (own(instance, 'open') && openLink(instance) !== null) row.open = openLink(instance);
+      if (own(instance, 'open')) { const link = openLink(instance); if (link !== null) row.open = link; }
       if (own(instance, 'retirePending')) row.retirePending = true;
       // #1247 (feature status-retire-state): the retire that runs, or failed, or was interrupted. Validated, never
       // check()ed: a value out of the contract is dropped and the row reads as if it had none.

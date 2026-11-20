@@ -101,6 +101,25 @@ test("a kernel without status-liveness: the collector leaves a provider row as t
   for (const name of ["dev-a", "dev-b", "dev-c"]) assert.equal(panel[name].tmux, null, name);
 });
 
+test("a kernel without status-liveness, a collector that failed or printed nonsense: a provider row keeps the kernel's three fields whole; the tmux rows read unknown, as before", () => {
+  const long = `E_SESSION_UNAVAILABLE: ${"x".repeat(400)}`;
+  const kernel = [bbRow("dev-a"), bbRow("dev-b", { running: false, runtimeState: "stopped" }), bbRow("dev-c", { running: null, runtimeState: "unreachable", runtimeError: long }),
+    { instance: "dev-t", home: home("dev-t"), running: true, tmux: { session: "oats", window: "dev-t", socket: "/s" } }];
+  const rows = rosterRows(deploymentStatusData(statusOf(kernel), "/d"), { ok: true, features: [] });
+  const expected = { "dev-a": [true, "unknown", undefined, undefined], "dev-b": [false, "stopped", undefined, undefined], "dev-c": [null, "unreachable", long, "kernel"] };
+  // The collector's own answer for a provider row cuts its text at 300 characters and may say anything: none of it is taken.
+  const printed = JSON.stringify(observeLiveness(JSON.parse(JSON.stringify(livenessInput(rows))), { tmuxReader: (row) => ({ tmux: row.tmux, running: true, runtimeState: "running" }) }));
+  const lying = JSON.stringify(rows.map(() => ({ running: false, runtimeState: "stopped", runtimeError: "no such window", tmux: { session: "oats" } })));
+  for (const [what, stdout] of [["failed", null], ["not JSON", "{"], ["too few answers", "[]"], ["its own answers", printed], ["answers that say stopped", lying]]) {
+    const panel = Object.fromEntries(panelInstances(rows, livenessAnswers(rows, stdout)).map((row) => [row.instance, row]));
+    for (const [name, fields] of Object.entries(expected)) {
+      assert.deepEqual([panel[name].running, panel[name].runtimeState, panel[name].runtimeError, panel[name].runtimeErrorOrigin], fields, `${what}: ${name}`);
+      assert.equal(panel[name].tmux, null, `${what}: ${name} has no tmux target`);
+    }
+    if (stdout === null || stdout === "{" || stdout === "[]") assert.deepEqual([panel["dev-t"].running, panel["dev-t"].runtimeState, panel["dev-t"].runtimeErrorOrigin], [null, "unreachable", "terminal-probe"], what);
+  }
+});
+
 test("from the kernel's row to the acts: a bb row offers what its state offers, opens no terminal, and carries its link", () => {
   const panel = panelInstances(rosterRows(deploymentStatusData(statusOf([bbRow("dev-a"), bbRow("dev-b", { running: false, runtimeState: "stopped", open: null }),
     bbRow("dev-c", { running: null, runtimeState: "unknown" })]), "/d"), CLI), []);

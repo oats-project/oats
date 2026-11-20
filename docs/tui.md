@@ -278,6 +278,8 @@ while a terminal is open); under 80 columns it has the whole width.
   workspace's remembered tabs never open it. Its `!` mark shows whenever
   OATS reports that it waits on you and it is not stopped
   ([how the clients read `backend`](desktop-cli-api.md#row-backend-clients)).
+  Start the TUI outside an agent's home: OATS refuses to retire a home while
+  a process works in it, the TUI's own included, and names that process.
 
 **A view of more than one deployment** (this machine and another, or two
 deployments on one machine) is one list, grouped as the Desktop groups it:

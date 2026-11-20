@@ -3788,8 +3788,13 @@ its absence.
     alone: its `runtimeState` is the provider's word (`unknown` while it
     runs), never `running`.
   - A start's or a restart's answer for it carries the provider's name as
-    `backend`, `session: {provider, endpoint?}` and no terminal `target`;
-    the clients open no terminal after it.
+    `backend`, `session: {provider, endpoint?}` and no terminal `target`
+    (the endpoint on a start on this machine, never on a routed one); the
+    clients open no terminal after it.
+  - Its stop and its retire run from the deployment's directory, never from
+    its home. The retire of such a home is refused while any process works in
+    it, the client's own included: start the Desktop or the TUI outside an
+    agent's home.
   - The Desktop shows the backend and `session.threadId`, when it is text,
     as `bb · thread thr_…`. Only a status row of this machine carries the
     thread id: a row relayed from another host (`oats server roster`,
