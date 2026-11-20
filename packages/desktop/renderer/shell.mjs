@@ -1315,16 +1315,17 @@ function renderContextRoster(instances) {
         if (attn) { meta.className = "ctx-meta ctx-attn-line"; meta.replaceChildren(attn); }
         const isNew = !!spawnJobs.isNew?.(ws, i);
         // The disclosure (the product owner, 2026-11-19): a row with children here wears a chevron and the count
-        // of the rows under it before its name, clear of the row tools at its end; a click on it opens or closes the
-        // row (below). Its words follow the name.
+        // of the rows under it right after its name (the product owner, 2026-11-20: "so that all instance names look
+        // aligned on the left"; an instance row has no tools over its end since slice 1); a click on it opens or
+        // closes the row (below). Its words follow the name.
         const told = hasChildren ? rowDisclosure(document, { count: rowsUnder(childrenHere, instanceId(i)) }) : null;
         const disclosure = told?.mark ?? null;
         // A pinned row's mark (feature instance-pin): beside the name, before New, so a pin is seen, not inferred.
         const pinned = rowPinned(i, pinsShown());
         if (isNew || disclosure || pinned) {
           const line = document.createElement("span"); line.className = "ctx-name-line";
-          if (disclosure) line.append(disclosure);
           line.append(name);
+          if (disclosure) line.append(disclosure);
           if (pinned) line.append(pinnedMark(document));
           if (told) line.append(told.spoken);
           if (isNew) {

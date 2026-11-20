@@ -1052,8 +1052,9 @@ and each instance linked as a sibling "sibling of" the other, after the row's
 two lines.
 
 The sidebar shows the top-level instances only until you open one. An
-instance with children has a chevron before its name, with the number of
-instances under it at every depth. Click the chevron to show its group as
+instance with children has a chevron right after its name, with the number
+of instances under it at every depth, so every name at a level starts at the
+same place. Click the chevron to show its group as
 it was drawn before, and click it again to hide the group. A click anywhere
 else on the row still opens its terminal. From the keyboard, Right opens the
 focused row and Left closes it. Every instance at the top of the tree, the

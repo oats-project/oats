@@ -691,10 +691,11 @@ split into sections) is `packages/client/roster-sections.mjs`.
   (`docs/desktop.md`, "Pinned instances"). The palette's focused rows keep their recency order.
 - **The disclosure, and roots that start collapsed** (the product owner, 2026-11-19; `roster-disclosure.mjs`):
   `sectionChildren` lists each row's children inside its own section (the main tree or the Background section,
-  and a deployment's part), and a row with any gets `span.ctx-disclosure` (`aria-hidden`) first on its
-  `.ctx-name-line`, before the name, so the row tools that overlay the row's end on hover never cover it: a chevron
-  (`svg.ctx-disclosure-chevron`, turned down by `.ctx-inst[aria-expanded="true"]`) and the count of every row under
-  it (`rowsUnder`). A `.sr-only` ", N below" follows the name, so the name is said first. The row's click handler
+  and a deployment's part), and a row with any gets `span.ctx-disclosure` (`aria-hidden`) on its
+  `.ctx-name-line`, right after the name (the product owner, 2026-11-20), so every name at a level starts at the
+  same place; an instance row has no tools over its end (slice 1), and a long name ellipsizes before the mark: a
+  chevron (`svg.ctx-disclosure-chevron`, turned down by `.ctx-inst[aria-expanded="true"]`) and the count of every
+  row under it (`rowsUnder`). A `.sr-only` ", N below" follows the mark, so the name is said first. The row's click handler
   opens or closes the row when the click lands on the mark (no terminal opens; the focus and the roving stop stay
   on the row), and the tree keys do the same (`onRosterRowKey`). The rows drawn collapsed are `collapsedRows`: the
   shell's `collapsedInstances` (closed by hand) and every root of its section with children that is not in
