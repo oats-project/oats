@@ -390,13 +390,15 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     // The context: read with the detail (inspect --board) once the view is open; attributed, plain text, line breaks kept.
     // A detail read for an earlier occurrence of this id says nothing about this one: it reads as still reading.
     const current = !!detail && (!detail.occurrences || detail.occurrences.has(occurrence(q)));
-    // The answer's own question must be this occurrence (its `since`), whatever the read was started for.
+    // The answer's own question must be this occurrence: its `since` exactly, whatever the read was started for. An
+    // answer that doesn't prove it (no since, or not a time) is no answer for this question: fail closed.
     const read = current && detail.state === 'ok' ? detail.questions.get(q.id) : null;
-    const ctx = read && (read.since == null || read.since === q.since) ? boardContext(read.context) : null;
+    const proven = !!read && read.since === q.since;
+    const ctx = proven ? boardContext(read.context) : null;
     context.hidden = !q.hasContext;
     if (q.hasContext) {
       const lead = node(doc, 'p', 'agent-q-says', `${name} says:`);
-      const stale = !!read && read.since != null && read.since !== q.since;
+      const stale = !!read && !proven;
       const words = !current || stale ? 'Reading the context…' : detail.state === 'ok' ? 'The agent sent no context for this question.' : DETAIL_NOTES[detail.state]?.context ?? DETAIL_NOTES.malformed.context;
       const body = ctx ? node(doc, 'p', 'agent-q-context-text', ctx) : node(doc, 'p', 'agent-q-context-none', words);
       // A long context scrolls inside its open fold (at most 12 lines tall), so its text takes the focus for the keys.

@@ -8,7 +8,7 @@ import { JSDOM } from 'jsdom';
 import { createAgentBoard, createHiddenFacts } from '../renderer/agent-board.mjs';
 import { boardData } from '../../client/instance-board.mjs';
 import { TEXT_PAIRS } from '../renderer/contrast-inventory.mjs';
-import { NOW, board } from './helpers/board-fixture.mjs';
+import { AT, NOW, board } from './helpers/board-fixture.mjs';
 
 const renderer = new URL('../renderer/', import.meta.url);
 const theme = readFileSync(new URL('theme.css', renderer), 'utf8'), shell = readFileSync(new URL('shell.css', renderer), 'utf8');
@@ -43,7 +43,7 @@ for (const name of ['light', 'solarized', 'dark']) test(`${name}: the agent view
   many.questions[0].options = ['Yes', 'token=abcdefghij'];
   many.questions[0].hasContext = true;
   view.update(boardData(many));
-  view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'one\ntwo' }]]) });
+  view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'one\ntwo', since: AT }]]) });
   doc.querySelector('li[data-key="pr"] .agent-fact-link').click();
   const root = win.getComputedStyle(doc.documentElement), value = t => channels(root.getPropertyValue(`--${t}`).trim());
   for (const [selector, surface, bg] of TEXTS) {
@@ -76,7 +76,7 @@ test('the agent view layout: no scrolling zone, the context fold\'s text the one
   const long = `https://example.com/${'a'.repeat(480)}`;
   const b = board(); b.facts[1].link = long; b.questions[0].hasContext = true;
   view.update(boardData(b));
-  view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'line\n'.repeat(400) }]]) });
+  view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'line\n'.repeat(400), since: AT }]]) });
   for (const selector of ['.agent-questions', '.agent-facts', '.agent-q-context', '.agent-q-context-body']) {
     const css = win.getComputedStyle(doc.querySelector(selector));
     assert.ok(!['auto', 'scroll'].includes(css.overflowY) && !['auto', 'scroll'].includes(css.overflow), `${selector} does not scroll`);
