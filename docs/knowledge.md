@@ -231,14 +231,15 @@ other than `off`, or a soul `knowledge.propose` key, refuses the spawn
    head of the same PR and each decision made while working are not
    checkpoints: those are captured in `notes/`, and the next checkpoint
    carries them. First update state, log and relevant notes. Apply
-   `knowledge-theory` and search accepted knowledge (`oats okf search`, then
-   `cat`): already accepted with nothing to add means no proposal. Make **one
-   proposal per checkpoint, carrying only what no earlier proposal carried**,
-   and record every checkpoint in `log.md`, either with its proposal's PR
-   URLs or with `nothing to propose` and the reason. Claim only for owned
-   nodes (or, for a version-2 soul, in `claims/` on its subjects); a lesson
-   for a node the soul only reads is named in one line in its hand-back for
-   that node's owner.
+   `knowledge-theory` and run a quick `oats okf search` for each claim: when
+   in doubt, propose, because duplicates, the canonical home and the subject
+   are the knowledge maintainer's to settle. Make **one proposal per
+   checkpoint, carrying only what no earlier proposal carried**, and record
+   every checkpoint in `log.md`, either with its proposal's PR URLs or with
+   `nothing to propose` and the reason. A claim goes in the owned nodes (or,
+   for a version-2 soul, in `claims/` on its subjects); a lesson that belongs
+   in a node the soul only reads may be proposed there too, and the check
+   flags it for the maintainer, who chooses its home.
 
    The instance proposes itself, from its home, in three steps:
 
@@ -259,6 +260,13 @@ other than `off`, or a soul `knowledge.propose` key, refuses the spawn
    that would leave the host and prints the complete outgoing diff, the
    commit text, the PR body with its provenance block and a digest; nothing
    remote changes, and the instance reads that diff once as a reviewer would.
+   It refuses only what protects against real harm (for example an unsafe
+   or non-Markdown file, `okf-base.json`, an invalid base or the content
+   screen's findings);
+   a path outside the write surface, a claim with no subject, a broken link
+   or an unfilled `proposal.md` is a `W_*` warning, listed under
+   `## Check warnings` in the PR body, which the maintainer resolves before
+   merging.
    `--apply` with that digest commits, pushes a new
    `okf-proposal/<date>-<uuid>` branch (create-only, never the accepted
    branch), labels it `okf-proposal` and opens one PR per changed base. One
@@ -321,9 +329,10 @@ names but does not judge its content. A bounded content screen runs over
 everything that would leave the host before every push, comment and merge,
 and the host's `screen-terms-file` can add terms to it; a clean screen is not
 proof. The proposer reads its outgoing diff before the push; the maintainer,
-the second reader, reads the already-pushed pull request. The write surface,
-the provenance checks and the soul's opt-out are enforced in code; none is a
-privacy guarantee. The opt-out ([The soul's opt-out](#the-souls-opt-out)) is
+the second reader, reads the already-pushed pull request. The refusals of
+`--check`, the provenance checks and the soul's opt-out are enforced in code;
+a path outside the write surface is only a warning the maintainer resolves.
+None is a privacy guarantee. The opt-out ([The soul's opt-out](#the-souls-opt-out)) is
 per soul and covers that soul's own proposals, not what its instances write
 to other seats. A soul whose work is reading third-party correspondence
 should opt out.
