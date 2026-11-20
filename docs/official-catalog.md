@@ -139,9 +139,14 @@ node scripts/check-mirrors.mjs --generate oats.aweb
 node scripts/check-mirrors.mjs --verify
 ```
 
-Generation fetches only the catalog tag into disposable build scratch, verifies
-its published tag object and peeled commit, and reads raw Git blobs. It does
-not use modified checkout files or touch deployment state. An optional source
+Generation fetches only the catalog tag into ignored disposable scratch under
+`.agents/mirror-source-*`, verifies its published tag object and peeled commit,
+and reads raw Git blobs. Same-filesystem staging uses
+`.agents/mirror-generation-*` there too. These paths are separate from the
+deployment packages/capabilities under `.agents/`; generation does not modify
+those or use modified source-checkout files. Existing destinations can be
+replaced only when the same package's prior manifest owns their exact names;
+OKF inventory paths are reserved for OKF. An optional source
 clone argument uses that clone's immutable objects instead of fetching them;
 its origin and tag must match the catalog and published remote. A moved tag
 at an unchanged pin is refused against the previous inventory. All bytes,

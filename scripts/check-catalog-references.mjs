@@ -29,7 +29,8 @@ export function checkCatalogReferences(root) {
       else if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "upgrading.md") files.push(join(dir, entry.name));
     }
   }
-  for (const dir of ["docs", "skills", "oats-package"]) walk(join(root, dir));
+  for (const dir of ["docs", "skills", "oats-package", "capabilities", "souls", "injects"]) walk(join(root, dir));
+  if (existsSync(join(root, "README.md"))) files.push(join(root, "README.md"));
   for (const file of files) {
     // JSON response examples describe recorded deployments, not recommended pins.
     const text = readFileSync(file, "utf8").replace(/```json[^\n]*\n[\s\S]*?```/g, "");

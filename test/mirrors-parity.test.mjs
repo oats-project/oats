@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { checkCatalogReferences } from "../scripts/check-catalog-references.mjs";
 import { checkMirrors, generateMirror, INVENTORY_PATH, REPO_ROOT } from "../scripts/check-mirrors.mjs";
 
 const write = (path, bytes) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, bytes); };
-function fixture(t, { rootCapability = false } = {}) {
+function fixture(t, { rootCapability = false, capability = "fixture" } = {}) {
   mkdirSync(join(REPO_ROOT, ".agents"), { recursive: true });
   const base = mkdtempSync(join(REPO_ROOT, ".agents/mirror-parity-"));
   t.after(() => rmSync(base, { recursive: true, force: true }));
@@ -16,8 +16,8 @@ function fixture(t, { rootCapability = false } = {}) {
   const git = (...args) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", ...args], { cwd: source, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   mkdirSync(source, { recursive: true });
   git("init", "-q"); git("init", "--bare", origin); git("remote", "add", "origin", origin);
-  write(join(source, "oats-package/oats-package.json"), JSON.stringify({ package: "oats.fixture", version: "1.0.0", capabilities: [rootCapability ? "." : "capabilities/fixture"] }));
-  const capRoot = rootCapability ? "oats-package" : "oats-package/capabilities/fixture";
+  write(join(source, "oats-package/oats-package.json"), JSON.stringify({ package: "oats.fixture", version: "1.0.0", capabilities: [rootCapability ? "." : `capabilities/${capability}`] }));
+  const capRoot = rootCapability ? "oats-package" : `oats-package/capabilities/${capability}`;
   write(join(source, capRoot, "oats.json"), JSON.stringify({ capability: "fixture.cap", version: "1.0.0" }));
   write(join(source, capRoot, "tool.mjs"), "export const value = 1;\n");
   chmodSync(join(source, capRoot, "tool.mjs"), 0o755);
@@ -40,6 +40,9 @@ test("generation reads the catalog tag's Git bytes, ignoring modified checkout b
   generateMirror("oats.fixture", f.source, { repoRoot: f.root });
   assert.equal(readFileSync(join(f.root, "mirrors/fixture/tool.mjs"), "utf8"), "export const value = 1;\n");
   assert.deepEqual(Object.keys(checkMirrors({ repoRoot: f.root })), ["oats.fixture"]);
+  const before = snapshot(f.root);
+  generateMirror("oats.fixture", f.source, { repoRoot: f.root });
+  assert.deepEqual(snapshot(f.root), before, "the owning package can regenerate its exact prior destination");
 });
 
 test("a package exporting its payload root is mirrored whole", t => {
@@ -226,3 +229,49 @@ test("full framework tag references in prose match the catalog", t => {
   write(doc, "Use `oats-framework/v1.0.0`.\n");
   assert.throws(() => checkCatalogReferences(f.root), /framework.*pin differs/);
 });
+
+function snapshot(root) {
+  const entries = [];
+  function walk(dir, relative = "") {
+    for (const name of readdirSync(dir).sort()) {
+      const file = join(dir, name), path = relative ? `${relative}/${name}` : name;
+      const st = lstatSync(file), mode = st.mode & 0o777;
+      if (st.isSymbolicLink()) entries.push({ path, mode, target: readlinkSync(file) });
+      else if (st.isDirectory()) { entries.push({ path, mode, directory: true }); walk(file, path); }
+      else entries.push({ path, mode, bytes: readFileSync(file).toString("base64") });
+    }
+  }
+  walk(root);
+  return entries;
+}
+
+test("generation refuses foreign OKF exports before writing any payload or inventory", t => {
+  for (const present of [true, false]) {
+    const f = fixture(t, { capability: "oats-okf" });
+    cpSync(join(REPO_ROOT, "scripts/okf-source-inventory.json"), join(f.root, "scripts/okf-source-inventory.json"));
+    if (present) cpSync(join(REPO_ROOT, "mirrors/oats-okf"), join(f.root, "mirrors/oats-okf"), { recursive: true, verbatimSymlinks: true });
+    write(join(f.root, INVENTORY_PATH), JSON.stringify({ schemaVersion: 1, packages: {} }));
+    const before = snapshot(f.root);
+    assert.throws(() => generateMirror("oats.fixture", f.source, { repoRoot: f.root }), /owned by oats.okf/);
+    assert.deepEqual(snapshot(f.root), before, "the entire root, including payload, inventories and existing directories, is unchanged");
+  }
+});
+
+test("generation refuses an unowned existing destination before any write", t => {
+  const f = fixture(t);
+  write(join(f.root, "mirrors/fixture/operator-file"), "keep this existing directory unchanged");
+  write(join(f.root, INVENTORY_PATH), JSON.stringify({ schemaVersion: 1, packages: {} }));
+  const before = snapshot(f.root);
+  assert.throws(() => generateMirror("oats.fixture", f.source, { repoRoot: f.root }), /not owned by oats.fixture/);
+  assert.deepEqual(snapshot(f.root), before);
+});
+
+for (const file of ["README.md", "capabilities/x/skills/y/SKILL.md", "souls/x/AGENTS.md", "injects/x.md"]) {
+  test(`catalog reference guard includes ${file}`, t => {
+    const f = fixture(t), doc = join(f.root, file);
+    write(doc, "Pin `oats.fixture: v1.0.0`.\n");
+    checkCatalogReferences(f.root);
+    write(doc, "Pin `oats.fixture: v2.0.0`.\n");
+    assert.throws(() => checkCatalogReferences(f.root), /recommended pin differs/);
+  });
+}

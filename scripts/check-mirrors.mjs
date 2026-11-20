@@ -10,7 +10,7 @@ import { devNull } from "node:os";
 import { isDeepStrictEqual } from "node:util";
 import { basename, dirname, isAbsolute, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkOkfMirror, payloadEntries } from "./check-okf-mirror.mjs";
+import { MIRROR_PATHS as OKF_MIRROR_PATHS, checkOkfMirror, payloadEntries } from "./check-okf-mirror.mjs";
 import { parseConfigData } from "../lib/config-data.mjs";
 import { currentRepoKey } from "../lib/repo-moves.mjs";
 
@@ -125,9 +125,16 @@ export function generateMirror(id, source, { repoRoot = REPO_ROOT } = {}) {
   }
   const output = join(repoRoot, INVENTORY_PATH);
   try { regular(output); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  const priorNames = new Set(prior ? JSON.parse(prior.manifestText).capabilities.map(cap => mirrorName(cap, id)) : []);
+  // The OKF inventory is pinned to this shared path list by checkOkfMirror.
+  // Reserve it even when its inventory or payload is missing.
+  const okfNames = new Set(OKF_MIRROR_PATHS.map(path => basename(path)));
   for (const cap of manifest.capabilities) {
-    const dest = join(repoRoot, "mirrors", mirrorName(cap, manifest.package));
-    try { directory(dest); } catch (error) { if (error.code !== "ENOENT") throw error; }
+    const name = mirrorName(cap, manifest.package), dest = join(repoRoot, "mirrors", name);
+    assert.ok(!okfNames.has(name), `mirror already owned by oats.okf: ${cap}`);
+    let present = false;
+    try { directory(dest); present = true; } catch (error) { if (error.code !== "ENOENT") throw error; }
+    assert.ok(!present || priorNames.has(name), `existing mirror not owned by ${id}: ${name}`);
     for (const [otherId, record] of Object.entries(inventory.packages)) {
       if (otherId !== id) assert.ok(!JSON.parse(record.manifestText).capabilities.some(p => mirrorName(p, otherId) === mirrorName(cap, manifest.package)), `mirror already owned by ${otherId}: ${cap}`);
     }
