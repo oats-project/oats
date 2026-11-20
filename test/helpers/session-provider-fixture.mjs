@@ -41,6 +41,16 @@ export function sessionsOf(events) {
   return sessions;
 }
 
+/** The events of a stateful fake's log, from its text: one JSON object per line, and only the
+ *  lines that are WHOLE. Several commands append to the log while others read it (the explorer runs
+ *  schedules side by side), so a read can end inside the line that is being written: what follows
+ *  the last newline is not a line yet, and is left for the next read. A whole line that is no JSON
+ *  is still an error. */
+export function eventsOf(text) {
+  const whole = text.slice(0, text.lastIndexOf("\n") + 1);
+  return whole.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+}
+
 const SESSION_SCRIPT = `import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
@@ -58,7 +68,8 @@ const open = (endpoint) => ({ label: "Open in fake", url: "${FAKE_SERVER}/thread
 // Stateful (control.stateful): each effect is an event, written when it happens (after a sleep),
 // and inspect answers from them.
 const stateful = control.stateful === true;
-const events = () => (existsSync(join(dir, "events.log")) ? readFileSync(join(dir, "events.log"), "utf8").trim().split("\\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
+${eventsOf.toString()}
+const events = () => (existsSync(join(dir, "events.log")) ? eventsOf(readFileSync(join(dir, "events.log"), "utf8")) : []);
 const emit = (event) => appendFileSync(join(dir, "events.log"), JSON.stringify({ ...event, at: Date.now() }) + "\\n");
 ${sessionsOf.toString()}
 const statefulDefaults = {
@@ -155,7 +166,7 @@ export function providerDeployment(t, { manifest = fakeManifest(), capabilities 
   fx.hooks = (event) => fx.calls().filter((c) => c.hook !== undefined && (event === undefined || c.hook === event));
   fx.clearCalls = () => rmSync(join(fx.fake, "calls.log"), { force: true });
   /** A stateful fake's events so far, oldest first (sessionsOf reads them), and a test's own event. */
-  fx.events = () => (existsSync(join(fx.fake, "events.log")) ? readFileSync(join(fx.fake, "events.log"), "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
+  fx.events = () => (existsSync(join(fx.fake, "events.log")) ? eventsOf(readFileSync(join(fx.fake, "events.log"), "utf8")) : []);
   fx.emit = (event) => appendFileSync(join(fx.fake, "events.log"), `${JSON.stringify({ ...event, at: Date.now() })}\n`);
   /** A home of soul `dev` launched on the fake backend. */
   fx.launch = (name, spawnOpts = {}) => fx.spawn("dev", { name, backend: "fake", launchConfig: "claude", launch: true, ...spawnOpts });

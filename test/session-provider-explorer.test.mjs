@@ -34,7 +34,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { providerDeployment, sessionsOf } from "./helpers/session-provider-fixture.mjs";
+import { eventsOf, providerDeployment, sessionsOf } from "./helpers/session-provider-fixture.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, "..", "bin", "oats.mjs");
@@ -266,4 +266,18 @@ test(`the explorer: a kernel killed at any seam of any verb, then another verb a
   };
   await Promise.all(Array.from({ length: Math.min(Number(process.env.OATS_EXPLORER_WORKERS ?? 6), SAMPLE.length) }, worker));
   assert.equal(failures.length, 0, `${failures.length} of ${SAMPLE.length} schedules broke an invariant:${failures.join("")}`);
+});
+
+// The schedules run side by side and share the fake's event log: a read can land while a command
+// is appending its line.
+test("the fake's events are read by whole lines: a line that is still being written is left for the next read", () => {
+  const first = JSON.stringify({ ev: "created", thread: "thr_a_1", home: "a", at: 1 });
+  const second = JSON.stringify({ ev: "input", thread: "thr_a_1", at: 2 });
+  assert.deepEqual(eventsOf(""), []);
+  assert.deepEqual(eventsOf(`${first}\n`), [JSON.parse(first)]);
+  // Every cut inside the second line: the first is read, the second not yet.
+  for (let cut = 0; cut <= second.length; cut++) assert.deepEqual(eventsOf(`${first}\n${second.slice(0, cut)}`), [JSON.parse(first)], `cut at ${cut}`);
+  assert.deepEqual(eventsOf(`${first}\n${second}\n`), [JSON.parse(first), JSON.parse(second)]);
+  // A whole line that is no JSON is a damaged log, and says so.
+  assert.throws(() => eventsOf(`${first}\n{"ev":\n`), SyntaxError);
 });
