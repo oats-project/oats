@@ -17,10 +17,9 @@
   font-weight: 200 900; font-stretch: 50% 200%; font-style: normal; font-display: block;
 }
 :root { --mono: "Inconsolata", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-/* --ui-font, the UI's face, is set only by the font choice (theme.mjs fontStacks: Omarchy's font, the
-   default), inline on the root with --mono and, on Linux and Windows, --term-font-family. Every UI
-   font rule reads it as var(--ui-font, <its own stack>), so System font, which sets none of them, is
-   each rule's own stack exactly as before. */
+/* The chrome is the system sans (D2, the Desktop UI rework): nothing sets --ui-font any more, so every UI font rule,
+   which reads var(--ui-font, <its own stack>), is its own system stack. The font choice sets only the terminals'
+   --term-font-family (theme.mjs fontStacks). */
 
 :root, [data-theme="dark"] {
   color-scheme: dark;     /* native lists, scrollbars and pickers follow the theme */

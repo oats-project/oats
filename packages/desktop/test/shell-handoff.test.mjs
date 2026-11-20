@@ -1,4 +1,6 @@
-// Execute the shipped Quick Open composition with the real picker DOM. Only
+// Execute the shipped New agent handoff (Quick Open, folded into the palette in slice 4 of the Desktop UI rework: the
+// palette's souls group calls openNewAgent) with the real picker DOM. The picker here is the family's test picker over
+// the souls (helpers/soul-picker.mjs), standing for the palette's souls group, whose rows call the same onSoul. Only
 // the HTTP/module-loading boundaries and the destination view are synthetic.
 // No Electron, IPC, CLI, filesystem reads via endpoints or operator state.
 import test from "node:test";
@@ -6,7 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
-import { createQuickOpen } from "../renderer/quick-open.mjs";
+import { createSoulPicker } from "./helpers/soul-picker.mjs";
 import { createSelectionOwnership } from "../renderer/selection-ownership.mjs";
 import { canActivateTab } from "../renderer/workspace-tabs.mjs";
 
@@ -33,24 +35,26 @@ function fixture(t, { shellSource = source, ownership = createSelectionOwnership
     loadSpawn() { const gate = deferred(); loads.push(gate); return gate.promise; },
     ctx: { notify: text => notices.push(text) },
     showStage(name) { s.tabOpenIntents.invalidate(); events.push(["stage", name]); },
-    createQuickOpen(options) {
-      const pick = soul => { const done = options.onPick(soul); handoffs.push(done); return done; };
-      return createQuickOpen({ ...options, onPick: pick, doc: document });
-    },
-    palette: { close() { paletteCloses++; } },
+    // The palette: its souls group (the test picker over /api/agents, as the shipped loadSouls reads it), whose pick
+    // is the shipped onSoul, openNewAgent; and its command list, which the composition adds to.
+    palette: null, chordDetail: () => () => "", runAction() {}, DESKTOP_NOUNS: { instance: "agent", instances: "agents" },
     // The picker's opener, and where the operator was: captured at the pick, before any await.
     document, takePickerFocusReturn: () => ({ opener: true }),
     surfaceReturn: { capture: opener => { captures.push(opener); return { origin: true }; }, restore: origin => { returns.push(origin); return true; } },
     onWorkspaceChange: listener => listeners.push(listener),
   };
+  const picker = createSoulPicker({ doc: document, loadSouls: () => c.api(`/api/agents?ws=${encodeURIComponent(c.workspace)}`),
+    onPick: soul => { const done = s.openNewAgent(soul); handoffs.push(done); return done; } });
+  c.palette = { commands: [], open: () => picker.open(), close() { paletteCloses++; picker.close(); } };
   const setup = shellSource.match(/const tabOpenIntents = [^\n]+/)[0];
   const selection = shellSource.match(/function selectTab\([^]*?\n\}/)[0];
-  const start = shellSource.indexOf("const quickOpen = createQuickOpen({");
+  const start = shellSource.indexOf("// ── Quick Open, folded into the palette");
   const end = shellSource.indexOf("// ── shortcuts editor", start);
   assert.ok(start >= 0 && end > start, "exercise shipped picker composition and workspace subscription");
   const composition = shellSource.slice(start, end).replace('import("./views/spawn.mjs")', "loadSpawn()");
   assert.ok(composition.includes("await loadSpawn()"), "only the module-loader boundary is replaced");
-  const s = runInNewContext(`${setup}\n${selection}\n${composition}\n({ quickOpen, tabOpenIntents, selectTab });`, c);
+  const s = runInNewContext(`${setup}\n${selection}\n${composition}\n({ openNewAgent, tabOpenIntents, selectTab, quickOpen: palette });`, c);
+  assert.equal(c.palette.commands.at(-1)?.label, "New agent: choose a soul…", "the palette lists New agent as a command too");
   document.getElementById("opener").focus();
   return {
     ...s, c, document, requests, loads, events, notices, handoffs, captures, returns, dismissals,
@@ -157,7 +161,7 @@ test("a loaded picker row from the old workspace cannot run after A→B→A", as
 // All mutants run in memory, leaving this shared worktree untouched.
 for (const outcome of ["resolve", "reject"]) {
   test(`mutation: Quick Open ${outcome} must check its dispatch ticket`, async t => {
-    const oldBlock = source.slice(source.indexOf("const quickOpen ="), source.indexOf("// ── shortcuts editor"));
+    const oldBlock = source.slice(source.indexOf("// ── Quick Open, folded into the palette"), source.indexOf("// ── shortcuts editor"));
     const guard = outcome === "resolve" ? "    if (!owns()) return;\n    mod.preselectSpawn" : "      if (!owns()) return;\n      ctx.notify";
     assert.ok(oldBlock.includes(guard));
     const mutant = source.replace(oldBlock, oldBlock.replace(guard, guard.replace("if (!owns()) return;", "/* weakened guard */")));

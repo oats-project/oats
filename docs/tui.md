@@ -746,9 +746,14 @@ The panel can be split in two **groups**, side by side or one above the
 other. Each group is a panel of [tabs](#tabs) of its own: a tab bar, a shown
 tab and the marks of its hidden ones.
 
-- **Splitting.** The leader then `|` splits the panel side by side, and the
-  leader then `-` one above the other; in the Instances view `|` and `-`
-  do the same without the leader. The tabs open stay in the first group
+- **The list out of the way.** The leader then `b` gives the shown terminal the
+  whole screen with the focus, and again gives the list back with the focus (the
+  Desktop's `b` hides its sidebar; the list is the TUI's). With no terminal shown
+  it does nothing.
+- **Splitting.** The leader then `|` (or `h`) splits the panel side by side, and the
+  leader then `-` (or `v`) one above the other; in the Instances view `|` and `-`
+  do the same without the leader. (`h` and `v` are Herdr's letters, shared with the
+  Desktop since its UI rework.) The tabs open stay in the first group
   (left, or top). The second group starts empty and is the focused group.
   - A split needs a tab open, and none starting.
   - **There are at most two groups.** With two, the split keys do nothing,

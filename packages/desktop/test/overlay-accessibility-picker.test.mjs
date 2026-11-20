@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { createOverlayPicker } from "../renderer/overlay-picker.mjs";
 import { createPalette } from "../renderer/palette.mjs";
-import { createQuickOpen } from "../renderer/quick-open.mjs";
+import { createSoulPicker as createQuickOpen } from "./helpers/soul-picker.mjs";
 
 function deferred() {
   let resolve, reject;

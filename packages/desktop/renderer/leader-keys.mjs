@@ -28,7 +28,7 @@ export const LEADER_ACTIONS = Object.freeze({
   spawn: "app.quickOpenSouls",
   filter: "sidebar.focusFilter",
   workspaces: "app.workspaces",
-  help: "app.shortcuts",
+  sidebar: "sidebar.toggle",
 });
 
 /** The Desktop's own words for the rest (and for the sidebar's `refresh`, which the leader lacks, and the
@@ -49,6 +49,8 @@ export const LEADER_LABELS = Object.freeze({
   "spawn-another": "Spawn another of the instance's soul…",
   list: "Instance roster",
   refresh: "Read the instance roster now",
+  // The leader then ? pins the help sheet (the Desktop UI rework, slice 4, D15); the shortcuts are Ctrl+, and the palette's.
+  help: "Pin the help sheet (Esc closes it)",
 });
 
 /** What the Desktop cannot do from the leader: `m`, moving a tab to the other group (no input

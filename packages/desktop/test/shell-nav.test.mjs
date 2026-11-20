@@ -80,10 +80,11 @@ test("shell.mjs consumes the manifest: rail built from shell-nav NAV, openView r
     "openView routes every named view through the stage host");
 });
 
-test("palette view commands derive from NAV and NAV_TABS — no hard-coded destination list to drift", () => {
+test("palette sections derive from NAV and NAV_TABS — no hard-coded destination list to drift", () => {
   const src = shellSource();
-  assert.match(src, /\.\.\.\[\.\.\.NAV, \.\.\.NAV_TABS\]\.map\(\(v\) => \(\{ label: `View: \$\{v\.label\}`,.*run: \(\) => showStageFocused\(v\.name\) \}\)\)/,
-    "palette view commands (View: Workspace › Machines among them) are generated from the manifests");
+  // Slice 4: the pages are the palette's Sections group (no "View: " prefix there); the registry keeps "View: …".
+  assert.match(src, /sections: \(\) => \[\n    \.\.\.\[\.\.\.NAV, \.\.\.NAV_TABS\]\.map\(\(v\) => \(\{ label: v\.label,.*run: \(\) => showStageFocused\(v\.name\) \}\)\)/,
+    "palette sections (Workspace › Machines among them) are generated from the manifests");
   assert.ok(!/label:\s*"View: /.test(src), "no hard-coded View: palette entries remain");
 });
 
@@ -115,7 +116,7 @@ test("showStage routes a NAV_TABS name to openWorkspaceSouls(tab); showStageFocu
   assert.match(src, /workspaceTab: stage\?\.name === "spawn" \? stage\.mod\?\.currentWorkspaceTab\?\.\(\) \?\? null : null/);
   assert.match(src, /selectWorkspaceTab: name => stage\?\.name === "spawn" && stage\.mod\?\.preselectWorkspaceTab\?\.\(name\)\s*&& stage\.mod\.currentWorkspaceTab\?\.\(\) === name \? document\.getElementById\(`workspace-tab-\$\{name\}`\) : null/);
   assert.match(src, /const mounted = stage = \{ name, life, el, mod \};/);
-  assert.match(src, /const WORKSPACE_TAB_NAMES = \{ machines: "Machines", souls: "Souls", capabilities: "Capabilities" \};/);
+  assert.match(src, /const WORKSPACE_TAB_NAMES = \{ machines: "Machines", souls: "Souls", capabilities: "Capabilities", teams: "Teams", sources: "Setup" \};/);
 });
 
 // The nav sits under the list of workspaces, outside the foot; the foot's bar's controls (New agent and ?, slice 1;

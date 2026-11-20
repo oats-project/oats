@@ -7,7 +7,7 @@
 // shared home's rule for a kept failure (deployment-facts.mjs keptFailure), are pure and shared the same way.
 // #1247: the window's retires in flight. A suite about other behaviour holds none: rows are drawn as the roster
 // says (`shownRows` the identity) and a read lets nothing go; a suite about them passes the shipped ones.
-// A workspace switch's focus place (focus-place.mjs) is inert the same way.
+// A workspace switch's focus place (focus-place.mjs) is inert the same way, and so is slice 4's retired-row ghost.
 // #1579: the Background section's placement, section key and heading are pure and shared the same way; a suite
 // about other behaviour runs without the kernel's feature (`backgroundShown`), so nothing moves, and its sections
 // are closed (`backgroundOpen`). background-sidebar.test.mjs turns the feature on.
@@ -55,6 +55,8 @@ export const viewContext = () => ({
   // #1421 §2: an instance's colour on its dots (instance-dot.mjs), pure, read by the roster paint, the tab sync and a tab's open.
   dotColor, paintDotColor,
   shownRows: rows => rows, retires: { landed() {}, ids: () => new Set() },
+  // Slice 4: a retired row's ghost (retire-ghosts.mjs). A suite about other behaviour holds none; slice4-overlays drives it.
+  retireGhosts: { rows: () => [], add() {}, clear() {} }, retiredGhostRow: () => { throw new Error("no ghost is drawn here"); },
   // A launch's --instance (launch-focus.mjs): a suite about other behaviour has no request pending; an observed read
   // tells it nothing. launch-focus.test.mjs drives the shipped one.
   launchFocus: { observe() {}, pending: () => false },

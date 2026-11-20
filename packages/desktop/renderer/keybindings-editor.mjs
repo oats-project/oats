@@ -30,13 +30,15 @@
 import {
   listActions, getBinding, setBinding, resetBinding, resetAllBindings,
   onKeymapChange, findConflict, keymapConflicts, formatChord, chordFromEvent, chordToString,
-  isPlainChord, defaultBinding, chordKeys, terminalAllows, terminalTaker, CHORDS_READ,
+  isPlainChord, defaultBinding, chordKeys, terminalAllows, terminalTaker, CHORDS_READ, LEADER_CHOICES,
 } from "./keybindings.mjs";
 import { supportedLeaderRows, leaderLabel, keyIdCaps, rowKeysText } from "./leader-keys.mjs";
 import { CHORD_FAMILIES, CHORD_FAMILY_LABELS, DEFAULT_CHORD_FAMILY } from "../../client/keymap.mjs";
 import { takePickerFocusReturn } from "./overlay-picker.mjs";
 import { revealInScrollport } from "./reveal-in-scrollport.mjs";
 import { icon } from "./shell-icons.mjs";
+import { SHEET, SHEET_BACKDROP } from "./sheet.mjs";
+import { leaderHelpEnabled, setLeaderHelpEnabled } from "./leader-hint.mjs";
 
 const CONTEXT_LABELS = {
   leader: "Leader",
@@ -283,9 +285,10 @@ export function createKeybindingsEditor({ doc = document, isMac, chordFamily = n
     restoreFocus = opener;
     ensureUsefulCSS(doc);
     overlay = doc.createElement("div");
-    overlay.className = "palette-overlay kb-overlay";
+    // A sheet (the Desktop UI rework, slice 4, D10): centred over the scrim with the sheet's ease (sheet.mjs).
+    overlay.className = `palette-overlay kb-overlay ${SHEET_BACKDROP}`;
     overlay.innerHTML = `
-      <div class="kb-editor" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <div class="kb-editor ${SHEET}" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
         <div class="kb-head">
           <h2 class="kb-title">Keyboard shortcuts</h2>
           <div class="kb-search-field">${icon("search", { size: 13 })}<input type="search" class="kb-search"
@@ -301,6 +304,15 @@ export function createKeybindingsEditor({ doc = document, isMac, chordFamily = n
           <p class="kb-family-tui">${CHORD_FAMILY_WORDS.tui}</p>
           <p class="kb-family-note" role="status" hidden></p>
         </fieldset>` : ""}
+        <fieldset class="kb-leader">
+          <legend class="kb-family-title">Leader</legend>
+          <div class="kb-family-options">${LEADER_CHOICES.map((chord, i) => `
+            <label class="kb-family-option"><input type="radio" name="kb-leader" value="${i}"> ${formatChord(chord, isMac)}${i === 0 ? " (default)" : ""}</label>`).join("")}
+          </div>
+          <p class="kb-leader-note">If ${formatChord(LEADER_CHOICES[0], isMac)} doesn't open the help sheet, your input method takes it (fcitx, IBus, macOS's input sources): choose ${formatChord(LEADER_CHOICES[1], isMac)} here.</p>
+          <p class="kb-leader-own" hidden></p>
+        </fieldset>
+        <label class="kb-help-setting"><input type="checkbox" class="kb-help-toggle"> Show the help sheet when the leader is pressed (the leader then ? always pins it)</label>
         <p class="kb-hint">Click a shortcut to record a new one — Esc cancels, Backspace unbinds.</p>
         <p class="kb-clashes" role="status" hidden></p>
         <p class="kb-count sr-only" role="status"></p>
@@ -308,6 +320,27 @@ export function createKeybindingsEditor({ doc = document, isMac, chordFamily = n
       </div>`;
     const search = overlay.querySelector(".kb-search");
     const body = overlay.querySelector(".kb-body");
+    // The leader's help sheet on or off (leader-hint.mjs; D15: "configurable off").
+    // The leader, one click each (the Desktop UI rework, D18): Ctrl+Space, the default, or Ctrl+X. A leader of the
+    // user's own, set on its row, is said and kept until one of these is chosen.
+    const leaderEl = overlay.querySelector(".kb-leader"), leaderOwn = overlay.querySelector(".kb-leader-own");
+    const renderLeader = () => {
+      const now = getBinding("app.leader", isMac);
+      const at = LEADER_CHOICES.indexOf(now);
+      for (const radio of leaderEl.querySelectorAll('input[type="radio"]')) radio.checked = Number(radio.value) === at;
+      leaderOwn.hidden = at >= 0;
+      leaderOwn.textContent = at >= 0 ? "" : now ? `Your own leader: ${formatChord(now, isMac)}.` : "The leader has no key.";
+    };
+    leaderEl.addEventListener("change", (e) => {
+      const chord = LEADER_CHOICES[Number(e.target?.value)];
+      if (!chord) return;
+      if (chord === defaultBinding("app.leader", isMac)) resetBinding("app.leader"); else setBinding("app.leader", chord);
+      renderLeader();
+    });
+    renderLeader();
+    const helpToggle = overlay.querySelector(".kb-help-toggle");
+    helpToggle.checked = leaderHelpEnabled();
+    helpToggle.addEventListener("change", () => setLeaderHelpEnabled(helpToggle.checked));
     // The chord family: the choice shows the family in use, and the note main sent (keys.json was
     // there and not taken) or, after a write that failed, that the family in use stays.
     const familyEl = overlay.querySelector(".kb-family"), own = overlay;
@@ -455,7 +488,7 @@ export function createKeybindingsEditor({ doc = document, isMac, chordFamily = n
             const extras = doc.createElement("p");
             extras.className = "kb-extras";
             const stage = (id) => { const chord = getBinding(id, isMac); return chord ? formatChord(chord, isMac) : "unbound"; };
-            extras.textContent = `The leader and the keys after it are the TUI's; the direct shortcuts are Desktop extras. ${leaderText()} then 1 is Instances and ${leaderText()} then 3 is Capabilities, while ${stage("stage.hierarchy")} stays Machines and ${stage("stage.automations")} stays Automations.`;
+            extras.textContent = `The keys after the leader are the TUI's; the direct shortcuts are Desktop extras. ${leaderText()} then 1 is Instances and ${leaderText()} then 3 is Capabilities, while ${stage("stage.hierarchy")} stays Machines and ${stage("stage.automations")} stays Automations.`;
             h.after(extras);
             for (const leaderRow of supportedLeaderRows()) section.append(leaderFixedRow(leaderRow));
           }
@@ -676,7 +709,7 @@ export function createKeybindingsEditor({ doc = document, isMac, chordFamily = n
       doc.addEventListener("keydown", onKey, true);
     };
 
-    offKeymap = onKeymapChange(render);
+    offKeymap = onKeymapChange(() => { render(); renderLeader(); });
     render();
     search.focus();
   }

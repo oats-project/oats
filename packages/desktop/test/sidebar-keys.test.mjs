@@ -137,7 +137,7 @@ test("rebindable and unbindable in the editor's terms", t => {
 
 test("shell wiring: the sidebar context follows focus; the keys run the leader's `does`", () => {
   assert.match(shell, /document\.addEventListener\("focusin", \(\) => updateActiveContexts\(\)\);/);
-  assert.match(shell, /for \(const \{ id, does \} of SIDEBAR_KEYS\) \{\n  registerAction\(\{ id, label: leaderLabel\(does, actionLabel\), context: "sidebar",/);
+  assert.match(shell, /for \(const \{ id, does \} of \[\.\.\.SIDEBAR_KEYS, SIDEBAR_DELETE\]\) \{\n  registerAction\(\{ id, label: leaderLabel\(does, actionLabel\), context: "sidebar",/);
   assert.match(shell, /leaderDispatch\.run\(does, leaderOrigin\(/);
 });
 
