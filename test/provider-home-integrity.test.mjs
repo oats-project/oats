@@ -7,7 +7,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { inputInstanceSession, restartInstanceSession, startInstanceSession } from "../lib/core.mjs";
+import { inputInstanceSession, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
+import { applyUpgrade, planUpgrade } from "../lib/instance-upgrade.mjs";
+import { writeLock } from "../lib/packages.mjs";
+import { contentDigest } from "../lib/remote.mjs";
+import { git } from "./helpers/v2-deployment.mjs";
 import { compositionOf, homeModulesProblem, moduleCopyDigest, moduleCopyProblem, providerHomeTrust } from "../lib/home-integrity.mjs";
 import { FAKE_CAPABILITY, fakeFiles, fakeManifest, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
@@ -200,4 +204,73 @@ test("a tmux home is unchanged: its receipt records no composition, and nothing 
   writeFileSync(join(copyOf(home), "bin", "hook.mjs"), "// edited\n");
   assert.equal(moduleCopyProblem(home, FAKE_CAPABILITY), null);
   assert.equal(homeModulesProblem(home), null);
+});
+
+// A package capability beside the fake (a member, which an upgrade never moves): `acme.one`, whose
+// launch hook tells which version of it ran.
+const PACKAGED = "acme.one";
+const packageFiles = (version) => {
+  const base = `oats-package/capabilities/${PACKAGED}`;
+  return {
+    "oats-package/oats-package.json": { json: { package: "acme.pkg", version, capabilities: [`capabilities/${PACKAGED}`] } },
+    [`${base}/oats.json`]: { json: { capability: PACKAGED, version, description: "Fixture capability", hooks: { launch: "launch.mjs", retire: "retire.mjs", upgrade: "upgrade.mjs" } } },
+    [`${base}/launch.mjs`]: `import { appendFileSync } from "node:fs"; import { join } from "node:path";\nappendFileSync(join(process.env.HOME, "fake-session", "packaged.log"), ${JSON.stringify(version)} + "\\n");\nconsole.log("{}");\n`,
+    [`${base}/retire.mjs`]: 'console.log("{}");\n',
+    [`${base}/upgrade.mjs`]: 'console.log(JSON.stringify(process.env.OATS_UPGRADE_PHASE === "plan" ? { adopt: true } : { meta: {} }));\n',
+  };
+};
+const lockPackage = (fx, version) => writeLock(fx.dep, { lockfileVersion: 3, packages: { "acme.pkg": { source: `git:${fx.key}@main`, url: fx.ref, path: "oats-package", version, commit: git(fx.member, "rev-parse", "HEAD"), integrity: contentDigest(join(fx.member, "oats-package")), capabilities: [PACKAGED] } } });
+async function upgradable(t, name) {
+  const fx = providerDeployment(t, { files: packageFiles("1.0.0"), souls: { dev: { soul: { capabilities: { "oats.core": "off", [FAKE_CAPABILITY]: { from: "here" }, [PACKAGED]: { from: "package" } } } } } });
+  fx.commit({ "oats-workspace.yaml": { yaml: { schemaVersion: 2, name: "acme", members: [fx.ref], defaults: { knowledge: "none", messaging: "none", tasks: "none" }, packages: { "acme.pkg": `git:${fx.key}@main` } } } });
+  lockPackage(fx, "1.0.0");
+  const { home } = await fx.launch(name);
+  await fx.inEnv(() => stopInstanceSession(home, {}));
+  fx.commit(packageFiles("2.0.0"));
+  lockPackage(fx, "2.0.0");
+  const upgrade = (verb, opts = {}) => fx.inEnv(() => verb(fx.dep, fx.root, name, { remoteOptions: fx.remoteOptions, ...opts }));
+  return { fx, home, plan: (opts) => upgrade(planUpgrade, opts), apply: (opts) => upgrade(applyUpgrade, opts), ran: () => (existsSync(join(fx.fake, "packaged.log")) ? readFileSync(join(fx.fake, "packaged.log"), "utf8").trim().split("\n") : []) };
+}
+
+test("an upgrade of a provider home rewrites the receipt's record in the step that moves the copies: the moved module and its row are the new ones, the others as recorded, and the home's calls and hooks go on", async (t) => {
+  const { fx, home, plan, apply, ran } = await upgradable(t, "moved");
+  const before = readJson(receiptOf(home)).composition;
+  const planned = await plan();
+  assert.deepEqual(planned.modules.map((m) => m.capability), [PACKAGED]);
+  const done = await apply({ planRevision: planned.planRevision, idempotencyKey: "move-1" });
+  assert.equal(done.status, "complete");
+  const after = readJson(receiptOf(home)).composition;
+  assert.deepEqual(after.modules[FAKE_CAPABILITY], before.modules[FAKE_CAPABILITY], "a module that did not move is as it was recorded");
+  assert.notEqual(after.modules[PACKAGED].digest, before.modules[PACKAGED].digest);
+  assert.deepEqual(after.modules[PACKAGED], moduleCopyDigest(copyOf(home, PACKAGED)), "the moved module is recorded as its copy is");
+  assert.deepEqual(after.capabilityRuntime, recordOf(home).capabilityRuntime, "the rows are the ones the upgrade derived");
+  assert.match(after.capabilityRuntime.find((row) => row.id === PACKAGED).hooks.launch, /launch\.mjs/);
+  assert.equal(homeModulesProblem(home), null);
+  // The home starts: the provider is called, and the moved capability's NEW hook runs.
+  fx.clearCalls();
+  await fx.inEnv(() => startInstanceSession(home));
+  assert.deepEqual([fx.verbs("launch").length, ran().at(-1)], [1, "2.0.0"]);
+  assert.equal(fx.cli(["session", "inspect", "--home", home, "--json"]).json().result.running, true);
+});
+
+test("an upgrade of a provider home starts only from copies the receipt records, is not undone from the home's kept copies, and is not resumed from the home's journal", async (t) => {
+  const { fx, home, plan, apply } = await upgradable(t, "guarded");
+  const before = readFileSync(receiptOf(home), "utf8");
+  // A copy that is not the spawn's: refused at the plan and at the apply, and nothing is moved or kept.
+  const hook = join(copyOf(home, PACKAGED), "launch.mjs"), original = readFileSync(hook, "utf8");
+  writeFileSync(hook, marking(join(fx.fake, "kept-edited"), original));
+  await assert.rejects(plan(), (e) => e.code === "E_UPGRADE_INTEGRITY" && e.message.match(NOT_THE_SPAWNS)?.[1] === "acme.one" && /no modules were upgraded/.test(e.message));
+  await assert.rejects(apply({ planRevision: "x".repeat(24), idempotencyKey: "guard-1" }), (e) => e.code === "E_UPGRADE_INTEGRITY");
+  assert.equal(existsSync(join(home, ".oats", "previous")), false, "no copy of the edited module was kept");
+  writeFileSync(hook, original);
+  // Undo: refused for a provider home, before and after a move.
+  await assert.rejects(plan({ undo: true }), (e) => e.code === "E_UPGRADE_UNDO" && /is on a session provider/.test(e.message));
+  const planned = await plan();
+  await apply({ planRevision: planned.planRevision, idempotencyKey: "guard-2" });
+  await assert.rejects(plan({ undo: true }), (e) => e.code === "E_UPGRADE_UNDO");
+  assert.notEqual(readFileSync(receiptOf(home), "utf8"), before);
+  // A journal in the home that says an upgrade is partial: not resumed.
+  const journal = join(home, ".oats", "upgrade-receipt.guard-2.json");
+  writeFileSync(journal, JSON.stringify({ ...readJson(journal), status: "partial", step: "swap" }));
+  await assert.rejects(apply({ planRevision: planned.planRevision, idempotencyKey: "guard-2" }), (e) => e.code === "E_UPGRADE_PARTIAL" && /is not resumed from the journal in its home/.test(e.message));
 });
