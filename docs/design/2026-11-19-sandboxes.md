@@ -137,7 +137,7 @@ nothing. All of this is shown by a live rehearsal and by the tests pinned in eac
 | What runs where? | The shared workspace names sandboxes and the souls each may run, with a ceiling on their capabilities. A machine's local file selects which declared sandboxes it runs, and nothing else. A spawn or a schedule selects a soul; if the soul is placed, it resolves to an eligible sandbox (C2). |
 | What does the runtime isolate? | Each sandbox has its own name, workload, private state, and declared egress and mounts. Several sandboxes may run on one machine. Agents that share readable state, credential files or a process trust boundary are mutually trusted. |
 | Who can communicate? | aweb team membership, service routes, and contact, inbound and federation policy. A sandbox needs egress to a service to reach it. Sharing a sandbox joins no team. Sharing a team neither colocates agents nor gives them each other's local state. |
-| Who is acting? | The identity provider binds each instance to an authenticated principal, resolved per instance from its soul's `souls:` entry, never from its sandbox. |
+| Who is acting? | The identity provider binds each instance to an authenticated principal, from that instance's identity configuration, resolved per instance. Its messaging context, the team it joins, is resolved separately, from `souls:` and the documented fallbacks. Neither comes from its sandbox. |
 | What can the actor do? | The resource's owner grants operations, to a team or to a long-lived principal, and the broker or provider checks them at use. Placement, a capability, membership or an address grants nothing on its own. |
 
 One team per sandbox is a useful starting layout, and tooling may generate it as
@@ -263,7 +263,7 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
    `sandbox-pending-stale`, naming the spawn key, never the task. S1 pins a test that
    its content never reaches a receipt, a log or a readiness line.
 4. The kernel runs `seat` with the plan's revision, `spawnKey` and
-   `instance: {name, soul, team, decision: D, settings}`. `settings` is the preview's
+   `instance: {name, soul, spawnKey, team, decision: D, settings}`. `settings` is the preview's
    composed settings for the capability the seat plan named
    (`spawnProvider.capability`), passed through unread, so the provider can refuse a
    seat it must not mint (C6, r5). The name, `D` and `settings` are inputs to the mint,
@@ -626,7 +626,9 @@ anything happens:
   chooses a placement.
 - **A named target** that the workspace doesn't declare (`sandbox-unknown`), or that
   doesn't list the soul (`sandbox-not-eligible`), is refused with
-  `E_SANDBOX_PLACEMENT`. A target this host doesn't list is refused with
+  `E_SANDBOX_PLACEMENT`. Both remedies list the soul's eligible sandboxes and say to
+  name one of them. `sandbox-not-eligible` also says the soul can be added to that
+  sandbox's `souls` in the workspace, by a reviewed change. A target this host doesn't list is refused with
   `E_SANDBOX_NOT_HERE`. Each refusal comes before any effect, and none falls back to
   the host.
 - `runsOn` still names the one machine that owns a schedule's clock. `sandbox:` names
@@ -946,10 +948,15 @@ existing Docker-context SSH relay from container.md.
   team's bundle: its aweb server, egress and agent container. So `oats.aweb-sandbox`
   takes the bundle's team from the souls the sandbox lists (C4's request carries each
   one's team). It writes it as teamctl's `team.id`, which no host file may set (C3).
-  - **What it refuses:** a start, or a seat, whose souls join more than one team, or
-    whose team's service isn't the bundle's, is refused before any seat:
-    `E_SANDBOX_TEAM`, reason `team-not-served`. The remedy names the teams found and
-    says to place the other team's souls in a sandbox of their own.
+  - **What it refuses:** `oats sandbox start`, sync's start, the seat plan and `seat`
+    refuse, before any seat, a sandbox whose souls join more than one team, or a team
+    whose service isn't the bundle's: `E_SANDBOX_TEAM`, reason `team-not-served`. Each
+    case has its own remedy, and neither changes a team or moves a spawn:
+    - **Several teams:** the remedy names the teams found, and says to list the other
+      team's souls in a sandbox of their own.
+    - **Another service:** the remedy names the team's service and the bundle's
+      server. It says to place that team's souls in a sandbox whose bundle serves that
+      service, or to point this sandbox's bundle at it.
   - **What the limit covers:** only the combinations of membership inside one sandbox.
     Messaging between agents of one team in separately placed sandboxes stays
     governed by aweb's policy.
@@ -1055,7 +1062,7 @@ The refusals belong to the acts:
 | `sandbox-<name>` registered by someone else (r1) | `oats sandbox start`, sync's start | `E_SANDBOX_SERVER`, `server-taken` |
 | `sandbox-<name>` owned by another deployment (r2) | `oats sandbox start`, sync's start | `E_SANDBOX_SERVER`, `server-owned-elsewhere` |
 | The team an instance joins, or the team a start would serve, has no provider id yet (r2, r5) | `oats sandbox start`, sync's start, a routed spawn | `E_SANDBOX_TEAM`, `team-not-created` |
-| The sandbox's souls join more than one team, or a team whose service isn't the bundle's: v1's provider limit (r5) | `oats sandbox start`, sync's start, the seat plan | `E_SANDBOX_TEAM`, `team-not-served` |
+| The sandbox's souls join more than one team, or a team whose service isn't the bundle's: v1's provider limit (r5) | `oats sandbox start`, sync's start, the seat plan, `seat` | `E_SANDBOX_TEAM`, `team-not-served` |
 | A delivered seat with a missing or contradictory descriptor (r2) | the in-sandbox apply | `seat-binding` (oats.aweb) |
 | No provider, or more than one (r1) | every sandbox act | `E_SANDBOX_PROVIDER`, `none` or `ambiguous` |
 | A placed soul whose selected sandbox this host does not list or run | `oats spawn`, a schedule's spawn | `E_SANDBOX_NOT_HERE` |
@@ -1067,6 +1074,15 @@ The refusals belong to the acts:
 | A join beyond the default team, into a sandbox (r5) | `seat`, before the mint | `E_SANDBOX_PLACEMENT`, `join-not-seated` |
 | A resident's grant seat, into a sandbox (r5) | `seat`, before the mint | `E_SANDBOX_PLACEMENT`, `grant-seat-not-sandboxable` |
 | A sandbox entry with a `team` field (the unreleased shape) (r5) | reading the workspace file | `E_WORKSPACE_SCHEMA`, `sandbox-team-field` |
+| A local `sandboxes` entry the workspace doesn't declare, a duplicate, or a listed sandbox with no `host.name` (C3) | reading the local file | `E_WORKSPACE_SCHEMA`, `sandbox-unknown`, `duplicate-entry` or `sandbox-host-name-required` |
+| `sandbox: {self}` combined with `sandboxes`, `credentials`, local `teams` or a local `defaultTeam` (C3b) | reading the in-sandbox local file | `E_WORKSPACE_SCHEMA`, `sandbox-self-conflict` |
+| A new `oats server add` or `connect` with the reserved `sandbox-` prefix (C7) | `oats server add`, `oats server connect` | `E_SERVER_INVALID`, `reserved-prefix` |
+| A private registry with no in-sandbox `settings.oats.aweb.registry` (C3) | the in-sandbox spawn | oats.aweb's reason `registry-setting-required`, carried by the kernel's refusal of a required hook's failure |
+
+Reasons in the table that a provider gives, such as `seat-binding` and
+`registry-setting-required`, reach the caller inside the kernel's own refusal for a
+failed required hook. The kernel's codes stay the kernel's; the provider adds only the
+reason and its remedy (r5).
 
 **Why `E_SANDBOX_HOST_AGENT`.** The controller key, the team roots, the credential
 sources and any resident's custody service sit under the account that runs the
