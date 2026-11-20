@@ -10,13 +10,13 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachInstanceSession, inputInstanceSession, inspectInstanceSession, listInstances, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
 import { setWaiting } from "../lib/instance-events.mjs";
 import { PROVIDER_RESUME_NOTICE, RESUME_LIMIT } from "../lib/provider-resume.mjs";
 import { parseRemoteEnvelope, rosterGroups, writeServers } from "../lib/servers.mjs";
-import { FAKE_CAPABILITY, FAKE_SERVER, LOST, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
+import { FAKE_CAPABILITY, FAKE_SERVER, LOST, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
 const HOST_STOP_CHILD = join(dirname(fileURLToPath(import.meta.url)), "..", "lib", "host-stop-child.mjs");
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -59,7 +59,8 @@ test("T1: a spawn with --backend fake launches through the provider and records 
   assert.equal(calls[0].backend, "fake");
   // The call: the home's own module copy, in the home, with the hook environment and OATS_BACKEND.
   const [launch] = fx.verbs("launch");
-  assert.deepEqual([launch.cwd, launch.instance, launch.backend, launch.event, launch.capability, launch.argv], [home, "one", "fake", "session", FAKE_CAPABILITY, ["launch"]]);
+  assert.equal(launch.cwd === home || launch.cwd.startsWith(`${home}/`), false, "a call never works in the home: the home is in the request");
+  assert.deepEqual([parse(launch.cwd).root, launch.instance, launch.backend, launch.event, launch.capability, launch.argv], [launch.cwd, "one", "fake", "session", FAKE_CAPABILITY, ["launch"]]);
   assert.deepEqual({ ...launch.request, input: null }, { schemaVersion: 1, phase: "session", capability: FAKE_CAPABILITY, provider: "fake", verb: "launch", input: null });
   // The launch as data: every variable with its source, the arguments, the harness, the model, yolo, the prompt.
   assert.deepEqual(launch.request.input, {
@@ -69,7 +70,7 @@ test("T1: a spawn with --backend fake launches through the provider and records 
       { name: "OATS_INSTANCE_HOME", value: home, source: "kernel" },
       { name: "ACME_FAKE_TOKEN_FILE", value: "/nowhere/token", source: "capability", capability: FAKE_CAPABILITY },
     ],
-    unset: [], pathPrepend: [join(home, ".oats", "bin")], args: [], promptFile: join(home, "TASK.md"), resume: null, previous: null,
+    unset: [], pathPrepend: [join(home, ".oats", "bin")], args: [], promptFile: join(home, "TASK.md"), previous: null,
   });
 
   // The records: instance.json and the independent receipt carry the endpoint; no tmux in either.
@@ -809,6 +810,13 @@ test("a capability's launch arguments arrive in the launch input's args, after t
   assert.deepEqual(fx.verbs(), [], "the provider was never called");
 });
 
+test("spawn --suggest-name on a session provider asks the harness on this host's PATH for the name", (t) => {
+  const fx = providerDeployment(t);
+  const naming = fx.cli(["spawn", "dev", "--suggest-name", "--backend", "fake", "--launch-config", "claude", "--task", "fix the login bug", "--preview", "--json"]).json().result.naming;
+  // The fixture's claude was run, and answers no name: never "no executable for it here".
+  assert.deepEqual([naming.source, naming.reason, naming.message], ["numbered", "invalid-reply", "claude's reply holds no name"]);
+});
+
 test("the authority check: a record that disagrees with the receipt is refused, with the provider's field labels", async (t) => {
   const fx = providerDeployment(t);
   const { home } = await fx.launch("drifted");
@@ -883,7 +891,35 @@ test("retire when the provider cannot stop the session: it goes on only when no 
   assert.match(refused.error.message, new RegExp(`a process works in its home \\(.*${pid}`));
   assert.equal(existsSync(busy.home), true);
   assert.equal(Number.isFinite(Date.parse(runtimeOf(busy.home).stoppedAt)), true, "stoppedAt was recorded first: its input is refused from then on");
+  // A stop the provider CONFIRMS is no word on the home's processes: the same scan, the same refusal.
+  fx.control({});
+  const still = fx.cli(["retire", "busy", "--json"]).json();
+  assert.deepEqual([still.ok, still.error.code], [false, "E_RUNTIME_QUIESCE_FAILED"]);
+  assert.match(still.error.message, new RegExp(`the fake session of busy stopped, and a process works in its home \\(.*${pid}`));
+  assert.equal(existsSync(busy.home), true);
   process.kill(pid, "SIGKILL");
+});
+
+test("inputs that run at the same time to a lost session pass the cap together never: the count is taken under a lock", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("crowd");
+  const text = join(fx.base, "mail.txt");
+  writeFileSync(text, "aweb mail event received.\n");
+  // Each input's provider call takes a while, so the ten overlap; none of them is "a process of
+  // the home's last run" to another (a provider call never works in the home).
+  fx.control({ inspect: { result: LOST }, input: { sleepMs: 300 } });
+  fx.clearCalls();
+  const input = () => new Promise((done) => {
+    const child = spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "oats.mjs"), "session", "input", "--home", home, "--text-file", text, "--json"], { cwd: fx.dep, env: fx.env, stdio: ["ignore", "pipe", "ignore"] });
+    let out = "";
+    child.stdout.on("data", (d) => { out += d; });
+    child.on("close", () => done(JSON.parse(out.trim().split("\n").pop())));
+  });
+  const answers = await Promise.all(Array.from({ length: 10 }, input));
+  assert.equal(answers.filter((a) => a.ok).length, RESUME_LIMIT, JSON.stringify(answers.filter((a) => !a.ok).map((a) => a.error.message.slice(0, 160))));
+  assert.deepEqual([...new Set(answers.filter((a) => !a.ok).map((a) => [a.error.code, a.error.details?.resumeCap?.limit ?? null].join(" ")))], [`E_SESSION_NOT_RUNNING ${RESUME_LIMIT}`], "every other one is refused by the cap, and by nothing else");
+  assert.equal(fx.verbs("input").length, RESUME_LIMIT, "the provider's input is called up to the cap");
+  assert.equal((await input()).error.code, "E_SESSION_NOT_RUNNING", "and the next one too");
 });
 
 // ----------------------------------------------------------------------- T12: nothing relayed
@@ -1057,5 +1093,4 @@ test("E_BACKEND_AMBIGUOUS at a start: a home whose modules now hold two capabili
     await assert.rejects(fx.inEnv(start), (e) => e.code === "E_BACKEND_AMBIGUOUS" && JSON.stringify(e.details) === JSON.stringify({ backend: "fake", capabilities: [FAKE_CAPABILITY, "acme.twin"] }) && /nothing was stopped or started/.test(e.message));
   }
   assert.deepEqual(fx.verbs(), [], "nothing was launched");
-  assert.equal(typeof fakeFiles, "function");
 });

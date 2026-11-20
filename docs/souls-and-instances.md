@@ -1562,17 +1562,20 @@ lists the feature `session-providers`, in this order:
    `E_SESSION_NOT_RUNNING`, so nothing restarts its session.
 2. **The provider is asked to stop the session**, with the usual grace,
    never escalated.
-3. The retire hooks run (the provider's own archives its session there), the
+3. **No process may work in the home**, as for every retire: a stop the
+   provider confirms can still leave one behind (a harness that outlives its
+   server for a while). With a process working in the home, or when that
+   cannot be told, the retire refuses `E_RUNTIME_QUIESCE_FAILED`, names the
+   processes and keeps the home; its stop stays recorded.
+4. The retire hooks run (the provider's own archives its session there), the
    work is preserved as for any home, and the home is removed.
 
 **When the provider cannot confirm the stop** (it fails, it does not answer,
 or its capability is no longer among the home's modules after an upgrade),
-the retire does not strand the home. It goes on only when no process works
-in the home, and its answer then carries a warning that the session was not
-stopped through its backend: archive or remove that session with the
-provider's own tooling. With a process working in the home, or when that
-cannot be told, the retire refuses `E_RUNTIME_QUIESCE_FAILED`, names the
-processes and keeps the home; its stop stays recorded.
+the retire does not strand the home. It goes on when step 3 finds no
+process in the home, and its answer then carries a warning that the session
+was not stopped through its backend: archive or remove that session with the
+provider's own tooling.
 
 A retire's plan (`oats retire <instance> --plan`) reads the session through
 the provider, as `oats session inspect` does. A kernel without the feature

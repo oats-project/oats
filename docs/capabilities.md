@@ -2024,8 +2024,12 @@ the instance being spawned. Two of them declaring the same name is
 ### The call
 
 Every call runs the **home's own copy** of the capability:
-`node <home>/.oats/modules/<capability>/<script> <args>`, with the home as
-its working directory.
+`node <home>/.oats/modules/<capability>/<script> <args>`. **Its working
+directory is not the home** (it is the filesystem root): read the home from
+the request (`input.home`) or `OATS_INSTANCE_HOME`, and start nothing that
+outlives the call with its working directory in the home. OATS looks for
+processes working in a home before it resumes a lost session and before it
+retires the home, and a provider's call must never be one of them.
 
 - **Environment:** what a lifecycle hook of the capability gets in that home
   ([Commands and hooks](#commands-and-hooks)): `OATS_INSTANCE`,
@@ -2075,7 +2079,6 @@ In:
   "pathPrepend": ["/abs/home/.oats/bin"],
   "args": ["--flag", "value"],
   "promptFile": "/abs/home/TASK.md",
-  "resume": null,
   "previous": null }
 ```
 
@@ -2098,8 +2101,6 @@ In:
   `false`, or `null` when nobody chose) and the prompt.
 - `promptFile` is the home's `TASK.md`: the briefing a fresh conversation
   starts on.
-- `resume` is always `null`: a provider home is resumed through `input`,
-  never relaunched.
 - `previous` is the endpoint of the session a start or a restart replaces;
   `null` for the home's first launch. The kernel has asked you to stop it
   just before (a restart's stop, or once more for a home OATS had stopped),
