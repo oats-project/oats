@@ -789,6 +789,17 @@ test('agent view facts: a moved row\'s focused control is given the focus back',
   assert.equal(f.doc.activeElement, f.facts().querySelector('li[data-key="c"] .agent-fact-hide'));
 });
 
+// The lead's call at VERIFIED: the zone's key hint names the shown question's own number keys.
+test('agent view questions: the key hint names 1–N for the shown question\'s N options', t => {
+  const f = fixture(t);
+  f.view.update(boardData(board()));
+  const hint = () => f.zone().querySelector('.agent-q-hint').textContent;
+  assert.match(hint(), /^1–2 put the answer on the input line/, 'q1 has two options');
+  f.zone().querySelector('.agent-q-turn[aria-label="Next question"]').click();
+  assert.equal(f.view.question, 'q2');
+  assert.match(hint(), /^1–3 put the answer on the input line/, 'q2 has three');
+});
+
 // The round-4 delta's finding: the occurrence check fails closed.
 test('r4 delta: an answer that does not prove its question\'s since (absent, null, not a time) shows no context', t => {
   for (const since of [undefined, null, 'invalid']) {

@@ -38,7 +38,7 @@ export const DETAIL_NOTES = Object.freeze({
 });
 export const BOARD_MALFORMED = "This agent's board could not be read.";
 export const boardDropped = n => `${n} ${n === 1 ? 'entry' : 'entries'} of this agent's board could not be shown.`;
-export const ZONE_HINT = '1–4 put the answer on the input line · Enter there sends it · c the context · Esc back to the terminal';
+export const zoneHint = count => `1–${count} put the answer on the input line · Enter there sends it · c the context · Esc back to the terminal`;
 const HIDDEN_STORE = 'oats.desktop.board.hidden';
 
 /** The person's hidden facts on this computer, by agent home: `{ [home]: { [key]: value } }` in `storage`
@@ -172,7 +172,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   const contextSummary = node(doc, 'summary', null, 'Context');
   const contextBody = node(doc, 'div', 'agent-q-context-body');
   context.append(contextSummary, contextBody);
-  const hint = node(doc, 'p', 'agent-q-hint', ZONE_HINT);
+  const hint = node(doc, 'p', 'agent-q-hint');
   zone.append(head, text, options, note, context, hint);
   zone.setAttribute('aria-describedby', text.id);
   prev.addEventListener('click', () => turn(-1));
@@ -390,6 +390,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     setText(age, ` · asked ${waitedText(q.since, now())} ago`.replace('under a minute ago', 'just now'));
     age.title = q.since;
     setText(text, q.withheld ? displayLine(q.question) : q.question);
+    // The keys the question's own options have: 1–2 for two of them, 1–4 for four.
+    setText(hint, zoneHint(q.options.length));
     const hadFocus = zone.contains(doc.activeElement), focusedOption = hadFocus && doc.activeElement.dataset?.option;
     // The same question's options are kept, nodes and focus, across repaints: only whether each is usable changes.
     const optionsKey = JSON.stringify([occurrence(q), q.options, q.optionsWithheld]);
