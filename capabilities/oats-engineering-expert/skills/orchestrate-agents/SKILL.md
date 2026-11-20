@@ -39,10 +39,11 @@ fresh instance of that area's expert or developer soul.
 An effort is one goal that can land on its own. Work its "done means" needs stays in it;
 work it can finish without is another effort. In doubt, it is yours.
 
+<!-- OATS: Pepe's coordination rule (2026-11-20): a lead's children and its sibling leads get related work, the flag `--related-work` from OATS 0.69.23 (`--same-work` before). -->
 | Its work | Relation | Spawn with |
 |---|---|---|
-| A part of your effort: a specialist, a helper, a probe, a developer | your **child** | `--parent <your instance> --same-work` |
-| A new effort that arises from yours: a follow-on, a discovery that bears on your work, a piece your person wants tracked apart | your **sibling**, a lead of its own | `--relation sibling --relative-to <your instance>` |
+| A part of your effort: a specialist, a helper, a probe, a developer | your **child** | `--parent <your instance> --related-work` |
+| A new effort that arises from yours: a follow-on, a discovery that bears on your work, a piece your person wants tracked apart | your **sibling**, a lead of its own | `--relation sibling --relative-to <your instance> --related-work` |
 | A new effort with no bearing on yours | **independent**, a lead of its own | `--relation unrelated` |
 
 - A child asks you and hands back to you, and you make sure it is retired. Retiring
@@ -56,10 +57,15 @@ work it can finish without is another effort. In doubt, it is yours.
   maintainer launched you, ask it to launch the new lead. As a specialist, hand a new
   effort to your parent.
 
+<!-- OATS: Pepe's coordination rule (2026-11-20): a lead's children and its sibling leads get related work, the flag `--related-work` from OATS 0.69.23 (`--same-work` before). -->
 ```bash
-oats spawn <soul> --parent "$OATS_INSTANCE" --same-work --name <task>-<role> --task-file <brief.md>
+oats spawn <soul> --parent "$OATS_INSTANCE" --related-work --name <task>-<role> --task-file <brief.md>
 ```
-`--same-work` records that the child does your work; it shares no work tree. A child of
+`--related-work` records that the child's work is related to yours, and your person's sidebar
+draws the line between you; it shares no work tree. A sibling lead you start for an effort
+that arises from yours gets it too: their dots are joined at the top of the tree. An
+independent lead never does. On an OATS before 0.69.23 the flag is `--same-work`, and it
+cannot bind a sibling (start the sibling without it). A child of
 a worktree soul that needs another repository's code also gets `--repo <clone> --base
 origin/<its default branch>`: preview it and check its start point against the remote
 before you apply, as `/coordinate-developers` says for a developer. Where

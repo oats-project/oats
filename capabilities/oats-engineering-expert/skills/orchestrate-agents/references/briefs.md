@@ -96,11 +96,12 @@ Name every instance as your landing rules say: its task first, its role in the e
 last, and a name no instance has had. `<question-slug>-probe`, `<task-slug>-helper`,
 `<area-slug>-specialist`, `<effort-slug>-lead`.
 
+<!-- OATS: Pepe's coordination rule (2026-11-20): a lead's children and its sibling leads get related work, the flag `--related-work` from OATS 0.69.23 (`--same-work` before). -->
 ```bash
 # a child: a probe, a helper, a specialist
-oats spawn <soul> --parent "$OATS_INSTANCE" --same-work --name <name> --task-file <brief.md>
+oats spawn <soul> --parent "$OATS_INSTANCE" --related-work --name <name> --task-file <brief.md>
 # a lead of another effort: your message is its task, and opens with
 # "Seat: root lead of <the new effort>"
-oats spawn <soul> --relation sibling --relative-to "$OATS_INSTANCE" --name <effort-slug>-lead --task-file <message.md>
+oats spawn <soul> --relation sibling --relative-to "$OATS_INSTANCE" --related-work --name <effort-slug>-lead --task-file <message.md>
 oats spawn <soul> --relation unrelated --name <effort-slug>-lead --task-file <message.md>
 ```

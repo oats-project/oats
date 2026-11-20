@@ -24,8 +24,9 @@ A developer builds a spec only where `/plan-and-spec` ("Who builds it") gives it
   - `oats-desktop-developer`: the Desktop (`packages/desktop/`), with `oats.desktop-ui`'s
     live Electron checks on a display.
 - **Spawn it** as your child, the spec as its task:
+  <!-- OATS: Pepe's coordination rule (2026-11-20): a lead's children and its sibling leads get related work, the flag `--related-work` from OATS 0.69.23 (`--same-work` before). -->
   ```bash
-  oats spawn <developer-soul> --parent "$OATS_INSTANCE" --same-work \
+  oats spawn <developer-soul> --parent "$OATS_INSTANCE" --related-work \
     --name <piece-slug>-developer --task-file <spec.md>
   ```
   Where the spec's repository isn't the developer soul's own, add `--repo <clone of the

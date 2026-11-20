@@ -18,7 +18,8 @@ branch>`. If they differ, don't apply:
   Name the destination, so the fetch updates that ref whatever branches the clone tracks:
   `git -C <clone> fetch origin refs/heads/<branch>:refs/remotes/origin/<branch>`.
 
-`--same-work` records that the developer does your work, and your person's sidebar draws
-its line to you. It shares no work tree: the developer keeps its own worktree and branch,
-and only a reviewer is attached to its author's tree.
-A developer started without the flag gets it with `oats instance same-work <developer> on`.
+<!-- OATS: Pepe's coordination rule (2026-11-20): a lead's children and its sibling leads get related work, the flag `--related-work` from OATS 0.69.23 (`--same-work` before). -->
+`--related-work` records that the developer's work is related to yours, and your person's
+sidebar draws its line to you. It shares no work tree: the developer keeps its own worktree
+and branch, and only a reviewer is attached to its author's tree.
+A developer started without the flag gets it with `oats instance related-work <developer> on`.
