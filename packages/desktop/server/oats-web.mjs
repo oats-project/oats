@@ -1123,8 +1123,10 @@ function resolveGuardedFile(requested, allowedRoots, io = { realpathSync }) {
   if (!allowedRoots.some((root) => underRoot(real, root))) return { error: "path outside allowed roots", code: 403 };
   return { real };
 }
-/** Read only the opened regular file whose identity matches the contained path.
- * Roots are admission-time canonical strings; all content reads are bounded. */
+/** Bounded reads with path containment and descriptor identity checks.
+ * Roots are admission-time canonical strings. These checks assume agents and
+ * Desktop share an OS user: repeated directory swaps are not excluded, and
+ * portable Node lacks descriptor-relative opens. */
 function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null,
   io = { openSync, fstatSync, realpathSync, statSync, readSync, closeSync } } = {}) {
   if (typeof requested !== "string" || !requested.startsWith("/")) return { error: "path must be absolute", code: 400 };

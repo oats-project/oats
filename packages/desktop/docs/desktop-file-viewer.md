@@ -34,7 +34,8 @@ A remote (server-routed) instance grants no local roots.
 **The read** (`readContainedFile`, shared by `fileData` and brain skill frontmatter):
 - the server opens read-only without following the final link or waiting on a FIFO. A final
   symlink is resolved and opened with the same flags, preserving in-root links;
-- the descriptor's identity must match the canonical, contained path before any content is read;
+- the descriptor's identity must match the stat of the canonical pathname checked against
+  admitted roots before any content is read;
 - a non-regular file is 400;
 - metadata and credential-file checks use the opened descriptor;
 - reads take at most 2 MiB plus one byte; larger than 2 MiB is 413;
@@ -43,6 +44,9 @@ A remote (server-routed) instance grants no local roots.
 The answer is `{path (canonical), name, size, mtime, markdown, content}`. `markdown` is true for
 `.md`, `.markdown`, `.mdown` and `.mkd`. `size` is the number of bytes read; `mtime` comes
 from the opened descriptor. Every read closes its descriptor, including refusals.
+
+The path and identity checks use the [Desktop security model](../../../docs/desktop.md#security-posture),
+where agents and Desktop share an OS user; repeated directory changes during a read are not excluded.
 
 The route is **not workspace-pinned**: a `ws` query does not narrow the allowed roots.
 
