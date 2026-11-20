@@ -23,7 +23,7 @@ walking up to `oats-local.yaml`), or pass `--dir <deployment>`. Use `--json`
 when you parse output. Flags take `--flag value` or `--flag=value`. When a flag
 is not shown here, read `oats help`; never invent one.
 
-Use Node.js 22.5 or later. Node 18 and 20 refuse every command with
+Use Node.js 22.5 or later. From OATS 0.69.24, Node 18 and 20 refuse every command with
 `E_NODE_UNSUPPORTED`, including `version`, the reader and capabilities.
 An older Node that cannot parse the entry may fail before that refusal.
 
@@ -204,7 +204,7 @@ oats doctor                  # this deployment's local file and lock, plus diagn
                              # and, from OATS 0.50.0, what retires left (recovery copies, retained worktrees)
 ```
 
-Doctor's `git-version:` line (`information[]` in JSON) reports cache support, never a warning or refusal.
+From OATS 0.69.24, doctor's `git-version:` line (`information[]` in JSON) reports cache support, never a warning or refusal.
 Git before 2.45 works with whole-tree fetches; newer Git supports partial caches, but a remote or existing cache may still use whole trees.
 
 ## Spawn: preview, then apply
