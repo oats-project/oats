@@ -736,7 +736,8 @@ test("restart stops, then launches, under the kernel's stop rule; a start never 
   // A session that is there and that OATS did not stop: running, or not tellable.
   await assert.rejects(fx.inEnv(() => startInstanceSession(home, {})), (e) => e.code === "E_SESSION_RUNNING");
   fx.control({ inspect: { result: { present: true, state: "unknown", running: null } } });
-  await assert.rejects(fx.inEnv(() => startInstanceSession(home, {})), (e) => e.code === "E_SESSION_UNKNOWN");
+  // The way out it names is the stop as it is run: its plan, then its apply.
+  await assert.rejects(fx.inEnv(() => startInstanceSession(home, {})), (e) => e.code === "E_SESSION_UNKNOWN" && e.message.includes("Stop it first, in the stop's two steps (oats instance stop cycled --plan, then --apply --plan-revision <rev> --idempotency-key <key>, which the plan prints), or use oats session restart --home"));
   fx.control({ inspect: { result: { present: true, state: "shell", running: false } } });
   await assert.rejects(fx.inEnv(() => startInstanceSession(home, {})), (e) => e.code === "E_SESSION_UNKNOWN");
   fx.control({ inspect: { exit: 1 } });
