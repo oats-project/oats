@@ -6,7 +6,7 @@ import {
   useRpc,
 } from "@get-bb/plugin-sdk/app";
 import type { PluginThreadAction, PluginThreadActionItemInput } from "@get-bb/plugin-sdk/app";
-import type { AgentState } from "./model/types";
+import type { Agent, AgentState } from "./model/types";
 import { ActsOverlay, askPlan, run } from "./app/acts";
 import { HomePage, HomeTab, useHomeBadge } from "./app/Home";
 import { IdentityRow } from "./app/IdentityRow";
@@ -46,7 +46,7 @@ function lifecycle(
   order: number,
   label: string,
   icon: string,
-  when: (state: AgentState) => boolean,
+  when: (state: AgentState, agent: Agent) => boolean,
   act: (instance: string, input: PluginThreadActionItemInput<ActionData>) => void | Promise<void>,
   variant: PluginThreadAction["variant"] = "default",
 ) {
@@ -61,7 +61,7 @@ function lifecycle(
       const { oats } = input.data;
       if (oats.phase !== "ready") return null;
       const node = oats.nodeByThread.get(input.thread.id);
-      if (node === undefined || !when(node.state)) return null;
+      if (node === undefined || !when(node.state, node.agent)) return null;
       return { label, icon, variant, run: () => act(node.agent.instance, input) };
     },
   };
@@ -107,8 +107,15 @@ export default definePluginApp((app) => {
     ),
   );
   app.slots.experimental_threadAction(
-    lifecycle("start", 1, "Start agent (OATS)", ICON.start, (state) => state === "stopped" || state === "error", (instance, { data, navigate }) =>
-      run("start", instance, data.rpc, navigate),
+    lifecycle(
+      "start",
+      1,
+      "Start agent (OATS)",
+      ICON.start,
+      // A stopped agent can always be started, also one that still holds a claim and so counts as
+      // needing you rather than as stopped.
+      (state, agent) => state === "stopped" || state === "error" || agent.runtimeState === "stopped",
+      (instance, { data, navigate }) => run("start", instance, data.rpc, navigate),
     ),
   );
   app.slots.experimental_threadAction(

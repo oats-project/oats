@@ -264,7 +264,11 @@ async function a13(browser, viewport, threads) {
       `${at} the row's chips: soul, instance, alias, parent, home, OATS`,
       chips,
     );
-    check(await page.evaluate(visible(testId("oats-chip-oats"))), `${at} the OATS chip is on screen, whatever the other chips' width`);
+    // by its place, not by what is on top: the whole chip lies inside the row and inside the viewport
+    const chipInRow = await page.evaluate(
+      `(() => { const chip = document.querySelector(${JSON.stringify(testId("oats-chip-oats"))})?.getBoundingClientRect(); const row = document.querySelector(${JSON.stringify(testId("oats-identity-row"))})?.getBoundingClientRect(); return Boolean(chip && row && chip.width > 0 && chip.left >= row.left && chip.right <= Math.min(row.right, innerWidth)); })()`,
+    );
+    check(chipInRow, `${at} the OATS chip is on screen, whatever the other chips' width`);
     const rowHeight = await page.evaluate(`document.querySelector(${JSON.stringify(testId("oats-identity-row"))}).getBoundingClientRect().height`);
     check(rowHeight < 50, `${at} the row is one line (${Math.round(rowHeight)} px)`);
     await page.shot(`a13-${viewport.name}-thread`);

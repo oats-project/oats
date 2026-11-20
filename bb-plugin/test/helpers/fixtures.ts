@@ -18,13 +18,10 @@ export function fixtureAgents(): Agent[] {
 
 /**
  * What bb-app 0.50.1 reports for the fields the pinned threads.json leaves out (recorded in the
- * backend probe's b2-frontend-useSidebarThreads.json): bb's own status glyph reads `activity`
- * and `queuedWork`, and bb's thread menu reads the rest.
+ * backend probe's b2-frontend-useSidebarThreads.json): bb's thread menu reads them.
  */
 const RECORDED_DEFAULTS = {
   titleFallback: null,
-  queuedWork: "none",
-  activity: { workflows: 0, backgroundAgents: 0, backgroundCommands: 0, planMode: 0 },
   parentNotifications: "off",
   lifecycleOwnerThreadId: null,
   sourceThreadId: null,

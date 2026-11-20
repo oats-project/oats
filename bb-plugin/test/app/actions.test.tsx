@@ -91,6 +91,13 @@ test("each action shows only in the states it applies to", async () => {
   const with_ = (change: Partial<Agent>) => fixtureAgents().map((agent) => (agent.instance === "harvest-knowledge-helper" ? { ...agent, ...change } : agent));
   expect(await by("thr_harvest", with_({ runtimeState: "shell" }))).toEqual(["start", "restart", "retire"]); // error
   expect(await by("thr_harvest", with_({ runtimeState: "unreachable" }))).toEqual(["restart", "retire"]);
+  // stopped while it holds a claim: it needs you, and it can still be started
+  expect(await by("thr_harvest", with_({ runtimeState: "stopped", running: false, waiting: { reason: "question", message: "ok?", since: null } }))).toEqual([
+    "stop",
+    "start",
+    "restart",
+    "retire",
+  ]);
 });
 
 test("no action shows while OATS cannot be read", async () => {
