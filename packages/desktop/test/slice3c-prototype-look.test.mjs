@@ -189,7 +189,7 @@ test('slice3c capabilities rows with pills and intro', t => {
   // official rule (in the OATS catalog, or from the OATS repository).
   const intro = u.$('.caps > .cap-intro');
   assert.equal(u.$('.caps').firstElementChild, intro, 'first, above the Workspace defaults');
-  assert.equal(intro.textContent, `${INTRO_COPY.what} You have 5 capabilities, 3 official: the mark ✓ means official (in the OATS catalog, or from the OATS repository); `
+  assert.equal(intro.textContent, `${INTRO_COPY.what} You have 5 capabilities, 3 official: the check mark means official (in the OATS catalog, or from the OATS repository); `
     + 'the others say who made them. “core” fills one of the three places every soul has: knowledge, messaging, tasks; “default” is what this workspace gives a soul unless it says otherwise.');
   assert.ok(intro.querySelector('.cap-official[aria-hidden=true] svg'), 'the mark itself, drawn as the rows draw it');
   renderCapabilityList(u.$('.caps'), { rows: ROWS, status: STATUS, query: 'zeta', onOpen() {} });

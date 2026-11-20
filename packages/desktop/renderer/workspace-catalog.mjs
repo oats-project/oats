@@ -49,7 +49,7 @@ export const catalogCSS = `
 .catalog-empty { margin:0; padding:24px 16px; color:var(--muted); line-height:1.5; }
 /* The page's first line (slice 3c): what a capability is, what the mark, "core" and "default" say, with the counts. */
 .cap-intro { margin:0 0 var(--space-5); max-width:96ch; color:var(--muted); font-size:var(--text-body); line-height:1.55; }
-.cap-intro .cap-official { display:inline-grid; vertical-align:-3px; margin:0 1px; }
+.cap-intro .cap-official { display:inline-grid; vertical-align:-3px; margin:0 0 0 5px; }
 .cap-intro b { color:var(--fg); font-weight:600; }
 /* The tab's two parts (slice 2b, Amendment 1, D): Workspace defaults, then All capabilities, each titled in the small
    uppercase label (slice 3c), its groups and slots one step quieter. */
@@ -177,7 +177,7 @@ function workspaceDefaultsPart(doc, { status, rows, onOpen }) {
  * then what the mark, "core" and "default" say. "default" is said only where the kernel reports defaults. */
 export const INTRO_COPY = Object.freeze({
   what: 'A capability is a bundle a soul is composed with: instructions, skills, hooks and commands.',
-  have: (n, official) => ` You have ${n} ${n === 1 ? 'capability' : 'capabilities'}, ${official} official: the mark `,
+  have: (n, official) => ` You have ${n} ${n === 1 ? 'capability' : 'capabilities'}, ${official} official: the check mark`,
   mark: 'means official (in the OATS catalog, or from the OATS repository); the others say who made them.',
   core: ' “core” fills one of the three places every soul has: knowledge, messaging, tasks;',
   noDefaults: ' “core” fills one of the three places every soul has: knowledge, messaging, tasks.',
@@ -188,9 +188,8 @@ function capabilityIntro(doc, { rows, status }) {
   const all = capabilityList(rows, status);
   const p = node(doc, 'p', null, 'cap-intro');
   const mark = node(doc, 'span', null, 'cap-official'); mark.setAttribute('aria-hidden', 'true'); mark.append(iconElement(doc, 'check', { size: 10 }));
-  const said = node(doc, 'span', '✓', 'workspace-sr-only');
   const hasDefaults = !!(status && typeof status === 'object' && status.defaults && typeof status.defaults === 'object');
-  p.append(INTRO_COPY.what, INTRO_COPY.have(all.length, all.filter(entry => entry.origin?.official).length), mark, said, ' ', INTRO_COPY.mark,
+  p.append(INTRO_COPY.what, INTRO_COPY.have(all.length, all.filter(entry => entry.origin?.official).length), mark, ' ', INTRO_COPY.mark,
     hasDefaults ? INTRO_COPY.core : INTRO_COPY.noDefaults, ...(hasDefaults ? [INTRO_COPY.defaults] : []));
   return p;
 }
