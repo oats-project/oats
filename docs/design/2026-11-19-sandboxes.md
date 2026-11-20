@@ -288,6 +288,23 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
 5. The kernel runs the remote apply with `--expect-decision D` and
    `--idempotency-key spawnKey`, from the kept request, with the same provider options
    as the preview. No provider input changes between 2 and 5.
+   - **The request's in-flight lock (r5).** From step 3 until its seat settles in step 6,
+     the spawn holds an exclusive lock on its kept request. A reconcile skips a request
+     whose lock is held (`held-in-flight`), and replays or binds nothing for it. A lock
+     whose holder is gone is taken over, and its request is replayable again.
+   - **The apply-time admission fence (r5).** Under that lock, immediately before it
+     sends the apply, the host recomputes the admission inputs: the workspace's commit
+     and lock, the exclusions, and the recorded entry for this sandbox and soul. It
+     then rechecks the composition `D` binds against them. `D` fingerprints the
+     composition, not workspace policy, so this recheck is what catches an exclusion
+     committed between the seat and the apply.
+   - **When the fence refuses** (`capability-excluded` or `capability-not-applied`),
+     the apply is not sent. The kept request records every send durably before it's
+     made, so one with no recorded send, refused here under its lock, is proof that no
+     apply carrying `spawnKey` was ever sent. `bind` then gets that proof in place of an
+     answer (step 6).
+   - **Later edits:** an exclusion committed after this check applies to the next
+     spawn, as it does to a home already running.
 6. The kernel passes the apply's own answer to the provider (`bind`, C4), which acts
    on it by this table (r4, contract):
 
@@ -295,6 +312,7 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
    | --- | --- | --- |
    | Success, or the keyed replay of one | the home's `capabilityMeta["oats.aweb"].seat`, `{seatApi:1, seatId, certificateId, spawnKey}`, written by oats.aweb's spawn hook once the seat is connected, matching the ledger entry | `active` |
    | `E_DECISION_STALE` | the kernel's key recovery found no home holding `spawnKey` and refused before placing anything; the descriptor admits only that key (C6), so no home holds the seat | released (`spawn-failed`) |
+   | No apply sent: `{sent: false, code}`, from the admission fence, for a request with no recorded send (r5) | the host refused under the request's lock before any apply carrying `spawnKey` was made, and the request is deleted once the seat is released, so no home can hold the seat | released (`spawn-failed`) |
    | `E_REQUIRED_HOOK_FAILED` or `E_HOOK_ENVIRONMENT_CONTRACT` whose details carry no `unconfirmed: true` (r4d) | the spawn's rollback confirmed its home is gone, so no home holds the seat, whatever the hook did before it failed (oats.aweb's `seat-binding` refusal arrives this way) | released (`spawn-failed`) |
    | `E_IDEMPOTENCY_CONFLICT` (r4d) | a home already holds `spawnKey` under another decision and may hold the seat | stays `delivered` |
    | `E_SPAWN_INCOMPLETE`, a hook failure with `unconfirmed: true`, a failed or uncertain seat connect, any other refusal, or no answer | none of these proves that no home holds the seat | stays `delivered` |
@@ -325,12 +343,13 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
    applied or replayed, and one whose seat was released is deleted. Each replay is
    unchanged, keyed by its `spawnKey`, and its answer goes to `bind` as in 6. A replay of an apply that was
    never sent is that apply, with its task, and a stale `D` refuses it terminally.
-   Before each replay the host rechecks the kept composition against the current
-   recorded entry and exclusions (r5). The recorded entry only widens, but an
-   exclusion added since can refuse the replay. A replay that fails the recheck is not
-   sent. Its request is kept and reported (`held-not-admitted`), and its seat stays
-   `delivered` (readiness, `sandbox-seat-unsettled`), because no proof says no home
-   holds it. The
+   Before each replay, the host runs step 5's admission fence under the request's
+   lock (r5). The recorded entry only widens, but an exclusion added since can refuse
+   the replay. A request with no recorded send that the fence refuses settles as in
+   step 6 ("No apply sent"). A replay of a request that was sent before, and fails the
+   fence, is not sent. Its request is kept and reported (`held-not-admitted`), and
+   its seat stays `delivered` (readiness, `sandbox-seat-unsettled`), because an
+   earlier send may have made a home that holds it. The
    provider never builds or replays a spawn itself. Absence of the instance's name, or
    an unused seat directory, is never evidence. A `delivered` seat with no kept request
    stays `delivered`, and readiness reports `sandbox-seat-unsettled`.
@@ -633,9 +652,13 @@ sandboxes:
       change made after the plan was reviewed changes the revision, so the apply
       refuses that sandbox's admission (`E_PLAN_STALE`, with the fresh plan in its
       detail), records nothing for it, and goes on with the rest of the sync.
-    - **The commit point:** the kernel writes that sandbox's recorded entries (per
-      soul, the derived set and the revision), under the sandbox's lock, only after
-      the sandbox's own sync action has succeeded.
+    - **The commit point:** a sync that applies an admission revision writes the
+      recorded entries (per sandbox and soul, the derived set and the revision) for
+      all its sandboxes in one atomic write, under sync's own lock, and only when the
+      whole sync has succeeded, with no problem in any sandbox. A sync that fails
+      anywhere writes none. Its infrastructure changes stand, as they always have,
+      and a later sync with a fresh revision applies the admission. So when sandbox A
+      succeeds and sandbox B fails, A's admission isn't widened either.
     - **Where they live:** in the host deployment's own state, per sandbox and soul.
       The in-sandbox kernel never reads them: the host checks them against what `D`
       binds (Identities, step 2).
@@ -770,8 +793,13 @@ its own because a kernel reads it:
 
 - `self` must name a sandbox the workspace declares. That deployment then spawns only
   souls that sandbox's `souls` lists, with the capabilities admitted for them, and refuses
-  others with `E_SANDBOX_PLACEMENT` (r5). A routed request must name the sandbox,
-  soul and composition its preview showed, and its sandbox must equal `self`. `D`
+  others with `E_SANDBOX_PLACEMENT`, reason `not-placed-here` (r5), whose remedy says
+  to spawn it from the host into a sandbox that lists it. A routed request must name
+  the sandbox, soul and composition its preview showed, and its sandbox must equal
+  `self`. One that names another sandbox is refused with `E_SANDBOX_PLACEMENT`,
+  reason `wrong-sandbox`, even when the soul is eligible in both. Its remedy says the
+  host routed it to the wrong registration, and to check the host's `sandbox-<name>`
+  server entry (C7). Nothing is spawned. `D`
   already binds the composition, and the `self` check refuses a request that names
   another sandbox. A request through the sandbox's own deployment can never place a
   soul on the host or in another sandbox.
@@ -828,7 +856,7 @@ and by act:
 | `start`, `stop`, `reconcile` | `planRevision`, `idempotencyKey` | `server`; for `reconcile`, `seats` as in `status` |
 | `status` | none | `server`, `seats: [{seatId, instance, alias, certificateId, team, state}]` |
 | `seat` | `planRevision`, `idempotencyKey`, `instance: {name, soul, spawnKey, team, decision, settings}` (`decision` is `D`, the remote preview's `decision.revision`; `team` is the team the instance joins; `settings` is the preview's composed settings for the seat's capability, passed unread; r5) | `seat: {id, path, alias, certificateId, team}` |
-| `bind` | `planRevision`, `idempotencyKey`, `instance: {name, spawnKey}`, `apply`: the routed apply's answer as the kernel received it | `seat: {id, certificateId, state}` |
+| `bind` | `planRevision`, `idempotencyKey`, `instance: {name, spawnKey}`, `apply`: the routed apply's answer as the kernel received it, or `{sent: false, code}` when the admission fence refused a request with no recorded send (r5) | `seat: {id, certificateId, state}` |
 | `release` | `planRevision`, `idempotencyKey`, `instance: {name, seatId}`, `reason`: `retired` or `spawn-failed` | `seat: {id, certificateId, state}` |
 
 **The envelope** of every answer:
@@ -1149,7 +1177,8 @@ The refusals belong to the acts:
 | A delivered seat with a missing or contradictory descriptor (r2) | the in-sandbox apply | `seat-binding` (oats.aweb) |
 | No provider, or more than one (r1) | every sandbox act | `E_SANDBOX_PROVIDER`, `none` or `ambiguous` |
 | A placed soul whose selected sandbox this host does not list or run | `oats spawn`, a schedule's spawn | `E_SANDBOX_NOT_HERE` |
-| A soul not listed by this sandbox, or a routed request naming another sandbox, inside it (r5) | the in-sandbox `oats spawn` | `E_SANDBOX_PLACEMENT` |
+| A soul this sandbox doesn't list, inside it (r5) | the in-sandbox `oats spawn` | `E_SANDBOX_PLACEMENT`, `not-placed-here` |
+| A routed request naming another sandbox, inside it (r5) | the in-sandbox `oats spawn` | `E_SANDBOX_PLACEMENT`, `wrong-sandbox` |
 | Several eligible sandboxes and no `--sandbox` or schedule `sandbox:` (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-ambiguous` |
 | A named target that isn't declared, or doesn't list the soul (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-unknown` or `sandbox-not-eligible` |
 | A soul reference no member or package offers (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `soul-unknown` |
@@ -1241,6 +1270,7 @@ the release notes when that feature ships (r5).
 | Same team, separate sandboxes | A reviewer and a deployer in one team, in two sandboxes, exchange the messages aweb allows. Their state, session material and mounts stay separate, and the reviewer can't use the deployment credential. The same holds with cross-team messaging allowed, and with it denied, by aweb's policy. Pending for v1's provider until aweb's maintainers say whether teamctl runs two sandboxes for one team (C8). |
 | Teams independent of the runtime | Changing a soul's default team, or a label's alias, moves no soul. Two teams in one sandbox, accepted as co-resident trust, run on a provider that serves several teams; v1's provider refuses it with `team-not-served`. One team in two sandboxes introduces no second team. |
 | Placement and capability refusals | An ambiguous target, a wrong host, a wrong sandbox, an excluded capability, a capability not yet applied, a forged seat binding and an unavailable provider route each fail with the responsible decision and a remedy, before any placement succeeds or usable authority leaks. |
+| The admission fence and its commit | An exclusion committed between the seat and the apply: the apply is not sent, the seat is released with no home made, and the request is gone. The same exclusion before a replay of an apply that was sent: the replay isn't sent and the seat stays delivered (`held-not-admitted`). Sandbox A's sync step succeeds and B's fails under `--admission-revision`: neither's admission is recorded. |
 | Capabilities widen only through an applied plan | One sandbox lists review (capability `read`) and deploy (`read` and `deploy`). Upstream adds `deploy` to review, with no new applied plan. A manual spawn of review and its tick both refuse before minting (`capability-not-applied`), and deploy still works. After the revised plan is approved and applied, review may load the capability, which still grants it no credential or operation. |
 | Identity apart from the route | Designed while grant seats stay on the host. A grant-backed agent restarts with the same stable DID and a new valid session; one without public inbound reach stays usable as the same principal; an alias match, a wrong team or a stale session can't spend its grant; revocation stops the next dispatch with both sandboxes left in place. |
 | Target and policy | With Compose: start, authorized work, stop, resume and delist, with separate state and one clock. The same contract against an existing Kubernetes cluster, including storage across a workload replacement and a check of the network policy, before that provider is claimed. |
