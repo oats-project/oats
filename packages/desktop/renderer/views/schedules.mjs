@@ -428,7 +428,9 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
       queueMicrotask(() => { if (alive && reading) view()?.repaint(); });
       try { const list = await call({ kind: "schedule", action: "list" }); readOk = true; return list; }
       catch (error) { readOk = false; throw error; }
-      finally { reading--; render(); }
+      // The last read to end may not be the one the page paints for (it paints for the latest asked): paint once
+      // more when none is left, so no Edit is left showing that it waits.
+      finally { reading--; render(); if (!reading) queueMicrotask(() => { if (alive && !reading) view()?.repaint(); }); }
     },
     // The page's own acts (Turn off here, Turn on here, Run now, Test, a summary's save). While one runs, no form
     // opens and nothing is sent from here. One that begins under an open Edit closes it: the form holds the

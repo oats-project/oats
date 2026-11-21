@@ -302,7 +302,7 @@ test("an Edit still reading its soul's inspection is dropped by whatever moves o
 
 // A list read in flight (spec C1b, 4, "a list read"): the rows on screen are from before it. An Edit pressed then
 // would hold the old definition whichever lands first, the list or the form's own read of the soul's inspection
-// (often the faster: the server holds it), so no Edit opens until the read ends. Round 1's finding.
+// (often the faster: the server holds it), so no Edit opens until the read ends.
 test("no Edit opens while the list is being read, of a provider schedule or a tmux one, whichever answer would land first; after the read, Edit holds the new definition", async () => {
   for (const outcome of ["the read answers", "the read fails"]) for (const id of ["bb-review", "plain"]) {
     const say = `${outcome}, ${id}`, saved = []; let enabled = true, reads = 0, release, fail;
@@ -333,6 +333,22 @@ test("no Edit opens while the list is being read, of a provider schedule or a tm
       assert.deepEqual(saved.map(spec => spec.enabled), [false], `${say}: a save keeps what the list now says`);
     } finally { s.cleanup(); }
   }
+});
+
+test("two list reads that overlap, the earlier answering last: Edit is offered again once none is left", async () => {
+  const release = []; let reads = 0;
+  const s = setup({ read: async () => { if (++reads > 1) await new Promise(resolve => release.push(resolve)); return { schedules: [{ ...onBb, backend: "tmux" }], scheduler }; }, mutate: async () => ({}) });
+  try {
+    await tick();
+    s.el.querySelector('button[aria-label="Refresh schedules"]').click(); await tick();
+    s.rowAction("bb-review", "disable").click(); await ticks(); // an act, then its own re-read
+    assert.equal(release.length, 2, "two reads in flight");
+    release[1](); await ticks();
+    assert.equal(s.rowAction("bb-review", "edit").disabled, true, "one read is still in flight");
+    release[0](); await ticks(5);
+    assert.equal(s.rowAction("bb-review", "edit").disabled, false, "none left: Edit no longer waits");
+    s.rowAction("bb-review", "edit").click(); await ticks(); assert.equal(sheetOf(s).hidden, false);
+  } finally { s.cleanup(); }
 });
 
 test("a change's own re-read holds Edit too: after a save, a Delete or a summary's save, no Edit opens on the rows from before it", async () => {
