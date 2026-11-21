@@ -1375,19 +1375,22 @@ nobody alive holds is cleared by the home's next pi: a
 `question` whose holder is gone (a pi killed with its dialog open) when that pi
 starts, and a failed turn's, or a claim with no mark (a bridge from before the
 mark left it), at its first run; a pi that starts and ends with no run clears
-no failed turn. A session that ends on a failed turn leaves
+no failed turn. A pi that lives on clears a second pi's `question` whose holder
+is gone at its next run. A session that ends on a failed turn leaves
 the claim and removes its mark. A clear the kernel does not take keeps the mark
 and is tried again at the bridge's next step, and a question's by itself too, a
-second later and then at growing waits up to a minute. Two limits: bridges are not fenced against each
+second later and then at growing waits up to a minute. Three limits: bridges are not fenced against each
 other, so one pi's clear that lands just after another pi's set leaves that
-pi's dialog with no claim until it closes; and a failed turn that another pi's
-question replaced is not shown again when that dialog closes. The mark is in the agent's own home and decides
+pi's dialog with no claim until it closes; a failed turn that another pi's
+question replaced is not shown again when that dialog closes; and a dialog that
+opens before a pi's first run takes a failed turn an earlier session left with
+it. The mark is in the agent's own home and decides
 only claims the agent could set or clear itself, so it needs no protection from
 the agent, in a sandboxed home either. Every write is producer `oats.pi`'s: no
 other producer's claim is touched.
 
-**A pi claim that outlives its dialog.** With no pi left to start in the home,
-a dead pi's `question` stays, and it holds every scheduled wake: the hold reads
+**A pi claim that outlives its dialog.** With no pi left running or starting in
+the home, a dead pi's `question` stays, and it holds every scheduled wake: the hold reads
 claims, not whether the session runs. For a home on a session provider that
 lasts until the claim is cleared, because a wake never starts such a home; a
 tmux home's next start voids it, as a session boundary voids every claim. A

@@ -105,7 +105,9 @@ function readMark(home) {
  *    alive holds: a mark whose holder is gone, or a claim with no mark (a bridge
  *    from before the mark left it, or a session that ended on a failed turn). A
  *    session that starts and ends with no run clears no leftover. After that, a
- *    step with no claim to clear starts no process.
+ *    step with no claim to clear starts no process, and only reads the mark: it
+ *    clears the question of a holder that is gone, a second pi that died with its
+ *    dialog open while this one lives.
  *  - when its session starts (`session_start`): clears only the question of a holder
  *    that is gone, a pi that died with its dialog open. A failed turn waits for the
  *    next run, as before.
@@ -125,7 +127,9 @@ function readMark(home) {
  *  set, and that pi's dialog then has no claim until it closes. The window is the
  *  two kernel calls' jitter. A failed turn that another pi's question replaced is
  *  not shown again when that dialog closes: its bridge learns of it only at its
- *  next step. */
+ *  next step. A dialog that opens before this bridge's first run takes a leftover
+ *  failed turn with it, for the same reason: the question replaces the producer's
+ *  one claim, and this bridge has no failed turn of its own to show again. */
 /** How often a bridge whose claim a live holder blocks looks again, in ms. */
 const BLOCKED_RETRY_MS = 1000;
 /** The longest wait before a question's clear the kernel did not take is tried again, in ms: the
@@ -197,11 +201,22 @@ export function waitingClaim(pi, home) {
     retry = setTimeout(() => change(), ms);
     retry.unref?.();
   };
+  /** Clear the question of a holder that is gone: a pi that died with its dialog open. */
+  const clearDeadQuestion = async () => {
+    const mark = readMark(home);
+    if (mark === null || mark.reason !== "question" || mine(mark) || alive(mark)) return;
+    await clearClaim();
+  };
   const step = async () => {
     clearTimeout(retry);
     const [reason, message] = wanted();
     const next = reason === undefined ? "" : `${reason} ${message}`;
-    if (next === shown) return;
+    if (next === shown) {
+      // Nothing to show and nothing shown: a look at the mark, for a second pi's question that
+      // outlived it. A run's start comes here, so a live pi clears it within a run.
+      if (next === "") await clearDeadQuestion();
+      return;
+    }
     const first = shown === undefined;
     const mark = readMark(home);
     const other = mark !== null && !mine(mark) && alive(mark) ? mark : null;
@@ -236,11 +251,7 @@ export function waitingClaim(pi, home) {
   pi.on("session_start", () => {
     ended = false;
     LIVE_BRIDGES.add(self.token);
-    then(async () => {
-      const mark = readMark(home);
-      if (mark === null || mark.reason !== "question" || mine(mark) || alive(mark)) return;
-      await clearClaim();
-    });
+    then(clearDeadQuestion);
   });
   pi.on("session_shutdown", () => {
     ended = true;

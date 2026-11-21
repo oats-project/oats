@@ -610,6 +610,20 @@ test("real kernel: a holder that has exited and is not yet reaped is gone", { sk
   await settle(() => markOf(home) === null);
 });
 
+test("real kernel: a second pi that dies with its dialog open is cleared by the pi that lives on, at its next run", async (t) => {
+  const home = kernelHome(t);
+  const fire = session(home);
+  const run = async () => { await fire("agent_start"); await fire("agent_end", { messages: [{ role: "assistant", stopReason: "stop" }] }); await fire("agent_settled", { aborted: false }); };
+  await fire("session_start", { type: "session_start", reason: "startup" });
+  await run();
+  leftBy(home, gone(), "question", "Nested?");
+  assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.pi" }, "left behind by the second pi");
+  await run();
+  await settle(() => liveWaiting(home) === null);
+  assert.equal(waitingHold(home), null);
+  await settle(() => markOf(home) === null);
+});
+
 test("real kernel: the bridge clears its own claim and no other producer's", async (t) => {
   const home = kernelHome(t);
   setWaiting(home, { producer: "agent", waiting: true, reason: "attention", message: "my own question" });
