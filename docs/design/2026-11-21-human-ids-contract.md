@@ -1,6 +1,6 @@
 # Human IDs: the contract between aweb's primitives and OATS
 
-**Status:** DRAFT r1, 2026-11-21. It isn't in force until aweb's maintainers and the
+**Status:** DRAFT r2, 2026-11-21 (r1 read by aweb's maintainers and the product owner's side). It isn't in force until aweb's maintainers and the
 product owner's side approve it on this PR. Items marked **OPEN** are undecided and
 mustn't be built on.
 
@@ -19,7 +19,7 @@ one of these primitives, or OATS changes how it uses one, this record changes fi
   list at that SHA.
 - Cloud: the person's dashboard steps read at Cloud `15591632` (tag v0.8.80) and main
   `234882b7`.
-- OATS: the integration plan v1.5, read with oats-aweb main `717d0fd`.
+- OATS: the integration plan v1.7 (`0d8b9e1159c6`), read with oats-aweb main `717d0fd`.
 
 Every behaviour below is pinned at **the 1.36.59 cut SHA**, which aweb names when it cuts.
 Commit ids are background only.
@@ -29,16 +29,22 @@ Commit ids are background only.
 1. **Opt-in is the adoption itself.** A deployment whose roots nobody adopted changes in
    nothing: no OATS setting, no config key, no new aw requirement.
 2. **People sign; agents never act as people.**
-   - aw refuses every person signature inside an OATS instance or without a terminal
-     (`human_approval_required`).
-   - No agent uses a person's signing key, or an account key that carries the person's
-     authority, such as a team owner/admin API key.
-   - The person's acts happen in Cloud's dashboard.
+   - No agent holds or uses a person's signing key, or a key with owner/admin authority over
+     team membership (P6's key). This is an OATS rule in its own right.
+   - aw also refuses every person signature inside an OATS instance or without a terminal
+     (`human_approval_required`). That is a safeguard on native person signing, not a
+     custody boundary, so OATS doesn't rely on it.
+   - The person's adoption acts happen in Cloud's dashboard.
+   - OATS's existing operator-run key flows are unchanged: `oats aweb setup`'s provisioning
+     key and `resident create`'s dashboard key are typed by the person into a protected
+     child environment and never held by an agent.
 3. **Prospective, never retroactive.**
    - Adoption applies from then on.
-   - Instances created before it keep their key, ID, certificate, address, mailbox and
-     memberships, and read `unknown`.
-   - OATS doesn't respawn or re-sign them.
+   - Instances created before it keep their key, ID, certificate, address, mailbox,
+     memberships and actual ancestry. Chainless ones read `unknown` / `legacy_no_chain`.
+     Ones with older namespace ancestry can read `no_human`, or refuse superseded evidence.
+   - Leaving them alone is the deployment owner's choice. OATS doesn't respawn or re-sign
+     them.
 4. **Attribution is information.** No OATS behaviour (gating, routing, permission) depends on
    the human. OATS only reads it and shows it.
 5. **aw's answer is the truth.** OATS copies aw's verdicts and refusals as aw gives them. It
@@ -48,12 +54,12 @@ Commit ids are background only.
 
 | # | Primitive (aw at the cut SHA) | Who runs it, where | OATS's use |
 |---|---|---|---|
-| P1 | `aw --identity-home <root>/.aw id parent request --domain D --parent H --invitation-id I --out request.json` | An agent, in the root's home, during adoption | Documented step (PR b). D, H and I are copied from the dashboard's invitation, never derived. |
-| P2 | `aw --identity-home <root>/.aw id parent import response.json --domain D` | An agent, in the root's home | Documented step (PR b). |
-| P3 | `aw --json init --join-from=<root> --join-team=<T> --name=<alias> --do-not-touch-agents-md` | The provider's spawn hook, on the root's host, as the deployment's user | Primary identity of every spawned instance (unchanged). After adoption, aw signs the child under the root through a same-machine retained link. |
-| P4 | `aw team invite --team-id <T> --json` in the root, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local --parent <root>/.aw --json` | The provider, joining an instance to an extra team | Joined-team identities. `--parent` is passed only when the root reads `nearest_human`, because an adopted root's invites carry `for_human`. aweb confirms this as the supported, unattended route (native agent-to-agent exchange, same user and HOME). An unadopted root's join is unchanged. An adopted root on an aw below 1.36.59 stops before minting any invite and names the floor. |
+| P1 | `aw --identity-home <root>/.aw id parent request --domain D --parent H --invitation-id I --out request.json` | An agent, in the root's home, during adoption, with the root's own key | Documented step (PR b). D, H and I are copied from the dashboard's invitation, never derived. Writes and retains the request. Only a genuinely chainless root, or one parented directly by its namespace, can be adopted. A root with person ancestry or an agent parent can't. |
+| P2 | `aw --identity-home <root>/.aw id parent import response.json --domain D` | An agent, in the root's home | Documented step (PR b). Verifies and installs the exact signed response. If these steps become machine-consumed, they add `--json` and follow §4's refusal rules. |
+| P3 | `aw init --join-from=<root> --join-team=<T> --name=<alias> --json --do-not-touch-agents-md` (oats-aweb `bin/oats-aweb.mjs:2541`), `<root>` being the root's workspace directory | The provider's spawn hook, on the root's host, as the deployment's user | Primary identity of every spawned instance (unchanged). After adoption, aw signs the child under the root through the mint's same-machine hosted issuer link. |
+| P4 | `aw team invite --team-id <T> --json` with the root as the selected identity, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local [--parent <root>/.aw] --json`, the same token on stdin | The provider, joining an instance to an extra team; `<home>/.aweb-identity-<label>` is fresh, or the same retained target on retry | Joined-team identities. aweb confirms `--parent` as the supported, unattended route (native agent-to-agent exchange through a token-scoped creator link, same user and HOME). The child proves the invite's human before membership is submitted. `--parent` is passed only when the root reads `nearest_human`. That is decided by one bounded P5 read of `<root>/.aw` at join time, falling back to C3's record when the read is `unavailable`. It is omitted for a genuinely chainless root, whose join is unchanged. An adopted root on an aw below 1.36.59 stops before minting any invite, with a code in aw's `--json` style and a README line naming the fix. |
 | P5 | `aw --identity-home <home>/.aw who --json` | The provider | C1 and C2 (§4). |
-| P6 | `aw id team remove-member` on a hosted team (route `/api/v1/teams/{team_id}/agents/remove-member`), needing a team-scoped owner/admin API key | **OPEN R** | Revocation (§6). |
+| P6 | `aw id team remove-member --namespace D --team NAME --cert-id C [--aweb-url URL] --json` (or `--member`), with a team-scoped owner/admin API key from `--api-key` or the environment, calling `/api/v1/teams/{team_id}/agents/remove-member` | **OPEN R** | Membership removal (§6). A browser session or a person's signing key doesn't satisfy this CLI. |
 
 Person's steps in Cloud (dashboard, signed in, the root's team selected, from the root's
 Chat or Messages pane):
@@ -97,7 +103,10 @@ OATS doesn't use, and doesn't build on, these aw primitives:
     refused (`evidence_unavailable`) with no fallback.
   - New children are issued in the person's domain.
   - Alias, address form, roster entry and mail and chat routing are unchanged in form.
-  - A grandchild's ID parent is the root, because OATS mints every instance from the root.
+  - An instance spawned by another instance has the root as its immediate ID parent,
+    because OATS selects the root for every mint. Its OATS parent stays in `spawnedBy`.
+  - An evidence failure refuses without dropping a presented chain. The code and reason can
+    vary with the command and the cause.
 - **Same machine, same HOME.** Both halves of one mint run on the root's host, as the same
   user with the same HOME. The retained link lives under the minting process's HOME. A mint
   whose issuer can't be reached locally stops as **signature pending**: key and request
@@ -115,9 +124,11 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   `{mode, human: {id, label}|null, parent: {id}|null}`.
 - **Mapping from aw's `outcome`:**
   - `nearest_human` → `human`. `label` is `human_id`, because aw gives no display name, so
-    the Desktop shows the `did:aw`.
+    the Desktop shows the `did:aw`. `parent {id}` is the chain's next link up from the
+    instance, that is, the root.
   - `no_human` → `none`.
   - Anything else → `unknown`.
+  - `parent` is null when there is no verified chain.
 - **Carry-forward:** a non-zero exit, a timeout, unparseable output or `unavailable` carries
   the previous value forward, or `unknown` if there is none. An answer aw gave replaces the
   previous value.
@@ -133,14 +144,17 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   spawning from it needs 1.36.59.
 
 **C3, the adopted-lineage warning.**
-- **The record:** the provider keeps each root's last C2 outcome in its own state, keyed by
-  the root's identity and key, not by its label.
-- **When it warns:** a root that last read `nearest_human` now reads `unknown` or
-  `no_human`, whatever the reason. Examples are `legacy_no_chain` after a restore from a
+- **The record:** the provider keeps, in its own state, each root's last *verified*
+  `nearest_human` observation (the human and when it was seen), keyed by the root's identity
+  and key, not by its label. A later `unknown` or `no_human` doesn't erase it. Only a new
+  `nearest_human` replaces it. So the warning shows at every spawn and in every check-only
+  while the chain stays missing, not only at the first read.
+- **When it warns:** a root with that record now reads `unknown` or `no_human`, whatever the
+  reason. Examples are `legacy_no_chain` after a restore from a
   backup taken before adoption, and `revoked` or `root_replaced`.
 - **How:** it warns at spawn and in check-only (C2's `warnings`), naming the root and aw's
   reason.
-- `unavailable` never triggers it, and the last outcome is kept.
+- `unavailable` never triggers it, and the record is kept.
 - It never refuses. A stale copied home is never a reason to adopt again.
 
 **Signature pending.**
