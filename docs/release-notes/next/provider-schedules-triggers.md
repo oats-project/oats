@@ -6,13 +6,14 @@
   that preview with the job's own launch selection, its `yolo` included
   ([spawn](../schedules.md#kinds)). On a provider that launches only in full
   mode:
-  - a job with `yolo: true`, or a launch configuration that sets it, is
-    saved and launches (a build with the preview's new check and without
-    this change refused it, `E_SCHEDULE_INVALID` with `details.code:
-    "E_BACKEND_SANDBOXED_MODE"`, and `oats schedule test` said its soul did
-    not resolve: the schedule's preview did not carry the job's `yolo`);
-  - a job with no `yolo` is refused when saved, with that code, and `oats
-    schedule test` reports it, where it used to fail only at its run. One
+  - a job with `yolo: true` is saved and launches, as one whose launch
+    configuration sets yolo does (a build with the preview's new check and
+    without this change refused the job's own `yolo: true` on `add` and
+    `update`, and `oats schedule test` said its soul did not resolve: the
+    schedule's preview did not carry it);
+  - a job with no `yolo` is refused when saved (`E_SCHEDULE_INVALID`,
+    `details.code: "E_BACKEND_SANDBOXED_MODE"`), and `oats schedule test`
+    reports it, where it used to fail only at its run. One
     saved without the preview (its soul was already spawned in the
     deployment) fails at each run, `launch-failed` with `errorCode:
     "E_BACKEND_SANDBOXED_MODE"`, and leaves no home.
