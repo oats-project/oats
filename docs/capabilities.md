@@ -2288,6 +2288,24 @@ from, never print it.
   problems. A refused spawn runs no hook and leaves no home; a refused
   start or restart runs no hook and stops nothing. A check that fails or
   answers outside these words is not ready.
+- **A preview asks it too, with the same planned launch**, so that a launch
+  you would refuse does not read clean in its preview. `check` must only
+  read, and must answer for a home that is not there:
+  - A spawn's preview (`oats spawn --preview`) hands you the home's
+    **planned path, which does not exist yet**, `trees` with its one planned
+    tree and `protected` by name, none of them made. Treat an absent home
+    and absent files as absent, not as an error. Your environment is the
+    spawn's too; `OATS_SOUL` and `OATS_LEVEL` may name directories that are
+    not there yet. Your script then runs from
+    your package's tree in the deployment's module store, as it does for
+    `oats readiness --soul`, not from a home's copy. A refusal fails the
+    preview with the code the spawn would be refused with, and nothing is
+    created. You are given what is left of the preview's budget, and never
+    more than the spawn gives its check. A provider that lives in a member module, which runs only from
+    a spawned home, is not asked: the preview says so in its `warnings`.
+  - A launch's preview (`oats launch-config preview --home`) hands you the
+    home as a start would. A refusal is a failed `backend` item in its
+    `preflight`.
 
 ### What the kernel trusts in a provider home
 

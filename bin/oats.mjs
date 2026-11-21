@@ -1153,7 +1153,7 @@ function launchConfigContext(bail) {
  *  a soul) would run under a selection, resolved against the current scoped
  *  configuration, preflighted, read-only; environment values withheld and
  *  the prompt named, never the TASK body. */
-function launchPreview(bail) {
+async function launchPreview(bail) {
   for (const k of ["launch-config", "harness", "runtime", "model"]) if (flag(k) === true) bail("E_BAD_ARGS", `--${k} needs a value`);
   const sel = { launchConfig: flag("launch-config"), harness: harnessFlag(), model: flag("model"), yolo: yoloFlag() };
   if (sel.harness !== undefined && !LAUNCH_HARNESSES.includes(sel.harness)) bail("E_BAD_ARGS", `--harness must be one of ${LAUNCH_HARNESSES.join(", ")}`);
@@ -1190,8 +1190,11 @@ function launchPreview(bail) {
   // The same planner a start uses, in preview mode: failed checks are listed, nothing is touched.
   // Its checks read the pane a launch would run in, as a command that only reads can know it (a
   // home's recorded session, a soul's session default; with no server running, not established).
+  // A home on a session provider: its provider is asked what a start will ask it (its check, with
+  // the launch that is planned), from the deployment's configuration as it is now, as a start reads it.
+  const providerCheck = meta ? await homeSandboxSourceOf(home) : null;
   let plan;
-  try { plan = planLaunch({ home, instance, meta, contextDir: context, agentLike, selection: sel, resolvedCfg: r, preview: true, pane: () => previewPaneEnvironment(meta ? { home, meta } : { deployment: context }) }); } catch (e) { bail(e.code || "E_BAD_ARGS", e.message); }
+  try { plan = planLaunch({ home, instance, meta, contextDir: context, agentLike, selection: sel, resolvedCfg: r, preview: true, pane: () => previewPaneEnvironment(meta ? { home, meta } : { deployment: context }), providerCheck }); } catch (e) { bail(e.code || "E_BAD_ARGS", e.message); }
   const { recipe } = plan;
   // A home on a session provider has no command line: its launch is handed to the provider as data
   // (`command` and `argv` null, the executable's path null); its environment is listed by name.
@@ -1206,7 +1209,7 @@ async function launchConfigCmd() {
   dropAmbientRoot();
   const sub = args[1];
   const usage = "usage: oats launch-config list [--dir <scope> | --home <abs> | --soul <name> [--dir <scope>] [--agents-root <abs>]] [--json] | set <name> --file <json> [--keep-env] [--dir <scope>] [--json] | remove <name> [--dir <scope>] [--json] | preview (--home <abs> | --soul <name> [--dir <scope>]) [--launch-config <name>|none] [--harness r] [--model m] [--yolo|--no-yolo] --json";
-  if (sub === "preview") { launchPreview(bail); return; }
+  if (sub === "preview") { await launchPreview(bail); return; }
   if (!["list", "set", "remove"].includes(sub)) bail("E_USAGE", usage);
   const { context: dir, selected } = sub === "list" ? launchConfigContext(bail) : { context: dirFlag(), selected: null };
   // Lead decision 2: launch configurations are a HOST choice, declared in the
