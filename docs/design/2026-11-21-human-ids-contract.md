@@ -1,7 +1,7 @@
 # Human IDs: the contract between aweb's primitives and OATS
 
-**Status:** DRAFT r2, 2026-11-21 (r1 read by aweb's maintainers and the product owner's side). It isn't in force until aweb's maintainers and the
-product owner's side approve it on this PR. Items marked **OPEN** are undecided and
+**Status:** DRAFT r2, 2026-11-21 (r1 read by aweb's maintainers and the OATS deployment owner's side). It isn't in force until aweb's maintainers and the
+OATS deployment owner's side approve it on this PR. Items marked **OPEN** are undecided and
 mustn't be built on.
 
 **What it is.** aweb lets a person adopt an agent (a "root") so that every agent the root
@@ -257,7 +257,7 @@ OATS doesn't use, and doesn't build on, these aw primitives:
 - The person can revoke their whole ID, which ends everything under them. OATS neither does
   nor tests that.
 
-**How the membership is removed on a hosted team** (decided by the product owner, 2026-11-21,
+**How the membership is removed on a hosted team** (decided by aweb's product owner, 2026-11-21,
 through aweb's maintainers):
 - The paired Cloud release keeps production's removal path. An owner's or admin's key from
   Cloud's setup flow authorizes P6. The creation-only restriction on that route is withdrawn
@@ -272,7 +272,9 @@ through aweb's maintainers):
 - the person runs it, with their own owner or admin key;
 - an agent runs it with an owner key the person delegates.
 
-Principle 2 forbids the second unless the product owner rules otherwise.
+Principle 2 forbids the second unless both OATS owners, aweb's product owner and the OATS
+deployment owner, rule otherwise. Principle 2 binds every OATS deployment, so neither side
+changes it alone.
 
 PR b's revocation text waits for this.
 
@@ -283,8 +285,8 @@ PR b's revocation text waits for this.
 | aw primitives P1 to P6, codes, the cut SHA | aweb's maintainers | aweb's maintainers |
 | Cloud's person steps and the paired Cloud release | aweb's Cloud maintainers | aweb's maintainers |
 | The journey case and its verdicts (G2) | aweb's Cloud maintainers | both sides; any change to the case's text comes to OATS first |
-| C1 to C3, the mint flows, the floor (oats-aweb PR a) | the product owner's side builds it | the product owner's side, then the OATS maintainers at the exact head |
-| Docs and release notes (PR b) | the product owner's side | both |
+| C1 to C3, the mint flows, the floor (oats-aweb PR a) | the OATS deployment owner's side builds it | the OATS deployment owner's side, then the OATS maintainers at the exact head |
+| Docs and release notes (PR b) | the OATS deployment owner's side | both |
 | This record | the OATS maintainers | both sides, on its PR |
 
 ## 8. Open items
@@ -293,4 +295,4 @@ PR b's revocation text waits for this.
 - **C.** `native_agent_signature_pending` is implemented on aweb `802f1674` (exit 1, key and
   request kept, no membership). aweb confirms it is in the cut SHA.
 - **R.** Whether an agent may run P6 with a delegated owner key, or only the person runs it
-  (§6). (the product owner)
+  (§6). (both OATS owners: aweb's product owner and the OATS deployment owner)
