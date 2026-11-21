@@ -95,7 +95,10 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   let operationRequest = 0, formOperation = 0, mutationOperation = 0, backendRequest = 0;
   // The automations page's own acts (a switch, a run, a test, a summary's save: its onBusy). While one runs this
   // view opens no form and sends no change, as while its own `busy`.
-  let pageBusy = false;
+  // A count, not a flag: the page rebuilds its view when the CLI's gate changes, and an act of the view that went
+  // may still be in flight when the new view begins one (each view tells true and false in turn).
+  // `actsView`: the page's view the latest act began under.
+  let pageActs = 0, pageBusy = false, actsView = null;
   // The list reads in flight. While one runs no Edit opens: the rows on screen are from before it, and a form
   // opened on one would hold, and save back, a definition the read is about to replace (whichever of the list's
   // answer and the form's own reads lands first). A New form holds no stored definition and opens.
@@ -437,7 +440,13 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
     // definition as it was before the act (its Enabled, for one), and saving it would undo the act. A pending
     // Edit goes without a word; one already in use says why it closed.
     onBusy: acting => {
-      pageBusy = acting;
+      pageActs = Math.max(0, pageActs + (acting ? 1 : -1)); pageBusy = pageActs > 0;
+      if (!alive) return;
+      if (acting) actsView = view();
+      // The last act ended under another view than it began (the page was rebuilt meanwhile): that view re-read
+      // nothing after the act, and the view on screen may have read the list before it landed. Read it again,
+      // which holds Edit until it answers.
+      else if (!pageBusy) { const began = actsView; actsView = null; if (began !== view()) void view()?.refresh(); }
       if (acting && editing && !sheet.hidden) { const id = editing, silent = !!pendingEdit; closeForm(); if (!silent) notice(`${id} changed while it was being edited. Open Edit again.`); }
       render();
     },

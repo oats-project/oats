@@ -199,8 +199,11 @@ const OUTCOMES = { launched: 'agent launched', active: 'agent active', running: 
  * changes. canOpenCapability(name) / openCapability(name): the source's capability page, when the catalog lists it. */
 /** onBusy(busy): told when one of the page's OWN acts begins (true) and ends (false): a switch, a run, a test, a
  * summary's save. A view that extends the page (views/schedules.mjs) holds its own work back while one runs, and
- * drops what it read before one began. Never told of the busy state that view sets itself (setBusy), nor of the
- * banner's action, which is that view's. */
+ * drops what it read before one began. An act ends when its request has settled and its own re-read is done, and
+ * not before: a view disposed under an act (the page is rebuilt when the CLI's gate changes) still tells the end
+ * when the request settles, never at its disposal, since the act may not have landed yet. true and false
+ * alternate, so a listener that outlives a view can count. Never told of the busy state that view sets itself
+ * (setBusy), nor of the banner's action, which is that view's. */
 export function createAutomationsView(host, { kind, read, act = null, status = null, openFile = null, now = () => Date.now(),
   verbs = null, headerActions = null, rowActions = null, onEnableScheduler = null, onResult = null, heading = null, onCount = null, describe = null, onBusy = null,
   sources = false, canOpenCapability = () => false, openCapability = null } = {}) {
@@ -222,9 +225,10 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
 
   let alive = true, serial = 0, data = null, failure = '', loading = false, origin = 'all', query = '', openId = null, busy = false, notice = '';
   const tests = new Map(), statuses = new Map();
-  // The page's own acts, as onBusy hears them: one in flight (`acting`), or a summary being saved.
-  let acting = false;
-  const tellBusy = () => onBusy?.(acting || describeBusy);
+  // The page's own acts, as onBusy hears them: one in flight (`acting`), or a summary's save (`saving`: until its
+  // request settles and its re-read ends, which outlasts the sheet's own describeBusy). Told only when it changes.
+  let acting = false, saving = false, told = false;
+  const tellBusy = () => { const now = acting || saving; if (now !== told) { told = now; onBusy?.(now); } };
   const setActing = v => { acting = v; tellBusy(); };
   // Capability sources. `confirming`: the row whose Test confirm shows (with that row as it was: confirmSig);
   // `testing`: the row whose confirmed test runs.
@@ -314,8 +318,9 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
       else if (verb === 'test') { if (current()) tests.set(row.id, { ok: false, error: error?.message || String(error) }); }
       else failure = error?.message || String(error);
     } finally {
+      setActing(false); // also for a view disposed meanwhile: the act ended now, not at the disposal
       if (alive) {
-        busy = false; setActing(false); render();
+        busy = false; render();
         if (unconfirmed) { await refresh(); if (alive && openId === row.id && (!doc.activeElement || doc.activeElement === doc.body)) focusKey('test'); }
       }
     }
@@ -358,10 +363,11 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
       if (!alive) return;
       failed = true; keep(timedOut(error) ? { ok: false, error: TIMED_OUT } : { ok: false, error: error?.message || String(error), code: typeof error?.code === 'string' ? error.code : null });
     } finally {
+      setActing(false);
       if (alive) {
         // Focus follows the answer only where the operator still is: on this page, in the confirm (or nowhere).
         const at = doc.activeElement, here = openId === row.id && (!at || at === doc.body || !!page.querySelector('.auto-confirm')?.contains(at));
-        testing = null; busy = false; setActing(false); if (confirming === row.id) revokeConfirm(); render();
+        testing = null; busy = false; if (confirming === row.id) revokeConfirm(); render();
         if (here) focusKey(failed || !kept ? 'test' : 'result-title');
       }
     }
@@ -973,11 +979,11 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
     // Sent as typed: only "" clears; the kernel keeps boundary spaces, and refuses what breaks its rule.
     const value = summaryInput.value;
     if (value && !descriptionValid(value)) { sheetError.textContent = `A summary is one line of up to ${DESCRIPTION_MAX} characters, without control characters.`; summaryInput.focus(); return; }
-    const my = ++describeSerial; describeBusy = true; tellBusy(); sheetError.textContent = ''; paintSheet(); sheetStatus.focus();
+    const my = ++describeSerial; describeBusy = true; saving = true; tellBusy(); sheetError.textContent = ''; paintSheet(); sheetStatus.focus();
     try {
       await describe(row, value);
       if (!alive || my !== describeSerial) return;
-      describeBusy = false; tellBusy(); sheet.hidden = true; paintSheet(); describing = null;
+      describeBusy = false; sheet.hidden = true; paintSheet(); describing = null;
       describeReturn(row.id)?.focus();
       await refresh();
       // The re-read repaints the page: put focus back on the same control by identity, unless it moved on.
@@ -985,9 +991,9 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
       describeOpener = null;
     } catch (error) {
       if (!alive || my !== describeSerial) return;
-      describeBusy = false; tellBusy(); paintSheet();
+      describeBusy = false; paintSheet();
       sheetError.textContent = error?.message || String(error); summaryInput.focus();
-    }
+    } finally { saving = false; tellBusy(); } // whatever became of the sheet or the view
   });
   cancelButton.addEventListener('click', () => { if (!describeBusy) closeDescribe(); });
   sheet.addEventListener('keydown', e => {
@@ -1032,7 +1038,7 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
   const closeMenus = e => { for (const m of root.querySelectorAll('.auto-menu[open]')) if (!m.contains(e.target)) m.open = false; };
   doc.addEventListener('click', closeMenus);
   render(); void refresh();
-  return { refresh, open: openRow, describe: id => { const row = rowById(id); if (row) openDescribe(row); }, repaint() { render(); }, setNotice(text) { notice = text || ''; render(); }, setBusy(v) { busy = !!v; render(); }, dispose() { alive = false; if (acting || describeBusy) { acting = false; describeBusy = false; tellBusy(); } revokeConfirm(); serial++; describeSerial++; doc.removeEventListener('click', closeMenus); root.remove(); } };
+  return { refresh, open: openRow, describe: id => { const row = rowById(id); if (row) openDescribe(row); }, repaint() { render(); }, setNotice(text) { notice = text || ''; render(); }, setBusy(v) { busy = !!v; render(); }, dispose() { alive = false; revokeConfirm(); serial++; describeSerial++; doc.removeEventListener('click', closeMenus); root.remove(); } };
 }
 
 /** The Desktop shows these pages only for an OATS that reports them (kernel 0.29.0). */

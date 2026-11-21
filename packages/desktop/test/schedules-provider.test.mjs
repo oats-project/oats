@@ -421,7 +421,35 @@ test("one of the page's acts that begins under an Edit already in use closes it 
   } finally { s.cleanup(); }
 });
 
-test("the automations page tells its own acts, begin and end, and ends one it is disposed under; never the busy state set from outside", async () => {
+test("the page rebuilt under one of its acts (the CLI's gate changes): the schedule view stays held until the act's request settles, then reads the list again before any Edit", async () => {
+  for (const outcome of ["the act answers", "the act fails"]) {
+    let finish, fail, enabled = true; const cliFacts = {}, saved = [], heard = [], rebuild = () => { for (const fn of heard) fn(); };
+    const s = setup({ cliFacts, subscribeCli: fn => { heard.push(fn); return () => {}; }, read: async () => ({ schedules: [{ ...onBb, enabled }], scheduler }), mutate: async (path, body) => {
+      if (path.startsWith("/api/capabilities")) return listsBb;
+      if (path.startsWith("/api/automations")) { await new Promise((resolve, reject) => { finish = resolve; fail = () => reject(new Error("refused")); }); return {}; }
+      return saver(saved)(body);
+    } });
+    try {
+      await tick(); s.rowAction("bb-review", "disable").click(); await tick();
+      // The gate changes: the page disposes its view and builds another, which reads the list before the act lands.
+      cliFacts.features = ["automation-descriptions"]; rebuild(); await ticks(5);
+      const reads = posts(s, "/api/automations").filter(c => JSON.parse(c.opts.body).action === "list").length;
+      assert.equal(s.el.querySelector(".schedule-new").disabled, true, `${outcome}: still held, the act has not ended`);
+      const edit = s.rowAction("bb-review", "edit"); edit.disabled = false; edit.click(); await ticks();
+      assert.equal(sheetOf(s).hidden, true, `${outcome}: no Edit on a list read before the act landed`);
+      if (outcome === "the act answers") { enabled = false; finish(); } else fail();
+      await ticks(5);
+      assert.equal(posts(s, "/api/automations").filter(c => JSON.parse(c.opts.body).action === "list").length, reads + 1, `${outcome}: the list is read again`);
+      assert.equal(s.el.querySelector(".schedule-new").disabled, false, outcome);
+      s.rowAction("bb-review", "edit").click(); await ticks();
+      assert.equal(sheetOf(s).hidden, false, outcome); assert.equal(s.el.querySelector("form").elements.enabled.checked, outcome === "the act fails", `${outcome}: the definition as it now is`);
+      submit(s); await ticks();
+      assert.deepEqual(saved.map(spec => spec.enabled), [outcome === "the act fails"], `${outcome}: a save keeps it`);
+    } finally { s.cleanup(); }
+  }
+});
+
+test("the automations page tells its own acts, begin and end, in turn; one it is disposed under ends when its request settles; never the busy state set from outside", async () => {
   const dom = new JSDOM("<body><main></main></body>", { pretendToBeVisual: true }), host = dom.window.document.querySelector("main"), told = [];
   const list = { scheduleApi: 2, host: { name: "laptop" }, snapshot: null, scheduler, schedules: [{ ...onBb, name: "bb-review", qualifiedId: "local/bb-review", origin: { kind: "local", path: "local" }, runsHere: true, enabledHere: true, teams: [] }] };
   assert.equal(automationRows(list, "schedule").rows.length, 1);
@@ -437,8 +465,18 @@ test("the automations page tells its own acts, begin and end, and ends one it is
     form.querySelector("input").value = "Nightly"; form.dispatchEvent(new dom.window.Event("submit", { cancelable: true })); assert.deepEqual(told.slice(4), [true], "a summary's save");
     fail(new Error("refused")); await ticks(); assert.deepEqual(told.slice(4), [true, false]);
     form.dispatchEvent(new dom.window.Event("submit", { cancelable: true })); finish({}); await ticks(); assert.deepEqual(told.slice(6), [true, false]);
-    action("test").click(); assert.deepEqual(told.slice(8), [true]);
-    view.dispose(); assert.deepEqual(told.slice(8), [true, false], "disposed under an act: the extending view is not left held");
-    finish({}); await ticks(); assert.deepEqual(told.length, 10, "and the late answer tells nothing");
+    // Disposed under an act: nothing is told at the disposal (the act may not have landed), and the end is told
+    // when the request settles, on its answer and on its failure; under a summary's save, the same.
+    for (const [begin, settle] of [[() => action("test").click(), () => finish({})], [() => action("run").click(), () => fail(new Error("refused"))],
+      [() => { action("describe").click(); const sheet = host.querySelector(".auto-describe"); sheet.querySelector("input").value = "Weekly"; sheet.dispatchEvent(new dom.window.Event("submit", { cancelable: true })); }, () => finish({})],
+      [() => { action("describe").click(); const sheet = host.querySelector(".auto-describe"); sheet.querySelector("input").value = "Daily"; sheet.dispatchEvent(new dom.window.Event("submit", { cancelable: true })); }, () => fail(new Error("refused"))]]) {
+      const at = told.length;
+      begin(); assert.deepEqual(told.slice(at), [true]);
+      view.dispose(); assert.deepEqual(told.slice(at), [true], "nothing at the disposal");
+      settle(); await ticks(); assert.deepEqual(told.slice(at), [true, false], "the end, when the request settles");
+      view = make(); await ticks();
+    }
+    assert.deepEqual(told, told.map((_, i) => i % 2 === 0), "true and false in turn, never the same twice");
+    view.dispose();
   } finally { dom.window.close(); }
 });

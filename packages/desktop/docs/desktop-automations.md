@@ -326,6 +326,13 @@ begins under an Edit already in use closes it too, with a notice: the form
 holds the definition from before the act (its Enabled, for one), and saving it
 would undo the act. A New form holds no stored definition and stays.
 
+An act ends when its request has settled and its own re-read is done. The page
+rebuilds its view when the CLI's gate changes; a view disposed under an act
+tells nothing at its disposal and tells the end when the request settles, so
+the schedule view stays held until then (it counts acts begun and ended), and
+then reads the list again, since the new view may have read it before the act
+landed.
+
 **No Edit opens while the list is being read** (a Refresh, and the re-read
 that ends a save, a Delete or a summary's save), of any schedule: the rows on
 screen are from before the read, and a form opened on one would hold the old
