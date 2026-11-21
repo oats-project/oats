@@ -517,6 +517,62 @@ test("a dialog that opens and closes while an earlier write is under way starts 
   assert.equal(markOf(home), null);
 });
 
+test("a clear the kernel did not take keeps the mark and is tried again: at the next run, or when the session ends", async (t) => {
+  for (const next of ["agent_start", "session_shutdown"]) {
+    const { home, shim, log, calls } = recordingHome(t);
+    // The first clear is recorded and fails; every other call is recorded and succeeds.
+    writeFileSync(shim, `#!${process.execPath}\nconst fs = require("node:fs"), argv = process.argv.slice(2), failed = ${JSON.stringify(join(home, "failed-once"))};\nfs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(argv) + "\\n");\nif (argv[2] === "clear" && !fs.existsSync(failed)) { fs.writeFileSync(failed, ""); process.exit(1); }\n`);
+    const fire = session(home);
+    await fire("ui_prompt_start", opened("select", "Pick one"));
+    await settle(() => calls().length === 1);
+    await fire("ui_prompt_end");
+    await settle(() => calls().length === 2);
+    await quiet();
+    assert.equal(markOf(home)?.reason, "question", "the claim may still stand, so its mark does");
+    await fire(next, { type: next, reason: "quit" });
+    await settle(() => calls().length === 3);
+    assert.deepEqual(calls(), [questionArgv(home, "Pick one"), clearArgv(home), clearArgv(home)]);
+    await settle(() => markOf(home) === null);
+  }
+});
+
+test("a pi that exits with its question's clear never taken leaves the mark, and the home's next pi clears the claim as it starts", async (t) => {
+  const { home, shim, log, calls } = recordingHome(t);
+  const recording = readFileSync(shim, "utf8");
+  const fire = session(home);
+  await fire("ui_prompt_start", opened("select", "Pick one"));
+  await settle(() => calls().length === 1);
+  writeFileSync(shim, `#!/bin/sh\necho "$@" >> ${JSON.stringify(`${log}.refused`)}\nexit 1\n`);
+  await fire("ui_prompt_end");
+  await fire("session_shutdown", { type: "session_shutdown", reason: "quit" });
+  assert.equal(readFileSync(`${log}.refused`, "utf8").split("\n").filter(Boolean).length, 2, "tried at the dialog's close and at the session's end");
+  const mark = markOf(home);
+  assert.equal(mark?.reason, "question");
+  // The pi is gone: its mark now names no live process.
+  writeFileSync(markPath(home), `${JSON.stringify({ ...mark, ...gone() })}\n`);
+  writeFileSync(shim, recording);
+  const nextPi = session(home);
+  await nextPi("session_start", { type: "session_start", reason: "startup" });
+  await settle(() => calls().length === 2);
+  assert.deepEqual(calls()[1], clearArgv(home));
+  await settle(() => markOf(home) === null);
+});
+
+test("real kernel: a holder that has exited and is not yet reaped is gone", { skip: process.platform === "linux" ? false : "needs /proc" }, async (t) => {
+  const home = kernelHome(t);
+  // A shell that starts a short child, says its pid and becomes a process that never reaps it.
+  const parent = spawn("sh", ["-c", "sleep 0.1 & echo $!; exec sleep 30"], { stdio: ["ignore", "pipe", "inherit"] });
+  t.after(() => { parent.kill("SIGKILL"); });
+  const pid = Number(await new Promise((resolve) => parent.stdout.once("data", (d) => resolve(String(d).trim()))));
+  const state = () => readFileSync(`/proc/${pid}/stat`, "utf8").split(") ").at(-1)[0];
+  await settle(() => state() === "Z");
+  leftBy(home, { pid, start: processStart(pid) }, "question", "Which one?");
+  const fire = session(home);
+  await fire("session_start", { type: "session_start", reason: "startup" });
+  await settle(() => liveWaiting(home) === null);
+  await settle(() => markOf(home) === null);
+});
+
 test("real kernel: the bridge clears its own claim and no other producer's", async (t) => {
   const home = kernelHome(t);
   setWaiting(home, { producer: "agent", waiting: true, reason: "attention", message: "my own question" });

@@ -44,26 +44,36 @@ export function claimMessage(text) {
 /** Where a home's mark is. */
 export const markPath = (home) => join(home, ".pi", "oats-pi-claim.json");
 
-/** When a process started, as a string that is the same for every reader while it
- *  lives, or null where that cannot be read. Linux: the start time in its stat (field
- *  22, counted after the command's closing parenthesis, which a command name cannot
- *  spoof). Elsewhere: what `ps` prints for it. */
-export function processStart(pid) {
+/** A Linux process's state letter and start time, from its stat (fields 3 and 22, counted
+ *  after the command's closing parenthesis, which a command name cannot spoof), or null. */
+function procStat(pid) {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] || null;
-  } catch {
-    try { return execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] }).trim() || null; }
-    catch { return null; }
-  }
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    return fields[19] ? { state: fields[0], start: fields[19] } : null;
+  } catch { return null; }
+}
+
+/** When a process started, as a string that is the same for every reader while it
+ *  lives, or null where that cannot be read. Linux: the start time in its stat.
+ *  Elsewhere: what `ps` prints for it. */
+export function processStart(pid) {
+  const stat = procStat(pid);
+  if (stat) return stat.start;
+  try { return execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] }).trim() || null; }
+  catch { return null; }
 }
 
 /** Whether the process a mark names is still that process. One that cannot be told
  *  apart from it counts as alive: a live holder's claim taken for a dead one's would
- *  be cleared under an open dialog. */
+ *  be cleared under an open dialog. A process that has exited and waits for its
+ *  parent to reap it (Linux state Z, or X) is gone; where there is no /proc, such a
+ *  one counts as alive until it is reaped. */
 function holderAlive(mark) {
   try { process.kill(mark.pid, 0); }
   catch (error) { if (error?.code !== "EPERM") return false; }
+  const state = procStat(mark.pid)?.state;
+  if (state === "Z" || state === "X") return false;
   const start = processStart(mark.pid);
   return start === null || mark.start === null || start === mark.start;
 }
@@ -104,8 +114,10 @@ function readMark(home) {
  *  bridge starts its own, a set still under way would land after its clear, and a pi
  *  that exits would leave a dialog's claim behind. A failed turn's claim outlives the
  *  session, as before, and gives up its mark, so the next bridge's first run clears
- *  it. A write is bounded by its timeout, and a failed one is dropped, as is a mark
- *  that cannot be written: reporting must never break a session.
+ *  it. A write is bounded by its timeout. A set the kernel did not take is dropped,
+ *  as is a mark that cannot be written; a clear it did not take keeps the mark and is
+ *  tried again at the bridge's next step, because a question left standing holds
+ *  every wake. Reporting must never break a session.
  *
  *  Two bridges are not fenced against each other: a step reads the mark and then
  *  writes, so a clear that read "nobody alive holds it" can land after another pi's
@@ -130,9 +142,10 @@ export function waitingClaim(pi, home) {
   // Whether a run has started or ended in this bridge's time: only then is a leftover its to clear.
   let ran = false;
 
+  /** One kernel call. Whether the kernel took it: false for a refusal, a failure and the timeout. */
   const waiting = (...args) => new Promise((done) => {
     const argv = ["instance", "waiting", ...args, "--producer", "oats.pi", "--home", home, "--json"];
-    execFile(join(home, ".oats", "bin", "oats"), argv, { cwd: home, timeout: 5000 }, () => done());
+    execFile(join(home, ".oats", "bin", "oats"), argv, { cwd: home, timeout: 5000 }, (error) => done(!error));
   });
   /** Remove a file of the mark's. One that stays is harmless: a mark reads as its holder's while that
    *  lives and as nobody's after, and a draft is never read. */
@@ -149,6 +162,15 @@ export function waitingClaim(pi, home) {
     } catch { drop(draft); }
   };
   const removeMark = () => drop(markPath(home));
+  /** Clear the claim, then remove the mark, unless a live holder wrote its own meanwhile. False when
+   *  the kernel did not take the clear: the claim may stand, so the mark stays, for a later try by
+   *  this bridge or, once this pi is gone, by the home's next one. */
+  const clearClaim = async () => {
+    if (!(await waiting("clear"))) return false;
+    const left = readMark(home);
+    if (left === null || mine(left) || !holderAlive(left)) removeMark();
+    return true;
+  };
   /** One step after the others. A step that throws is dropped: reporting must never break a session. */
   const then = (run) => { steps = steps.then(run).catch(() => undefined); };
 
@@ -164,12 +186,13 @@ export function waitingClaim(pi, home) {
     if (reason === undefined) {
       // Nothing of its own yet, and what an earlier pi left waits for a run.
       if (first && !ran) return;
-      // Its own claim, or on its first run a leftover, unless a live holder has the claim.
+      // Its own claim, or on its first run a leftover, unless a live holder has the claim. A clear
+      // the kernel did not take is tried again at this bridge's next step: a question left standing
+      // would hold every wake.
+      const before = shown;
       shown = "";
       if (other !== null) return;
-      await waiting("clear");
-      const left = readMark(home);
-      if (left === null || mine(left) || !holderAlive(left)) removeMark();
+      if (!(await clearClaim())) shown = before;
       return;
     }
     if (other !== null && !(reason === "question" && other.reason === "attention")) {
@@ -192,15 +215,16 @@ export function waitingClaim(pi, home) {
     then(async () => {
       const mark = readMark(home);
       if (mark === null || mark.reason !== "question" || mine(mark) || holderAlive(mark)) return;
-      await waiting("clear");
-      removeMark();
+      await clearClaim();
     });
   });
   pi.on("session_shutdown", () => {
     ended = true;
     question = undefined;
     change();
-    then(() => { if (mine(readMark(home))) removeMark(); });
+    // A failed turn's claim outlives the session and gives up its mark. A question whose clear the
+    // kernel did not take keeps its mark: once this pi has exited, the home's next pi clears it.
+    then(() => { if (shown?.startsWith("attention ") && mine(readMark(home))) removeMark(); });
     return steps;
   });
   return {
