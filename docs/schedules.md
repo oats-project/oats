@@ -1134,7 +1134,7 @@ more than that:
   every wake types. pi homes read `unknown`. A dialog an extension opens there
   holds a wake, through the pi bridge's `question` claim
   ([A pi dialog](capabilities.md#oatscore-needs-input), `@awebai/oats-pi` after
-  0.70.0 on pi 0.84.4 or later), but the kernel can't see whether that bridge is
+  0.70.1 on pi 0.84.4 or later), but the kernel can't see whether that bridge is
   loaded, and a screen of pi's own fires no event.
 - **A dialog that opens before the Enter is still answered.** That covers one that
   opens between the read and the Enter, and the lag between a dialog opening and

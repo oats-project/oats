@@ -458,7 +458,7 @@ for a question you ask in text, by mail or by chat. Your attention claim is
 yours alone, and the emitter never clears it. A claim with text is shown over
 one without, so a later claim with no text does not hide your question. A later
 one with text, such as a permission prompt's, is shown in its place.
-On pi, an extension's dialog (a question tool's) is reported too, by an `@awebai/oats-pi` after 0.70.0.
+On pi, an extension's dialog (a question tool's) is reported too, by an `@awebai/oats-pi` after 0.70.1.
 
 From OATS 0.69.7, a turn that ends in a provider error sets a claim the same
 way, because the error ends the turn and you can't: `Turn failed: <the error>`,
