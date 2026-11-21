@@ -61,11 +61,13 @@ export function recordedStart(home) {
   return {identityHome: doc?.launch?.hooks?.env?.AWEB_IDENTITY_HOME, meta: meta && typeof meta === 'object' && !Array.isArray(meta) ? meta : undefined, harness, backend: typeof doc?.backend === 'string' ? doc.backend : undefined};
 }
 
-/** The session backend a home's last start ran on: the session provider this
- *  provider recorded (it records no other backend), else the kernel's own
- *  record of the home's backend. */
+/** The session backend a home's last start ran on, read in one order by every
+ *  reader (readiness, the probe, retire, join and leave): the kernel's own
+ *  record of the home's backend, else the session provider this provider
+ *  recorded (it records no other backend), for a record the kernel wrote none
+ *  in. The two differ only in a record that contradicts itself. */
 export function recordedBackend(meta, kernelBackend) {
-  return typeof meta?.backend === 'string' ? meta.backend : kernelBackend;
+  return typeof kernelBackend === 'string' ? kernelBackend : typeof meta?.backend === 'string' ? meta.backend : undefined;
 }
 
 /** The runtime a home's last start ran under: what this provider recorded
@@ -288,9 +290,10 @@ function receiveRecord(home) {
   // Kernel launch receipts govern readiness. Provider meta may precede a
   // failed launch; configuration names and caller env do not identify a start.
   // Lifecycle callers retain recordedRuntime's historical cleanup semantics.
-  // The backend is read the same way: the kernel's record of the home's
-  // session backend, else the session provider this provider recorded.
-  return {meta, runtime: doc.launch?.harness ?? doc.harness ?? meta.runtime, backend: doc.backend ?? meta.backend, identityHome: doc.launch?.hooks?.env?.AWEB_IDENTITY_HOME, hooks: doc.launch?.hooks, launchPromptStatus, startedAt};
+  // The backend is read as every reader reads it (recordedBackend): the
+  // kernel's record of the home's session backend, else the session provider
+  // this provider recorded.
+  return {meta, runtime: doc.launch?.harness ?? doc.harness ?? meta.runtime, backend: recordedBackend(meta, doc.backend), identityHome: doc.launch?.hooks?.env?.AWEB_IDENTITY_HOME, hooks: doc.launch?.hooks, launchPromptStatus, startedAt};
 }
 
 /** Preserve valid retained facts even when a legacy record lacks ownership.

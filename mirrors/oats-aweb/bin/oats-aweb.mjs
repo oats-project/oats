@@ -601,8 +601,17 @@ function deliveryFor(runtime = process.env.OATS_RUNTIME || "", delivery = delive
 }
 /** Whether the broker delivered to this home's primary identity as of its last
  *  recorded start (retire runs under no runtime of its own). A meta with no
- *  delivery comes from a spawn that never reached the registration. */
-const brokerDeliveredTo = (meta = {}) => !!meta.delivery && brokerDelivers({ delivery: meta.delivery, runtime: instanceRuntime(meta), backend: instanceBackend(meta) });
+ *  delivery comes from a spawn that never reached the registration. Only a
+ *  retire asks, and it removes a registration that may exist, so here either
+ *  record naming a session provider is enough: where the kernel's backend and
+ *  this provider's meta contradict each other (readiness and the probe then
+ *  read the kernel's), a provider start may still have registered the home,
+ *  `aw wake deregister` is idempotent, and the home is going away. The kernel's
+ *  record is already read first by instanceBackend, so the meta is the one
+ *  record left to ask. */
+const brokerDeliveredTo = (meta = {}) => !!meta.delivery && (
+  brokerDelivers({ delivery: meta.delivery, runtime: instanceRuntime(meta), backend: instanceBackend(meta) }) ||
+  sessionProviderBackend(meta.backend));
 // Session delivery registers the home with the host wake broker (aweb-abil:
 // `aw wake register --home <abs> --identity-home <abs> --delivery session
 // [--backend tmux|herdr]`, durable even when the daemon is down). `--backend`
@@ -2369,7 +2378,7 @@ function instanceRuntime(meta = {}) {
 }
 /** The home's session backend, read as its runtime is: spawn and launch run
  *  under the kernel's OATS_BACKEND; a retire, join or leave reads what the
- *  last start recorded. */
+ *  last start recorded, in the one order every reader uses (recordedBackend). */
 function instanceBackend(meta = {}) {
   if (["spawn", "launch"].includes(event)) return process.env.OATS_BACKEND || undefined;
   return recordedBackend(meta, recordedStart(home).backend);
