@@ -67,7 +67,8 @@
   keeps the pair it replaced, so that `--undo` names the kernel's previous
   copies and rows again in one write. It is not resumed after an
   interruption (`E_UPGRADE_PARTIAL`): the journal it would resume from is
-  in the home. The kernel's side is whole either way; undo it, or respawn.
+  in the home. The kernel's side is whole either way; such a home is
+  retired and spawned again.
 
 ## Upgrade notes
 

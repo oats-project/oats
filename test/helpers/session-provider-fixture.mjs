@@ -169,9 +169,10 @@ export function providerDeployment(t, { manifest = fakeManifest(), capabilities 
   fx.verbs = (verb) => fx.calls().filter((c) => c.verb !== undefined && (verb === undefined || c.verb === verb));
   fx.hooks = (event) => fx.calls().filter((c) => c.hook !== undefined && (event === undefined || c.hook === event));
   fx.clearCalls = () => rmSync(join(fx.fake, "calls.log"), { force: true });
-  /** The receipt records the home's module copies as they are now, which is what `oats instance
-   *  upgrade` does after it moves them: for a test that edits a copy by hand to stand for what an
-   *  upgrade brings. Without it, a copy that differs from the receipt's record is never run. */
+  /** The kernel takes the home's module copies as they are now, which is what `oats instance
+   *  upgrade` does of the ones it moves: for a test that edits a copy by hand to stand for what an
+   *  upgrade brings: the kernel's own copies are made again from the home's, and the receipt
+   *  names them. Without it, the kernel goes on running the copies its spawn made. */
   fx.recordComposition = (home) => {
     const path = findRetirementBaseline(home), receipt = JSON.parse(readFileSync(path, "utf8"));
     writeFileSync(path, JSON.stringify({ ...receipt, composition: compositionOf(home, receipt.composition.capabilityRuntime) }, null, 2));

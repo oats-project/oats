@@ -2327,8 +2327,10 @@ takes no capability setting from it**:
   **An upgrade that fails or is interrupted before that write leaves the old
   copy and the old capability rows, together**; after it, the new ones.
   There is no moment at which the rows name one version and the kernel runs
-  another. A store is removed only after a write of the receipt: the one
-  before the previous, once a move is made.
+  another. A store is removed only once a move is complete, after the
+  receipt's write: the one before the previous. A move that fails after
+  that write and is rolled back puts the earlier receipt back, with the
+  stores it names still there.
 - **An undo** (`oats instance upgrade --undo`) writes the receipt once,
   naming the previous store and the previous rows again; the newer store is
   removed after that write. The hook an undo runs is the kernel's previous
@@ -2339,8 +2341,8 @@ takes no capability setting from it**:
   journal is in the home, where the agent can write. The kernel's side is
   whole either way (the old pair, or the new one once the receipt was
   written); the home's own copies may be half moved, which
-  `moduleCopy.homeCopy` on its status row then says. The remedy is `--undo`
-  where the receipt already names the new pair, or a respawn. The upgrade
+  `moduleCopy.homeCopy` on its status row then says. Such a home is not
+  started again: the remedy is to retire it and spawn it again. The upgrade
   takes its module set and each module's source from the receipt: a module
   only the home's record names refuses it.
 - **When the kernel has no copy.** A home whose receipt has no
