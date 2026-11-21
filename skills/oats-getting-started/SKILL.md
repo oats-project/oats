@@ -562,7 +562,7 @@ installed CLI's catalog:
 node -e 'const c=require(process.argv[1]);console.log(c.packages["oats.framework"].ref,c.packages["oats.aweb"].ref)' "$(oats root)/package-catalog.json"
 ```
 
-It prints the two refs, for example `oats-framework/v1.28.0 v1.47.0`. If the
+It prints the two refs, for example `oats-framework/v1.28.0 v1.48.0`. If the
 framework's version (after the `/`) is below `1.19.0`, or with aweb
 `oats.aweb`'s is below `v1.33.1`, this OATS release is older than this
 skill: stop, and tell the person to wait for the next OATS
