@@ -60,9 +60,9 @@ Commit ids are background only.
 | P1 | `aw --identity-home <root>/.aw id parent request --domain D --parent H --invitation-id I --out request.json` | An agent, in the root's home, during adoption, with the root's own key | Documented step (PR b). D, H and I are copied from the dashboard's invitation, never derived. Writes and retains the request. Only a genuinely chainless root, or one parented directly by its namespace, can be adopted. A root with person ancestry or an agent parent can't. |
 | P2 | `aw --identity-home <root>/.aw id parent import response.json --domain D` | An agent, in the root's home | Documented step (PR b). Verifies and installs the exact signed response. If these steps become machine-consumed, they add `--json` and follow §4's refusal rules. |
 | P3 | `aw init --join-from=<root> --join-team=<T> --name=<alias> --json --do-not-touch-agents-md` (oats-aweb `bin/oats-aweb.mjs:2541`), `<root>` being the root's workspace directory | The provider's spawn hook, on the root's host, as the deployment's user | Primary identity of every spawned instance (unchanged). After adoption, aw signs the child under the root through the mint's same-machine hosted issuer link. |
-| P4 | `aw team invite --team-id <T> --json` with the root as the selected identity, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local [--parent <root>/.aw] --json`, the same token on stdin | The provider, joining an instance to an extra team; `<home>/.aweb-identity-<label>` is fresh, or the same retained target on retry | Joined-team identities. aweb confirms `--parent` as the supported, unattended route (native agent-to-agent exchange through a token-scoped creator link, same user and HOME). The child proves the invite's human before membership is submitted. `--parent` is passed only when the root reads `nearest_human`. That is decided by one bounded P5 read of `<root>/.aw` at join time, falling back to C3's record when the read is `unavailable`. It is omitted for a genuinely chainless root, whose join is unchanged. An adopted root on an aw below 1.36.59 stops before minting any invite, with a code in aw's `--json` style and a README line naming the fix. |
+| P4 | `aw team invite --team-id <T> --json` with the root as the selected identity, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local [--parent <root>/.aw] --json`, the same token on stdin | The provider, joining an instance to an extra team; `<home>/.aweb-identity-<label>` is fresh, or the same retained target on retry | Joined-team identities. aweb confirms `--parent` as the supported, unattended route (native agent-to-agent exchange through a token-scoped creator link, same user and HOME). The child proves the invite's human before membership is submitted. `nearest_human` selects the explicit `--parent` path. That is decided by one bounded P5 read of `<root>/.aw` at join time, falling back to C3's record when the read is `unavailable`. Otherwise `--parent` is omitted: a genuinely chainless root's join is unchanged, and a chained `no_human` root's same-machine join completes through the retained mint link without it. An adopted root on an aw below 1.36.59 stops before minting any invite. That stop is an oats-aweb diagnostic with an OATS-owned code, and a README line names the fix. |
 | P5 | `aw --identity-home <home>/.aw who --json` | The provider | C1 and C2 (§4). |
-| P6 | `aw id team remove-member --namespace D --team NAME --cert-id C [--aweb-url URL] --json` (or `--member`), with a team-scoped owner/admin API key from `--api-key` or the environment, calling `/api/v1/teams/{team_id}/agents/remove-member` | The person, from a terminal (§6) | Membership removal (§6). The documented person-run CLI uses the setup key. The server also accepts signed-in person authority for the same route. A person's signing key is a separate credential. |
+| P6 | `aw id team remove-member --namespace D --team NAME --cert-id C [--aweb-url URL] --json` (or `--member`), with a team-scoped owner/admin API key from `--api-key` or `AWEB_API_KEY`, calling `/api/v1/teams/{team_id}/agents/remove-member` | The person, from a terminal (§6) | Membership removal (§6). The documented person-run CLI uses the setup key. The server also accepts signed-in person authority for the same route. A person's signing key is a separate credential. |
 
 Person's steps in Cloud (dashboard, signed in, the root's team selected, from the root's
 Chat or Messages pane):
@@ -94,7 +94,11 @@ OATS doesn't use, and doesn't build on, these aw primitives:
     failure.
   - A `did:key` home with no chain reads `unknown` / `legacy_no_chain`.
   - The same fields exist in aw 1.36.58.
-- **Adoption** is once per root key, and only for an organisation-only chain.
+- **Adoption** is once per root key. P1 and P2 cover two cases:
+  - first issuance to a genuinely chainless root;
+  - one-time replacement of a chain parented directly by the namespace, under the first
+    person.
+  - Cloud's browser authority and eligibility checks gate either case.
   - A local `did:key` root adopts only through the browser-file flow above. An
     agent-submitted request is refused with `global_agent_required`.
   - One adoption covers one key. A host with several roots needs one adoption per root.
@@ -102,19 +106,28 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   - The root's ordinary hosted member invites default to its verified nearest human
     (`for_human`). There is no opt-out: `--for-human` can only name another valid person.
   - A `--join-from` child satisfies it.
-  - Spawning needs aw's registry and the person's domain DNS. Without them, the spawn is
-    refused (`evidence_unavailable`) with no fallback.
+  - Spawning needs current evidence: registry status and the namespace's DNS. Valid cached
+    evidence can cover a brief outage. Without current evidence, the spawn is refused
+    (`evidence_unavailable`) with no fallback.
   - New children are issued in the person's domain.
   - Alias, address form, roster entry and mail and chat routing are unchanged in form.
   - An instance spawned by another instance has the root as its immediate ID parent,
     because OATS selects the root for every mint. Its OATS parent stays in `spawnedBy`.
   - An evidence failure refuses without dropping a presented chain. The code and reason can
     vary with the command and the cause.
-- **Same machine, same HOME.** Both halves of one mint run on the root's host, as the same
-  user with the same HOME. The retained link lives under the minting process's HOME. A mint
-  whose issuer can't be reached locally stops as **signature pending**: key and request
-  kept, no membership submitted, stable code `native_agent_signature_pending` (in the cut
-  SHA; on aweb `802f1674`, to be confirmed in the cut).
+- **Same machine, same HOME, for the unattended route.** The unattended local-link route runs
+  both halves of one mint on the root's host, as the same user with the same HOME. The
+  retained link lives under the minting process's HOME.
+- **Signature pending.** A fresh recipient of an invite that pins a self-custodial agent
+  issuer stops before membership when it has no installed chain and no accessible local
+  issuer exchange. That holds whether or not the invite carries `for_human`, so it covers a
+  chained `no_human` issuer too.
+  - aw keeps the key, the pending invite selection and any prepared request. The stop can
+    come before any request is created. No membership is submitted.
+  - On 1.36.59 it exits 1 with `error.code` `native_agent_signature_pending` (aweb
+    `802f1674`; pending verification of the published final binary at the cut SHA).
+  - aw 1.36.58 takes the same stop, but exits 1 with the generic `error.code` `error`, which
+    doesn't identify this state.
 
 ## 4. OATS's side (oats-aweb PR a; docs PR b)
 
@@ -174,9 +187,10 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   runs the hook again. Once aw settles the mint either way, the hook answers what is true and
   a plain retry clears the home. `--force` is not the route.
 - Nothing remints into that home or compensates it away while it is pending.
-- If the cut SHA lacks that code, PR a falls back to not retiring a home whose mint failed
-  after aw wrote a key.
-- oats-aweb never retries or remints into the same home.
+- On an aw without the code (1.36.58, or a cut SHA that lacks it), PR a keeps any home whose
+  mint failed after aw wrote a key, without parsing prose.
+- OATS never retries or remints automatically. An explicit operator recovery keeps the exact
+  original home, key, token and selection.
 
 **Reading aw's refusals** (aweb's `docs/cli-integration-contract.md` at `e6e9f099c5`).
 - PR a branches only on the exit status and the structured fields: `error.code`,
@@ -200,22 +214,25 @@ OATS doesn't use, and doesn't build on, these aw primitives:
 - Joined teams mint through P4.
 - GLOBAL grant seats, retained seats and `setup --create` don't mint from a root.
 - `oats aweb connect <server>`, and `setup --join` with an invite issued by a root on
-  another machine, mint away from the issuing root. After that root is adopted they would
-  stall.
-- The rule (aweb, at `d8d0bfa1e7`):
-  - Invite a server's root only from a root that reads `unknown` / `legacy_no_chain`, that
-    is, genuinely chainless. Its invite carries no condition, and the remote root can be
-    adopted on its own later.
-  - "Unadopted" isn't enough. A root that reads `no_human` has a chain, and a remote root
-    minted under it joins that lineage. An agent-parented root can never be adopted
-    independently.
-  - If the only inviter is chained (`no_human` or `nearest_human`), the supported route is
-    aw's cross-machine file exchange: the inviting root agent signs the remote root as its
-    child, with an operator moving the files and no person signature. The remote root is
-    then under that lineage, not adopted separately.
-  - OATS's connect and `setup --join` check the inviting root's `aw who` first, and refuse
-    to invite a remote root from a chained root unless the operator chose the file
-    exchange.
+  another machine, mint a new remote root away from the issuing root.
+- The rule (aweb, at `d8d0bfa1e7`, tested against aw 1.36.58 and the 1.36.59 candidate):
+  - A new unattended remote root can't join through an invite from a self-custodial chained
+    inviter, whether that inviter reads `nearest_human` or `no_human`, on either aw version.
+    That holds before adoption as well as after. aw stops it as signature pending (§3).
+  - Only a genuinely chainless inviter (`unknown` / `legacy_no_chain`) gives an invite a new
+    remote root can join directly, and that root can be adopted on its own later.
+  - With a chained inviter, the supported route is aw's cross-machine file exchange. The
+    inviting root agent signs the remote root as its child, with an operator moving the files
+    and no person signature. The remote root then belongs to that lineage and can't be
+    adopted separately.
+  - **Connect** has the inviting root on this host. It reads that root with P5 before
+    minting the invite, and refuses a chained inviter unless the operator chose the file
+    exchange. An `unavailable` read falls back to C3's record, or with none proceeds with a
+    warning.
+  - **`setup --join`** with only a token can't read the inviter. aw enforces the rule at
+    accept, and OATS keeps the pending home (§4 "Signature pending").
+  - Out of scope for this rule: an identity that already has a chain joining a team, and an
+    issuer in host-managed custody.
 
 ## 5. Gates
 
@@ -309,8 +326,10 @@ PR b documents the person-run P6 with the setup key, and no session plumbing.
 
 ## 8. Open items
 
-- **A, B: answered** by aweb at `d8d0bfa1e7` (§2 P4, §4 "Where OATS mints").
-- **C.** `native_agent_signature_pending` is implemented on aweb `802f1674` (exit 1, key and
-  request kept, no membership). aweb confirms it is in the cut SHA.
+- **A, B: answered** by aweb at `d8d0bfa1e7`, with B tested against aw 1.36.58 and the
+  1.36.59 candidate (§2 P4, §3, §4 "Where OATS mints").
+- **C.** `native_agent_signature_pending` is implemented on aweb `802f1674` (exit 1, recovery
+  state kept, no membership). Its inclusion is pending verification of the published final
+  binary at the cut SHA.
 - **R.** Whether an agent may ever run P6 with a delegated owner key (§6). Today only the
   person runs it. (both OATS owners: aweb's product owner and the OATS deployment owner)
