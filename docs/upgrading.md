@@ -218,8 +218,9 @@ must follow is in its release's Upgrade section whether or not it is listed
 here.
 
 - **[0.70.0](release-notes/v0.70.0.md#upgrade):** upgrade the Desktop with
-  the CLI: a 0.69.x Desktop runs the 0.70.0 CLI in its reduced, above-tested
-  mode until Desktop 0.70.0 is installed. A session-provider home spawned by
+  the CLI: a Desktop of 0.69.18 to 0.69.24 runs the 0.70.0 CLI in its
+  reduced, above-tested mode until Desktop 0.70.0 is installed; a Desktop of
+  0.69.17 or older refuses it until then. A session-provider home spawned by
   an earlier kernel is retired with `--force` and spawned again (no released
   provider exists). Capability authors: in a provider home, hooks run from
   the kernel's copy of the capability; find the home by `OATS_INSTANCE_HOME`.
