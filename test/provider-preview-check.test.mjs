@@ -1,0 +1,145 @@
+// A preview asks a session provider what the launch will ask it: its `check`, with the launch
+// that is planned, so a spawn or a launch the provider would refuse does not read clean in its
+// preview (found by the bb provider's pre-release run: a preview of a spawn with no full-mode
+// default read complete, and the spawn was then refused E_BACKEND_SANDBOXED_MODE).
+import test from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { stopInstanceSession } from "../lib/core.mjs";
+import { writeLock } from "../lib/packages.mjs";
+import { contentDigest } from "../lib/remote.mjs";
+import { git } from "./helpers/v2-deployment.mjs";
+import { FAKE_CAPABILITY, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
+
+const CHECKED = fakeManifest({ fake: fakeProvider({ check: true }) });
+const REFUSES = { check: { result: { status: "unavailable", problems: [{ code: "E_BACKEND_SANDBOXED_MODE", message: "this provider launches only in full mode, and this launch would be sandboxed" }] } } };
+
+/** A deployment whose `dev` soul takes the fake provider FROM A PACKAGE: what a preview can ask,
+ *  its tree being in the deployment's module store and not only in a spawned home. */
+function packagedProvider(t) {
+  const base = `oats-package/capabilities/${FAKE_CAPABILITY}`;
+  const files = { "oats-package/oats-package.json": { json: { package: "acme.pkg", version: "1.0.0", capabilities: [`capabilities/${FAKE_CAPABILITY}`] } },
+    [`${base}/oats.json`]: { json: { capability: FAKE_CAPABILITY, version: "1.0.0", description: "A fake session backend, packaged", ...CHECKED } },
+    ...Object.fromEntries(Object.entries(fakeFiles()).map(([name, text]) => [`${base}/${name}`, text])) };
+  const fx = providerDeployment(t, { files, souls: { dev: { soul: { capabilities: { "oats.core": "off", [FAKE_CAPABILITY]: { from: "package" } } } } } });
+  fx.commit({ "oats-workspace.yaml": { yaml: { schemaVersion: 2, name: "acme", members: [fx.ref], defaults: { knowledge: "none", messaging: "none", tasks: "none" }, packages: { "acme.pkg": `git:${fx.key}@main` } } } });
+  writeLock(fx.dep, { lockfileVersion: 3, packages: { "acme.pkg": { source: `git:${fx.key}@main`, url: fx.ref, path: "oats-package", version: "1.0.0", commit: git(fx.member, "rev-parse", "HEAD"), integrity: contentDigest(join(fx.member, "oats-package")), capabilities: [FAKE_CAPABILITY] } } });
+  return fx;
+}
+const preview = (fx, extra = [], env = {}) => fx.cli(["spawn", "dev", "--name", "seat", "--backend", "fake", "--launch-config", "claude", "--preview", "--json", ...extra], { env });
+const homeOf = (fx) => join(fx.root, "dev", "instances", "seat");
+const nothingCreated = (fx) => {
+  assert.equal(existsSync(homeOf(fx)), false, "no home");
+  assert.equal(existsSync(join(dirname(homeOf(fx)), ".oats-retirement")), false, "nor the kernel's directory beside it");
+};
+
+test("a spawn preview on a session provider asks the provider's check with the planned launch: a refusal fails the preview with the apply's code and creates nothing; a ready provider previews clean", (t) => {
+  const fx = packagedProvider(t);
+  // Ready: the preview is as it was, and the provider was asked once, with what the apply will hand it.
+  const clean = preview(fx);
+  assert.equal(clean.status, 0, clean.stderr);
+  const doc = clean.json();
+  assert.deepEqual([doc.ok, doc.result.preflight.status, doc.result.warnings ?? null], [true, "complete", null], JSON.stringify(doc).slice(0, 600));
+  const asked = fx.verbs("check");
+  assert.equal(asked.length, 1);
+  const { home, soul, launch } = asked[0].request.input;
+  assert.deepEqual([home, soul], [doc.result.home, null], "the planned home, which does not exist yet");
+  assert.deepEqual([launch.harness, launch.yolo, launch.trees, launch.protected], ["claude", doc.result.yolo ?? null, [join(doc.result.home, "work")], [join(dirname(doc.result.home), ".oats-retirement")]]);
+  assert.ok(launch.sandbox && Array.isArray(launch.sandbox.write), "and the allowances, as the launch input carries them");
+  assert.deepEqual([asked[0].instance, asked[0].backend, asked[0].event, asked[0].capability], ["seat", "fake", "session", FAKE_CAPABILITY], "with a provider call's environment");
+  assert.deepEqual(fx.hooks(), [], "no hook ran");
+  nothingCreated(fx);
+
+  // Refused: the apply's own code, exit 1, nothing created.
+  fx.control(REFUSES);
+  fx.clearCalls();
+  const refused = preview(fx);
+  assert.equal(refused.status, 1);
+  const error = refused.json();
+  assert.deepEqual([error.ok, error.error.code], [false, "E_BACKEND_SANDBOXED_MODE"], JSON.stringify(error));
+  assert.match(error.error.message, /seat would not be launched: acme\.fake's session provider fake is not ready \(unavailable\): E_BACKEND_SANDBOXED_MODE: this provider launches only in full mode.*nothing was created/);
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["check"]);
+  nothingCreated(fx);
+  // The preview a person reads fails the same way.
+  const text = fx.cli(["spawn", "dev", "--name", "seat", "--backend", "fake", "--launch-config", "claude", "--preview"]);
+  assert.equal(text.status, 1);
+  assert.match(text.stderr, /this provider launches only in full mode/);
+
+  // And the apply is refused with that code, as before: the preview said what it would do.
+  const applied = fx.cli(["spawn", "dev", "--name", "seat", "--backend", "fake", "--launch-config", "claude", "--json"]).json();
+  assert.deepEqual([applied.ok, applied.error.code], [false, "E_BACKEND_SANDBOXED_MODE"], JSON.stringify(applied));
+  assert.equal(existsSync(homeOf(fx)), false, "the refused spawn was undone");
+});
+
+test("a provider that cannot be asked fails the preview E_BACKEND_NOT_READY, as it fails the apply; one that outlasts the preview's budget leaves the preflight a timeout", (t) => {
+  const fx = packagedProvider(t);
+  for (const [control, said] of [[{ check: { exit: 3 } }, /the check command exited 3/], [{ check: { raw: "not json" } }, /its readiness could not be read/]]) {
+    fx.control(control);
+    const failed = preview(fx);
+    assert.equal(failed.status, 1);
+    assert.deepEqual([failed.json().ok, failed.json().error.code], [false, "E_BACKEND_NOT_READY"], failed.stdout);
+    assert.match(failed.json().error.message, said);
+    nothingCreated(fx);
+  }
+  // Slower than what is left of the budget: the preview answers, and says its preflight did not finish.
+  fx.control({ check: { sleepMs: 20000 } });
+  const slow = preview(fx, [], { OATS_PREVIEW_PREFLIGHT_BUDGET_MS: "1500" });
+  assert.equal(slow.status, 0, slow.stderr);
+  assert.deepEqual([slow.json().ok, slow.json().result.preflight.status, slow.json().result.preflight.budgetMs], [true, "timeout", 1500]);
+  assert.ok(slow.json().result.preflight.elapsedMs >= 1500 && slow.json().result.preflight.elapsedMs < 15000, "the check was ended at the budget");
+  nothingCreated(fx);
+});
+
+test("a preview that cannot ask says so and goes on: a provider in a member module, which runs only from a spawned home; a provider with no check is not asked; a spawn that launches nothing asks nothing", (t) => {
+  // A member module: the provider declares a check, and the preview cannot run it.
+  const member = providerDeployment(t, { manifest: CHECKED });
+  member.control(REFUSES);
+  const told = preview(member);
+  assert.equal(told.status, 0, told.stderr);
+  assert.deepEqual(told.json().result.warnings, ["acme.fake's session provider fake was not asked whether it can take this launch (a provider in a member module runs only from a spawned home): the spawn asks it before any hook runs, and refuses what it refuses"]);
+  assert.equal(told.json().result.preflight.status, "complete");
+  assert.deepEqual(member.verbs(), []);
+
+  // A provider that declares no check has nothing to be asked: nothing is said of it.
+  const unchecked = providerDeployment(t);
+  const plain = preview(unchecked);
+  assert.deepEqual([plain.status, (plain.json().result.warnings ?? []).filter((w) => /was not asked/.test(w)), unchecked.verbs()], [0, [], []]);
+
+  // Nothing to ask: nothing is asked, and nothing is said of it.
+  const fx = packagedProvider(t);
+  fx.control(REFUSES);
+  const tmux = fx.cli(["spawn", "dev", "--name", "seat", "--launch-config", "claude", "--preview", "--json"]);
+  const unasked = (r) => [r.status, (r.json().result.warnings ?? []).filter((w) => /was not asked/.test(w))];
+  assert.deepEqual(unasked(tmux), [0, []], "a tmux launch asks no provider");
+  assert.deepEqual(unasked(preview(fx, ["--no-launch"])), [0, []], "a spawn that launches nothing asks nothing");
+  assert.deepEqual(fx.verbs(), []);
+});
+
+test("a launch preview of a provider home asks the check a start will ask: a refusal is a failed backend check and the preview is not ok; nothing is stopped, started or created", async (t) => {
+  const fx = providerDeployment(t, { manifest: CHECKED });
+  const { home } = await fx.launch("seat");
+  await fx.inEnv(() => stopInstanceSession(home, {}));
+  const launchPreview = () => fx.cli(["launch-config", "preview", "--home", home, "--json"]);
+  const before = readdirSync(join(dirname(home), ".oats-retirement")).sort();
+  fx.clearCalls();
+  const clean = launchPreview().json();
+  assert.deepEqual([clean.ok, clean.result.ok, clean.result.preflight.filter((c) => !c.ok)], [true, true, []], JSON.stringify(clean).slice(0, 600));
+  const asked = fx.verbs("check");
+  assert.equal(asked.length, 1);
+  assert.deepEqual([asked[0].request.input.home, asked[0].request.input.launch.harness, asked[0].request.input.launch.trees], [home, "claude", [join(home, "work")]]);
+  assert.ok(asked[0].request.input.launch.sandbox, "the allowances, or why there are none, as a start hands them");
+
+  fx.control(REFUSES);
+  fx.clearCalls();
+  const refused = launchPreview().json();
+  assert.deepEqual([refused.ok, refused.result.ok], [true, false], JSON.stringify(refused).slice(0, 600));
+  const failed = refused.result.preflight.filter((c) => !c.ok);
+  assert.deepEqual(failed.map((c) => [c.check, c.code]), [["backend", "E_BACKEND_SANDBOXED_MODE"]]);
+  assert.match(failed[0].detail, /this provider launches only in full mode/);
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["check"], "nothing was stopped or launched");
+  assert.deepEqual(readdirSync(join(dirname(home), ".oats-retirement")).sort(), before);
+  // The start it previews is refused with that code.
+  const started = fx.cli(["session", "start", "--home", home, "--json"]).json();
+  assert.deepEqual([started.ok, started.error.code], [false, "E_BACKEND_SANDBOXED_MODE"], JSON.stringify(started));
+});

@@ -2824,6 +2824,27 @@ preflight a spawn runs and writes nothing, on success or refusal. It reads the
 soul from the per-commit cache (`agents/<soul>/souls/<commit12>/`) or fetches
 it to a temporary copy (`soulFetched: true`).
 
+**A preview on a session provider asks the provider** what the spawn will ask
+it before any hook runs: its readiness `check`, with the launch that is
+planned ([check](capabilities.md#check-optional)). No key changes meaning:
+
+- A launch the provider would refuse **fails the preview** with the code the
+  spawn would be refused with (`E_BACKEND_SANDBOXED_MODE` for a provider that
+  launches only in full mode, `E_BACKEND_NOT_READY` for one that cannot be
+  asked or answers outside the rules), exit 1, as every other refusal of a
+  backend fails it. Nothing is created: not the home, nor the kernel's
+  directory beside it.
+- The check runs within the preview's one preflight budget. A provider that
+  does not answer in what is left of it leaves `preflight.status: "timeout"`.
+- The provider's script runs from its package's tree in the deployment's
+  module store, which the preview fetches there, verified, when it is absent:
+  the one thing a preview may write, a cache `oats readiness --soul` fills the
+  same way. A provider in a **member module** runs only from a spawned home,
+  so it is not asked, and `warnings` carries one line that says so; the spawn
+  still asks it.
+- A provider that declares no `check`, a tmux launch and a `--no-launch`
+  spawn ask nothing.
+
 ```json
 {"modules":[
    {"name":"nw-tools","from":{"kind":"member","repoKey":"github.com/nw/agents","commit":"66566512…"},"layer":null,"private":false,"declares":[],
@@ -7666,7 +7687,11 @@ hold the listing up. A client has no use for it.
 **Launch preview.** `oats launch-config preview --home <abs> --json` of a
 provider home answers `command: null`, `argv: null` and `executable.path:
 null` (its launch is handed to the provider as data), `environment` by name,
-and a `backend` item in `preflight`.
+and a `backend` item in `preflight`. The preview asks the provider's `check`
+with the launch that is planned, as the start will before it stops anything:
+a launch the provider would refuse is a failed `backend` item (`code`: the
+start's refusal, `E_BACKEND_*`), and `ok` is false. Nothing is stopped,
+started or created.
 
 ### Input
 
