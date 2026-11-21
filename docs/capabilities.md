@@ -1369,11 +1369,17 @@ claim's reason. A bridge tells its own claim by that mark, never by the claim's
 reason, and clears only its own. A holder that is alive keeps its claim: a
 second pi's first run does not clear it, and another pi's `attention` never
 replaces its `question`; only a `question` replaces another live pi's
-`attention`. A claim nobody alive holds is cleared by the home's next pi: a
+`attention`. A pi whose claim a live holder blocks looks again every second, so
+a second pi's open dialog is claimed once the first pi's has closed. A claim
+nobody alive holds is cleared by the home's next pi: a
 `question` whose holder is gone (a pi killed with its dialog open) when that pi
 starts, and a failed turn's, or a claim with no mark (a bridge from before the
-mark left it), at its first run. A session that ends on a failed turn leaves
-the claim and removes its mark. The mark is in the agent's own home and decides
+mark left it), at its first run; a pi that starts and ends with no run clears
+no failed turn. A session that ends on a failed turn leaves
+the claim and removes its mark. Two limits: bridges are not fenced against each
+other, so one pi's clear that lands just after another pi's set leaves that
+pi's dialog with no claim until it closes; and a failed turn that another pi's
+question replaced is not shown again when that dialog closes. The mark is in the agent's own home and decides
 only claims the agent could set or clear itself, so it needs no protection from
 the agent, in a sandboxed home either. Every write is producer `oats.pi`'s: no
 other producer's claim is touched.

@@ -87,12 +87,15 @@ function readMark(home) {
  *  closed while an earlier write was under way starts no process. A step reads the
  *  mark, then:
  *  - to show a claim: writes its own mark, then the claim. A live holder's claim
- *    stays instead, unless this one is a question and that one a failed turn.
+ *    stays instead, unless this one is a question and that one a failed turn. A
+ *    bridge so blocked looks again every second while it still has a claim to show,
+ *    so a second pi's open dialog is claimed once the first pi's has closed.
  *  - to show none: clears the claim its own mark stands for, then removes the mark.
- *    This bridge's first step also clears what nobody alive holds: a mark whose
- *    holder is gone, or a claim with no mark (a bridge from before the mark left
- *    it, or a session that ended on a failed turn). After that, a step with no
- *    claim to clear starts no process.
+ *    Once a run has started, this bridge's first such step also clears what nobody
+ *    alive holds: a mark whose holder is gone, or a claim with no mark (a bridge
+ *    from before the mark left it, or a session that ended on a failed turn). A
+ *    session that starts and ends with no run clears no leftover. After that, a
+ *    step with no claim to clear starts no process.
  *  - when its session starts (`session_start`): clears only the question of a holder
  *    that is gone, a pi that died with its dialog open. A failed turn waits for the
  *    next run, as before.
@@ -102,7 +105,17 @@ function readMark(home) {
  *  that exits would leave a dialog's claim behind. A failed turn's claim outlives the
  *  session, as before, and gives up its mark, so the next bridge's first run clears
  *  it. A write is bounded by its timeout, and a failed one is dropped, as is a mark
- *  that cannot be written: reporting must never break a session. */
+ *  that cannot be written: reporting must never break a session.
+ *
+ *  Two bridges are not fenced against each other: a step reads the mark and then
+ *  writes, so a clear that read "nobody alive holds it" can land after another pi's
+ *  set, and that pi's dialog then has no claim until it closes. The window is the
+ *  two kernel calls' jitter. A failed turn that another pi's question replaced is
+ *  not shown again when that dialog closes: its bridge learns of it only at its
+ *  next step. */
+/** How often a bridge whose claim a live holder blocks looks again, in ms. */
+const BLOCKED_RETRY_MS = 1000;
+
 export function waitingClaim(pi, home) {
   const self = { pid: process.pid, start: processStart(process.pid), token: randomUUID() };
   const mine = (mark) => mark !== null && mark.pid === self.pid && mark.token === self.token;
@@ -111,6 +124,11 @@ export function waitingClaim(pi, home) {
   // What this bridge's claim says, "" for none; undefined until its first step.
   let shown;
   let steps = Promise.resolve();
+  // The timer of a blocked bridge's next look, and whether the session has ended (no look after).
+  let retry;
+  let ended = false;
+  // Whether a run has started or ended in this bridge's time: only then is a leftover its to clear.
+  let ran = false;
 
   const waiting = (...args) => new Promise((done) => {
     const argv = ["instance", "waiting", ...args, "--producer", "oats.pi", "--home", home, "--json"];
@@ -136,6 +154,7 @@ export function waitingClaim(pi, home) {
 
   const wanted = () => question !== undefined ? ["question", question] : failure !== undefined ? ["attention", failure] : [];
   const step = async () => {
+    clearTimeout(retry);
     const [reason, message] = wanted();
     const next = reason === undefined ? "" : `${reason} ${message}`;
     if (next === shown) return;
@@ -143,10 +162,11 @@ export function waitingClaim(pi, home) {
     const mark = readMark(home);
     const other = mark !== null && !mine(mark) && holderAlive(mark) ? mark : null;
     if (reason === undefined) {
-      // Its own claim, when no live holder took it over; on a first step, a leftover too.
-      const clears = other === null && (first || shown !== "");
+      // Nothing of its own yet, and what an earlier pi left waits for a run.
+      if (first && !ran) return;
+      // Its own claim, or on its first run a leftover, unless a live holder has the claim.
       shown = "";
-      if (!clears) return;
+      if (other !== null) return;
       await waiting("clear");
       const left = readMark(home);
       if (left === null || mine(left) || !holderAlive(left)) removeMark();
@@ -156,6 +176,9 @@ export function waitingClaim(pi, home) {
       // The holder's claim stays, and this bridge shows none. Blocked on its first step, it has
       // yet to look for a leftover.
       shown = first ? undefined : "";
+      if (ended) return;
+      retry = setTimeout(change, BLOCKED_RETRY_MS);
+      retry.unref?.();
       return;
     }
     shown = next;
@@ -165,6 +188,7 @@ export function waitingClaim(pi, home) {
   const change = () => then(step);
 
   pi.on("session_start", () => {
+    ended = false;
     then(async () => {
       const mark = readMark(home);
       if (mark === null || mark.reason !== "question" || mine(mark) || holderAlive(mark)) return;
@@ -173,6 +197,7 @@ export function waitingClaim(pi, home) {
     });
   });
   pi.on("session_shutdown", () => {
+    ended = true;
     question = undefined;
     change();
     then(() => { if (mine(readMark(home))) removeMark(); });
@@ -180,6 +205,6 @@ export function waitingClaim(pi, home) {
   });
   return {
     asked(message) { question = message; change(); },
-    turnFailed(message) { failure = message; change(); },
+    turnFailed(message) { ran = true; failure = message; change(); },
   };
 }
