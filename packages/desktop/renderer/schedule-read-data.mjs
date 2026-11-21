@@ -13,9 +13,10 @@ const draftString = v => typeof v === 'string' && v.length <= 1048576 && !v.incl
 /** Exact legacy editor inputs only: no previews/redactions/trim, no captured fields.
  * If the adapter cannot preserve a definition, it is not an editable draft.
  * `backends`: the session backends a caller's form can keep (packages/client/session-backends.mjs
- * `sessionBackendNames` gives the names the kernel lists); "tmux" alone when none is given, which is what the
- * Schedules form passes today: it offers and keeps tmux only, so a schedule on a session provider is not a draft
- * and is edited with the CLI. A spawn schedule whose `backend` is one of `backends` is a draft; any other is not. */
+ * `sessionBackendNames` gives the names the kernel lists); "tmux" alone when none is given. The Schedules form
+ * (views/schedules.mjs) admits a stored session provider for now, to open, and then decides with the names the
+ * kernel lists for the schedule's soul: a schedule on a provider the soul does not offer is not a draft and is
+ * edited with the CLI. A spawn schedule whose `backend` is one of `backends` is a draft; any other is not. */
 export function scheduleDraft(v, { backends = ['tmux'] } = {}) {
   if (!record(v) || policyKeys.some(k => Object.hasOwn(v, k)) || !scheduleId(v.id)
     || !['spawn', 'wake', 'operation'].includes(v.kind) || !draftString(v.cron) || !v.cron.trim()

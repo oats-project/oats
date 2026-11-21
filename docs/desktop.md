@@ -911,7 +911,12 @@ on a Soul roster card preselects that soul. Choose the task or message, repeat
 pattern and time zone; new agent jobs also offer harness, model, permissions
 and session backend. The list shows the next run, last observed outcome and
 whether the host scheduler is enabled. Pause, edit, run now and delete operate
-on that workspace's saved jobs. Launching an agent is reported separately from
+on that workspace's saved jobs. The session backend is tmux or a session
+provider the chosen soul offers (bb, where the soul has it). bb launches only
+in full mode, so choosing it sets permissions to YOLO; a schedule saved without
+it is marked **Refused at each run** or **Needs YOLO** in the list. A wake to
+an agent on a session provider is sent as its session's input and never
+starts a stopped one: it is delivered once the agent runs again. Launching an agent is reported separately from
 the end of its run; neither means its task succeeded. While a schedule's last
 run is **launch failed** or **invalid**, the sidebar's **Automations** shows a
 red dot, and a screen reader hears "Automations, a run failed"; it clears once

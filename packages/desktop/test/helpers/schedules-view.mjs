@@ -15,7 +15,8 @@ const job = { ...spec, id: "review", nextRun: "2026-09-07T12:00:00Z", lastRun: {
 // verbs (add/update/remove/reconcile/host-install) on /api/schedules.
 const localRow = s => ({ ...s, name: s.id, qualifiedId: `local/${s.id}`, origin: { kind: "local", path: "local" }, owner: null, runsOn: null,
   runsHere: true, reason: null, enabledHere: s.enabled !== false, soul: null, teams: [], nextDue: s.nextRun || null });
-function setup({ mutate, read, instances = [{ home, instance: "reviewer-seat" }], cliFacts = {}, host = { installed: true, active: true, registered: true, lastTick: "2026-09-07T11:59:00Z", maxConcurrent: 1 } } = {}) {
+const reviewer = { name: "reviewer", repo: "src", repoName: "src", agentsRoot: "/team/src/agents", work: "worktree" };
+function setup({ mutate, read, instances = [{ home, instance: "reviewer-seat" }], agents = [reviewer], cliFacts = {}, host = { installed: true, active: true, registered: true, lastTick: "2026-09-07T11:59:00Z", maxConcurrent: 1 } } = {}) {
   const dom = new JSDOM("<body><main></main></body>", { pretendToBeVisual: true }); const el = dom.window.document.querySelector("main");
   const calls = []; setWorkspace("/team");
   const ctx = { api: async (path, opts) => {
@@ -28,7 +29,7 @@ function setup({ mutate, read, instances = [{ home, instance: "reviewer-seat" }]
         result: { scheduleApi: 2, host: { name: "laptop" }, snapshot: null, scheduler: raw.scheduler, schedules: raw.schedules.map(localRow) } };
     }
     if (opts?.method === "POST") return mutate ? mutate(path, JSON.parse(opts.body)) : { schedule: job };
-    if (path.startsWith("/api/agents")) return { agents: [{ name: "reviewer", repo: "src", repoName: "src", agentsRoot: "/team/src/agents", work: "worktree" }] };
+    if (path.startsWith("/api/agents")) return { agents };
     if (path.startsWith("/api/panel")) return { instances };
     assert.fail(path);
   } };

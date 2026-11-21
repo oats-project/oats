@@ -2372,13 +2372,15 @@ home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
   selected target (Open in split) speaks only of that target: when its own read holds the
   home's replacement, it says the identity changed.
 
-The Schedules form is unchanged: it offers and keeps tmux only, so a schedule whose `backend` is a session
-provider is refused as before ("edit it with the CLI"). `scheduleDraft` takes the backends a form can keep
-(`schedule-read-data.mjs`, "tmux" alone by default) and `packages/client/session-backends.mjs` gives the names
-the kernel lists; a form that keeps a provider's schedule, with the read of its soul's inspection that needs,
-comes with the New agent form's backend choice.
+The Schedules form offers a spawn schedule the session providers of its soul and keeps a stored one
+(`views/schedules.mjs`; `scheduleDraft` takes the backends the kernel lists for the soul,
+`packages/client/session-backends.mjs` `sessionBackendNames`). An Edit of such a schedule opens the form at once
+and holds it until the soul's inspection answers; a later Edit, a Delete, a list read, another workspace and the
+automations page's own acts (its `onBusy`) drop it. A provider that launches only in full mode takes YOLO
+(`FULL_MODE_ONLY_PROVIDERS`). In full: [the local form](../docs/desktop-automations.md#the-local-form). The New
+agent form still offers tmux alone.
 
-Tests: `provider-rows.test.mjs`, and the A4 cases of `workspace-tab-memory.test.mjs`,
+Tests: `provider-rows.test.mjs`, `schedules-provider.test.mjs`, and the A4 cases of `workspace-tab-memory.test.mjs`,
 `retired-tabs.test.mjs` and `instance-tree.test.mjs`.
 
 ### The agent view (`agent-board.mjs`, `agent-board-tabs.mjs`)

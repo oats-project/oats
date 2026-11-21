@@ -1357,10 +1357,14 @@ for (const [name] of palettes) test(`${name}: the schedule form sheet and delete
   for (let i = 0; i < 4; i++) await new Promise(resolve => setImmediate(resolve));
   doc.querySelector('.auto-row[data-id="local/digest"] .auto-menu button[data-verb=remove]').click();
   const root = dom.window.getComputedStyle(doc.documentElement);
+  // The form's warning note (a schedule stored without YOLO on a provider that launches only in full mode): the view
+  // sets the class on its note (schedules-provider.test.mjs pins when); here the rule is resolved in each theme.
+  doc.querySelector('.schedule-yolo-note').classList.add('schedule-warn');
   for (const [selector, painted, fg, bg] of [
     ['.schedule-form label', '.schedule-form', 'fg', 'surface'],
     ['.schedule-form .schedule-hint', '.schedule-form', 'muted', 'surface'],
     ['.schedule-form .schedule-error', '.schedule-form', 'danger', 'surface'],
+    ['.schedule-form .schedule-warn', '.schedule-form', 'warn', 'surface'],
     ['.schedule-confirm h3', '.schedule-confirm', 'fg', 'surface'],
     ['.schedule-confirm p', '.schedule-confirm', 'muted', 'surface'],
     ['.schedule-delete-confirm', '.schedule-delete-confirm', 'danger', 'surface'],

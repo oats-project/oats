@@ -10,7 +10,7 @@
 import {
   automationRows, groupRows, filterRows, placementText, ownerParts, taskParts, cronInWords, onSummary, relativeTime,
   hostLogin, templateLabel, soulOriginText, testResult, triggerStatus, summaryLine, runState, reconcileCommand, templateProvenance, eventLabel, firedEntry,
-  triggerSourcesSupported, capabilitySource, sourceLabel, sourceParams, sourceCheck, taskFields, causeWords, ruleWords, EVENTS_SHOWN,
+  triggerSourcesSupported, capabilitySource, sourceLabel, sourceParams, sourceCheck, taskFields, causeWords, ruleWords, EVENTS_SHOWN, scheduleRefusal,
 } from '../automation-rows.mjs';
 import { sourceQuote, sourceQuoteCSS, LEAD_INS } from '../source-quote.mjs';
 import { displayLine } from '../../../client/display-text.mjs';
@@ -197,8 +197,12 @@ const OUTCOMES = { launched: 'agent launched', active: 'agent active', running: 
  * github.pull_request a capability-source row: its On card, last poll, refused and skipped events, source check and
  * the informed Test (a confirm first: its Test runs a capability's command on this computer). Without it nothing
  * changes. canOpenCapability(name) / openCapability(name): the source's capability page, when the catalog lists it. */
+/** onBusy(busy): told when one of the page's OWN acts begins (true) and ends (false): a switch, a run, a test, a
+ * summary's save. A view that extends the page (views/schedules.mjs) holds its own work back while one runs, and
+ * drops what it read before one began. Never told of the busy state that view sets itself (setBusy), nor of the
+ * banner's action, which is that view's. */
 export function createAutomationsView(host, { kind, read, act = null, status = null, openFile = null, now = () => Date.now(),
-  verbs = null, headerActions = null, rowActions = null, onEnableScheduler = null, onResult = null, heading = null, onCount = null, describe = null,
+  verbs = null, headerActions = null, rowActions = null, onEnableScheduler = null, onResult = null, heading = null, onCount = null, describe = null, onBusy = null,
   sources = false, canOpenCapability = () => false, openCapability = null } = {}) {
   const doc = host.ownerDocument;
   const node = (tag, value, cls) => { const el = doc.createElement(tag); if (value !== undefined && value !== null) el.textContent = value; if (cls) el.className = cls; return el; };
@@ -218,6 +222,10 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
 
   let alive = true, serial = 0, data = null, failure = '', loading = false, origin = 'all', query = '', openId = null, busy = false, notice = '';
   const tests = new Map(), statuses = new Map();
+  // The page's own acts, as onBusy hears them: one in flight (`acting`), or a summary being saved.
+  let acting = false;
+  const tellBusy = () => onBusy?.(acting || describeBusy);
+  const setActing = v => { acting = v; tellBusy(); };
   // Capability sources. `confirming`: the row whose Test confirm shows (with that row as it was: confirmSig);
   // `testing`: the row whose confirmed test runs.
   // `confirmToken`: the one confirm that is open, as an identity. Its Cancel and Run test are bound to it, so a
@@ -282,7 +290,7 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
     if (!act || busy) return;
     // A capability source's Test is never one click: it goes through its confirm (runConfirmed), from every entry.
     if (verb === 'test' && sourceOf(row)) { openConfirm(row); return; }
-    busy = true; ranNothing = null; render();
+    busy = true; ranNothing = null; setActing(true); render();
     // A test's answer is the answer about the source it was asked for: one that lands after the row's source
     // changed (success or failure) leaves no result.
     let unconfirmed = false; const gen = genOf(row.id), current = () => genOf(row.id) === gen;
@@ -307,7 +315,7 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
       else failure = error?.message || String(error);
     } finally {
       if (alive) {
-        busy = false; render();
+        busy = false; setActing(false); render();
         if (unconfirmed) { await refresh(); if (alive && openId === row.id && (!doc.activeElement || doc.activeElement === doc.body)) focusKey('test'); }
       }
     }
@@ -341,7 +349,7 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
     // The answer is the one about this source as it was confirmed: a row whose source changed meanwhile (even
     // back again) keeps no result of the test asked before the change.
     const keep = result => { if (genOf(row.id) === gen) { tests.set(row.id, result); kept = true; } };
-    testing = row.id; busy = true; render(); focusKey('confirm-status');
+    testing = row.id; busy = true; setActing(true); render(); focusKey('confirm-status');
     try {
       const result = testResult(await act('test', row, { runSource: true }), kind, { source });
       if (!alive) return;
@@ -353,7 +361,7 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
       if (alive) {
         // Focus follows the answer only where the operator still is: on this page, in the confirm (or nowhere).
         const at = doc.activeElement, here = openId === row.id && (!at || at === doc.body || !!page.querySelector('.auto-confirm')?.contains(at));
-        testing = null; busy = false; if (confirming === row.id) revokeConfirm(); render();
+        testing = null; busy = false; setActing(false); if (confirming === row.id) revokeConfirm(); render();
         if (here) focusKey(failed || !kept ? 'test' : 'result-title');
       }
     }
@@ -384,6 +392,10 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
     const check = !row.unreadable && sourceOf(row) ? sourceCheck(row.invalid) : null;
     if (check?.at) { const t = node('span', undefined, 'auto-tag warn auto-source-check'); t.append(iconElement(doc, 'warning', { size: 11 }), node('span', 'Source check failed')); t.title = check.message || check.code || ''; tags.append(t); }
     else if (bad) { const t = node('span', row.unreadable ? 'Unreadable' : 'Invalid', 'auto-tag warn'); t.title = bad.message || bad.code || ''; tags.append(t); }
+    // A spawn on a session provider that launches only in full mode, stored without it (automation-rows.mjs
+    // `scheduleRefusal`): said in the row, in words, with the whole sentence as the tag's title and on its page.
+    const refusal = scheduleRefusal(row);
+    if (refusal) { const t = node('span', undefined, 'auto-tag warn auto-full-mode'); t.append(iconElement(doc, 'warning', { size: 11 }), node('span', refusal.tag)); t.title = refusal.sentence; tags.append(t); }
     const template = templateLabel(row.template);
     if (template) { const t = node('span', undefined, 'auto-tag muted'); t.append(iconElement(doc, 'package', { size: 11 }), node('span', template)); t.title = `From the package template ${template}${row.template.version ? ` ${row.template.version}` : ''}`; tags.append(t); }
   }
@@ -598,6 +610,8 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
         ['Harness', [row.harness ? harnessName(row.harness) : null, row.model].filter(Boolean).join(' · ')], ['Launch config', row.launchConfig],
         ['Permissions', row.yolo === true ? 'YOLO — skips permission prompts' : row.yolo === false ? 'Native permission policy' : null], ['Backend', row.backend], ['Concurrency', conc],
         ['Wakes it', wake, row.wake ? row.wake.cron : null], ['Wake message', row.wake?.message, null, 'wrap']]));
+      const refusal = scheduleRefusal(row);
+      if (refusal) spawns.body.append(node('p', refusal.sentence, 'auto-test-line warn auto-full-mode-line'));
       cards.append(spawns.card);
     }
     main.append(cards);
@@ -948,7 +962,7 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
     return [...listHost.querySelectorAll('.auto-row')].find(r => r.dataset.id === id)?.querySelector('.auto-menu summary') || null;
   }
   function closeDescribe() {
-    const id = describing; ++describeSerial; describing = null; describeBusy = false; sheet.hidden = true; paintSheet();
+    const id = describing; ++describeSerial; describing = null; describeBusy = false; tellBusy(); sheet.hidden = true; paintSheet();
     describeReturn(id)?.focus(); describeOpener = null;
   }
   form.addEventListener('submit', async e => {
@@ -959,11 +973,11 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
     // Sent as typed: only "" clears; the kernel keeps boundary spaces, and refuses what breaks its rule.
     const value = summaryInput.value;
     if (value && !descriptionValid(value)) { sheetError.textContent = `A summary is one line of up to ${DESCRIPTION_MAX} characters, without control characters.`; summaryInput.focus(); return; }
-    const my = ++describeSerial; describeBusy = true; sheetError.textContent = ''; paintSheet(); sheetStatus.focus();
+    const my = ++describeSerial; describeBusy = true; tellBusy(); sheetError.textContent = ''; paintSheet(); sheetStatus.focus();
     try {
       await describe(row, value);
       if (!alive || my !== describeSerial) return;
-      describeBusy = false; sheet.hidden = true; paintSheet(); describing = null;
+      describeBusy = false; tellBusy(); sheet.hidden = true; paintSheet(); describing = null;
       describeReturn(row.id)?.focus();
       await refresh();
       // The re-read repaints the page: put focus back on the same control by identity, unless it moved on.
@@ -971,7 +985,7 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
       describeOpener = null;
     } catch (error) {
       if (!alive || my !== describeSerial) return;
-      describeBusy = false; paintSheet();
+      describeBusy = false; tellBusy(); paintSheet();
       sheetError.textContent = error?.message || String(error); summaryInput.focus();
     }
   });
@@ -1018,7 +1032,7 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
   const closeMenus = e => { for (const m of root.querySelectorAll('.auto-menu[open]')) if (!m.contains(e.target)) m.open = false; };
   doc.addEventListener('click', closeMenus);
   render(); void refresh();
-  return { refresh, open: openRow, describe: id => { const row = rowById(id); if (row) openDescribe(row); }, repaint() { render(); }, setNotice(text) { notice = text || ''; render(); }, setBusy(v) { busy = !!v; render(); }, dispose() { alive = false; revokeConfirm(); serial++; describeSerial++; doc.removeEventListener('click', closeMenus); root.remove(); } };
+  return { refresh, open: openRow, describe: id => { const row = rowById(id); if (row) openDescribe(row); }, repaint() { render(); }, setNotice(text) { notice = text || ''; render(); }, setBusy(v) { busy = !!v; render(); }, dispose() { alive = false; if (acting || describeBusy) { acting = false; describeBusy = false; tellBusy(); } revokeConfirm(); serial++; describeSerial++; doc.removeEventListener('click', closeMenus); root.remove(); } };
 }
 
 /** The Desktop shows these pages only for an OATS that reports them (kernel 0.29.0). */
