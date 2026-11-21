@@ -13,9 +13,10 @@
     schedule's preview did not carry it);
   - a job with no `yolo` is refused when saved (`E_SCHEDULE_INVALID`,
     `details.code: "E_BACKEND_SANDBOXED_MODE"`), and `oats schedule test`
-    reports it, where it used to fail only at its run. One
-    saved without the preview (its soul was already spawned in the
-    deployment) fails at each run, `launch-failed` with `errorCode:
+    reports it, where it used to fail only at its run. One the
+    save did not ask the provider about (its soul was already spawned in
+    the deployment, or the provider comes from a member module, which a
+    preview does not ask) fails at each run, `launch-failed` with `errorCode:
     "E_BACKEND_SANDBOXED_MODE"`, and leaves no home.
 
 ## Documentation

@@ -201,8 +201,10 @@ refuses the key on a trigger.
   [default for the harness](configuration.md#the-harness-default). Without
   it `add` and `update` refuse the job where they ask the preview
   (`E_SCHEDULE_INVALID`, with `details.code: "E_BACKEND_SANDBOXED_MODE"`),
-  and `oats schedule test` reports it. A job saved without the preview (its
-  soul was already spawned here) fails at each run: the run is recorded
+  and `oats schedule test` reports it. A job the save did not ask the
+  provider about (its soul was already spawned here, so `add` and `update`
+  ask no preview; or the provider comes from a member module, which a
+  preview does not ask) fails at each run: the run is recorded
   `launch-failed` with `errorCode: "E_BACKEND_SANDBOXED_MODE"` and the
   provider's message, its spawn is undone and no home is left; the job tries
   again at its next due minute.
@@ -242,10 +244,13 @@ refuses the key on a trigger.
   A home on a [session provider](execution-targets.md#session-providers) has
   no terminal: the message is its session's input, sent once through the
   provider, and a live claim holds it the same way. **A wake never starts a
-  provider home.** For a home OATS stopped the input is refused before any
-  provider call: the run is `skipped` with `errorCode:
-  "E_SESSION_NOT_RUNNING"`, and the delivery stays pending until the home is
-  started (`oats session start`). An input the provider itself refuses
+  provider home OATS stopped.** Its input is refused before any provider
+  call: the run is `skipped` with `errorCode: "E_SESSION_NOT_RUNNING"`, and
+  the delivery stays pending until the home is started (`oats session
+  start`). To a session that is lost (gone, and not stopped by OATS) the
+  input is a resume, on which the provider restarts the session, counted
+  against the home's cap
+  ([lost sessions](execution-targets.md#session-providers)). An input the provider itself refuses
   (`E_SESSION_PROMPT_OPEN` while its session shows a prompt,
   `E_SESSION_INPUT_QUEUED`) is `skipped` with that `errorCode`: nothing was
   sent, and the pending delivery is tried again at every tick, then delivered
