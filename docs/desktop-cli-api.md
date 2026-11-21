@@ -2820,7 +2820,9 @@ oats spawn <soul> [the flags of a real spawn] --preview [--max-age <s>] --json
 ```
 
 Feature `spawn-preview-2`, `spawnPreviewApi: 2`. The preview runs every
-preflight a spawn runs and writes nothing, on success or refusal. It reads the
+preflight a spawn runs and writes nothing of the deployment's state, on
+success or refusal (one cache may be filled: a session provider's package
+tree, below). It reads the
 soul from the per-commit cache (`agents/<soul>/souls/<commit12>/`) or fetches
 it to a temporary copy (`soulFetched: true`).
 
@@ -7690,8 +7692,10 @@ null` (its launch is handed to the provider as data), `environment` by name,
 and a `backend` item in `preflight`. The preview asks the provider's `check`
 with the launch that is planned, as the start will before it stops anything:
 a launch the provider would refuse is a failed `backend` item (`code`: the
-start's refusal, `E_BACKEND_*`), and `ok` is false. Nothing is stopped,
-started or created.
+start's refusal, `E_BACKEND_*`), and `ok` is false. So is an allowance's path
+the start would refuse to make (`E_BACKEND_SANDBOX_HOST`); `warnings` carries
+the start's `sandbox allowances: …` lines. Nothing is stopped, started or
+created.
 
 ### Input
 

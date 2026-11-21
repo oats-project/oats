@@ -4,7 +4,7 @@
 // default read complete, and the spawn was then refused E_BACKEND_SANDBOXED_MODE).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { stopInstanceSession } from "../lib/core.mjs";
 import { writeLock } from "../lib/packages.mjs";
@@ -72,6 +72,21 @@ test("a spawn preview on a session provider asks the provider's check with the p
   assert.equal(existsSync(homeOf(fx)), false, "the refused spawn was undone");
 });
 
+test("the check a spawn preview asks is the check the spawn asks: the same input, and the same environment (settings, soul, level, backend), for a home that is not there yet", (t) => {
+  const fx = packagedProvider(t);
+  const told = (c) => ({ input: c.request.input, settings: c.settings, soul: c.soul, soulId: c.soulId, level: c.level, instance: c.instance, backend: c.backend, event: c.event, capability: c.capability, cwd: c.cwd });
+  const previewed = fx.cli(["spawn", "dev", "--name", "twin", "--backend", "fake", "--launch-config", "claude", "--preview", "--json"]);
+  assert.equal(previewed.status, 0, previewed.stdout);
+  const atPreview = told(fx.verbs("check")[0]);
+  fx.clearCalls();
+  const applied = fx.cli(["spawn", "dev", "--name", "twin", "--backend", "fake", "--launch-config", "claude", "--json"]).json();
+  assert.equal(applied.ok, true, JSON.stringify(applied));
+  const atApply = told(fx.verbs("check")[0]);
+  // (`cwd`: the root of the file system for both; the script is the package's tree for the one, the kernel's copy for the other.)
+  assert.deepEqual(atPreview, atApply);
+  assert.deepEqual([atPreview.level, atPreview.soul.startsWith(join(fx.root, "dev", "souls") + "/")], [applied.result.home, true], "the level is the home, and the soul its commit's directory, never a preview's temporary copy");
+});
+
 test("a provider that cannot be asked fails the preview E_BACKEND_NOT_READY, as it fails the apply; one that outlasts the preview's budget leaves the preflight a timeout", (t) => {
   const fx = packagedProvider(t);
   for (const [control, said] of [[{ check: { exit: 3 } }, /the check command exited 3/], [{ check: { raw: "not json" } }, /its readiness could not be read/]]) {
@@ -89,6 +104,11 @@ test("a provider that cannot be asked fails the preview E_BACKEND_NOT_READY, as 
   assert.deepEqual([slow.json().ok, slow.json().result.preflight.status, slow.json().result.preflight.budgetMs], [true, "timeout", 1500]);
   assert.ok(slow.json().result.preflight.elapsedMs >= 1500 && slow.json().result.preflight.elapsedMs < 15000, "the check was ended at the budget");
   nothingCreated(fx);
+  // Slower than a check's OWN limit, with budget to spare: the apply would refuse it, and so does the preview.
+  const overLimit = preview(fx, [], { OATS_TEST_SESSION_PROVIDER_TIMEOUT_MS: "1000" });
+  assert.equal(overLimit.status, 1);
+  assert.deepEqual([overLimit.json().ok, overLimit.json().error.code], [false, "E_BACKEND_NOT_READY"], overLimit.stdout);
+  assert.match(overLimit.json().error.message, /did not answer check within 1 s and was killed/);
 });
 
 test("a preview that cannot ask says so and goes on: a provider in a member module, which runs only from a spawned home; a provider with no check is not asked; a spawn that launches nothing asks nothing", (t) => {
@@ -142,4 +162,26 @@ test("a launch preview of a provider home asks the check a start will ask: a ref
   // The start it previews is refused with that code.
   const started = fx.cli(["session", "start", "--home", home, "--json"]).json();
   assert.deepEqual([started.ok, started.error.code], [false, "E_BACKEND_SANDBOXED_MODE"], JSON.stringify(started));
+});
+
+test("a launch preview refuses what the start refuses of the allowances' paths: an events directory reached through a link is a failed backend check, and the provider is not asked", async (t) => {
+  // A messaging provider, whose host makes the events directory one of the paths a sandbox may write.
+  const fx = providerDeployment(t, { manifest: CHECKED,
+    capabilities: { "acme.msg": { manifest: { layer: "messaging", settings: { server: { default: "" } }, sandboxDomains: [{ setting: "server" }] }, files: {} } },
+    souls: { dev: { soul: { capabilities: { [FAKE_CAPABILITY]: { from: "here" }, "acme.msg": { from: "here" } }, messaging: { server: "https://app.example.org/x" } } } } });
+  const { home } = await fx.launch("seat");
+  await fx.inEnv(() => stopInstanceSession(home, {}));
+  // (A command that reads the workspace brings it to this host: what a start then resolves the allowances from.)
+  assert.equal(fx.cli(["spawn", "dev", "--backend", "fake", "--launch-config", "claude", "--preview", "--json"]).status, 0);
+  const events = join(realpathSync(fx.dep), ".agents", "events");
+  rmSync(events, { recursive: true, force: true });
+  mkdirSync(join(fx.dep, "elsewhere"));
+  mkdirSync(join(fx.dep, ".agents"), { recursive: true });
+  symlinkSync(join(fx.dep, "elsewhere"), events);
+  fx.clearCalls();
+  const previewed = fx.cli(["launch-config", "preview", "--home", home, "--json"]).json();
+  assert.deepEqual([previewed.ok, previewed.result.ok, previewed.result.preflight.filter((c) => !c.ok).map((c) => [c.check, c.code])], [true, false, [["backend", "E_BACKEND_SANDBOX_HOST"]]], JSON.stringify(previewed).slice(0, 600));
+  assert.deepEqual([fx.verbs(), readdirSync(join(fx.dep, "elsewhere"))], [[], []], "nothing was asked, and nothing made through the link");
+  const started = fx.cli(["session", "start", "--home", home, "--json"]).json();
+  assert.deepEqual([started.ok, started.error.code], [false, "E_BACKEND_SANDBOX_HOST"], JSON.stringify(started));
 });

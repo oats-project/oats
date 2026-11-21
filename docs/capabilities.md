@@ -2294,11 +2294,14 @@ from, never print it.
   - A spawn's preview (`oats spawn --preview`) hands you the home's
     **planned path, which does not exist yet**, `trees` with its one planned
     tree and `protected` by name, none of them made. Treat an absent home
-    and absent files as absent, not as an error. Your script then runs from
+    and absent files as absent, not as an error. Your environment is the
+    spawn's too; `OATS_SOUL` and `OATS_LEVEL` may name directories that are
+    not there yet. Your script then runs from
     your package's tree in the deployment's module store, as it does for
     `oats readiness --soul`, not from a home's copy. A refusal fails the
     preview with the code the spawn would be refused with, and nothing is
-    created. A provider that lives in a member module, which runs only from
+    created. You are given what is left of the preview's budget, and never
+    more than a launch gives you. A provider that lives in a member module, which runs only from
     a spawned home, is not asked: the preview says so in its `warnings`.
   - A launch's preview (`oats launch-config preview --home`) hands you the
     home as a start would. A refusal is a failed `backend` item in its
