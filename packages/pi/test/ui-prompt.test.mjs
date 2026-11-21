@@ -536,6 +536,43 @@ test("a clear the kernel did not take keeps the mark and is tried again: at the 
   }
 });
 
+test("a question's clear the kernel did not take is tried again by itself: a quiet session has no next event to bring it", async (t) => {
+  const { home, shim, log, calls } = recordingHome(t);
+  writeFileSync(shim, `#!${process.execPath}\nconst fs = require("node:fs"), argv = process.argv.slice(2), failed = ${JSON.stringify(join(home, "failed-once"))};\nfs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(argv) + "\\n");\nif (argv[2] === "clear" && !fs.existsSync(failed)) { fs.writeFileSync(failed, ""); process.exit(1); }\n`);
+  const fire = session(home);
+  await fire("ui_prompt_start", opened("select", "Pick one"));
+  await settle(() => calls().length === 1);
+  await fire("ui_prompt_end");
+  await settle(() => calls().length === 3);
+  assert.deepEqual(calls(), [questionArgv(home, "Pick one"), clearArgv(home), clearArgv(home)], "no event since the dialog closed");
+  await settle(() => markOf(home) === null);
+  await new Promise((r) => setTimeout(r, 1200));
+  assert.equal(calls().length, 3, "once it lands, no more");
+});
+
+test("a reload after a question's clear the kernel did not take: the process's next bridge clears it as it starts, and claims its own dialogs", async (t) => {
+  const { home, shim, log, calls } = recordingHome(t);
+  const recording = readFileSync(shim, "utf8");
+  const before = session(home);
+  await before("ui_prompt_start", opened("select", "Q1"));
+  await settle(() => calls().length === 1);
+  writeFileSync(shim, `#!/bin/sh\nexit 1\n`);
+  await before("session_shutdown", { type: "session_shutdown", reason: "reload" });
+  assert.deepEqual({ pid: markOf(home)?.pid, reason: markOf(home)?.reason }, { pid: process.pid, reason: "question" }, "left by a bridge of this very process");
+  writeFileSync(shim, recording);
+  const after = session(home);
+  await after("session_start", { type: "session_start", reason: "reload" });
+  await settle(() => calls().length === 2);
+  assert.deepEqual(calls()[1], clearArgv(home));
+  await settle(() => markOf(home) === null);
+  await after("ui_prompt_start", opened("select", "Q2"));
+  await settle(() => calls().length === 3);
+  assert.deepEqual(calls()[2], questionArgv(home, "Q2"));
+  await after("ui_prompt_end");
+  await settle(() => calls().length === 4);
+  assert.deepEqual(calls()[3], clearArgv(home));
+});
+
 test("a pi that exits with its question's clear never taken leaves the mark, and the home's next pi clears the claim as it starts", async (t) => {
   const { home, shim, log, calls } = recordingHome(t);
   const recording = readFileSync(shim, "utf8");

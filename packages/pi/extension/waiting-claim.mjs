@@ -116,8 +116,9 @@ function readMark(home) {
  *  session, as before, and gives up its mark, so the next bridge's first run clears
  *  it. A write is bounded by its timeout. A set the kernel did not take is dropped,
  *  as is a mark that cannot be written; a clear it did not take keeps the mark and is
- *  tried again at the bridge's next step, because a question left standing holds
- *  every wake. Reporting must never break a session.
+ *  tried again at the bridge's next step, and a question's by itself too, at growing
+ *  waits, because a question left standing holds every wake. Reporting must never
+ *  break a session.
  *
  *  Two bridges are not fenced against each other: a step reads the mark and then
  *  writes, so a clear that read "nobody alive holds it" can land after another pi's
@@ -127,17 +128,32 @@ function readMark(home) {
  *  next step. */
 /** How often a bridge whose claim a live holder blocks looks again, in ms. */
 const BLOCKED_RETRY_MS = 1000;
+/** The longest wait before a question's clear the kernel did not take is tried again, in ms: the
+ *  wait starts at BLOCKED_RETRY_MS and doubles, so a kernel that keeps failing costs a process a
+ *  minute, not one a second. */
+const CLEAR_RETRY_MAX_MS = 60000;
+/** The tokens of this process's bridges whose session has not ended, shared by every copy of this
+ *  module pi loads (a /reload and a session replacement load it again in the same process). A mark
+ *  of this process whose token is not here is an ended bridge's: nobody's. */
+const LIVE_BRIDGES = (globalThis[Symbol.for("@awebai/oats-pi/waiting-claim/live-bridges")] ??= new Set());
 
 export function waitingClaim(pi, home) {
   const self = { pid: process.pid, start: processStart(process.pid), token: randomUUID() };
   const mine = (mark) => mark !== null && mark.pid === self.pid && mark.token === self.token;
+  /** Whether a mark's holder is alive: another process that is (holderAlive), or a bridge of this
+   *  process whose session has not ended. */
+  const alive = (mark) => mark.pid === self.pid && mark.start === self.start ? LIVE_BRIDGES.has(mark.token) : holderAlive(mark);
+  LIVE_BRIDGES.add(self.token);
   let question;
   let failure;
   // What this bridge's claim says, "" for none; undefined until its first step.
   let shown;
   let steps = Promise.resolve();
-  // The timer of a blocked bridge's next look, and whether the session has ended (no look after).
+  // The timer of this bridge's next look (blocked by a live holder, or after a question's clear the
+  // kernel did not take), how many such clears in a row, and whether the session has ended (no
+  // look after).
   let retry;
+  let refused = 0;
   let ended = false;
   // Whether a run has started or ended in this bridge's time: only then is a leftover its to clear.
   let ran = false;
@@ -168,13 +184,19 @@ export function waitingClaim(pi, home) {
   const clearClaim = async () => {
     if (!(await waiting("clear"))) return false;
     const left = readMark(home);
-    if (left === null || mine(left) || !holderAlive(left)) removeMark();
+    if (left === null || mine(left) || !alive(left)) removeMark();
     return true;
   };
   /** One step after the others. A step that throws is dropped: reporting must never break a session. */
   const then = (run) => { steps = steps.then(run).catch(() => undefined); };
 
   const wanted = () => question !== undefined ? ["question", question] : failure !== undefined ? ["attention", failure] : [];
+  /** Take the next step by itself after a wait, unless the session has ended. Any step cancels it. */
+  const lookAgain = (ms) => {
+    if (ended) return;
+    retry = setTimeout(() => change(), ms);
+    retry.unref?.();
+  };
   const step = async () => {
     clearTimeout(retry);
     const [reason, message] = wanted();
@@ -182,26 +204,27 @@ export function waitingClaim(pi, home) {
     if (next === shown) return;
     const first = shown === undefined;
     const mark = readMark(home);
-    const other = mark !== null && !mine(mark) && holderAlive(mark) ? mark : null;
+    const other = mark !== null && !mine(mark) && alive(mark) ? mark : null;
     if (reason === undefined) {
       // Nothing of its own yet, and what an earlier pi left waits for a run.
       if (first && !ran) return;
       // Its own claim, or on its first run a leftover, unless a live holder has the claim. A clear
-      // the kernel did not take is tried again at this bridge's next step: a question left standing
-      // would hold every wake.
+      // the kernel did not take is tried again at this bridge's next step, and a question's by
+      // itself too, at growing waits: left standing in a quiet session, it would hold the very wake
+      // that session waits for.
       const before = shown;
       shown = "";
       if (other !== null) return;
-      if (!(await clearClaim())) shown = before;
+      if (await clearClaim()) { refused = 0; return; }
+      shown = before;
+      if (before?.startsWith("question ")) lookAgain(Math.min(CLEAR_RETRY_MAX_MS, BLOCKED_RETRY_MS * 2 ** refused++));
       return;
     }
     if (other !== null && !(reason === "question" && other.reason === "attention")) {
       // The holder's claim stays, and this bridge shows none. Blocked on its first step, it has
       // yet to look for a leftover.
       shown = first ? undefined : "";
-      if (ended) return;
-      retry = setTimeout(change, BLOCKED_RETRY_MS);
-      retry.unref?.();
+      lookAgain(BLOCKED_RETRY_MS);
       return;
     }
     shown = next;
@@ -212,9 +235,10 @@ export function waitingClaim(pi, home) {
 
   pi.on("session_start", () => {
     ended = false;
+    LIVE_BRIDGES.add(self.token);
     then(async () => {
       const mark = readMark(home);
-      if (mark === null || mark.reason !== "question" || mine(mark) || holderAlive(mark)) return;
+      if (mark === null || mark.reason !== "question" || mine(mark) || alive(mark)) return;
       await clearClaim();
     });
   });
@@ -223,8 +247,12 @@ export function waitingClaim(pi, home) {
     question = undefined;
     change();
     // A failed turn's claim outlives the session and gives up its mark. A question whose clear the
-    // kernel did not take keeps its mark: once this pi has exited, the home's next pi clears it.
-    then(() => { if (shown?.startsWith("attention ") && mine(readMark(home))) removeMark(); });
+    // kernel did not take keeps its mark, and this bridge is live no more: the next bridge of this
+    // process, or the home's next pi, clears it as it starts.
+    then(() => {
+      if (shown?.startsWith("attention ") && mine(readMark(home))) removeMark();
+      LIVE_BRIDGES.delete(self.token);
+    });
     return steps;
   });
   return {

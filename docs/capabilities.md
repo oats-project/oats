@@ -1377,7 +1377,8 @@ starts, and a failed turn's, or a claim with no mark (a bridge from before the
 mark left it), at its first run; a pi that starts and ends with no run clears
 no failed turn. A session that ends on a failed turn leaves
 the claim and removes its mark. A clear the kernel does not take keeps the mark
-and is tried again at the bridge's next step. Two limits: bridges are not fenced against each
+and is tried again at the bridge's next step, and a question's by itself too, a
+second later and then at growing waits up to a minute. Two limits: bridges are not fenced against each
 other, so one pi's clear that lands just after another pi's set leaves that
 pi's dialog with no claim until it closes; and a failed turn that another pi's
 question replaced is not shown again when that dialog closes. The mark is in the agent's own home and decides
