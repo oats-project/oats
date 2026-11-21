@@ -175,7 +175,9 @@ export function providerDeployment(t, { manifest = fakeManifest(), capabilities 
    *  names them. Without it, the kernel goes on running the copies its spawn made. */
   fx.recordComposition = (home) => {
     const path = findRetirementBaseline(home), receipt = JSON.parse(readFileSync(path, "utf8"));
-    writeFileSync(path, JSON.stringify({ ...receipt, composition: compositionOf(home, receipt.composition.capabilityRuntime) }, null, 2));
+    // (The rows name the store that goes: re-pointed here at the one that is made.)
+    const earlier = receipt.composition.store, made = compositionOf(home, receipt.composition.capabilityRuntime);
+    writeFileSync(path, JSON.stringify({ ...receipt, composition: JSON.parse(JSON.stringify(made).replaceAll(`/${earlier}/`, `/${made.store}/`)) }, null, 2));
   };
   /** A stateful fake's events so far, oldest first (sessionsOf reads them), and a test's own event. */
   fx.events = () => (existsSync(join(fx.fake, "events.log")) ? eventsOf(readFileSync(join(fx.fake, "events.log"), "utf8")) : []);

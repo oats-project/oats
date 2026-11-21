@@ -667,3 +667,45 @@ test("a store is removed only once a move is complete: a second upgrade killed r
   assert.equal(JSON.parse(fx.cli(["retire", "thrice", "--json"]).stdout).retired, "thrice");
   assert.equal(existsSync(dirname(dirname(kernelModuleDir(home, PACKAGED)))), false);
 });
+
+test("a failed upgrade of a provider home puts its receipt back whole from the kernel's own memory of it: a copy of the receipt rewritten in the home's staging while the upgrade ran changes nothing", async (t) => {
+  const { fx, home, plan, apply } = await upgradable(t, "rolled-back");
+  // The version to move to: its apply hook does what a process left in the home could do while
+  // the upgrade runs (it rewrites the copy of the receipt the upgrade keeps in the home's
+  // staging, to one that names no session provider), and then refuses.
+  const files = packageFiles("4.0.0");
+  files[`oats-package/capabilities/${PACKAGED}/upgrade.mjs`] = `import { readdirSync, writeFileSync } from "node:fs"; import { join } from "node:path";
+if (process.env.OATS_UPGRADE_PHASE === "plan") { console.log(JSON.stringify({ adopt: true })); process.exit(0); }
+const oats = join(process.env.OATS_INSTANCE_HOME, ".oats");
+for (const name of readdirSync(oats).filter((n) => n.startsWith(".staging-upgrade-"))) writeFileSync(join(oats, name, "retirement-baseline.json"), JSON.stringify({ version: 2, home: process.env.OATS_INSTANCE_HOME, runtime: { launched: false } }));
+process.exit(1);
+`;
+  fx.commit(files);
+  lockPackage(fx, "4.0.0");
+  const before = readFileSync(receiptOf(home), "utf8");
+  const planned = await plan();
+  await assert.rejects(apply({ planRevision: planned.planRevision, idempotencyKey: "rolled-1" }), (e) => e.code === "E_UPGRADE_REFUSED");
+  assert.equal(readFileSync(receiptOf(home), "utf8"), before, "the receipt is byte for byte what it was");
+  assert.notEqual(providerHomeTrust(home), null, "the home is still a provider home");
+  assert.equal(readdirSync(dirname(dirname(kernelModuleDir(home, PACKAGED)))).length, 1, "the store the failed move made is gone, and no other");
+  assert.match(readFileSync(join(kernelModuleDir(home, PACKAGED), "launch.mjs"), "utf8"), /1\.0\.0/);
+  // The home starts on what it had.
+  await fx.inEnv(() => startInstanceSession(home));
+  assert.equal(fx.cli(["session", "inspect", "--home", home, "--json"]).json().result.running, true);
+});
+
+test("an undo of a provider home goes back to what the receipt says the last move was: a home whose own record names another set of modules undoes nothing", async (t) => {
+  const { home, plan, apply } = await upgradable(t, "undo-set");
+  const planned = await plan();
+  await apply({ planRevision: planned.planRevision, idempotencyKey: "set-1" });
+  const receipt = readFileSync(receiptOf(home), "utf8");
+  // The home's record no longer says its packaged module was moved.
+  const record = recordOf(home), { previous: _dropped, ...withoutPrevious } = record.modules[PACKAGED];
+  writeFileSync(join(home, "instance.json"), JSON.stringify({ ...record, modules: { ...record.modules, [PACKAGED]: withoutPrevious } }, null, 2));
+  await assert.rejects(plan({ undo: true }), (e) => e.code === "E_UPGRADE_UNDO");
+  assert.equal(readFileSync(receiptOf(home), "utf8"), receipt);
+  // With the record as the move left it, the undo's hook is told the receipt's record of where it goes back to.
+  writeFileSync(join(home, "instance.json"), JSON.stringify(record, null, 2));
+  const back = await plan({ undo: true });
+  assert.deepEqual(back.modules.map((m) => m.capability), [PACKAGED]);
+});

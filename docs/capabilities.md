@@ -1043,7 +1043,10 @@ into the capture hooks and the capture service's unit. In the third case
 
 `OATS_EVENT=upgrade` lets a staged destination package module adopt the state
 of a stopped instance, for `oats instance upgrade` and `--undo`. It runs from
-the staged new copy, with the usual lifecycle environment plus:
+the staged new copy (in a home on a session provider: from the kernel's own
+copy of the new module, see
+[What the kernel trusts in a provider home](#what-the-kernel-trusts-in-a-provider-home)),
+with the usual lifecycle environment plus:
 
 - `OATS_UPGRADE_PHASE`: `plan` or `apply`;
 - `OATS_META`: the old recorded `capabilityMeta[capability]`;
@@ -1052,7 +1055,10 @@ the staged new copy, with the usual lifecycle environment plus:
 - `OATS_UPGRADE_TO`: JSON containing the locked destination entry;
 - `OATS_UPGRADE_MODULE_DIR`: the module's final `<home>/.oats/modules/<cap>`
   directory. Register host artifacts against this path, never the staging path,
-  which is removed after the move.
+  which is removed after the move. In a home on a session provider, in the
+  `apply` phase, it is the kernel's copy of the module, which is where the
+  module's code runs from then on (in `plan`, where nothing is registered,
+  it is the home's path).
 
 In `plan`, the hook is read-only. It prints `{"adopt":true}`, or
 `{"adopt":false,"reason":"…","remedy":"…"}`. A module with recorded
@@ -2294,7 +2300,7 @@ takes no capability setting from it**:
   run from that copy, and the home's manifests are read there. The copies
   under `<home>/.oats/modules/` stay where they are, for the agent and its
   harness (its skills, what the harness runs inside its sandbox). The kernel
-  never runs them and never reads them, so nothing the agent does to them,
+  never runs them, and reads nothing it acts on from them, so nothing the agent does to them,
   at rest or while the kernel is running a command, changes what the kernel
   runs. (A copy in the home that is checked and then run can be exchanged
   between the two by the session that writes the home. That is why the
@@ -2329,8 +2335,9 @@ takes no capability setting from it**:
   There is no moment at which the rows name one version and the kernel runs
   another. A store is removed only once a move is complete, after the
   receipt's write: the one before the previous. A move that fails after
-  that write and is rolled back puts the earlier receipt back, with the
-  stores it names still there.
+  that write and is rolled back puts the earlier receipt back whole, from
+  the kernel's own memory of it and never from a copy kept in the home,
+  with the stores it names still there.
 - **An undo** (`oats instance upgrade --undo`) writes the receipt once,
   naming the previous store and the previous rows again; the newer store is
   removed after that write. The hook an undo runs is the kernel's previous
