@@ -9,7 +9,8 @@
   ([What the kernel trusts in a provider home](../capabilities.md#what-the-kernel-trusts-in-a-provider-home)):
   - The kernel keeps its own copy of the home's modules outside the home,
     at `<instances>/.oats-retirement/modules/<hash of the home>/<store>/`,
-    made once by the spawn before the provider is asked to launch. Every
+    made once by the spawn, before the provider is asked anything and
+    before any hook of the spawn runs. Every
     lifecycle hook and worktree hook, every command of the provider, every
     capability's readiness check and every command or operation dispatched
     in the home runs from it, and the home's manifests are read there. The

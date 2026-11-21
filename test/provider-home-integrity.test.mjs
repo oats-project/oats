@@ -709,3 +709,67 @@ test("an undo of a provider home goes back to what the receipt says the last mov
   const back = await plan({ undo: true });
   assert.deepEqual(back.modules.map((m) => m.capability), [PACKAGED]);
 });
+
+// A hook that says where its own file is: the kernel's copy, or the home's.
+const WHERE_HOOK = `import { appendFileSync } from "node:fs"; import { fileURLToPath } from "node:url";
+appendFileSync(process.env.HOME + "/fake-session/where.log", JSON.stringify({ event: process.env.OATS_EVENT, instance: process.env.OATS_INSTANCE, at: fileURLToPath(import.meta.url) }) + "\\n");
+process.stdout.write("{}\\n");
+`;
+const withWhere = (hooks = { spawn: "bin/hook.mjs", launch: "bin/hook.mjs", retire: "bin/hook.mjs", worktree: "bin/hook.mjs" }) => ({
+  capabilities: { [HOOKED]: { manifest: { hooks }, files: { "bin/hook.mjs": WHERE_HOOK } } },
+  souls: { dev: { soul: { capabilities: { [FAKE_CAPABILITY]: { from: "here" }, [HOOKED]: { from: "here" } } } } },
+});
+const whereOf = (fx) => (existsSync(join(fx.fake, "where.log")) ? readFileSync(join(fx.fake, "where.log"), "utf8").trim().split("\n").map((line) => JSON.parse(line)) : []);
+
+for (const work of ["directory", "worktree"]) {
+  test(`every hook of a provider home runs from the kernel's copy from the spawn on, so a path a hook hands the harness is the kernel's: the spawn's hooks, its worktree hooks, a launch's and a retire's (${work})`, async (t) => {
+    const fx = providerDeployment(t, withWhere());
+    const { home } = await fx.launch("located", { work });
+    const kept = kernelModuleDir(home, HOOKED);
+    await fx.inEnv(() => restartInstanceSession(home));
+    assert.equal(JSON.parse(fx.cli(["retire", "located", "--json"]).stdout).retired, "located");
+    const ran = whereOf(fx).filter((h) => h.instance === "located");
+    assert.deepEqual([...new Set(ran.map((h) => h.event))].sort(), work === "worktree" ? ["launch", "retire", "spawn", "worktree"] : ["launch", "retire", "spawn"]);
+    for (const hook of ran) assert.equal(hook.at, join(kept, "bin", "hook.mjs"), `the ${hook.event} hook ran from ${hook.at}`);
+  });
+}
+
+test("a provider spawn that fails after its launch and whose work cannot be preserved keeps a provider receipt: the home is still run by the kernel's copies, and an edited hook of the home's own copy does not run at its retire", async (t) => {
+  // The spawn hook leaves in work/ what a recovery copy cannot take (a FIFO); the launch answers
+  // nothing usable, so the spawn is undone, cannot preserve work/, and retains the home.
+  const hook = `import { execFileSync } from "node:child_process"; import { appendFileSync } from "node:fs";
+if (process.env.OATS_EVENT === "spawn") execFileSync("mkfifo", [process.env.OATS_INSTANCE_HOME + "/work/pipe"]);
+appendFileSync(process.env.HOME + "/fake-session/retained.log", process.env.OATS_EVENT + "\\n");
+process.stdout.write("{}\\n");
+`;
+  const fx = providerDeployment(t, { capabilities: { [HOOKED]: { manifest: { hooks: { spawn: "bin/hook.mjs", retire: "bin/hook.mjs" } }, files: { "bin/hook.mjs": hook } } },
+    souls: { dev: { soul: { capabilities: { [FAKE_CAPABILITY]: { from: "here" }, [HOOKED]: { from: "here" } } } } } });
+  fx.control({ launch: { raw: "garbage" } });
+  await assert.rejects(fx.launch("kept"));
+  const home = join(fx.root, "dev", "instances", "kept");
+  assert.equal(existsSync(home), true, "the home is retained");
+  const receipt = readJson(receiptOf(home));
+  assert.deepEqual([receipt.runtime.provider, receipt.runtime.backend, typeof receipt.composition?.store], [FAKE_CAPABILITY, "fake", "string"], "its receipt still names its provider, and its composition");
+  assert.notEqual(providerHomeTrust(home), null);
+  assert.equal(homeModulesProblem(home), null, "and the kernel still holds its copies");
+  // The agent's copy of the hook, edited: it would leave a mark.
+  const marker = join(fx.fake, "retained-edited-ran");
+  writeFileSync(join(copyOf(home, HOOKED), "bin", "hook.mjs"), marking(marker, hook));
+  rmSync(join(home, "work", "pipe"));
+  fx.control({});
+  fx.cli(["retire", "kept", "--force", "--json"]);
+  assert.equal(existsSync(marker), false, "the home's own copy was not run");
+});
+
+test("a provider home whose own modules directory is gone is run as before: the kernel reads its copies, not the home's", async (t) => {
+  const fx = providerDeployment(t, withHooked());
+  const { home } = await fx.launch("emptied");
+  rmSync(join(home, ".oats", "modules"), { recursive: true });
+  fx.clearCalls();
+  assert.equal(fx.cli(["session", "inspect", "--home", home, "--json"]).json().result.running, true);
+  await fx.inEnv(() => restartInstanceSession(home));
+  assert.deepEqual([fx.verbs("launch").length, fx.hooks("launch").map((h) => h.capability).sort()], [1, [FAKE_CAPABILITY, HOOKED]]);
+  // (Its files are compared by readiness, which says so; its record of them is still the kernel's.)
+  const compared = fx.cli(["readiness", "--home", home, "--json"]).json().result.kernelCopies.differing;
+  assert.deepEqual(compared.map((d) => d.capability).sort(), [FAKE_CAPABILITY, HOOKED]);
+});

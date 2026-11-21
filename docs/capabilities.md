@@ -2294,7 +2294,8 @@ takes no capability setting from it**:
 - **The kernel keeps its own copy of the home's modules, outside the home,**
   at `<instances>/.oats-retirement/modules/<hash of the home>/<store>/<capability>/`,
   beside the home's receipt. The spawn makes it from the copies it
-  materialised, once, before it asks you to launch. Every lifecycle hook
+  materialised, once, before it asks you anything and before any hook of
+  the spawn runs. Every lifecycle hook
   and worktree hook, every one of your commands, every capability's
   readiness check and every command or operation dispatched in the home is
   run from that copy, and the home's manifests are read there. The copies
