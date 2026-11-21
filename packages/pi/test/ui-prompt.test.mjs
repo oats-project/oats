@@ -665,19 +665,22 @@ test("real kernel: a second pi that dies inside the live pi's run, with its dial
 
 /** Make the home's first clear the moment a second pi comes and goes: the real kernel takes the
  *  clear, and before the bridge that asked for it hears so, a pi that is gone has left its mark
- *  and its claim. Returns whether that has happened. */
-function leftDuringTheFirstClear(home, holder, reason, message) {
-  const shim = join(home, ".oats", "bin", "oats"), once = join(home, "left-during-the-clear");
+ *  and its claim. Returns whether that has happened. With `refuseNext`, the clear after that one
+ *  fails once, and the kernel never hears of it. */
+function leftDuringTheFirstClear(home, holder, reason, message, { refuseNext = false } = {}) {
+  const shim = join(home, ".oats", "bin", "oats"), once = join(home, "left-during-the-clear"), refuse = join(home, "refuse-a-clear");
   const mark = `${JSON.stringify({ token: "another-bridge", reason, ...holder })}\n`;
   rmSync(shim);
   writeFileSync(shim, `#!${process.execPath}
 const fs = require("node:fs"), argv = process.argv.slice(2);
+if (argv[2] === "clear" && fs.existsSync(${JSON.stringify(refuse)})) { fs.rmSync(${JSON.stringify(refuse)}); process.exit(1); }
 const { status } = require("node:child_process").spawnSync(process.execPath, [${JSON.stringify(join(REPO_ROOT, "bin", "oats.mjs"))}, ...argv], { stdio: "inherit" });
 if (argv[2] !== "clear" || status !== 0 || fs.existsSync(${JSON.stringify(once)})) process.exit(status ?? 1);
 import(${JSON.stringify(new URL("../../../lib/instance-events.mjs", import.meta.url).href)}).then(({ setWaiting }) => {
   fs.mkdirSync(${JSON.stringify(join(home, ".pi"))}, { recursive: true });
   fs.writeFileSync(${JSON.stringify(markPath(home))}, ${JSON.stringify(mark)});
   setWaiting(${JSON.stringify(home)}, ${JSON.stringify({ producer: "oats.pi", waiting: true, reason, message })});
+  if (${refuseNext}) fs.writeFileSync(${JSON.stringify(refuse)}, "");
   fs.writeFileSync(${JSON.stringify(once)}, "");
 });
 `);
@@ -696,6 +699,24 @@ test("real kernel: a second pi that leaves its question and dies while the live 
   assert.equal(liveWaiting(home), null, "not left standing with its mark removed, where no later step would find it");
   assert.equal(waitingHold(home), null, "the idle pi gets its wakes");
   assert.equal(markOf(home), null);
+});
+
+test("real kernel: a clear that took the bridge's own claim and then failed on a second pi's question left meanwhile: the own claim is gone, so the same failure is shown again", async (t) => {
+  const home = kernelHome(t);
+  const fire = session(home);
+  const fail = async () => { await fire("agent_end", failed("422: refused")); await fire("agent_settled", { aborted: false }); await fire.settled(); };
+  await fail();
+  assert.equal(liveWaiting(home)?.message, "Turn failed: 422: refused");
+  const left = leftDuringTheFirstClear(home, gone(), "question", "Nested?", { refuseNext: true });
+  await fire("agent_start");
+  await fire.settled();
+  assert.ok(left());
+  assert.ok(!existsSync(join(home, "refuse-a-clear")), "the nested question's clear was tried, and not taken");
+  assert.equal(liveWaiting(home)?.message, "Nested?", "the failed turn's claim is cleared, and the question left in its place stands");
+  assert.equal(markOf(home)?.token, "another-bridge", "with its mark");
+  await fail();
+  assert.equal(liveWaiting(home)?.message, "Turn failed: 422: refused", "this run's failure is shown: the bridge did not take its cleared claim for one still standing");
+  assert.equal(markOf(home)?.pid, process.pid);
 });
 
 test("real kernel: a second pi's failed turn left while the live pi's clear is under way keeps its mark, and the home's next pi clears it at its first run", async (t) => {

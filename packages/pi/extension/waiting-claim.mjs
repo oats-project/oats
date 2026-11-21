@@ -186,18 +186,20 @@ export function waitingClaim(pi, home) {
   const removeMark = () => drop(markPath(home));
   /** Clear the claim, then remove the mark, unless another holder wrote its own meanwhile. False when
    *  the kernel did not take the clear: the claim may stand, so the mark stays, for a later try by
-   *  this bridge or, once this pi is gone, by the home's next one.
+   *  this bridge or, once this pi is gone, by the home's next one. True once the kernel took one:
+   *  what this call was asked to clear is gone, even where a further clear, below, was not taken.
    *
    *  The mark is read before the clear and again after it, and only the mark the clear answered is
    *  removed. One that another pi wrote while the clear was under way stands for a claim the clear
    *  may not have reached: removed, a question whose pi then died would stand with no mark, and no
    *  later step would find it. So a live holder's stays, with its claim; a question whose holder is
-   *  already gone is cleared in turn, here, since a quiet session has no next step to do it; and a
+   *  already gone is cleared in turn, here, since a quiet session has no next step to do it (a clear
+   *  of it the kernel does not take leaves it with its mark, for this bridge's next look); and a
    *  failed turn whose holder is gone keeps its mark, for a bridge's first run, as one left at any
    *  other moment does. */
   const clearClaim = async () => {
-    for (let answered = readMark(home); ;) {
-      if (!(await waiting("clear"))) return false;
+    for (let answered = readMark(home), taken = false; ; taken = true) {
+      if (!(await waiting("clear"))) return taken;
       const left = readMark(home);
       if (left === null || mine(left) || (sameMark(left, answered) && !alive(left))) { removeMark(); return true; }
       if (alive(left) || left.reason !== "question") return true;
