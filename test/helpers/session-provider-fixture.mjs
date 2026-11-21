@@ -9,6 +9,8 @@
 //   control: { "<verb>": <behaviour>, "<instance>": { "<verb>": <behaviour> } }   (the instance's wins)
 //   behaviour: { result } | { error: { code, message } } | { raw: "<stdout>" } | { exit: <status> }
 //              | { sleepMs } (then the default answer) | { echo: { <header overrides> } }
+//              | { fullOnly: true } (a check's: FULL_ONLY for a planned launch whose `yolo` is not true,
+//                as a provider that launches only in full mode answers; the default answer for any other)
 //   control.stateful: true: the fake has sessions (sessionsOf): launch creates one, stop stops it, an
 //   input restarts a stopped one, inspect answers what is there; each effect is a line of events.log.
 // Defaults: launch answers a new endpoint `{ server, threadId }`; inspect a running session with an
@@ -53,6 +55,10 @@ export function eventsOf(text) {
   const whole = text.slice(0, text.lastIndexOf("\n") + 1);
   return whole.split("\n").filter(Boolean).map((line) => JSON.parse(line));
 }
+
+/** What a provider that launches only in full mode answers a check of a launch that would be
+ *  sandboxed (control `check: { fullOnly: true }`): the refusal the kernel gives the launch. */
+export const FULL_ONLY = Object.freeze({ status: "unavailable", problems: [{ code: "E_BACKEND_SANDBOXED_MODE", message: "this provider launches only in full mode, and this launch would be sandboxed" }] });
 
 const SESSION_SCRIPT = `import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -105,6 +111,7 @@ if (b.sleepMs) await new Promise((r) => setTimeout(r, b.sleepMs));
 if (b.late) appendFileSync(b.late, "late");
 if (b.exit !== undefined) process.exit(b.exit);
 if (b.raw !== undefined) { process.stdout.write(b.raw); process.exit(0); }
+if (b.fullOnly && req.verb === "check" && req.input.launch && req.input.launch.yolo !== true) { process.stdout.write(JSON.stringify({ ...echo, ok: true, result: ${JSON.stringify(FULL_ONLY)} }) + "\\n"); process.exit(0); }
 if (b.error) { process.stdout.write(JSON.stringify({ ...echo, ...(b.echo ?? {}), ok: false, error: b.error }) + "\\n"); process.exit(0); }
 let result = b.result;
 if (result === undefined && req.verb === "inspectMany") {
