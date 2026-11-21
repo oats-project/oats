@@ -213,7 +213,8 @@ export function waitingClaim(pi, home) {
     const next = reason === undefined ? "" : `${reason} ${message}`;
     if (next === shown) {
       // Nothing to show and nothing shown: a look at the mark, for a second pi's question that
-      // outlived it. A run's start comes here, so a live pi clears it within a run.
+      // outlived it. A run's start and its end come here, so a live pi clears it by the end of a
+      // run: a nested pi dies inside the run, after the start's look.
       if (next === "") await clearDeadQuestion();
       return;
     }

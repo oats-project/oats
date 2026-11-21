@@ -1376,7 +1376,7 @@ nobody alive holds is cleared by the home's next pi: a
 starts, and a failed turn's, or a claim with no mark (a bridge from before the
 mark left it), at its first run; a pi that starts and ends with no run clears
 no failed turn. A pi that lives on clears a second pi's `question` whose holder
-is gone at its next run. A session that ends on a failed turn leaves
+is gone when its run ends, or at its next one. A session that ends on a failed turn leaves
 the claim and removes its mark. A clear the kernel does not take keeps the mark
 and is tried again at the bridge's next step, and a question's by itself too, a
 second later and then at growing waits up to a minute. Three limits: bridges are not fenced against each

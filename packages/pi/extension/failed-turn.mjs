@@ -12,6 +12,9 @@
  * error it was retrying. The next run clears the claim, and a bridge's first run
  * clears what nobody alive holds: what an earlier pi in the session left
  * (waiting-claim.mjs). After that, a run with no claim to clear starts no process.
+ * A run's end reaches the claim too, failed or not: that is when a live pi finds a
+ * question a second pi left when it died inside the run (a nested one, a
+ * subagent's), which no later event of this pi would otherwise clear.
  */
 import { claimMessage } from "./waiting-claim.mjs";
 
@@ -37,7 +40,6 @@ export function reportFailedTurn(pi, claim) {
   pi.on("agent_settled", (event) => {
     const reported = event.aborted ? undefined : failure;
     failure = undefined;
-    if (reported === undefined) return;
     claim.turnFailed(reported);
   });
 }

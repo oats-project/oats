@@ -624,6 +624,36 @@ test("real kernel: a second pi that dies with its dialog open is cleared by the 
   await settle(() => markOf(home) === null);
 });
 
+test("real kernel: a second pi that dies inside the live pi's run, with its dialog open, is cleared when that run ends", async (t) => {
+  const home = kernelHome(t);
+  const fire = session(home);
+  await fire("session_start", { type: "session_start", reason: "startup" });
+  await fire("agent_start");
+  await quiet();
+  // A nested pi, started by this run and killed in it, leaves its question after the run's start.
+  leftBy(home, gone(), "question", "Nested?");
+  assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.pi" });
+  await fire("agent_end", { messages: [{ role: "assistant", stopReason: "stop" }] });
+  await fire("agent_settled", { aborted: false });
+  await settle(() => liveWaiting(home) === null);
+  assert.equal(waitingHold(home), null, "the idle pi gets its wakes");
+  await settle(() => markOf(home) === null);
+});
+
+test("a run that ends with nothing to clear starts no process: its end only reads the mark", async (t) => {
+  const { home, calls } = recordingHome(t);
+  const fire = session(home);
+  await fire("agent_start");
+  await settle(() => calls().length === 1);
+  for (const aborted of [false, true]) {
+    await fire("agent_end", { messages: [{ role: "assistant", stopReason: aborted ? "aborted" : "stop" }] });
+    await fire("agent_settled", { aborted });
+    await fire("agent_start");
+  }
+  await quiet();
+  assert.deepEqual(calls(), [clearArgv(home)], "the first run's clear, and nothing since");
+});
+
 test("real kernel: the bridge clears its own claim and no other producer's", async (t) => {
   const home = kernelHome(t);
   setWaiting(home, { producer: "agent", waiting: true, reason: "attention", message: "my own question" });
