@@ -297,9 +297,8 @@ feature, then `wakeHold` on `oats session inspect --home <home> --json`:
   2.11.0, on a Claude Code that fires them).
 - `not-exposed`: a capability vouches that it has no dialog an Enter can answer.
 - `unknown`: **not covered**, so a dialog there takes the wake's Enter. A pi home
-  reads this: the kernel can't see its pi bridge, whose claim (from
-  `@awebai/oats-pi` 0.70.2) holds a wake while an extension's dialog is open,
-  and a screen of pi's own has no claim.
+  reads this: its pi bridge's claim (`@awebai/oats-pi` 0.70.2) holds a wake
+  over an extension's dialog, but a screen of pi's own has no claim.
 
 `on-claims` isn't protection. A dialog still takes the Enter in the lag before its
 claim is written, and claims can't cover every Claude dialog: the rate-limit menu
