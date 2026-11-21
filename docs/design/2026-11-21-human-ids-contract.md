@@ -51,7 +51,7 @@ Commit ids are background only.
 | P1 | `aw --identity-home <root>/.aw id parent request --domain D --parent H --invitation-id I --out request.json` | An agent, in the root's home, during adoption | Documented step (PR b). D, H and I are copied from the dashboard's invitation, never derived. |
 | P2 | `aw --identity-home <root>/.aw id parent import response.json --domain D` | An agent, in the root's home | Documented step (PR b). |
 | P3 | `aw --json init --join-from=<root> --join-team=<T> --name=<alias> --do-not-touch-agents-md` | The provider's spawn hook, on the root's host, as the deployment's user | Primary identity of every spawned instance (unchanged). After adoption, aw signs the child under the root through a same-machine retained link. |
-| P4 | `aw team invite --team-id <T> --json` in the root, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local --parent <root>/.aw --json` | The provider, joining an instance to an extra team | Joined-team identities. `--parent` is needed once the root is adopted, because its invites then carry `for_human` (**OPEN A**). |
+| P4 | `aw team invite --team-id <T> --json` in the root, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local --parent <root>/.aw --json` | The provider, joining an instance to an extra team | Joined-team identities. `--parent` is passed only when the root reads `nearest_human`, because an adopted root's invites carry `for_human` (**OPEN A**). An unadopted root's join is unchanged. An adopted root on an aw below 1.36.59 stops before minting any invite and names the floor. |
 | P5 | `aw --identity-home <home>/.aw who --json` | The provider | C1 and C2 (§4). |
 | P6 | `aw id team remove-member` on a hosted team (route `/api/v1/teams/{team_id}/agents/remove-member`), needing a team-scoped owner/admin API key | **OPEN R** | Revocation (§6). |
 
@@ -123,8 +123,10 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   previous value.
 
 **C2, the root report in `oats aweb setup --check-only --json`.**
-- **Shape:** `roots[]`, one `{label, home, attribution: {outcome, humanId|null, reason|null}}`
-  per roots-map entry.
+- **Shape:** `roots[]`, one
+  `{label, home, attribution: {outcome, humanId|null, reason|null}, warnings: [string]}` per
+  roots-map entry. `warnings` carries the aw-version note and C3's warning, and is empty
+  otherwise.
 - **The read:** P5 with `--identity-home <root>/.aw`.
 - **A failed read** gives `unavailable` with its reason.
 - **Old aw:** a root that reads `nearest_human` on an aw below 1.36.59 gets a note that
@@ -135,14 +137,22 @@ OATS doesn't use, and doesn't build on, these aw primitives:
 - **When it warns:** a root that last read `nearest_human` now reads `unknown` or
   `no_human`, whatever the reason. Examples are `legacy_no_chain` after a restore from a
   backup taken before adoption, and `revoked` or `root_replaced`.
-- **How:** it warns at spawn and in check-only, naming the root and aw's reason.
+- **How:** it warns at spawn and in check-only (C2's `warnings`), naming the root and aw's
+  reason.
 - `unavailable` never triggers it, and the last outcome is kept.
 - It never refuses. A stale copied home is never a reason to adopt again.
 
 **Signature pending.**
-- A mint stopped as signature pending is left for the operator. The kernel's compensation
-  doesn't retire it, because that would delete the kept key.
+- A mint stopped as signature pending is left for the operator. Retiring it would delete the
+  kept key.
 - PR a recognises it by `native_agent_signature_pending`.
+- The spawn fails as a failed mint does today. When the kernel's compensation runs the
+  provider's retire hook, the hook answers `meta: {retired: false, reason: "signature-pending"}`.
+  That is an incomplete cleanup, so the kernel keeps the home, marked
+  `.oats-rollback-incomplete.json` (the existing rule in [capabilities](../capabilities.md)).
+  No kernel or hook-contract change is involved.
+- The operator inspects the membership as aw says, then removes the home with
+  `oats retire --force`.
 - If the cut SHA lacks that code, PR a falls back to not retiring a home whose mint failed
   after aw wrote a key.
 - oats-aweb never retries or remints into the same home.
