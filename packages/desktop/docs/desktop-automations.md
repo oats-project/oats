@@ -288,6 +288,86 @@ Local schedules are still created and edited by the form, through
 draft (`renderer/schedule-read-data.mjs`, `scheduleDraft`) is the stored local job exactly, or
 nothing ("edit it with the CLI") when the form cannot keep a field.
 
+### Session backends in the form (session providers)
+
+A spawn schedule's **Session backend** offers the soul's default, tmux, and each
+session provider the chosen soul's capabilities supply: the `sessionProviders`
+of `oats inspect --soul` (`packages/client/session-backends.mjs`
+`sessionProviderNames`), read through `POST /api/capabilities` once the form
+is open and again when another soul is chosen. Another soul's providers leave
+the list at once, and a choice among them falls back to the soul's default. A
+read that fails offers tmux alone and says so; the form stays usable.
+
+**Edit of a schedule on a provider.** `scheduleDraft(definition, { backends })`
+keeps a `backend` only when it is one of `backends`. Edit admits the stored
+provider for now, opens the form at once, and holds it unusable (Save, Action,
+Soul, Session backend and Permissions disabled; a status line says what it
+reads) until the soul's inspection answers. Then `scheduleDraft` decides with
+the backends the kernel lists for that soul (`sessionBackendNames(cli,
+inspection)`): listed, the form becomes usable and a save sends the backend
+unchanged; not listed, the form closes with "edit it with the CLI"; not read,
+it closes and says the read failed. A `backend` that is no provider's name
+(or "herdr") is refused without a read, as before.
+
+A definition stored without its `repo` (one made with the CLI) shows its soul
+when the roster has exactly one of that name under that agents root, the way
+the server reads it; with two, the Soul field stays empty for the person to
+choose.
+
+**Who owns a pending Edit.** The form is modal from the press on, so no other
+control is pressed while it reads. Every other way on drops the pending Edit,
+whether its read then answers or fails, and nothing is said of it: a later
+Edit (the form's ticket), a Delete asked, a list read that begins, a
+change sent from the list, another workspace, and each of the automations
+page's own acts. The page tells those (`createAutomationsView`'s `onBusy`: a
+switch, Run now, Test, a summary's save, begin and end), and while one runs
+the schedule view opens no form, asks no Delete and sends nothing. An act that
+begins under an Edit already in use closes it too, with a notice: the form
+holds the definition from before the act (its Enabled, for one), and saving it
+would undo the act. A New form holds no stored definition and stays.
+
+An act ends when its request has settled and its own re-read is done. The page
+rebuilds its view when the CLI's gate changes; a view disposed under an act
+tells nothing at its disposal and tells the end when the request settles. The
+acts in flight are counted per workspace at module scope (`views/schedules.mjs`
+`actsInFlight`), not in a view, because an act outlives the view it began
+under: the page's rebuilt view, and a Schedules view made again while the
+request is on its way (the stage makes one each time the subtab is chosen).
+Every live Schedules view of that workspace is held while the count is above
+zero, one made meanwhile starts held, and when the count reaches zero a view
+that shows another page view than an act began under reads the list again,
+since what it shows may have been read before the act landed.
+
+This covers every lifetime of a view inside one window. It does not cover
+another window, nor a change made with the CLI while a form is open: those
+need a check at save that the definition is unchanged since the form opened
+(its `updatedAt`), which is not built.
+
+**No Edit opens while the list is being read** (a Refresh, and the re-read
+that ends a save, a Delete or a summary's save), of any schedule: the rows on
+screen are from before the read, and a form opened on one would hold the old
+definition whichever answer lands first, the list's or the form's own read.
+The row's Edit shows disabled until the read ends.
+
+**A provider that launches only in full mode** (bb:
+`FULL_MODE_ONLY_PROVIDERS` in `packages/client/session-backends.mjs`, the one
+place a client names them, with why it is a list and not a question to the
+provider). Choosing one sets Permissions to YOLO, keeps it set while that
+backend is chosen, and says why under the two fields; leaving the backend gives
+the earlier choice back. A schedule stored without `yolo: true` on such a
+provider is marked in its row and on its page (`scheduleRefusal`): "Refused at
+each run" for `yolo: false`; "Needs YOLO" for no `yolo`, where the run takes
+its launch configuration's choice, so the sentence says it is refused unless
+that sets YOLO. Its form says the same and saves YOLO. Only schedules are
+marked; a trigger's spawn is not.
+
+**A wake to a provider home** is edited as any wake. Under the home, the form
+says the wake is sent as the session's input and never starts a stopped home
+there: it waits, and is delivered once the home runs again.
+
+Styles: the notes use `--muted`, `--warn` and `--space-2` of `theme.css`; the
+warning note is in the computed contrast test.
+
 ## Tests
 
 `test/automations-server.test.mjs` (captured argv, verbatim results, refusals,
@@ -296,6 +376,8 @@ gates, keys, the adapter over the real shapes), `automations-view.test.mjs`,
 the gate, the form's Summary), `trigger-subject-rows.test.mjs` and
 `trigger-subject-view.test.mjs` (the 0.49 status and test fields),
 `trigger-sources-rows.test.mjs` (the readers over the captured answers),
+`schedules-provider.test.mjs` (the form on a session provider: the offer, a
+pending Edit and everything that drops it, full mode, a wake),
 `trigger-sources-view.test.mjs` (the page, attribution, the result card, an
 older kernel), `trigger-sources-confirm.test.mjs` (the confirm, over the
 real server boundary and CLI adapter with a recording exec: what the
