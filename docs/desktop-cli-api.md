@@ -2838,6 +2838,9 @@ planned ([check](capabilities.md#check-optional)). No key changes meaning:
   directory beside it.
 - The check runs within the preview's one preflight budget. A provider that
   does not answer in what is left of it leaves `preflight.status: "timeout"`.
+  It is never given longer than a spawn gives its check (20 s): one slower
+  than that limit, with budget to spare, fails the preview
+  `E_BACKEND_NOT_READY`, as it fails the spawn.
 - The provider's script runs from its package's tree in the deployment's
   module store, which the preview fetches there, verified, when it is absent:
   the one thing a preview may write, a cache `oats readiness --soul` fills the
