@@ -11,7 +11,7 @@
 - **OATS pins oats.aweb 1.48.0** (from 1.47.0). The package's requirements
   follow the session backend: the channel packages (`aweb-channel`,
   `@awebai/pi`) are required of `tmux` launches only, and a session provider's
-  launch holds an installed `aweb-channel` to 1.7.9 and an installed
-  `@awebai/pi` to 0.3.10, so no older package opens its own mail stream beside
+  launch requires an installed `aweb-channel` to be 1.7.9 or later, and an
+  installed `@awebai/pi` 0.3.10 or later, so no older package opens its own mail stream beside
   the wake broker's. A retire removes a provider home's broker registration
   when either record names a session provider. Homes on tmux behave as before.
