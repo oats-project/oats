@@ -1340,6 +1340,24 @@ or at a session boundary.
 - **Codex:** not reported. A provider error fires neither its `Stop` hook nor
   `notify` (Codex 0.160.0), so nothing can observe the turn from outside it.
 
+**A pi dialog** (`@awebai/oats-pi` after 0.70.0). pi has no question dialog of
+its own: each blocking one is an extension's (`ctx.ui.select`, `confirm`,
+`input`, `editor` or `custom`; a question tool's, say). The bridge holds a claim
+of producer `oats.pi`, reason `question`, from pi's `ui_prompt_start` to its
+`ui_prompt_end` (pi 0.84.4 and later), in pi's terminal UI and in RPC mode alike,
+so the same holds for a pi in a tmux pane and one a session provider runs. The
+message is the dialog's title, made one line and cut to fit as the Claude
+emitter's is; a dialog with no title sets the claim with no text. pi reports
+nested and overlapping dialogs as one span, with the first one's title. The
+claim clears when the dialog closes, however it closes, and when the session
+ends with it open: the bridge waits for that write before pi exits. A producer
+holds one claim, so an open dialog is shown over a failed turn's `attention`,
+which shows again once the dialog closes if no run has started since. Outside an
+OATS instance the bridge reports nothing. What it does not see: a screen of pi's
+own (its project trust prompt, a picker a person opened), which fires neither
+event; a question a host asks outside pi (a session provider's own question
+tool); and anything on a pi before 0.84.4.
+
 **Whether a home is covered** (oats.core 2.11.0). Spawn and launch hooks answer
 [`dialogClaims: "reported"`](#commands-and-hooks), so the home reads `wakeHold:
 "on-claims"`, only when they wrote these settings and the Claude Code this launch
@@ -1349,8 +1367,9 @@ reads `unknown`: an older Claude Code, no executable handed, a failed or
 unreadable `--version`, a settings file oats.core left alone, or a launch that
 runs another program than the hooks were handed. An earlier
 `reported` doesn't survive that, and a preview answers nothing. Every other
-harness answers nothing too. A pi home reads `unknown`: an extension can open its
-own dialog, and the kernel can't see which load. `reported` doesn't mean every
+harness answers nothing too. A pi home reads `unknown`: the bridge's claims hold
+a wake while one of its dialogs is open (above), but the kernel can't see
+whether that bridge is loaded, on which pi, or which screens fire no event. `reported` doesn't mean every
 dialog: [What a hold leaves open](schedules.md#what-a-hold-leaves-open) names what
 it can't see, the Claude dialogs that fire no hook among them.
 

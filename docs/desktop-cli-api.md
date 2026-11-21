@@ -5175,9 +5175,10 @@ oats instance attention [--message=<text>] [--clear] --json
     on a turn an API error ended, or `question` for an error class that can
     open a menu, cleared when the session moves on). See
     [capabilities.md](capabilities.md), "oats.core: needs input".
-  - `oats.pi`: the `@awebai/oats-pi` bridge (`attention` on a turn a provider
-    error ended, once pi has stopped retrying, cleared by the next run). See
-    the same section, "A failed turn".
+  - `oats.pi`: the `@awebai/oats-pi` bridge (`question` while a dialog an
+    extension opened is open, its title as the message; `attention` on a turn
+    a provider error ended, once pi has stopped retrying, cleared by the next
+    run). See the same section, "A pi dialog" and "A failed turn".
   - `agent`: the instance itself, through `oats instance attention`, and
     only through it: `oats instance waiting --producer agent` is
     `E_BAD_ARGS`. **Agent claims are cleared only by the agent (`--clear`)

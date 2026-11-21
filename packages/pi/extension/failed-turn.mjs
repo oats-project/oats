@@ -9,47 +9,26 @@
  * and later) says pi will not go on, and a pi without it reports nothing. The last
  * run decides: a retry that worked leaves nothing to report, and an abort is not an
  * error, even one that cancels a retry's backoff, where no agent_end follows the
- * error it was retrying. The next run clears the claim. This process cannot know what an earlier pi
- * in the session claimed (a /reload, a pi started again in the pane), so its first run
- * clears too; after that, a run with no claim to clear starts no process.
+ * error it was retrying. The next run clears the claim, and this process's first run
+ * clears what an earlier pi in the session left (waiting-claim.mjs); after that, a
+ * run with no claim to clear starts no process.
  */
-import { execFile } from "node:child_process";
-import { join } from "node:path";
+import { claimMessage } from "./waiting-claim.mjs";
 
-/** The characters the kernel refuses in a claim's message: a copy of its set
- *  (lib/refused-text.mjs REFUSED_TEXT), which this package cannot import before it
- *  has found the kernel. A claim the kernel refuses is a stuck instance nobody
- *  sees. A test pins the two equal. */
-export const MESSAGE_REFUSED = /[\p{Cc}\u2028\u2029\u202A-\u202E\u2066-\u2069\u200B\u2060\uFEFF\u{E0000}-\u{E007F}]/gu;
-/** The kernel's longest message, in code points (lib/instance-events.mjs WAITING_MESSAGE_MAX). */
-const MESSAGE_MAX = 200;
+export { MESSAGE_REFUSED } from "./waiting-claim.mjs";
 
 /** The claim's message for a run's error: one the kernel accepts, whatever the provider said. */
 export function failedTurnMessage(error) {
-  const said = typeof error === "string" ? error.replace(/\s+/gu, " ").trim().replace(MESSAGE_REFUSED, "\ufffd") : "";
-  const points = [...(said ? `Turn failed: ${said}` : "Turn failed")];
-  return points.length > MESSAGE_MAX ? `${points.slice(0, MESSAGE_MAX - 1).join("")}…` : points.join("");
+  const said = claimMessage(error);
+  return said ? claimMessage(`Turn failed: ${said}`) : "Turn failed";
 }
 
-/** Writes run one at a time, so a clear cannot pass the set it answers, and a session
- *  that ends waits for them: a /reload's next reporter starts its own queue, and a set
- *  still under way would land after its clear. A write is bounded by its timeout, and
- *  a failed one is dropped: reporting must never break a session. */
-export function reportFailedTurn(pi, home) {
+/** `claim`: the home's waiting claim (waiting-claim.mjs waitingClaim). */
+export function reportFailedTurn(pi, claim) {
   let failure;
-  let claimed = true;
-  let writes = Promise.resolve();
-  const waiting = (...args) => {
-    const argv = ["instance", "waiting", ...args, "--producer", "oats.pi", "--home", home, "--json"];
-    writes = writes.then(() => new Promise((done) => {
-      execFile(join(home, ".oats", "bin", "oats"), argv, { cwd: home, timeout: 5000 }, () => done());
-    }));
-  };
   pi.on("agent_start", () => {
     failure = undefined;
-    if (!claimed) return;
-    claimed = false;
-    waiting("clear");
+    claim.turnFailed(undefined);
   });
   pi.on("agent_end", (event) => {
     const last = event.messages?.findLast((message) => message.role === "assistant");
@@ -59,8 +38,6 @@ export function reportFailedTurn(pi, home) {
     const reported = event.aborted ? undefined : failure;
     failure = undefined;
     if (reported === undefined) return;
-    claimed = true;
-    waiting("set", "--reason", "attention", `--message=${reported}`);
+    claim.turnFailed(reported);
   });
-  pi.on("session_shutdown", () => writes);
 }

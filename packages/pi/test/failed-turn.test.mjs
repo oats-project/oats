@@ -13,6 +13,7 @@ import { liveWaiting, setWaiting, validWaitingMessage } from "../../../lib/insta
 import { REFUSED_TEXT } from "../../../lib/refused-text.mjs";
 
 import { failedTurnMessage, MESSAGE_REFUSED, reportFailedTurn } from "../extension/failed-turn.mjs";
+import { waitingClaim } from "../extension/waiting-claim.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -22,7 +23,8 @@ const ended = (stopReason) => ({ messages: [{ role: "assistant", stopReason }] }
 /** The report in a home, with pi's events driven by hand. */
 function session(home) {
   const handlers = new Map();
-  reportFailedTurn({ on: (event, handler) => handlers.set(event, handler) }, home);
+  const pi = { on: (event, handler) => handlers.set(event, handler) };
+  reportFailedTurn(pi, waitingClaim(pi, home));
   return (event, payload = {}) => handlers.get(event)(payload);
 }
 
