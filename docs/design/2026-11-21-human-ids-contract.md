@@ -187,8 +187,11 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   runs the hook again. Once aw settles the mint either way, the hook answers what is true and
   a plain retry clears the home. `--force` is not the route.
 - Nothing remints into that home or compensates it away while it is pending.
-- On an aw without the code (1.36.58, or a cut SHA that lacks it), PR a keeps any home whose
-  mint failed after aw wrote a key, without parsing prose.
+- On an aw without the code (1.36.58, or a cut SHA that lacks it), a signature-pending stop
+  can only come from a chained issuer. So PR a keeps a home whose mint failed after aw wrote
+  a key only when the mint's issuing root isn't genuinely chainless, by P5's read or by C3's
+  record. It never parses prose. A mint from a chainless root keeps today's behaviour, where
+  retire settles the recorded mint, so a deployment that doesn't adopt changes in nothing.
 - OATS never retries or remints automatically. An explicit operator recovery keeps the exact
   original home, key, token and selection.
 
