@@ -2365,11 +2365,14 @@ takes no capability setting from it**:
   refused with a sentence that names the module; a read (`oats session
   inspect`, a status row, the sweep's plan, readiness) shows the home
   **unavailable** (`E_SESSION_UNAVAILABLE`; `running: null`,
-  `runtimeState: "unreachable"`), never stopped; a hook that cannot run
-  counts as a failed required hook, so a retire names it and removes the
-  home only with `--force`. The home's own copy is never run in its place.
-  The remedy is to retire the instance with `--force` (a hook that cannot
-  be run keeps a plain retire from removing the home) and spawn it again.
+  `runtimeState: "unreachable"`), never stopped; a hook of that module that
+  an event has, and that cannot run, counts as a failed required hook, so a
+  retire names it and removes the home only with `--force`. The home's own
+  copy is never run in its place. The remedy is to retire the instance and
+  spawn it again: with `--force` for a home whose receipt has no
+  `composition` (none of its retire hooks can be identified), and for one
+  that lacks the kernel's copy of a capability that has a retire hook; a
+  plain retire where that capability has none.
 - **What `oats status` and drift report.** The drift rows (`modules`) read
   the home's own record of which modules it holds, from where and at which
   version, as for every home. A provider home's status row also carries

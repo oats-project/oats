@@ -125,10 +125,13 @@ test("a provider home whose kernel copy of a module is gone runs nothing of that
   fx.clearCalls();
   const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
   assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"]);
-  assert.match(inspected.error.message, /the kernel's copy of capability acme\.fake for unkept is not at .*Retire the instance with --force \(oats retire unkept --force.*then spawn it again/);
+  assert.match(inspected.error.message, /the kernel's copy of capability acme\.fake for unkept is not at .*Retire the instance \(oats retire unkept; where the capability has a retire hook.*only --force removes the home\), then spawn it again/);
   assert.deepEqual([rowOf(fx, "unkept").running, rowOf(fx, "unkept").runtimeState], [null, "unreachable"]);
   assert.equal(await codeOf(() => fx.inEnv(() => inputInstanceSession(home, "x"))), "E_SESSION_INPUT_FAILED");
   assert.deepEqual([fx.calls(), runtimeOf(home).stoppedAt], [[], null], "the home's own copy was not run in its place");
+  // The remedy it names works: this capability has no retire hook, so a plain retire takes the home.
+  assert.equal(JSON.parse(fx.cli(["retire", "unkept", "--json"]).stdout).retired, "unkept");
+  assert.equal(existsSync(home), false);
 });
 
 test("a hook script edited in the home never runs edited: a launch and a retire run the spawn's hook, from the kernel's copy", async (t) => {
