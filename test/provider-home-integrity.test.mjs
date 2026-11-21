@@ -109,13 +109,26 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 for (;;) { put(original); await wait(6); put(edited); await wait(30); }
 `);
   const child = spawnChild(process.execPath, [flipper], { stdio: "ignore" });
-  t.after(() => child.kill("SIGKILL"));
-  await new Promise((r) => setTimeout(r, 300));
-  for (let i = 0; i < 20; i++) {
-    const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
-    assert.equal(inspected.ok, true, JSON.stringify(inspected));
+  const gone = new Promise((r) => child.once("exit", r));
+  // The child is ended, and seen gone, inside the test: the fixture's cleanup removes the tree the
+  // child writes in, and node:test runs t.after hooks in the order they were added, the fixture's
+  // first. A kill in a t.after of this test ran after that removal, which the child's next write
+  // could fail (ENOTEMPTY); a failed hook skips the ones after it, so the child was never killed
+  // and this file's process never ended (#2053). The synchronous beforeCleanup is the net for an
+  // early throw the finally cannot cover.
+  fx.beforeCleanup(() => { child.kill("SIGKILL"); });
+  try {
+    await new Promise((r) => setTimeout(r, 300));
+    for (let i = 0; i < 20; i++) {
+      const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
+      assert.equal(inspected.ok, true, JSON.stringify(inspected));
+    }
+    assert.equal(existsSync(marker), false, "the edited script never ran");
+  } finally {
+    child.kill("SIGKILL");
+    await gone;
   }
-  assert.equal(existsSync(marker), false, "the edited script never ran");
+  assert.equal(child.signalCode, "SIGKILL", "the rewriting child ran for the whole test: it was ended by the test, it did not fail on its own");
 });
 
 test("a provider home whose kernel copy of a module is gone runs nothing of that module, reads unavailable and never stopped, and names it", async (t) => {
