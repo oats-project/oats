@@ -225,10 +225,11 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
 
   let alive = true, serial = 0, data = null, failure = '', loading = false, origin = 'all', query = '', openId = null, busy = false, notice = '';
   const tests = new Map(), statuses = new Map();
-  // The page's own acts, as onBusy hears them: one in flight (`acting`), or a summary's save (`saving`: until its
-  // request settles and its re-read ends, which outlasts the sheet's own describeBusy). Told only when it changes.
-  let acting = false, saving = false, told = false;
-  const tellBusy = () => { const now = acting || saving; if (now !== told) { told = now; onBusy?.(now); } };
+  // The page's own acts, as onBusy hears them: one in flight (`acting`), or summaries being saved (`saving`, a
+  // count: each save lasts until its request settles and its re-read ends, which outlasts the sheet's own
+  // describeBusy, so the sheet can send a second save under the first one's re-read). Told only when it changes.
+  let acting = false, saving = 0, told = false;
+  const tellBusy = () => { const now = acting || saving > 0; if (now !== told) { told = now; onBusy?.(now); } };
   const setActing = v => { acting = v; tellBusy(); };
   // Capability sources. `confirming`: the row whose Test confirm shows (with that row as it was: confirmSig);
   // `testing`: the row whose confirmed test runs.
@@ -979,7 +980,7 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
     // Sent as typed: only "" clears; the kernel keeps boundary spaces, and refuses what breaks its rule.
     const value = summaryInput.value;
     if (value && !descriptionValid(value)) { sheetError.textContent = `A summary is one line of up to ${DESCRIPTION_MAX} characters, without control characters.`; summaryInput.focus(); return; }
-    const my = ++describeSerial; describeBusy = true; saving = true; tellBusy(); sheetError.textContent = ''; paintSheet(); sheetStatus.focus();
+    const my = ++describeSerial; describeBusy = true; saving++; tellBusy(); sheetError.textContent = ''; paintSheet(); sheetStatus.focus();
     try {
       await describe(row, value);
       if (!alive || my !== describeSerial) return;
@@ -993,7 +994,7 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
       if (!alive || my !== describeSerial) return;
       describeBusy = false; paintSheet();
       sheetError.textContent = error?.message || String(error); summaryInput.focus();
-    } finally { saving = false; tellBusy(); } // whatever became of the sheet or the view
+    } finally { saving--; tellBusy(); } // whatever became of the sheet or the view
   });
   cancelButton.addEventListener('click', () => { if (!describeBusy) closeDescribe(); });
   sheet.addEventListener('keydown', e => {

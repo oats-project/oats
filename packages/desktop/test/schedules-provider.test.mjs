@@ -422,29 +422,37 @@ test("one of the page's acts that begins under an Edit already in use closes it 
 });
 
 test("the page rebuilt under one of its acts (the CLI's gate changes): the schedule view stays held until the act's request settles, then reads the list again before any Edit", async () => {
-  for (const outcome of ["the act answers", "the act fails"]) {
+  // `then`: an act the rebuilt view begins before the first one lands (its buttons are free): its own re-read, if
+  // it has one, is from before the first act landed too.
+  for (let outcome of ["the act answers", "the act fails"]) for (const then of [null, "test", "run"]) {
     let finish, fail, enabled = true; const cliFacts = {}, saved = [], heard = [], rebuild = () => { for (const fn of heard) fn(); };
     const s = setup({ cliFacts, subscribeCli: fn => { heard.push(fn); return () => {}; }, read: async () => ({ schedules: [{ ...onBb, enabled }], scheduler }), mutate: async (path, body) => {
       if (path.startsWith("/api/capabilities")) return listsBb;
-      if (path.startsWith("/api/automations")) { await new Promise((resolve, reject) => { finish = resolve; fail = () => reject(new Error("refused")); }); return {}; }
+      if (path.startsWith("/api/automations")) {
+        if (body.action === "disable") await new Promise((resolve, reject) => { finish = resolve; fail = () => reject(new Error("refused")); });
+        return body.action === "test" ? { ok: true, problems: [], warnings: [] } : {};
+      }
       return saver(saved)(body);
     } });
+    outcome = `${outcome}${then ? `, then ${then}` : ""}`;
     try {
       await tick(); s.rowAction("bb-review", "disable").click(); await tick();
       // The gate changes: the page disposes its view and builds another, which reads the list before the act lands.
       cliFacts.features = ["automation-descriptions"]; rebuild(); await ticks(5);
+      if (then) { assert.equal(s.rowAction("bb-review", then).disabled, false, `${outcome}: the new view's own acts are free`); s.rowAction("bb-review", then).click(); await ticks(5); }
       const reads = posts(s, "/api/automations").filter(c => JSON.parse(c.opts.body).action === "list").length;
       assert.equal(s.el.querySelector(".schedule-new").disabled, true, `${outcome}: still held, the act has not ended`);
       const edit = s.rowAction("bb-review", "edit"); edit.disabled = false; edit.click(); await ticks();
       assert.equal(sheetOf(s).hidden, true, `${outcome}: no Edit on a list read before the act landed`);
-      if (outcome === "the act answers") { enabled = false; finish(); } else fail();
+      const answers = outcome.startsWith("the act answers");
+      if (answers) { enabled = false; finish(); } else fail();
       await ticks(5);
       assert.equal(posts(s, "/api/automations").filter(c => JSON.parse(c.opts.body).action === "list").length, reads + 1, `${outcome}: the list is read again`);
       assert.equal(s.el.querySelector(".schedule-new").disabled, false, outcome);
       s.rowAction("bb-review", "edit").click(); await ticks();
-      assert.equal(sheetOf(s).hidden, false, outcome); assert.equal(s.el.querySelector("form").elements.enabled.checked, outcome === "the act fails", `${outcome}: the definition as it now is`);
+      assert.equal(sheetOf(s).hidden, false, outcome); assert.equal(s.el.querySelector("form").elements.enabled.checked, !answers, `${outcome}: the definition as it now is`);
       submit(s); await ticks();
-      assert.deepEqual(saved.map(spec => spec.enabled), [outcome === "the act fails"], `${outcome}: a save keeps it`);
+      assert.deepEqual(saved.map(spec => spec.enabled), [!answers], `${outcome}: a save keeps it`);
     } finally { s.cleanup(); }
   }
 });
@@ -477,6 +485,19 @@ test("the automations page tells its own acts, begin and end, in turn; one it is
       view = make(); await ticks();
     }
     assert.deepEqual(told, told.map((_, i) => i % 2 === 0), "true and false in turn, never the same twice");
+    view.dispose();
+    // Two summaries' saves that overlap: the sheet is free again once the first save answered, while that save's
+    // re-read is still in flight. The page stays busy until the second save has settled too.
+    let reads = 0, releaseRead; const answers = [];
+    told.length = 0;
+    view = createAutomationsView(host, { kind: "schedule", read: async () => { if (++reads === 2) await new Promise(resolve => { releaseRead = resolve; }); return list; },
+      describe: () => new Promise(resolve => answers.push(resolve)), onBusy: v => told.push(v) });
+    await ticks();
+    const save = text => { action("describe").click(); const sheet = host.querySelector(".auto-describe"); sheet.querySelector("input").value = text; sheet.dispatchEvent(new dom.window.Event("submit", { cancelable: true })); };
+    save("One"); answers[0]({}); await ticks(); assert.equal(reads, 2, "the first save's re-read is in flight");
+    save("Two"); await ticks(); assert.equal(answers.length, 2, "and a second save is sent under it");
+    releaseRead(); await ticks(); assert.deepEqual(told, [true], "the first save ended; the second is still in flight: busy");
+    answers[1]({}); await ticks(5); assert.deepEqual(told, [true, false], "not busy once both have settled");
     view.dispose();
   } finally { dom.window.close(); }
 });

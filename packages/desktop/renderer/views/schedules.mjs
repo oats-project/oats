@@ -97,7 +97,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   // view opens no form and sends no change, as while its own `busy`.
   // A count, not a flag: the page rebuilds its view when the CLI's gate changes, and an act of the view that went
   // may still be in flight when the new view begins one (each view tells true and false in turn).
-  // `actsView`: the page's view the latest act began under.
+  // `actsView`: the page's view the first of the acts in flight began under.
   let pageActs = 0, pageBusy = false, actsView = null;
   // The list reads in flight. While one runs no Edit opens: the rows on screen are from before it, and a form
   // opened on one would hold, and save back, a definition the read is about to replace (whichever of the list's
@@ -440,12 +440,16 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
     // definition as it was before the act (its Enabled, for one), and saving it would undo the act. A pending
     // Edit goes without a word; one already in use says why it closed.
     onBusy: acting => {
+      const before = pageActs;
       pageActs = Math.max(0, pageActs + (acting ? 1 : -1)); pageBusy = pageActs > 0;
       if (!alive) return;
-      if (acting) actsView = view();
-      // The last act ended under another view than it began (the page was rebuilt meanwhile): that view re-read
-      // nothing after the act, and the view on screen may have read the list before it landed. Read it again,
-      // which holds Edit until it answers.
+      // The view the first of the acts in flight began under: an act the rebuilt view begins meanwhile is not the
+      // one that may land late.
+      if (acting) { if (!before) actsView = view(); }
+      // The acts in flight have all ended, and the first of them began under another view than the one on screen
+      // (the page was rebuilt meanwhile): that view re-read nothing after its act, and the view on screen may have
+      // read the list before it landed, whatever it read for an act of its own. Read it again, which holds Edit
+      // until it answers.
       else if (!pageBusy) { const began = actsView; actsView = null; if (began !== view()) void view()?.refresh(); }
       if (acting && editing && !sheet.hidden) { const id = editing, silent = !!pendingEdit; closeForm(); if (!silent) notice(`${id} changed while it was being edited. Open Edit again.`); }
       render();
