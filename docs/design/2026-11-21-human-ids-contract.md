@@ -254,26 +254,22 @@ OATS doesn't use, and doesn't build on, these aw primitives:
 - The person can revoke their whole ID, which ends everything under them. OATS neither does
   nor tests that.
 
-**OPEN R: who removes the membership, and how.** On a hosted team it's P6, which sends a
-team-scoped person API key. aweb rules that no agent may use that key. Cloud's dashboard
-owners read the paired Cloud release (7b034ae27) and found:
-- the dashboard issues only creation-only setup keys, which removal refuses with 403
-  `setup_key_creation_only`;
-- so a person has no dashboard way to obtain a key P6 accepts. Only a previously issued
-  unrestricted key still works.
-- such keys have no expiry, and there is no dashboard control to revoke them.
+**How the membership is removed on a hosted team** (decided by the product owner, 2026-11-21,
+through aweb's maintainers):
+- The paired Cloud release keeps production's removal path. An owner's or admin's key from
+  Cloud's setup flow authorizes P6. The creation-only restriction on that route is withdrawn
+  for this release.
+- There is no new dashboard removal control in this release.
+- The principle: no user path is harder than production, and extra human-assurance security
+  is opt-in.
+- Removing the membership stops that root getting more memberships through that team. It
+  doesn't reverse the person's signed adoption or revoke the ID chain.
 
-As released, the person can't revoke an adoption on a hosted team without an old key. The
-Cloud removal route also accepts a signed-in person's authority, so a dashboard **Remove
-membership** action for an agent member needs no new server authority. Removing the
-membership stops that root getting more memberships through that team. It doesn't reverse
-the person's signed adoption or revoke the ID chain. The options, for the people who
-own the product:
-- Cloud ships that dashboard Remove membership action with the paired release. Adoption then has a
-  documented undo, all in the browser. **The OATS maintainers recommend this.**
-- Adoption ships without a documented revocation on hosted teams, and PR b says so plainly.
-- Cloud adds a dashboard issuer for a removal-capable key, and the person runs P6 from a
-  terminal.
+**OPEN R: who runs P6.** One of:
+- the person runs it, with their own owner or admin key;
+- an agent runs it with an owner key the person delegates.
+
+Principle 2 forbids the second unless the product owner rules otherwise.
 
 PR b's revocation text waits for this.
 
@@ -293,5 +289,5 @@ PR b's revocation text waits for this.
 - **A, B: answered** by aweb at `d8d0bfa1e7` (§2 P4, §4 "Where OATS mints").
 - **C.** `native_agent_signature_pending` is implemented on aweb `802f1674` (exit 1, key and
   request kept, no membership). aweb confirms it is in the cut SHA.
-- **R.** Who removes a root's membership on a hosted team (§6). (decided by the people who
-  own the product)
+- **R.** Whether an agent may run P6 with a delegated owner key, or only the person runs it
+  (§6). (the product owner)
