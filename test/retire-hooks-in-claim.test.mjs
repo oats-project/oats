@@ -94,7 +94,7 @@ for (const kind of ["oats retire", "the completion of a self-retire"]) {
     const i = f.home("after-hooks");
     const { argv, env } = f.retirer(i, kind);
     // Held where the retire writes its `retired` row: its hooks have returned, and no row is written.
-    const run = startGated(argv, { cwd: f.fx.dep, env, gateDir: join(f.fx.base, "gates"), gates: [{ name: "row", fn: "appendFileSync", path: i.log, when: "before", waitMs: WAIT_MS }] });
+    const run = startGated(argv, { cwd: f.fx.dep, env, gateDir: join(f.fx.base, "gates"), gates: [{ name: "row", fn: "appendEventRow", path: i.log, when: "before", waitMs: WAIT_MS }] });
     try {
       await run.waitGate("row", WAIT_MS);
       assert.deepEqual(f.ran(), [FIRST, SECOND], "fixture premise: both hooks ran, in this order");
@@ -142,7 +142,7 @@ test("a hook that ended reporting that its cleanup did not finish is in the clai
   const f = deployment(t);
   const i = f.home("owes");
   f.ask(`incomplete-${FIRST}`);
-  const run = startGated([CLI, "retire", i.name, "--json"], { cwd: f.fx.dep, env: f.fx.env, gateDir: join(f.fx.base, "gates"), gates: [{ name: "row", fn: "appendFileSync", path: i.log, when: "before", waitMs: WAIT_MS }] });
+  const run = startGated([CLI, "retire", i.name, "--json"], { cwd: f.fx.dep, env: f.fx.env, gateDir: join(f.fx.base, "gates"), gates: [{ name: "row", fn: "appendEventRow", path: i.log, when: "before", waitMs: WAIT_MS }] });
   try {
     await run.waitGate("row", WAIT_MS);
     run.child.kill("SIGKILL");

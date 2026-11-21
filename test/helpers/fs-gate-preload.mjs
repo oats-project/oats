@@ -24,7 +24,10 @@
 //                        { name, fn, path | prefix, when?, nth?, arg?, contains?, armed?, waitMs?,
 //                          throws?, every? }
 //      name      the gate's name: the stem of its files in the gate directory
-//      fn        a `node:fs` sync function (`lstatSync`, `readFileSync`, `linkSync`…)
+//      fn        a `node:fs` sync function (`lstatSync`, `readFileSync`, `linkSync`…), or
+//                `appendEventRow`: the kernel's one write of an event row
+//                (lib/instance-events.mjs `eventLog.appendRow(path, line)`), whose first
+//                argument is the log's path and whose second is the row's text
 //      path      the call matches when argument `arg` (default 0) is exactly this path;
 //      prefix    or when it starts with this one. A path may reach the call as text or as bytes
 //                (the kernel's walk reads names as bytes: `lstatSync(Buffer)`): both match.
@@ -98,7 +101,7 @@ function validGate(g) {
   const bad = (why) => new Error(`${GATES}: a gate ${why}: ${JSON.stringify(g)}`);
   if (!g || typeof g !== "object") throw bad("is not an object");
   if (typeof g.name !== "string" || !/^[A-Za-z0-9_-]+$/.test(g.name)) throw bad("needs a name of letters, digits, - and _");
-  if (typeof g.fn !== "string" || !g.fn.endsWith("Sync") || typeof fs[g.fn] !== "function") throw bad("needs fn, a node:fs sync function");
+  if (typeof g.fn !== "string" || !(Object.hasOwn(SEAMS, g.fn) || (g.fn.endsWith("Sync") && typeof fs[g.fn] === "function"))) throw bad("needs fn, a node:fs sync function or a kernel seam");
   if ((typeof g.path === "string") === (typeof g.prefix === "string")) throw bad("needs either path or prefix");
   if (g.when !== undefined && g.when !== "before" && g.when !== "after") throw bad('has a when that is neither "before" nor "after"');
   if (g.nth !== undefined && !(Number.isInteger(g.nth) && g.nth >= 1)) throw bad("has an nth that is not a positive integer");
@@ -107,7 +110,12 @@ function validGate(g) {
   return { ...g, when: g.when ?? "before", nth: g.nth ?? 1, arg: g.arg ?? 0, waitMs: g.waitMs ?? RELEASE_WAIT_MS, seen: 0, fired: false };
 }
 
-function installGates(specs, dir) {
+/** The kernel's own seams a gate may name beside a `node:fs` function → the object that holds
+ *  the function, and its key there. */
+const SEAMS = {
+  appendEventRow: async () => [(await import(new URL("../../lib/instance-events.mjs", import.meta.url))).eventLog, "appendRow"],
+};
+async function installGates(specs, dir) {
   if (!dir) throw new Error(`${GATES} is set without ${GATE_DIR}`);
   if (!Array.isArray(specs)) throw new Error(`${GATES} is not a JSON list of gates`);
   const gates = specs.map(validGate);
@@ -138,7 +146,8 @@ function installGates(specs, dir) {
     return g.path !== undefined ? value === g.path : value.startsWith(g.prefix);
   };
   for (const fn of new Set(gates.map((g) => g.fn))) {
-    const original = fs[fn];
+    const [holder, key] = Object.hasOwn(SEAMS, fn) ? await SEAMS[fn]() : [fs, fn];
+    const original = holder[key];
     const gated = function (...args) {
       const hit = [];
       for (const g of gates) {
@@ -156,7 +165,7 @@ function installGates(specs, dir) {
     };
     // What the function carries besides its body (its name, its length, `realpathSync.native`) stays.
     for (const key of Reflect.ownKeys(original)) if (key !== "prototype") Object.defineProperty(gated, key, Object.getOwnPropertyDescriptor(original, key));
-    fs[fn] = gated;
+    holder[key] = gated;
   }
   syncBuiltinESMExports(); // `import { lstatSync } from "node:fs"` reads the gated one too
 }
@@ -166,7 +175,7 @@ if (PRELOADED) {
   const specs = JSON.parse(process.env[GATES]), dir = process.env[GATE_DIR];
   delete process.env[GATES];
   delete process.env[GATE_DIR];
-  installGates(specs, dir);
+  await installGates(specs, dir);
 }
 
 // ---- 2. the driver ----------------------------------------------------------------------------

@@ -7624,7 +7624,9 @@ as the kernel computes it from the deployment's configuration. One key,
   **`homeCopy` covers records only**: it compares the home's own record of
   each module (`instance.json`, its source and commit) with the kernel's
   record of the copy it runs, and reads no file of either copy. `differs`
-  names the modules whose records disagree, `[]` when `homeCopy` is `same`.
+  names the modules whose records disagree (capability ids only, at most
+  200; a name in the home's record that is no capability id counts in
+  `homeCopy` and is not named), `[]` when `homeCopy` is `same`.
   It says `differs` after an upgrade that was interrupted between moving
   the home's copies and the kernel's, and when the home's record was
   rewritten. Whether the FILES of a home copy are the kernel's is reported

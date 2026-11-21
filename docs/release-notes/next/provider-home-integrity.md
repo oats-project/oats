@@ -71,7 +71,7 @@
   in the home. The kernel's side is whole either way; such a home is
   retired and spawned again.
 
-## Upgrade notes
+## Upgrade
 
 - **A provider home spawned by an earlier kernel must be respawned.** Its
   receipt has no `composition`, so this kernel runs none of its

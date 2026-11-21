@@ -1280,7 +1280,8 @@ claim and holds no scheduled wake. The board is in
 **The Claude Code emitter.** For a Claude instance, oats.core's spawn and
 launch hooks (`bin/oats-core.mjs`, preview-aware) write Claude Code hooks
 into the home's project settings, `<home>/.claude/settings.json`. Each one
-runs `bin/claude-waiting.sh` from the home's module copy, which calls
+runs `bin/claude-waiting.sh` from the home's module copy (in a home on a
+session provider: from the kernel's copy of it), which calls
 `oats instance waiting set|clear --producer oats.core`:
 
 | Claude Code event | Matcher | Action |
@@ -1551,8 +1552,9 @@ home whose oats.core moves to it is upgraded rather than respawned. The
 hook that runs is the destination's, so this covers homes spawned on any
 earlier oats.core, with or without the emitter. oats.core records no
 capability metadata, and its settings entries name the module copy's path,
-`.oats/modules/oats.core`, which an upgrade keeps; the next start's launch
-hook rewrites them. So `plan` adopts a home whose recorded
+`.oats/modules/oats.core`, which an upgrade keeps (in a home on a session
+provider they name the kernel's copy, whose path an upgrade changes); the
+next start's launch hook rewrites them. So `plan` adopts a home whose recorded
 `capabilityMeta["oats.core"]` is absent or `{}`, or a falsy value (`null`,
 `false`, `0`, `""`), which the kernel passes in `OATS_META` as `{}`. It
 refuses any other value as state it cannot vouch for, with the remedy
@@ -1720,7 +1722,8 @@ spawn's fail-closed hooks.
 ```
 
 **Invocation.** The kernel runs the command's script with `node`, from the
-module directory. That is the home's module copy for `--home`, or the
+module directory. That is the home's module copy for `--home` (the kernel's
+copy of it, for a home on a session provider), or the
 deployment's verified module store for `--soul`. The script must resolve inside
 the module and be a regular file. The command's words after the script are
 passed as arguments; no shell is involved.
@@ -2219,7 +2222,8 @@ an `http` or `https` `url` of at most 2000, without credentials.
 `{ "homes": [ { "home", "instance", "endpoint" } ] }`, at most 200. Out:
 `{ "results": [ … ] }`, one per home in the same order, each an inspect
 result or `{ "error": { "code", "message" } }`. `oats status` calls it once
-per group of homes that share the capability's module copy (same digest),
+per group of homes that share the capability's module copy (the same
+source, as each home's receipt records it),
 the provider and the settings; the call's environment is the group's first
 home's. Each entry is judged as one `inspect` answer would be. A batch that
 fails or is not one result per home, and an entry that is neither a result

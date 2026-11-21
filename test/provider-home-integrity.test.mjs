@@ -579,6 +579,13 @@ test("a provider home's status row, and a start's answer, say which copy of its 
   writeFileSync(join(home, "instance.json"), JSON.stringify({ ...record, modules: { ...record.modules, [PACKAGED]: { ...record.modules[PACKAGED], commit: "0".repeat(40) }, "acme.added": record.modules[FAKE_CAPABILITY] } }));
   assert.deepEqual(row().moduleCopy, { runs: "kernel-copy", homeCopy: "differs", differs: ["acme.added", PACKAGED] });
   assert.match(fx.cli(["status"]).stdout, /modules: the kernel runs its own copy; the home's own record differs for acme\.added, acme\.one/);
+  // The names are the home's own to choose: only capability ids are named, and no more than a row may carry.
+  const wild = Object.fromEntries([["\u001b[31mnot an id", {}], ["x".repeat(300), {}], ...Array.from({ length: 250 }, (_, n) => [`acme.n${String(n).padStart(3, "0")}`, {}])]);
+  writeFileSync(join(home, "instance.json"), JSON.stringify({ ...record, modules: { ...record.modules, ...wild } }));
+  const many = row().moduleCopy;
+  assert.deepEqual([many.homeCopy, many.differs.length, many.differs.every((id) => /^[a-z0-9][a-z0-9._-]*$/.test(id) && id.length <= 200)], ["differs", 200, true]);
+  const said = fx.cli(["status"]).stdout.split("\n").find((line) => line.includes("modules: the kernel runs its own copy"));
+  assert.equal(/acme\.n000/.test(said) && !said.includes("\u001b") && !said.includes("x".repeat(250)), true, "the line names capability ids only: nothing else the home chose reaches the terminal by it");
   writeFileSync(join(home, "instance.json"), JSON.stringify(record));
   // After an upgrade, and at the start that follows it: the same again, on the row and in the answer.
   const planned = await plan();
@@ -596,7 +603,8 @@ test("a provider home's status row, and a start's answer, say which copy of its 
 test("a remote row's moduleCopy is relayed only as this kernel reads it: the three keys, the two words, and a list that agrees with them", () => {
   const same = { runs: "kernel-copy", homeCopy: "same", differs: [] }, differs = { runs: "kernel-copy", homeCopy: "differs", differs: ["acme.one"] };
   assert.deepEqual([readModuleCopy(same), readModuleCopy(differs)], [same, differs]);
-  for (const refused of [null, "same", [], {}, { ...same, extra: 1 }, { ...same, runs: "home-copy" }, { ...same, homeCopy: "differs" }, { ...differs, homeCopy: "same" }, { ...differs, differs: [1] }, { ...differs, differs: [""] }, { ...differs, differs: "acme.one" }, { ...differs, differs: Array(201).fill("x") }]) {
+  assert.deepEqual(readModuleCopy({ ...same, homeCopy: "differs" }), { ...same, homeCopy: "differs" }, "differs with nothing named: the names were none a row may carry");
+  for (const refused of [null, "same", [], {}, { ...same, extra: 1 }, { ...same, runs: "home-copy" }, { ...same, homeCopy: "other" }, { ...differs, homeCopy: "same" }, { ...differs, differs: [1] }, { ...differs, differs: [""] }, { ...differs, differs: ["\u001b[31mred"] }, { ...differs, differs: ["Has Space"] }, { ...differs, differs: "acme.one" }, { ...differs, differs: Array(201).fill("x") }]) {
     assert.equal(readModuleCopy(refused), undefined, JSON.stringify(refused)?.slice(0, 80));
   }
 });
@@ -772,4 +780,17 @@ test("a provider home whose own modules directory is gone is run as before: the 
   // (Its files are compared by readiness, which says so; its record of them is still the kernel's.)
   const compared = fx.cli(["readiness", "--home", home, "--json"]).json().result.kernelCopies.differing;
   assert.deepEqual(compared.map((d) => d.capability).sort(), [FAKE_CAPABILITY, HOOKED]);
+});
+
+test("readiness and inspect of a provider home take its modules from the receipt: a home whose own modules directory and record of them are gone answers as before", async (t) => {
+  const fx = providerDeployment(t, { manifest: fakeManifest({ fake: fakeProvider({ check: true }) }) });
+  const { home } = await fx.launch("unlisted");
+  const before = fx.cli(["readiness", "--home", home, "--json"]).json().result;
+  rmSync(join(home, ".oats", "modules"), { recursive: true });
+  writeFileSync(join(home, "instance.json"), JSON.stringify({ ...recordOf(home), modules: {} }));
+  fx.clearCalls();
+  const after = fx.cli(["readiness", "--home", home, "--json"]).json().result;
+  assert.deepEqual(after.checks.providers, before.checks.providers, "the provider's readiness is asked and answered as before");
+  assert.deepEqual(fx.verbs("check").length, 1);
+  assert.deepEqual(after.kernelCopies.differing, [{ capability: FAKE_CAPABILITY, differs: null }], "its own copy is not there to compare");
 });

@@ -37,9 +37,8 @@
     (`sessionProviders.<name>.wire`, `"1.3"`), and every request carries the
     kernel's. A provider that declares another, or none, is refused
     `E_BACKEND_WIRE`, naming both.
-  - **Not checked by this change: the home's module copy.** The kernel runs
-    a provider home's own copy of its capabilities (provider commands and
-    hooks) without checking it against a record outside the home. The
-    session-provider wire is experimental while that is so.
+  - What the kernel runs of a provider home is its own copy of the home's
+    modules, kept outside the home: see "The kernel runs its own copy of a
+    provider home's modules" in these notes.
   - tmux launches are unchanged: no `sandbox`, and `sandboxDomains` is not
     read. A kernel from before session providers ignores the key.
