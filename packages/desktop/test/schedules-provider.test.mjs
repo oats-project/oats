@@ -493,18 +493,38 @@ test("the Schedules view made again under one of the page's acts starts held, an
   }
 });
 
-test("an act in one workspace holds no Schedules view of another, and the view that comes back to it is held", async () => {
-  let finish;
-  const s = setup({ read: async () => ({ schedules: [onBb], scheduler }), mutate: async path => { if (path.startsWith("/api/automations")) await new Promise(resolve => { finish = resolve; }); return path.startsWith("/api/capabilities") ? listsBb : {}; } });
-  try {
-    await tick(); s.rowAction("bb-review", "disable").click(); await tick();
-    setWorkspace("/elsewhere"); await ticks(5);
-    assert.equal(s.el.querySelector(".schedule-new").disabled, false, "another workspace is not held");
-    setWorkspace("/team"); await ticks(5);
-    assert.equal(s.el.querySelector(".schedule-new").disabled, true, "back in the act's workspace: held");
-    finish(); await ticks(5);
-    assert.equal(s.el.querySelector(".schedule-new").disabled, false);
-  } finally { setWorkspace("/team"); s.cleanup(); }
+test("an act in one workspace holds no Schedules view of another; it is counted against its own workspace wherever it ends, and the view back there reads the list again before any Edit", async () => {
+  // `ends`: which workspace is shown when the act's request settles.
+  for (const outcome of ["the act answers", "the act fails"]) for (const ends of ["back in its workspace", "while another is shown"]) {
+    const say = `${outcome}, ${ends}`, saved = []; let finish, fail, enabled = true;
+    const s = setup({ read: async () => ({ schedules: [{ ...onBb, enabled }], scheduler }), mutate: async (path, body) => {
+      if (path.startsWith("/api/capabilities")) return listsBb;
+      if (path.startsWith("/api/automations")) { await new Promise((resolve, reject) => { finish = resolve; fail = () => reject(new Error("refused")); }); return {}; }
+      return saver(saved)(body);
+    } });
+    const lists = () => posts(s, "/api/automations").filter(c => JSON.parse(c.opts.body).action === "list" && new URL(c.path, "http://local").searchParams.get("ws") === "/team").length;
+    const settle = () => { if (outcome === "the act answers") { enabled = false; finish(); } else fail(); };
+    try {
+      await tick(); s.rowAction("bb-review", "disable").click(); await tick();
+      setWorkspace("/elsewhere"); await ticks(5);
+      assert.equal(s.el.querySelector(".schedule-new").disabled, false, `${say}: another workspace is not held`);
+      if (ends === "while another is shown") { settle(); await ticks(5); }
+      setWorkspace("/team"); await ticks(5);
+      if (ends === "back in its workspace") {
+        assert.equal(s.el.querySelector(".schedule-new").disabled, true, `${say}: back in the act's workspace, held`);
+        const edit = s.rowAction("bb-review", "edit"); edit.disabled = false; edit.click(); await ticks();
+        assert.equal(sheetOf(s).hidden, true, `${say}: no Edit on a list read before the act landed`);
+        const reads = lists(); settle(); await ticks(5);
+        assert.equal(lists(), reads + 1, `${say}: the list is read again when the act ends`);
+      }
+      // Counted against its own workspace: nothing is left held there, wherever the end landed.
+      assert.equal(s.el.querySelector(".schedule-new").disabled, false, `${say}: not held once the act has ended`);
+      s.rowAction("bb-review", "edit").click(); await ticks();
+      assert.equal(sheetOf(s).hidden, false, say); assert.equal(s.el.querySelector("form").elements.enabled.checked, enabled, `${say}: the definition as it now is`);
+      submit(s); await ticks();
+      assert.deepEqual(saved.map(spec => spec.enabled), [enabled], `${say}: a save keeps it`);
+    } finally { setWorkspace("/team"); s.cleanup(); }
+  }
 });
 
 test("the automations page tells its own acts, begin and end, in turn; one it is disposed under ends when its request settles; never the busy state set from outside", async () => {
