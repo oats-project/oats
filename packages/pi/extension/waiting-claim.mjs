@@ -147,6 +147,8 @@ export function waitingClaim(pi, home) {
   /** Whether a mark's holder is alive: another process that is (holderAlive), or a bridge of this
    *  process whose session has not ended. */
   const alive = (mark) => mark.pid === self.pid && mark.start === self.start ? LIVE_BRIDGES.has(mark.token) : holderAlive(mark);
+  /** Whether two reads of the mark are one holder's one mark. */
+  const sameMark = (a, b) => a !== null && b !== null && a.pid === b.pid && a.start === b.start && a.token === b.token && a.reason === b.reason;
   LIVE_BRIDGES.add(self.token);
   let question;
   let failure;
@@ -182,14 +184,25 @@ export function waitingClaim(pi, home) {
     } catch { drop(draft); }
   };
   const removeMark = () => drop(markPath(home));
-  /** Clear the claim, then remove the mark, unless a live holder wrote its own meanwhile. False when
+  /** Clear the claim, then remove the mark, unless another holder wrote its own meanwhile. False when
    *  the kernel did not take the clear: the claim may stand, so the mark stays, for a later try by
-   *  this bridge or, once this pi is gone, by the home's next one. */
+   *  this bridge or, once this pi is gone, by the home's next one.
+   *
+   *  The mark is read before the clear and again after it, and only the mark the clear answered is
+   *  removed. One that another pi wrote while the clear was under way stands for a claim the clear
+   *  may not have reached: removed, a question whose pi then died would stand with no mark, and no
+   *  later step would find it. So a live holder's stays, with its claim; a question whose holder is
+   *  already gone is cleared in turn, here, since a quiet session has no next step to do it; and a
+   *  failed turn whose holder is gone keeps its mark, for a bridge's first run, as one left at any
+   *  other moment does. */
   const clearClaim = async () => {
-    if (!(await waiting("clear"))) return false;
-    const left = readMark(home);
-    if (left === null || mine(left) || !alive(left)) removeMark();
-    return true;
+    for (let answered = readMark(home); ;) {
+      if (!(await waiting("clear"))) return false;
+      const left = readMark(home);
+      if (left === null || mine(left) || (sameMark(left, answered) && !alive(left))) { removeMark(); return true; }
+      if (alive(left) || left.reason !== "question") return true;
+      answered = left;
+    }
   };
   /** One step after the others. A step that throws is dropped: reporting must never break a session. */
   const then = (run) => { steps = steps.then(run).catch(() => undefined); };
@@ -270,5 +283,9 @@ export function waitingClaim(pi, home) {
   return {
     asked(message) { question = message; change(); },
     turnFailed(message) { ran = true; failure = message; change(); },
+    /** Resolves once every step taken so far has run, its kernel call answered: what the claim and
+     *  the mark then say is this bridge's last word until its next event, or its next look by itself
+     *  (lookAgain). For a caller that has to wait for the claim's state, a test above all. */
+    settled() { return steps; },
   };
 }

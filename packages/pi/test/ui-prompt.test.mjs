@@ -25,16 +25,23 @@ const failed = (errorMessage) => ({ messages: [{ role: "assistant", stopReason: 
 const opened = (kind, title) => ({ type: "ui_prompt_start", reason: "ui_prompt", kind, ...(title ? { title } : {}) });
 
 /** The bridge's reports in a home, as index.ts wires them, with pi's events driven by hand:
- *  every handler of an event, in registration order, awaited as pi awaits them. */
+ *  every handler of an event, in registration order, awaited as pi awaits them. `settled()` on
+ *  what it returns resolves once the bridge has taken every step those events asked for, each
+ *  kernel call answered (waiting-claim.mjs settled): the wait of a test that then reads the
+ *  claim. It has no bound of its own, where a poll's would be a guess at how long a kernel
+ *  process takes on a busy host. */
 function session(home) {
   const handlers = new Map();
   const pi = { on: (event, handler) => handlers.set(event, [...(handlers.get(event) ?? []), handler]) };
   const claim = waitingClaim(pi, home);
   reportFailedTurn(pi, claim);
   reportUiPrompt(pi, claim);
-  return async (event, payload = {}) => { for (const handler of handlers.get(event) ?? []) await handler(payload); };
+  const fire = async (event, payload = {}) => { for (const handler of handlers.get(event) ?? []) await handler(payload); };
+  fire.settled = () => claim.settled();
+  return fire;
 }
 
+/** Wait for what no bridge of this process does: a kernel shim's record, another process. */
 const settle = async (done) => { const end = Date.now() + 15000; while (!done()) { if (Date.now() > end) throw new Error("timed out"); await new Promise((r) => setTimeout(r, 10)); } };
 const quiet = () => new Promise((r) => setTimeout(r, 100));
 
@@ -216,13 +223,15 @@ test("real kernel: the question reads back on the instance and holds a scheduled
   const fire = session(home);
   assert.equal(waitingHold(home), null, "no claim, no hold");
   await fire("ui_prompt_start", opened("select", "Which option should I take?"));
-  await settle(() => liveWaiting(home) !== null);
+  await fire.settled();
+  assert.notEqual(liveWaiting(home), null);
   const { since, ...shown } = liveWaiting(home);
   assert.deepEqual(shown, { producer: "oats.pi", reason: "question", message: "Which option should I take?" });
   assert.ok(!Number.isNaN(Date.parse(since)));
   assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.pi" }, "the schedule's read: a wake's Enter would answer the dialog");
   await fire("ui_prompt_end");
-  await settle(() => liveWaiting(home) === null);
+  await fire.settled();
+  assert.equal(liveWaiting(home), null);
   assert.equal(waitingHold(home), null, "answered: the wake goes");
 });
 
@@ -230,7 +239,8 @@ test("real kernel: a dialog with no title is a question with no text, and it hol
   const home = kernelHome(t);
   const fire = session(home);
   await fire("ui_prompt_start", opened("custom"));
-  await settle(() => liveWaiting(home) !== null);
+  await fire.settled();
+  assert.notEqual(liveWaiting(home), null);
   assert.equal(liveWaiting(home).reason, "question");
   assert.equal(liveWaiting(home).message, null);
   assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.pi" });
@@ -331,7 +341,8 @@ test("real kernel: a second pi process that starts, fails a turn and quits in th
   const home = kernelHome(t);
   const fire = session(home);
   await fire("ui_prompt_start", opened("select", "Which option should I take?"));
-  await settle(() => liveWaiting(home) !== null);
+  await fire.settled();
+  assert.notEqual(liveWaiting(home), null);
   const before = liveWaiting(home), mark = markOf(home);
   const { listens } = bridge({ home, env: { OATS_INSTANCE_HOME: home }, mode: "failed-run" });
   assert.ok(listens.includes("agent_settled"), "the second pi ran the bridge");
@@ -339,8 +350,9 @@ test("real kernel: a second pi process that starts, fails a turn and quits in th
   assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.pi" });
   assert.deepEqual(markOf(home), mark);
   await fire("ui_prompt_end");
-  await settle(() => liveWaiting(home) === null);
-  await settle(() => markOf(home) === null);
+  await fire.settled();
+  assert.equal(liveWaiting(home), null);
+  assert.equal(markOf(home), null);
 });
 
 test("a second pi's open dialog is claimed once the first pi's has closed: a blocked bridge looks again", async (t) => {
@@ -426,6 +438,7 @@ test("real kernel: a pi killed with its dialog open leaves its claim, and the ho
   const pi = spawn(process.execPath, [...RUNNER_ARGV, "dialog-then-hang"], { cwd: home, env: runnerEnv({ OATS_INSTANCE_HOME: home }), stdio: ["ignore", "pipe", "inherit"] });
   const exited = new Promise((resolve) => pi.on("exit", resolve));
   t.after(() => { pi.kill("SIGKILL"); });
+  // Another process's bridge: its claim is read here once the kernel has it.
   await settle(() => liveWaiting(home) !== null);
   assert.equal(markOf(home).pid, pi.pid);
   pi.kill("SIGKILL");
@@ -433,9 +446,10 @@ test("real kernel: a pi killed with its dialog open leaves its claim, and the ho
   assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.pi" }, "left behind: it would hold every wake");
   const fire = session(home);
   await fire("session_start", { type: "session_start", reason: "startup" });
-  await settle(() => liveWaiting(home) === null);
+  await fire.settled();
+  assert.equal(liveWaiting(home), null);
   assert.equal(waitingHold(home), null);
-  await settle(() => markOf(home) === null);
+  assert.equal(markOf(home), null);
 });
 
 test("real kernel: a pid that now belongs to another process is not the holder: the mark's start time tells", async (t) => {
@@ -443,8 +457,9 @@ test("real kernel: a pid that now belongs to another process is not the holder: 
   leftBy(home, { pid: process.pid, start: "not when this process started" }, "question", "Which one?");
   const fire = session(home);
   await fire("session_start", { type: "session_start", reason: "startup" });
-  await settle(() => liveWaiting(home) === null);
-  await settle(() => markOf(home) === null);
+  await fire.settled();
+  assert.equal(liveWaiting(home), null);
+  assert.equal(markOf(home), null);
 });
 
 test("real kernel: a live holder's question is left at a start and at a first run; a holder whose start cannot be read counts as alive", async (t) => {
@@ -467,12 +482,13 @@ test("real kernel: a failed turn left by a pi that is gone waits for the next ru
   const fire = session(home);
   await fire("session_start", { type: "session_start", reason: "startup" });
   await fire("session_shutdown", { type: "session_shutdown", reason: "reload" });
-  await quiet();
+  await fire.settled();
   assert.equal(liveWaiting(home)?.message, "Turn failed: 422: refused", "still shown: nothing has run since");
   await fire("session_start", { type: "session_start", reason: "reload" });
   await fire("agent_start");
-  await settle(() => liveWaiting(home) === null);
-  await settle(() => markOf(home) === null);
+  await fire.settled();
+  assert.equal(liveWaiting(home), null);
+  assert.equal(markOf(home), null);
 });
 
 test("a session that ends on a failed turn leaves the claim and gives up its mark, so the next bridge's first run clears it", async (t) => {
@@ -602,12 +618,14 @@ test("real kernel: a holder that has exited and is not yet reaped is gone", { sk
   t.after(() => { parent.kill("SIGKILL"); });
   const pid = Number(await new Promise((resolve) => parent.stdout.once("data", (d) => resolve(String(d).trim()))));
   const state = () => readFileSync(`/proc/${pid}/stat`, "utf8").split(") ").at(-1)[0];
+  // The child's own exit, which no bridge reports.
   await settle(() => state() === "Z");
   leftBy(home, { pid, start: processStart(pid) }, "question", "Which one?");
   const fire = session(home);
   await fire("session_start", { type: "session_start", reason: "startup" });
-  await settle(() => liveWaiting(home) === null);
-  await settle(() => markOf(home) === null);
+  await fire.settled();
+  assert.equal(liveWaiting(home), null);
+  assert.equal(markOf(home), null);
 });
 
 test("real kernel: a second pi that dies with its dialog open is cleared by the pi that lives on, at its next run", async (t) => {
@@ -616,12 +634,14 @@ test("real kernel: a second pi that dies with its dialog open is cleared by the 
   const run = async () => { await fire("agent_start"); await fire("agent_end", { messages: [{ role: "assistant", stopReason: "stop" }] }); await fire("agent_settled", { aborted: false }); };
   await fire("session_start", { type: "session_start", reason: "startup" });
   await run();
+  await fire.settled();
   leftBy(home, gone(), "question", "Nested?");
   assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.pi" }, "left behind by the second pi");
   await run();
-  await settle(() => liveWaiting(home) === null);
+  await fire.settled();
+  assert.equal(liveWaiting(home), null);
   assert.equal(waitingHold(home), null);
-  await settle(() => markOf(home) === null);
+  assert.equal(markOf(home), null);
 });
 
 test("real kernel: a second pi that dies inside the live pi's run, with its dialog open, is cleared when that run ends", async (t) => {
@@ -629,15 +649,72 @@ test("real kernel: a second pi that dies inside the live pi's run, with its dial
   const fire = session(home);
   await fire("session_start", { type: "session_start", reason: "startup" });
   await fire("agent_start");
-  await quiet();
+  // The start's own clear has landed: the nested pi's question comes after it, and no step of
+  // this bridge is under way. One that comes while that clear is under way is the next test's.
+  await fire.settled();
   // A nested pi, started by this run and killed in it, leaves its question after the run's start.
   leftBy(home, gone(), "question", "Nested?");
   assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.pi" });
   await fire("agent_end", { messages: [{ role: "assistant", stopReason: "stop" }] });
   await fire("agent_settled", { aborted: false });
-  await settle(() => liveWaiting(home) === null);
+  await fire.settled();
+  assert.equal(liveWaiting(home), null);
   assert.equal(waitingHold(home), null, "the idle pi gets its wakes");
-  await settle(() => markOf(home) === null);
+  assert.equal(markOf(home), null);
+});
+
+/** Make the home's first clear the moment a second pi comes and goes: the real kernel takes the
+ *  clear, and before the bridge that asked for it hears so, a pi that is gone has left its mark
+ *  and its claim. Returns whether that has happened. */
+function leftDuringTheFirstClear(home, holder, reason, message) {
+  const shim = join(home, ".oats", "bin", "oats"), once = join(home, "left-during-the-clear");
+  const mark = `${JSON.stringify({ token: "another-bridge", reason, ...holder })}\n`;
+  rmSync(shim);
+  writeFileSync(shim, `#!${process.execPath}
+const fs = require("node:fs"), argv = process.argv.slice(2);
+const { status } = require("node:child_process").spawnSync(process.execPath, [${JSON.stringify(join(REPO_ROOT, "bin", "oats.mjs"))}, ...argv], { stdio: "inherit" });
+if (argv[2] !== "clear" || status !== 0 || fs.existsSync(${JSON.stringify(once)})) process.exit(status ?? 1);
+import(${JSON.stringify(new URL("../../../lib/instance-events.mjs", import.meta.url).href)}).then(({ setWaiting }) => {
+  fs.mkdirSync(${JSON.stringify(join(home, ".pi"))}, { recursive: true });
+  fs.writeFileSync(${JSON.stringify(markPath(home))}, ${JSON.stringify(mark)});
+  setWaiting(${JSON.stringify(home)}, ${JSON.stringify({ producer: "oats.pi", waiting: true, reason, message })});
+  fs.writeFileSync(${JSON.stringify(once)}, "");
+});
+`);
+  chmodSync(shim, 0o755);
+  return () => existsSync(once);
+}
+
+test("real kernel: a second pi that leaves its question and dies while the live pi's clear is under way is cleared by that step, with no later event", async (t) => {
+  const home = kernelHome(t);
+  const left = leftDuringTheFirstClear(home, gone(), "question", "Nested?");
+  const fire = session(home);
+  await fire("session_start", { type: "session_start", reason: "startup" });
+  await fire("agent_start");
+  await fire.settled();
+  assert.ok(left(), "the nested pi's question came after the kernel took the run's clear, and before the bridge read the mark again");
+  assert.equal(liveWaiting(home), null, "not left standing with its mark removed, where no later step would find it");
+  assert.equal(waitingHold(home), null, "the idle pi gets its wakes");
+  assert.equal(markOf(home), null);
+});
+
+test("real kernel: a second pi's failed turn left while the live pi's clear is under way keeps its mark, and the home's next pi clears it at its first run", async (t) => {
+  const home = kernelHome(t);
+  const left = leftDuringTheFirstClear(home, gone(), "attention", "Turn failed: 422: refused");
+  const fire = session(home);
+  await fire("session_start", { type: "session_start", reason: "startup" });
+  await fire("agent_start");
+  await fire.settled();
+  assert.ok(left());
+  assert.equal(liveWaiting(home)?.message, "Turn failed: 422: refused", "a failed turn waits for a first run, as one left at any other moment does");
+  assert.equal(markOf(home)?.token, "another-bridge", "with its mark, which says whose it is");
+  await fire("session_shutdown", { type: "session_shutdown", reason: "quit" });
+  const nextPi = session(home);
+  await nextPi("session_start", { type: "session_start", reason: "startup" });
+  await nextPi("agent_start");
+  await nextPi.settled();
+  assert.equal(liveWaiting(home), null);
+  assert.equal(markOf(home), null);
 });
 
 test("a run that ends with nothing to clear starts no process: its end only reads the mark", async (t) => {
@@ -661,7 +738,8 @@ test("real kernel: the bridge clears its own claim and no other producer's", asy
   await new Promise((r) => setTimeout(r, 2));
   const fire = session(home);
   await fire("ui_prompt_start", opened("select", "Which one?"));
-  await settle(() => liveWaiting(home)?.producer === "oats.pi");
+  await fire.settled();
+  assert.equal(liveWaiting(home)?.producer, "oats.pi");
   await fire("ui_prompt_end");
   await fire("session_shutdown", { type: "session_shutdown", reason: "quit" });
   assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.core" }, "a question of another producer still holds");
