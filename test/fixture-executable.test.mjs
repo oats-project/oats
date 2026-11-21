@@ -7,7 +7,7 @@ import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { insideFixture, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
+import { fixtureSpawnPath, insideFixture, v2Deployment, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -78,4 +78,52 @@ test("no test writes a home's recorded launch.executable but through writeFixtur
     });
   }
   assert.deepEqual(offenders, [], "write a harness stand-in with writeFixtureExecutable(fx.base, path, content): it refuses a path outside the fixture");
+});
+
+// #2044: an in-process spawn looked for the harness on the PATH of the process that runs the tests,
+// so a home recorded the pi, claude or codex of the machine as its launch.executable.
+test("an in-process spawn records a harness inside the fixture; a test's own fake in front is still the one found; the host's harness is an opt-in", async (t) => {
+  const fx = v2Deployment({ t, souls: { dev: { soul: { work: "directory", capabilities: { "oats.core": "off" } } } } });
+  const recorded = (home) => JSON.parse(readFileSync(join(home, "instance.json"), "utf8")).launch.executable;
+  const before = process.env.PATH;
+  t.after(() => { process.env.PATH = before; });
+  assert.equal(before.split(":").some((dir) => insideFixture(fx.base, dir)), false, "this process's PATH names nothing of the fixture");
+
+  const plain = recorded((await fx.spawn("dev", { name: "plain" })).home);
+  assert.ok(insideFixture(fx.base, plain), `the recorded harness (${plain}) is a file of the fixture (${fx.base})`);
+  assert.ok(!plain.startsWith(join(fx.base, "fakes")));
+  assert.equal(process.env.PATH, before, "the process's PATH is put back");
+
+  // A fake the test put in front of its PATH wins over the fixture's inert one.
+  const fakes = join(fx.base, "fakes");
+  mkdirSync(fakes);
+  writeFixtureExecutable(fx.base, join(fakes, "pi"), "#!/bin/sh\nexit 0\n");
+  process.env.PATH = `${fakes}:${before}`;
+  assert.equal(recorded((await fx.spawn("dev", { name: "faked" })).home), join(fakes, "pi"));
+
+  // The opt-in: the spawn looks on the PATH the test process has, with nothing put in. A
+  // directory after the host's own stands for "what this machine has": with the opt-in the
+  // fixture's inert harness, which would come before it, is not the one recorded.
+  const last = join(fx.base, "last");
+  mkdirSync(last);
+  writeFixtureExecutable(fx.base, join(last, "pi"), "#!/bin/sh\nexit 0\n");
+  process.env.PATH = `${before}:${last}`;
+  const opted = recorded((await fx.spawn("dev", { name: "opted", hostHarness: true })).home);
+  assert.ok(opted === join(last, "pi") || !insideFixture(fx.base, opted), `with hostHarness the fixture's inert harness is not put on the PATH (recorded ${opted})`);
+  // Without it, on the same PATH, the fixture's is.
+  const usual = recorded((await fx.spawn("dev", { name: "usual" })).home);
+  assert.equal(usual, plain);
+});
+
+test("fixtureSpawnPath puts the fixture's harnesses before the host's directories, after what a test put in front, and leaves any other PATH alone", () => {
+  const host = "/usr/local/bin:/usr/bin", bin = "/fx/runtime-stub";
+  assert.equal(fixtureSpawnPath(host, bin, host), `${bin}:${host}`);
+  assert.equal(fixtureSpawnPath(`/fakes:${host}`, bin, host), `/fakes:${bin}:${host}`);
+  assert.equal(fixtureSpawnPath(`${bin}:/gh:${host}`, bin, host), `${bin}:/gh:${host}`, "already there: unchanged");
+  assert.equal(fixtureSpawnPath("/only/this", bin, host), "/only/this", "a PATH the test replaced whole: unchanged");
+  assert.equal(fixtureSpawnPath(`/x${host}`, bin, host), `/x${host}`, "the host's PATH is matched as whole entries");
+  assert.equal(fixtureSpawnPath(`/fakes:${host}:/more`, bin, host), `/fakes:${bin}:${host}:/more`, "what a test added after it stays after");
+  assert.equal(fixtureSpawnPath(`${host}x`, bin, host), `${host}x`);
+  assert.equal(fixtureSpawnPath("", bin, host), "");
+  assert.equal(fixtureSpawnPath(host, bin, ""), host, "no host PATH known: unchanged");
 });

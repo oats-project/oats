@@ -18,7 +18,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, realpathSync, openSync, closeSync, fstatSync, ftruncateSync, writeSync, fchmodSync, constants as fsConstants } from "node:fs";
 import { devNull } from "node:os";
-import { dirname, join, resolve, isAbsolute, relative, sep } from "node:path";
+import { delimiter, dirname, join, resolve, isAbsolute, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import YAML from "yaml";
 import { inertHarnessDir } from "./runtime-stub.mjs";
@@ -36,12 +36,13 @@ export const CLI = resolve(new URL("../../bin/oats.mjs", import.meta.url).pathna
  *  see every write of every test: docs/implementation.md says the rule).
  *
  *  Why: a home's recorded `launch.executable` is whatever the spawn found for its harness, and an
- *  in-process spawn looks on the PATH of the process that runs the tests. On a machine with the
+ *  in-process spawn other than fx.spawn (which looks on the fixture's PATH: fixtureSpawnPath)
+ *  looks on the PATH of the process that runs the tests. On a machine with the
  *  harness installed that is the person's own binary; a test that wrote "its" harness there
  *  replaced it (oats-project/oats#2042). */
 export function writeFixtureExecutable(base, path, content, mode = 0o755) {
   if (typeof base !== "string" || !isAbsolute(base) || typeof path !== "string" || !isAbsolute(path)) throw new Error(`writeFixtureExecutable needs an absolute base and an absolute path (got ${base} and ${path})`);
-  const outside = (why) => new Error(`refusing to write the executable ${path}: ${why}. A test writes only inside its fixture (${base}); a home's recorded launch.executable is the harness the spawn found on PATH, which on this machine may be the real one. Spawn with the fixture's PATH (process.env.PATH = fx.env.PATH, whose inert harnesses come first), or point a launch configuration at a file of the fixture`);
+  const outside = (why) => new Error(`refusing to write the executable ${path}: ${why}. A test writes only inside its fixture (${base}); a home's recorded launch.executable is the harness the spawn found on PATH, which on this machine may be the real one. Spawn through fx.spawn, which looks on the fixture's PATH (its inert harnesses first); for any other in-process spawn set process.env.PATH = fx.env.PATH; or point a launch configuration at a file of the fixture`);
   let root, dir;
   try { root = realpathSync(base); dir = realpathSync(dirname(path)); } catch (e) { throw outside(`its directory or the fixture's base cannot be resolved (${e.code ?? e.message})`); }
   const rel = relative(root, dir);
@@ -142,6 +143,22 @@ let inForce = null;
 export function setProcessEnvironment(target) {
   for (const key of Object.keys(process.env)) if (target[key] === undefined) delete process.env[key];
   for (const [key, value] of Object.entries(target)) if (value !== undefined && process.env[key] !== String(value)) process.env[key] = value;
+}
+/** The PATH this process had when the tests began: the host's, where its own harness may be. */
+const HOST_PATH = process.env.PATH || "";
+/** The PATH an in-process spawn looks for its harness on (#2044): `current`, with the fixture's
+ *  inert harnesses (`bin`) put before the host's own directories. What a test put in front itself
+ *  (its fakes) stays in front, so its fake harness is still the one found; without this a spawn
+ *  finds the host's pi, claude or codex and records it as the home's `launch.executable`. A PATH
+ *  that no longer holds the host's (the test replaced it), or that already names `bin`, is left
+ *  as it is. */
+export function fixtureSpawnPath(current, bin, host = HOST_PATH) {
+  const path = current || "";
+  if (path.split(delimiter).includes(bin) || !host) return path;
+  // The host's PATH as whole entries, wherever the test left it (it may have added to either end).
+  const framed = `${delimiter}${path}${delimiter}`, at = framed.indexOf(`${delimiter}${host}${delimiter}`);
+  if (at < 0) return path;
+  return `${path.slice(0, at)}${bin}${delimiter}${path.slice(at)}`;
 }
 /** Force the environment `build()` returns (from process.env as it is) on the real process.env, for
  *  `owner` (a fixture; `name` names it in an error) → the function that ends this call.
@@ -318,10 +335,18 @@ function buildDeployment(base, ownTmuxTmpdir, { souls = { dev: {} }, capabilitie
     prepared.toCapabilityRows = toCapabilityRows;
     return { prepared, agent: findAgent(root, soul) };
   };
-  /** An in-process spawn the way `oats spawn` does it (no launch unless asked). */
+  /** An in-process spawn the way `oats spawn` does it (no launch unless asked). It looks for the
+   *  harness on the fixture's PATH (fixtureSpawnPath, above), so the home's recorded
+   *  `launch.executable` is inside the fixture; `hostHarness: true` is the opt-in for a test that
+   *  needs the harness of the machine that runs it. Two limits. The opt-in holds only for a spawn
+   *  that does not overlap another of the fixture: the other has already put the fixture's
+   *  harnesses on the process's PATH. And a spawn that launches looks the harness up on the PATH of
+   *  the fixture's tmux server, not on this one: a server some other in-process call started with
+   *  the host's PATH still finds the host's harness. */
   fx.spawn = (soul, opts = {}) => fx.inEnv(async () => {
     const { spawnInstanceAsync } = await import("../../lib/core.mjs");
-    const { providers, ...rest } = opts;
+    const { providers, hostHarness = false, ...rest } = opts;
+    if (!hostHarness) process.env.PATH = fixtureSpawnPath(process.env.PATH, bin);
     const { prepared, agent } = await prepareIn(soul, { providers });
     const work = rest.work || agent.work || "directory";
     const repo = rest.repo ?? (work === "directory" ? dep : member);
