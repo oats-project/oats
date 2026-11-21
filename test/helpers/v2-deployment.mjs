@@ -36,12 +36,13 @@ export const CLI = resolve(new URL("../../bin/oats.mjs", import.meta.url).pathna
  *  see every write of every test: docs/implementation.md says the rule).
  *
  *  Why: a home's recorded `launch.executable` is whatever the spawn found for its harness, and an
- *  in-process spawn looks on the PATH of the process that runs the tests. On a machine with the
+ *  in-process spawn other than fx.spawn (which looks on the fixture's PATH: fixtureSpawnPath)
+ *  looks on the PATH of the process that runs the tests. On a machine with the
  *  harness installed that is the person's own binary; a test that wrote "its" harness there
  *  replaced it (oats-project/oats#2042). */
 export function writeFixtureExecutable(base, path, content, mode = 0o755) {
   if (typeof base !== "string" || !isAbsolute(base) || typeof path !== "string" || !isAbsolute(path)) throw new Error(`writeFixtureExecutable needs an absolute base and an absolute path (got ${base} and ${path})`);
-  const outside = (why) => new Error(`refusing to write the executable ${path}: ${why}. A test writes only inside its fixture (${base}); a home's recorded launch.executable is the harness the spawn found on PATH, which on this machine may be the real one. Spawn with the fixture's PATH (process.env.PATH = fx.env.PATH, whose inert harnesses come first), or point a launch configuration at a file of the fixture`);
+  const outside = (why) => new Error(`refusing to write the executable ${path}: ${why}. A test writes only inside its fixture (${base}); a home's recorded launch.executable is the harness the spawn found on PATH, which on this machine may be the real one. Spawn through fx.spawn, which looks on the fixture's PATH (its inert harnesses first); for any other in-process spawn set process.env.PATH = fx.env.PATH; or point a launch configuration at a file of the fixture`);
   let root, dir;
   try { root = realpathSync(base); dir = realpathSync(dirname(path)); } catch (e) { throw outside(`its directory or the fixture's base cannot be resolved (${e.code ?? e.message})`); }
   const rel = relative(root, dir);
@@ -143,20 +144,6 @@ export function setProcessEnvironment(target) {
   for (const key of Object.keys(process.env)) if (target[key] === undefined) delete process.env[key];
   for (const [key, value] of Object.entries(target)) if (value !== undefined && process.env[key] !== String(value)) process.env[key] = value;
 }
-/** Force the environment `build()` returns (from process.env as it is) on the real process.env, for
- *  `owner` (a fixture; `name` names it in an error) → the function that ends this call.
- *
- *  Calls of ONE fixture may nest or overlap (a spawn inside fx.inEnv, two spawns awaited together).
- *  - The last call to end puts back exactly what was there before the first.
- *  - A call that ends while it is the newest in flight (a nested one) puts back what was there
- *    when it began, as when each call had an object of its own: what happened to the environment
- *    during the inner call does not outlive it.
- *  - A call that ends while a newer one is in flight (they overlap) puts nothing back: the
- *    environment is never taken from under a call still running.
- *  Ending a call twice counts once.
- *
- *  A call of ANOTHER fixture while one is in flight is refused: one process has one environment, so
- *  one of the two would run its kernel calls in the other's deployment, or in none. */
 /** The PATH this process had when the tests began: the host's, where its own harness may be. */
 const HOST_PATH = process.env.PATH || "";
 /** The PATH an in-process spawn looks for its harness on (#2044): `current`, with the fixture's
@@ -173,7 +160,20 @@ export function fixtureSpawnPath(current, bin, host = HOST_PATH) {
   if (at < 0) return path;
   return `${path.slice(0, at)}${bin}${delimiter}${path.slice(at)}`;
 }
-
+/** Force the environment `build()` returns (from process.env as it is) on the real process.env, for
+ *  `owner` (a fixture; `name` names it in an error) → the function that ends this call.
+ *
+ *  Calls of ONE fixture may nest or overlap (a spawn inside fx.inEnv, two spawns awaited together).
+ *  - The last call to end puts back exactly what was there before the first.
+ *  - A call that ends while it is the newest in flight (a nested one) puts back what was there
+ *    when it began, as when each call had an object of its own: what happened to the environment
+ *    during the inner call does not outlive it.
+ *  - A call that ends while a newer one is in flight (they overlap) puts nothing back: the
+ *    environment is never taken from under a call still running.
+ *  Ending a call twice counts once.
+ *
+ *  A call of ANOTHER fixture while one is in flight is refused: one process has one environment, so
+ *  one of the two would run its kernel calls in the other's deployment, or in none. */
 export function forceEnvironment(owner, name, build) {
   if (inForce && inForce.owner !== owner) {
     throw new Error(`the fixture ${name} cannot force its environment on this process: the fixture ${inForce.name} has an in-process call in flight, and a process has one environment. Await that call first, or run this one as a child with the fixture's env (fx.cli).`);
@@ -338,7 +338,11 @@ function buildDeployment(base, ownTmuxTmpdir, { souls = { dev: {} }, capabilitie
   /** An in-process spawn the way `oats spawn` does it (no launch unless asked). It looks for the
    *  harness on the fixture's PATH (fixtureSpawnPath, above), so the home's recorded
    *  `launch.executable` is inside the fixture; `hostHarness: true` is the opt-in for a test that
-   *  needs the harness of the machine that runs it. */
+   *  needs the harness of the machine that runs it. Two limits. The opt-in holds only for a spawn
+   *  that does not overlap another of the fixture: the other has already put the fixture's
+   *  harnesses on the process's PATH. And a spawn that launches looks the harness up on the PATH of
+   *  the fixture's tmux server, not on this one: a server some other in-process call started with
+   *  the host's PATH still finds the host's harness. */
   fx.spawn = (soul, opts = {}) => fx.inEnv(async () => {
     const { spawnInstanceAsync } = await import("../../lib/core.mjs");
     const { providers, hostHarness = false, ...rest } = opts;

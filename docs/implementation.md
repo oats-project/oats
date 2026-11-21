@@ -988,8 +988,10 @@ inherits it (awebai/oats#816):
   looks for the harness on the fixture's PATH** (#2044): the fixture's inert
   `pi`, `claude` and `codex` are put before the host's directories
   (`fixtureSpawnPath`), after anything the test put in front itself, so a
-  test's own fake harness is still the one found and every recorded
-  `launch.executable` is inside the fixture. A test that needs the harness
+  test's own fake harness is still the one found and the `launch.executable`
+  such a spawn records is inside the fixture. (That is the lookup on this
+  process's PATH: a spawn that launches looks on the PATH of the fixture's
+  tmux server, and a spawn made without `fx.spawn` keeps the PATH it has.) A test that needs the harness
   of the machine it runs on says so: `fx.spawn(soul, { hostHarness: true })`.
   A spawn whose recorded executable a test will rewrite also asserts
   `insideFixture(fx.base, launch.executable)`. The fixture's
