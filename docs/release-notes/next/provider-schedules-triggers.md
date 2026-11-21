@@ -1,16 +1,21 @@
-## Fixed
+## Changed
 
-- **A scheduled spawn with `yolo: true` on a session provider that launches
-  only in full mode can be saved.** `oats schedule add` and `update` of a
-  spawn job whose soul this deployment had not spawned yet refused it
-  (`E_SCHEDULE_INVALID`, `details.code: "E_BACKEND_SANDBOXED_MODE"`), and
-  `oats schedule test` said its soul did not resolve, although the job's run
-  launched: their preview of the spawn did not carry the job's `yolo`, and a
-  preview asks the provider's `check` with the launch that is planned. The preview now carries the job's `yolo`, as a trigger's does
-  ([spawn](../schedules.md#kinds)). A job with no `yolo` on such a provider
-  is still refused when saved; one saved without the preview fails at each
-  run, `launch-failed` with `errorCode: "E_BACKEND_SANDBOXED_MODE"`, and
-  leaves no home.
+- **A spawn job on a session provider is checked by the provider when it is
+  saved.** A spawn's preview now asks a session provider's `check` with the
+  launch that is planned, and `oats schedule add`, `update` and `test` ask
+  that preview with the job's own launch selection, its `yolo` included
+  ([spawn](../schedules.md#kinds)). On a provider that launches only in full
+  mode:
+  - a job with `yolo: true`, or a launch configuration that sets it, is
+    saved and launches (a build with the preview's new check and without
+    this change refused it, `E_SCHEDULE_INVALID` with `details.code:
+    "E_BACKEND_SANDBOXED_MODE"`, and `oats schedule test` said its soul did
+    not resolve: the schedule's preview did not carry the job's `yolo`);
+  - a job with no `yolo` is refused when saved, with that code, and `oats
+    schedule test` reports it, where it used to fail only at its run. One
+    saved without the preview (its soul was already spawned in the
+    deployment) fails at each run, `launch-failed` with `errorCode:
+    "E_BACKEND_SANDBOXED_MODE"`, and leaves no home.
 
 ## Documentation
 
