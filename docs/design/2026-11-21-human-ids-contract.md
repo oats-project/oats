@@ -29,8 +29,11 @@ Commit ids are background only.
 1. **Opt-in is the adoption itself.** A deployment whose roots nobody adopted changes in
    nothing: no OATS setting, no config key, no new aw requirement.
 2. **People sign; agents never act as people.**
-   - No agent holds or uses a person's signing key, or a key with owner/admin authority over
-     team membership (P6's key). This is an OATS rule in its own right.
+   - No agent holds or uses a person's signing key, or a team-scoped owner/admin API key of
+     a person's account (P6's key). This is an OATS rule in its own right.
+   - A BYOT team's controller key on the deployment host, which the provider's mint uses
+     (`aw init --join-from` signs the local invite with it), is unchanged. It belongs to the
+     deployment's user, not to a person's account.
    - aw also refuses every person signature inside an OATS instance or without a terminal
      (`human_approval_required`). That is a safeguard on native person signing, not a
      custody boundary, so OATS doesn't rely on it.
