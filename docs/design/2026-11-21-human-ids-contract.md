@@ -166,8 +166,11 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   That is an incomplete cleanup, so the kernel keeps the home, marked
   `.oats-rollback-incomplete.json` (the existing rule in [capabilities](../capabilities.md)).
   No kernel or hook-contract change is involved.
-- The operator inspects the membership as aw says, then removes the home with
-  `oats retire --force`.
+- The hook answers `signature-pending` only while aw still holds the pending mint: the exact
+  home, key and pending selection, including any prepared request. Each `oats retire` retry
+  runs the hook again. Once aw settles the mint either way, the hook answers what is true and
+  a plain retry clears the home. `--force` is not the route.
+- Nothing remints into that home or compensates it away while it is pending.
 - If the cut SHA lacks that code, PR a falls back to not retiring a home whose mint failed
   after aw wrote a key.
 - oats-aweb never retries or remints into the same home.
@@ -214,7 +217,10 @@ OATS doesn't use, and doesn't build on, these aw primitives:
 ## 5. Gates
 
 - **G1, aw.** Nothing merges until aw 1.36.59 final is published and PR a's real-binary
-  tests pass against the final binary at the cut SHA.
+  tests pass against the final binary at the cut SHA. Those tests run P3 and same-machine P4
+  with their actual argv. They assert that the child's installed leaf binds the retained
+  child key and the exact parent, that it verifies to the person, and that P4 without
+  `--parent` from a chainless root still joins.
   - Development and CI may use `1.36.59-rc.3`, pinned by integrity.
   - `tested` never points at an RC.
 - **G2, the run.** aweb's Cloud journey case (`cloud-journey-case-acxy7-v1`, step hash
@@ -222,6 +228,11 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   a real person's identities.
   - Its first green run, with a verdict per step, is the evidence.
   - The agreed record (v3) is written from it.
+  - Revocation step: the case text (`85196827b2b0`) says a team admin removes R's
+    membership in the dashboard. The released Cloud has no such control (§6), so the step
+    changes, for example to the harness running P6 with the scratch team's admin key, inside
+    its isolated fixture. Per the agreed rule, that change comes to OATS first. Both sides
+    accept it in advance if it keeps the same "must show".
   - Its steps: adopt R; mint child and grandchild unattended, both verifying to the person;
     an earlier child unchanged; a control child from an unadopted root matching in alias,
     address, roster and routing; revocation refusing the next mint, through
@@ -253,10 +264,12 @@ owners read the paired Cloud release (7b034ae27) and found:
 - such keys have no expiry, and there is no dashboard control to revoke them.
 
 As released, the person can't revoke an adoption on a hosted team without an old key. The
-Cloud removal route also accepts a signed-in person's authority, so a dashboard **Remove**
-action for an agent member needs no new server authority. The options, for the people who
+Cloud removal route also accepts a signed-in person's authority, so a dashboard **Remove
+membership** action for an agent member needs no new server authority. Removing the
+membership stops that root getting more memberships through that team. It doesn't reverse
+the person's signed adoption or revoke the ID chain. The options, for the people who
 own the product:
-- Cloud ships that dashboard Remove action with the paired release. Adoption then has a
+- Cloud ships that dashboard Remove membership action with the paired release. Adoption then has a
   documented undo, all in the browser. **The OATS maintainers recommend this.**
 - Adoption ships without a documented revocation on hosted teams, and PR b says so plainly.
 - Cloud adds a dashboard issuer for a removal-capable key, and the person runs P6 from a
