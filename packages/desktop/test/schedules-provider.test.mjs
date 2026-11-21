@@ -457,6 +457,56 @@ test("the page rebuilt under one of its acts (the CLI's gate changes): the sched
   }
 });
 
+// The Schedules view made again while an act is in flight: the stage disposes it and makes a new one each time
+// the subtab is chosen (Triggers and back), and leaving Automations and coming back does the same. This way round
+// predates the form's provider part (the old view's disabled buttons were the only hold, and the new view has none).
+test("the Schedules view made again under one of the page's acts starts held, and reads the list again when the act ends, before any Edit", async () => {
+  for (const act of ["Turn off here", "a summary's save"]) for (const outcome of ["the act answers", "the act fails"]) {
+    const say = `${act}, ${outcome}`, saved = []; let finish, fail, stored = { ...onBb, description: "Nightly" };
+    const s = setup({ cliFacts: { features: ["automation-descriptions"] }, read: async () => ({ schedules: [structuredClone(stored)], scheduler }), mutate: async (path, body) => {
+      if (path.startsWith("/api/capabilities")) return listsBb;
+      if (path.startsWith("/api/automations")) { await new Promise((resolve, reject) => { finish = resolve; fail = () => reject(new Error("refused")); }); return {}; }
+      return saver(saved)(body);
+    } });
+    try {
+      await tick();
+      if (act === "Turn off here") s.rowAction("bb-review", "disable").click();
+      else { s.rowAction("bb-review", "describe").click(); const sheet = s.el.querySelector(".auto-describe"); sheet.querySelector("input").value = "Weekly"; sheet.dispatchEvent(new s.dom.window.Event("submit", { cancelable: true })); }
+      await tick();
+      s.remount(); await ticks(5); // its list is read before the act lands
+      const lists = () => posts(s, "/api/automations").filter(c => JSON.parse(c.opts.body).action === "list").length, reads = lists();
+      assert.equal(s.el.querySelector(".schedule-new").disabled, true, `${say}: the new view starts held`);
+      for (const verb of ["edit", "remove"]) { const control = s.rowAction("bb-review", verb); control.disabled = false; control.click(); await ticks(); }
+      assert.equal(sheetOf(s).hidden, true, `${say}: no Edit on a list read before the act landed`); assert.equal(s.el.querySelector(".schedule-delete-sheet").hidden, true, say);
+      const answers = outcome === "the act answers";
+      if (answers) { stored = act === "Turn off here" ? { ...stored, enabled: false } : { ...stored, description: "Weekly" }; finish(); } else fail();
+      await ticks(5);
+      assert.equal(lists(), reads + 1, `${say}: the list is read again`);
+      assert.equal(s.el.querySelector(".schedule-new").disabled, false, say);
+      s.rowAction("bb-review", "edit").click(); await ticks();
+      const form = s.el.querySelector("form");
+      assert.equal(sheetOf(s).hidden, false, say);
+      assert.deepEqual([form.elements.enabled.checked, form.elements.description.value], [stored.enabled, stored.description], `${say}: the definition as it now is`);
+      submit(s); await ticks();
+      assert.deepEqual(saved.map(spec => [spec.enabled, spec.description]), [[stored.enabled, stored.description]], `${say}: a save keeps it`);
+    } finally { s.cleanup(); }
+  }
+});
+
+test("an act in one workspace holds no Schedules view of another, and the view that comes back to it is held", async () => {
+  let finish;
+  const s = setup({ read: async () => ({ schedules: [onBb], scheduler }), mutate: async path => { if (path.startsWith("/api/automations")) await new Promise(resolve => { finish = resolve; }); return path.startsWith("/api/capabilities") ? listsBb : {}; } });
+  try {
+    await tick(); s.rowAction("bb-review", "disable").click(); await tick();
+    setWorkspace("/elsewhere"); await ticks(5);
+    assert.equal(s.el.querySelector(".schedule-new").disabled, false, "another workspace is not held");
+    setWorkspace("/team"); await ticks(5);
+    assert.equal(s.el.querySelector(".schedule-new").disabled, true, "back in the act's workspace: held");
+    finish(); await ticks(5);
+    assert.equal(s.el.querySelector(".schedule-new").disabled, false);
+  } finally { setWorkspace("/team"); s.cleanup(); }
+});
+
 test("the automations page tells its own acts, begin and end, in turn; one it is disposed under ends when its request settles; never the busy state set from outside", async () => {
   const dom = new JSDOM("<body><main></main></body>", { pretendToBeVisual: true }), host = dom.window.document.querySelector("main"), told = [];
   const list = { scheduleApi: 2, host: { name: "laptop" }, snapshot: null, scheduler, schedules: [{ ...onBb, name: "bb-review", qualifiedId: "local/bb-review", origin: { kind: "local", path: "local" }, runsHere: true, enabledHere: true, teams: [] }] };

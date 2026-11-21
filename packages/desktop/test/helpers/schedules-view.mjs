@@ -33,9 +33,12 @@ function setup({ mutate, read, instances = [{ home, instance: "reviewer-seat" }]
     if (path.startsWith("/api/panel")) return { instances };
     assert.fail(path);
   } };
-  const view = createSchedulesView(el, ctx, { cli: () => ({ ...cli, ...cliFacts, scheduleApi: 2, automationsApi: 1, features: ["schedule", "automations", ...(cliFacts.features || [])] }), subscribeCli });
+  const create = () => createSchedulesView(el, ctx, { cli: () => ({ ...cli, ...cliFacts, scheduleApi: 2, automationsApi: 1, features: ["schedule", "automations", ...(cliFacts.features || [])] }), subscribeCli });
+  let view = create();
   const rowAction = (id, verb) => el.querySelector(`.auto-row[data-id="local/${id}"] .auto-menu button[data-verb=${verb}]`);
-  return { dom, el, calls, view, rowAction, cleanup() { view.dispose(); dom.window.close(); } };
+  // remount(): the view is disposed and made again on the same element and backend, as the Automations stage does
+  // each time the Schedules subtab is chosen.
+  return { dom, el, calls, get view() { return view; }, remount() { view.dispose(); view = create(); }, rowAction, cleanup() { view.dispose(); dom.window.close(); } };
 }
 const posts = (s, prefix) => s.calls.filter(c => c.path.startsWith(prefix) && c.opts?.method === "POST");
 

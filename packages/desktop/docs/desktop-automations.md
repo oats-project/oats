@@ -328,10 +328,20 @@ would undo the act. A New form holds no stored definition and stays.
 
 An act ends when its request has settled and its own re-read is done. The page
 rebuilds its view when the CLI's gate changes; a view disposed under an act
-tells nothing at its disposal and tells the end when the request settles, so
-the schedule view stays held until then (it counts acts begun and ended), and
-then reads the list again, since the new view may have read it before the act
-landed.
+tells nothing at its disposal and tells the end when the request settles. The
+acts in flight are counted per workspace at module scope (`views/schedules.mjs`
+`actsInFlight`), not in a view, because an act outlives the view it began
+under: the page's rebuilt view, and a Schedules view made again while the
+request is on its way (the stage makes one each time the subtab is chosen).
+Every live Schedules view of that workspace is held while the count is above
+zero, one made meanwhile starts held, and when the count reaches zero a view
+that shows another page view than an act began under reads the list again,
+since what it shows may have been read before the act landed.
+
+This covers every lifetime of a view inside one window. It does not cover
+another window, nor a change made with the CLI while a form is open: those
+need a check at save that the definition is unchanged since the form opened
+(its `updatedAt`), which is not built.
 
 **No Edit opens while the list is being read** (a Refresh, and the re-read
 that ends a save, a Delete or a summary's save), of any schedule: the rows on

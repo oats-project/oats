@@ -8,7 +8,7 @@
  * form is modal from the press on, so nothing else is pressed while it reads; and every read carries a
  * latest-intent ticket, so an answer or a failure that lands after anything moved on changes nothing. */
 import { isShown } from "../focus-regions.mjs";
-import { apiJson, postJson, workspaceGeneration, wsQuery, onWorkspaceChange } from "./common.mjs";
+import { apiJson, postJson, workspaceGeneration, wsQuery, onWorkspaceChange, currentWorkspace } from "./common.mjs";
 import { wakeScheduleFields } from "../wake-schedule-fields.mjs";
 import { scheduleDraft, descriptionValid, DESCRIPTION_MAX } from "../schedule-read-data.mjs";
 import { localScheduleDefinition, runState, fullModeRefusal } from "../automation-rows.mjs";
@@ -16,6 +16,24 @@ import { sessionBackendNames, sessionProviderNames, listedBackends, fullModeOnly
 import { sessionProvider, sessionProviderName } from "../../../client/instance-presentation.mjs";
 import { mountAutomationsPage, automationDescriptionsSupported } from "./automations.mjs";
 import { cliStatus, onCliChange, cliHeldBack } from "./cli-status.mjs";
+
+// The automations page's own acts in flight (a switch, a run, a test, a summary's save: its onBusy), per workspace,
+// kept here and not in a view: an act outlives the view it began under. The page rebuilds its view when the CLI's
+// gate changes, and the stage makes a new Schedules view each time its subtab is chosen, while the act's request
+// is still on its way. `builds`: the page views the acts in flight began under (one token each).
+// This closes every lifetime of a view inside one window. It knows nothing of another window, nor of a change made
+// with the CLI: a check at save is what covers those (see the docs).
+const actsInFlight = new Map(); // workspace -> { count, builds }
+const actWatchers = new Set();
+/** An act of `build` began, or ended, in `workspace`: every live Schedules view hears it; the last end carries the
+ * builds the acts began under. */
+function noteAct(workspace, build, began) {
+  let entry = actsInFlight.get(workspace);
+  if (!entry) { if (!began) return; actsInFlight.set(workspace, entry = { count: 0, builds: new Set() }); }
+  entry.count += began ? 1 : -1; if (began) entry.builds.add(build);
+  const over = entry.count <= 0; if (over) actsInFlight.delete(workspace);
+  for (const watcher of [...actWatchers]) watcher(workspace, began, over ? entry.builds : null);
+}
 
 // Mounted as the Automations stage's Schedules subtab (views/automations.mjs).
 let preselection;
@@ -93,12 +111,11 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   let alive = true, busy = false, readOk = false, editing = null, formReady = false, opener = null;
   let agents = [], instances = [], original = null, baseline = {}, originalWake = null;
   let operationRequest = 0, formOperation = 0, mutationOperation = 0, backendRequest = 0;
-  // The automations page's own acts (a switch, a run, a test, a summary's save: its onBusy). While one runs this
-  // view opens no form and sends no change, as while its own `busy`.
-  // A count, not a flag: the page rebuilds its view when the CLI's gate changes, and an act of the view that went
-  // may still be in flight when the new view begins one (each view tells true and false in turn).
-  // `actsView`: the page's view the first of the acts in flight began under.
-  let pageActs = 0, pageBusy = false, actsView = null;
+  // The automations page's own acts in this workspace (`actsInFlight`, above). While one runs this view opens no
+  // form and sends no change, as while its own `busy`; a view made while one runs starts held.
+  const pageBusy = () => actsInFlight.has(currentWorkspace());
+  // The page view this Schedules view shows now: a token made each time the page builds one.
+  let build = null;
   // The list reads in flight. While one runs no Edit opens: the rows on screen are from before it, and a form
   // opened on one would hold, and save back, a definition the read is about to replace (whichever of the list's
   // answer and the form's own reads lands first). A New form holds no stored definition and opens.
@@ -239,7 +256,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   const mutationQuery = (operation) => (operation === "add" || operation === "update") && !sheet.hidden ? deploymentQuery() : wsQuery();
   /** `pending`: an Edit whose backend is a session provider's, admitted for now (editRow); loadBackends decides it. */
   async function openForm(job, soul, pending = null) {
-    if (!canMutate() || busy || pageBusy || (job && reading)) return;
+    if (!canMutate() || busy || pageBusy() || (job && reading)) return;
     const token = ++formOperation, gen = workspaceGeneration(); ++operationRequest; ++backendRequest;
     pendingEdit = pending; yoloFree = null;
     formDeployment = null; // this form's deployment is read below; never a previous form's
@@ -302,7 +319,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
    * modal), and whatever else moves on drops it (dropPendingEdit, the form's ticket). No Edit, of any schedule,
    * opens while the list is being read (`reading`). */
   function editRow(row) {
-    if (busy || pageBusy || reading) return;
+    if (busy || pageBusy() || reading) return;
     const definition = localScheduleDefinition(row);
     const provider = definition?.kind === "spawn" && sessionProviderName(definition.backend) && listedBackends([definition.backend]).length ? definition.backend : null;
     const draft = scheduleDraft(definition, provider ? { backends: ["tmux", provider] } : undefined);
@@ -311,7 +328,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   }
   let automations = null; // the page's POST /api/automations call
   async function mutate(operation, id, spec, send = body => postJson(ctx, `/api/schedules${mutationQuery(operation)}`, body)) {
-    if (busy || pageBusy || !canMutate()) return;
+    if (busy || pageBusy() || !canMutate()) return;
     dropPendingEdit(); // a change from the list, begun under a form still reading
     const op = ++mutationOperation, formToken = formOperation, gen = workspaceGeneration();
     const current = () => alive && op === mutationOperation && gen === workspaceGeneration();
@@ -330,9 +347,9 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
     }
   }
   function render() {
-    newButton.disabled = busy || pageBusy || !canMutate();
+    newButton.disabled = busy || pageBusy() || !canMutate();
     newButton.title = cliHeldBack("POST /api/schedules", cli()) ?? "";
-    q(".schedule-save").disabled = busy || pageBusy || !canMutate() || !formReady || !!pendingEdit;
+    q(".schedule-save").disabled = busy || pageBusy() || !canMutate() || !formReady || !!pendingEdit;
     // A pending Edit's action, soul, backend and permissions wait for its answer; a locked Permissions stays YOLO.
     for (const control of form.querySelectorAll("input, select, textarea")) control.disabled = busy || (control.name === "id" && !!editing)
       || (!formReady && ["agent", "home", "providerOperation"].includes(control.name))
@@ -342,7 +359,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   field("repeat").addEventListener("change", () => { if (field("repeat").value !== "custom") field("cron").value = field("repeat").value; });
   field("cron").addEventListener("input", () => { field("repeat").value = "custom"; });
   form.addEventListener("submit", event => {
-    event.preventDefault(); if (busy || pageBusy || !formReady || pendingEdit || !canMutate() || sheet.hidden) return;
+    event.preventDefault(); if (busy || pageBusy() || !formReady || pendingEdit || !canMutate() || sheet.hidden) return;
     const kind = field("kind").value;
     const spec = { kind, cron: preserve("cron"), tz: preserve("tz"), enabled: field("enabled").checked };
     if (summaries()) {
@@ -389,7 +406,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   // Delete asks first, in the app (a native confirm would block the renderer).
   let deleting = null, deleteOpener = null;
   function askDelete(row) {
-    if (busy || pageBusy || !canMutate()) return;
+    if (busy || pageBusy() || !canMutate()) return;
     dropPendingEdit(); // an Edit still reading opens nothing over this, or after it
     deleting = row.name; deleteOpener = doc.activeElement;
     q("#schedule-delete-text").textContent = `${row.name} is removed from this computer and stops running here.`;
@@ -422,7 +439,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
     if (row.origin.kind === "local") actions.push({ label: "Delete…", verb: "remove", run: () => askDelete(row) });
     return actions;
   };
-  const page = mountAutomationsPage(q(".schedule-stage"), ctx, "schedule", call => (automations = call, {
+  const page = mountAutomationsPage(q(".schedule-stage"), ctx, "schedule", call => { automations = call; const built = build = {}, workspace = currentWorkspace(); return {
     read: async () => {
       // A read of the list that begins: a pending Edit holds a definition from before it, and until the read
       // ends no Edit opens (`reading`: a mutation's and a summary's re-read begin here too, before they yield).
@@ -435,29 +452,27 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
       // more when none is left, so no Edit is left showing that it waits.
       finally { reading--; render(); if (!reading) queueMicrotask(() => { if (alive && !reading) view()?.repaint(); }); }
     },
-    // The page's own acts (Turn off here, Turn on here, Run now, Test, a summary's save). While one runs, no form
-    // opens and nothing is sent from here. One that begins under an open Edit closes it: the form holds the
-    // definition as it was before the act (its Enabled, for one), and saving it would undo the act. A pending
-    // Edit goes without a word; one already in use says why it closed.
-    onBusy: acting => {
-      const before = pageActs;
-      pageActs = Math.max(0, pageActs + (acting ? 1 : -1)); pageBusy = pageActs > 0;
-      if (!alive) return;
-      // The view the first of the acts in flight began under: an act the rebuilt view begins meanwhile is not the
-      // one that may land late.
-      if (acting) { if (!before) actsView = view(); }
-      // The acts in flight have all ended, and the first of them began under another view than the one on screen
-      // (the page was rebuilt meanwhile): that view re-read nothing after its act, and the view on screen may have
-      // read the list before it landed, whatever it read for an act of its own. Read it again, which holds Edit
-      // until it answers.
-      else if (!pageBusy) { const began = actsView; actsView = null; if (began !== view()) void view()?.refresh(); }
-      if (acting && editing && !sheet.hidden) { const id = editing, silent = !!pendingEdit; closeForm(); if (!silent) notice(`${id} changed while it was being edited. Open Edit again.`); }
-      render();
-    },
+    // The page's own acts (Turn off here, Turn on here, Run now, Test, a summary's save), told for the page view
+    // and the workspace they began in, whatever becomes of this view meanwhile (watchActs, below, is what acts).
+    onBusy: acting => noteAct(workspace, built, acting),
     headerActions: () => [newButton], rowActions,
     onEnableScheduler: () => mutate("host-install"),
     onResult: (verb, row, result) => { if (verb === "run" && result?.run) notice(`${row.id}: ${scheduleOutcome(result.run)}`); },
-  }), { cli, subscribeCli, frame });
+  }; }, { cli, subscribeCli, frame });
+  // The page's acts in this workspace, begun under any view. While one runs, no form opens and nothing is sent
+  // from here (pageBusy). One that begins under an open Edit closes it: the form holds the definition as it was
+  // before the act (its Enabled, for one), and saving it would undo the act. A pending Edit goes without a word;
+  // one already in use says why it closed. When the last one ends and any of them began under another page view
+  // than the one on screen (the page was rebuilt, or this whole view was made, meanwhile), that view re-read
+  // nothing here after its act, and the list on screen may be from before the act landed, whatever was read for an
+  // act of this view's own: read it again, which holds Edit until it answers.
+  const watchActs = (workspace, began, builds) => {
+    if (!alive || workspace !== currentWorkspace()) return;
+    if (began && editing && !sheet.hidden) { const id = editing, silent = !!pendingEdit; closeForm(); if (!silent) notice(`${id} changed while it was being edited. Open Edit again.`); }
+    if (builds && [...builds].some(other => other !== build)) void view()?.refresh();
+    render();
+  };
+  actWatchers.add(watchActs);
   // A workspace switch closes the form: its targets belong to the old workspace.
   const offWorkspace = onWorkspaceChange(() => { ++mutationOperation; busy = false; readOk = false; closeForm(); if (!deleteSheet.hidden) closeDelete(); render(); });
   const offCli = subscribeCli(() => render());
@@ -468,6 +483,6 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   }
   return {
     refresh: () => page.refresh(),
-    dispose() { alive = false; ++formOperation; ++operationRequest; ++backendRequest; ++mutationOperation; pendingEdit = null; offWorkspace(); offCli?.(); page.dispose(); el.replaceChildren(); },
+    dispose() { alive = false; ++formOperation; ++operationRequest; ++backendRequest; ++mutationOperation; pendingEdit = null; actWatchers.delete(watchActs); offWorkspace(); offCli?.(); page.dispose(); el.replaceChildren(); },
   };
 }
