@@ -217,6 +217,10 @@ of the Desktop and the CLI, and an optional package pin. A change a script
 must follow is in its release's Upgrade section whether or not it is listed
 here.
 
+- **[0.70.1](release-notes/v0.70.1.md#upgrade):** a scheduled or triggered
+  spawn on a provider that launches only in full mode (bb's) needs `yolo:
+  true`, or a launch configuration that sets it; a job without it is now
+  refused when saved.
 - **[0.70.0](release-notes/v0.70.0.md#upgrade):** upgrade the Desktop with
   the CLI: a Desktop of 0.69.18 to 0.69.24 runs the 0.70.0 CLI in its
   reduced, above-tested mode until Desktop 0.70.0 is installed; a Desktop of
