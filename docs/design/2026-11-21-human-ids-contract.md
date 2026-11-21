@@ -102,7 +102,7 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   user with the same HOME. The retained link lives under the minting process's HOME. A mint
   whose issuer can't be reached locally stops as **signature pending**: key and request
   kept, no membership submitted, stable code `native_agent_signature_pending` (in the cut
-  SHA, to be confirmed by aweb).
+  SHA; on aweb `802f1674`, to be confirmed in the cut).
 
 ## 4. OATS's side (oats-aweb PR a; docs PR b)
 
@@ -133,7 +133,8 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   spawning from it needs 1.36.59.
 
 **C3, the adopted-lineage warning.**
-- **The record:** the provider keeps each root's last C2 outcome in its own state.
+- **The record:** the provider keeps each root's last C2 outcome in its own state, keyed by
+  the root's identity and key, not by its label.
 - **When it warns:** a root that last read `nearest_human` now reads `unknown` or
   `no_human`, whatever the reason. Examples are `legacy_no_chain` after a restore from a
   backup taken before adoption, and `revoked` or `root_replaced`.
@@ -157,11 +158,15 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   after aw wrote a key.
 - oats-aweb never retries or remints into the same home.
 
-**Reading aw's refusals.**
-- ID-certificate refusals arrive as `error.code "error"` with the bare reason in
-  `error.message`.
-- HTTP refusals arrive as `error.code "http_error"` with `http_status` and `reason`.
-- PR a branches only on the exit status and these fields.
+**Reading aw's refusals** (aweb's `docs/cli-integration-contract.md` at `e6e9f099c5`).
+- PR a branches only on the exit status and the structured fields: `error.code`,
+  `error.http_status` and `error.reason`.
+- `error.message` is for display only. A direct ID-certificate refusal carries a bare reason
+  there, but commands may wrap it, so no machine behaviour keys on it.
+- A command may wrap an HTTP refusal under its own code and keep `http_status` and `reason`.
+  For example, `aw init --join-from` reports a refused invite as `invite_not_created`, and a
+  direct `aw team invite` reports it as `http_error`.
+- Tests assert the fields the actual command returns.
 
 **The aw floor.**
 - `min` stays 1.36.33, so a deployment that doesn't adopt needs no new aw.
@@ -194,8 +199,9 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   - The agreed record (v3) is written from it.
   - Its steps: adopt R; mint child and grandchild unattended, both verifying to the person;
     an earlier child unchanged; a control child from an unadopted root matching in alias,
-    address, roster and routing; revocation refusing the next mint (expected `http_error`
-    401 `certificate_revoked`, counted once the run reports it); memberships and history
+    address, roster and routing; revocation refusing the next mint, through
+    `aw init --join-from`: `error.code "invite_not_created"` with `http_status` 401 and
+    `reason "certificate_revoked"` (aw init.go:434-442), counted once the run reports it; memberships and history
     kept; clean-up.
 - **G3, Cloud.** Production Cloud (0.8.80, `15591632`, read from its health endpoint on
   2026-11-21) already has the person's three adoption steps. Adoption on hosted teams still
