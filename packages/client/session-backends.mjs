@@ -49,7 +49,8 @@ export const fullModeOnly = (backend) => typeof backend === 'string' && FULL_MOD
  * trigger's spawn stores them), for a backend that launches only in full mode:
  *
  *   'refused'   `yolo: false`: every launch is refused
- *   'default'   no `yolo`: the launch takes the deployment's default, so it is refused unless that is full mode
+ *   'default'   no `yolo`: the launch takes its launch configuration's choice (docs/execution-targets.md
+ *               "Permissions"), so it is refused unless that sets full mode
  *   null        `yolo: true`, or a backend that takes any mode: nothing to say
  *
  * Pure: no I/O, never throws. */

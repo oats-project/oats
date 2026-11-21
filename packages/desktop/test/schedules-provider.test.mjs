@@ -38,9 +38,9 @@ test("the one list of providers that launch only in full mode, and what a spawn'
   for (const none of [undefined, null, "true", 1]) assert.equal(fullModeProblem({ backend: "bb", yolo: none }), "default", String(none));
   for (const spawn of [{ backend: "tmux", yolo: false }, { yolo: false }, { backend: "other" }, null, "bb", []]) assert.equal(fullModeProblem(spawn), null);
   assert.equal(fullModeRefusal({ backend: "bb", yolo: true }), null);
-  assert.deepEqual(fullModeRefusal({ backend: "bb", yolo: false }), { tag: "Refused at each run",
+  assert.deepEqual(fullModeRefusal({ backend: "bb", yolo: false }), { tag: "Refused at each run", reason: "Every run is refused: bb launches only in full mode, and this schedule sets the native permission policy.",
     sentence: "Every run is refused: bb launches only in full mode, and this schedule sets the native permission policy. Set its permissions to YOLO (yolo: true)." });
-  assert.deepEqual(fullModeRefusal({ backend: "bb" }), { tag: "Needs YOLO",
+  assert.deepEqual(fullModeRefusal({ backend: "bb" }), { tag: "Needs YOLO", reason: "bb launches only in full mode, and this schedule makes no permission choice: a run is refused unless its launch configuration sets YOLO.",
     sentence: "bb launches only in full mode, and this schedule makes no permission choice: a run is refused unless its launch configuration sets YOLO. Set its permissions to YOLO (yolo: true)." });
   // A row: a spawn schedule's only.
   assert.equal(scheduleRefusal({ kind: "schedule", run: "spawn", backend: "bb", yolo: null })?.tag, "Needs YOLO");
@@ -161,12 +161,22 @@ test("a schedule made with the CLI, stored without its repository, shows its sou
   const saved = [], bare = { ...onBb }; delete bare.repo;
   const twin = { name: "reviewer", repo: "other", repoName: "other", agentsRoot: "/team/src/agents", work: "worktree" };
   for (const [agents, soul] of [[undefined, JSON.stringify(["reviewer", "src", "/team/src/agents"])], [[{ ...reviewer, repoName: "src" }, twin], ""]]) {
-    const s = setup({ agents, read: async () => ({ schedules: [bare], scheduler }), mutate: async (path, body) => (path.startsWith("/api/capabilities") ? listsBb : saver(saved)(body)) });
+    // With two souls of that name under one agents root the inspect boundary answers for neither
+    // (packages/client/inspect-boundary.mjs: "Select one soul and its agents root in this workspace").
+    const inspect = async () => { if (soul) return listsBb; throw new Error("Select one soul and its agents root in this workspace"); };
+    const s = setup({ agents, read: async () => ({ schedules: [bare, { ...bare, id: "plain", backend: "tmux" }], scheduler }), mutate: async (path, body) => (path.startsWith("/api/capabilities") ? inspect() : saver(saved)(body)) });
     try {
       await tick(); s.rowAction("bb-review", "edit").click(); await ticks();
       const form = s.el.querySelector("form");
-      assert.equal(form.elements.agent.value, soul, soul ? "the one soul" : "two of that name: none is chosen for the person");
-      if (!soul) continue;
+      if (!soul) {
+        // A decision, pinned: the provider schedule cannot be kept here, and the sentence sends the person to the CLI.
+        assert.equal(sheetOf(s).hidden, true);
+        assert.equal(s.el.querySelector(".auto-notice").textContent, "Could not read the session backends of reviewer, so this editor cannot tell whether it keeps bb-review. Try Edit again; if it fails again, edit it with the CLI.");
+        s.rowAction("plain", "edit").click(); await ticks();
+        assert.equal(sheetOf(s).hidden, false); assert.equal(form.elements.agent.value, "", "two of that name: none is chosen for the person");
+        continue;
+      }
+      assert.equal(form.elements.agent.value, soul, "the one soul");
       assert.equal(form.elements.backend.value, "bb"); assert.equal(form.checkValidity(), true);
       submit(s); await ticks();
       assert.equal(saved.length, 1); assert.equal(saved[0].agent, "reviewer"); assert.equal(saved[0].backend, "bb"); assert.equal(saved[0].yolo, true);
@@ -178,7 +188,7 @@ test("a schedule whose backend the kernel does not list for its soul is not kept
   const cannot = /^bb-review carries settings this editor cannot keep; edit it with the CLI\.$/;
   for (const [answer, said] of [[async () => ({ operationsApi: 2, sessionProviders: [{ name: "other" }] }), cannot], [async () => ({ operationsApi: 2 }), cannot],
     [async () => ({ operationsApi: 2, sessionProviders: { bb: { capability: "oats.bb" } } }), cannot],
-    [async () => { throw new Error("inspect failed"); }, /^Could not read the session backends of reviewer, so this editor cannot tell whether it keeps bb-review\. Try Edit again, or edit it with the CLI\.$/]]) {
+    [async () => { throw new Error("inspect failed"); }, /^Could not read the session backends of reviewer, so this editor cannot tell whether it keeps bb-review\. Try Edit again; if it fails again, edit it with the CLI\.$/]]) {
     const s = setup({ read: async () => ({ schedules: [onBb], scheduler }), mutate: async path => { assert.ok(path.startsWith("/api/capabilities"), path); return answer(); } });
     try {
       await tick(); const edit = s.rowAction("bb-review", "edit"); edit.focus(); edit.click(); await ticks();
@@ -199,8 +209,8 @@ test("a schedule whose backend the kernel does not list for its soul is not kept
 
 test("a schedule stored without YOLO on a provider that launches only in full mode: its row and its page say it is refused, and the form sets YOLO and says so", async () => {
   for (const [yolo, tag, sentence, formSays] of [
-    [false, "Refused at each run", /^Every run is refused: bb launches only in full mode, and this schedule sets the native permission policy\./, "As saved, every run of this schedule is refused: bb launches only in full mode. Saving it here sets YOLO (permission prompts are skipped)."],
-    [undefined, "Needs YOLO", /^bb launches only in full mode, and this schedule makes no permission choice: a run is refused unless its launch configuration sets YOLO\./, "bb launches only in full mode, and as saved this schedule makes no permission choice: a run is refused unless its launch configuration sets YOLO. Saving it here sets YOLO (permission prompts are skipped)."]]) {
+    [false, "Refused at each run", /^Every run is refused: bb launches only in full mode, and this schedule sets the native permission policy\./, "As saved: Every run is refused: bb launches only in full mode, and this schedule sets the native permission policy. Saving it here sets YOLO (permission prompts are skipped)."],
+    [undefined, "Needs YOLO", /^bb launches only in full mode, and this schedule makes no permission choice: a run is refused unless its launch configuration sets YOLO\./, "As saved: bb launches only in full mode, and this schedule makes no permission choice: a run is refused unless its launch configuration sets YOLO. Saving it here sets YOLO (permission prompts are skipped)."]]) {
     const stored = { ...onBb }; if (yolo === undefined) delete stored.yolo; else stored.yolo = yolo;
     const saved = [], fine = { ...onBb, id: "fine" }, plain = { ...onBb, id: "plain", yolo: false }; delete plain.backend;
     const s = setup({ read: async () => ({ schedules: [stored, fine, plain], scheduler }), mutate: async (path, body) => (path.startsWith("/api/capabilities") ? listsBb : saver(saved)(body)) });
@@ -287,6 +297,68 @@ test("an Edit still reading its soul's inspection is dropped by whatever moves o
       if (meanwhile === "Turn off here") assert.deepEqual([acts, stored.enabled], [["disable"], false], `${say}: the switch stands`);
       if (meanwhile === "Turn on here") assert.deepEqual([acts, stored.enabled], [["enable"], true], say);
     } finally { setWorkspace("/team"); s.cleanup(); }
+  }
+});
+
+// A list read in flight (spec C1b, 4, "a list read"): the rows on screen are from before it. An Edit pressed then
+// would hold the old definition whichever lands first, the list or the form's own read of the soul's inspection
+// (often the faster: the server holds it), so no Edit opens until the read ends. Round 1's finding.
+test("no Edit opens while the list is being read, of a provider schedule or a tmux one, whichever answer would land first; after the read, Edit holds the new definition", async () => {
+  for (const outcome of ["the read answers", "the read fails"]) for (const id of ["bb-review", "plain"]) {
+    const say = `${outcome}, ${id}`, saved = []; let enabled = true, reads = 0, release, fail;
+    const plain = { ...onBb, id: "plain", backend: "tmux" };
+    const s = setup({ read: async () => {
+      if (++reads === 2) await new Promise((resolve, reject) => { release = resolve; fail = () => reject(new Error("list failed")); });
+      return { schedules: [{ ...onBb, enabled }, { ...plain, enabled }], scheduler };
+    }, mutate: async (path, body) => (path.startsWith("/api/capabilities") ? listsBb : saver(saved)(body)) });
+    try {
+      await tick();
+      s.el.querySelector('button[aria-label="Refresh schedules"]').click(); await tick();
+      enabled = false; // what the read in flight will bring: switched off elsewhere
+      assert.equal(s.rowAction(id, "edit").disabled, true, `${say}: Edit waits for the read`);
+      // Every way in, not only the disabled button.
+      s.rowAction(id, "edit").disabled = false; s.rowAction(id, "edit").click(); await ticks();
+      assert.equal(sheetOf(s).hidden, true, `${say}: no form on the old row`); assert.equal(posts(s, "/api/capabilities").length, 0, `${say}: and nothing read for one`);
+      // A New form holds no stored definition: it opens, and stays through the read's end.
+      s.el.querySelector(".schedule-new").click(); await ticks(); assert.equal(sheetOf(s).hidden, false, say);
+      s.el.querySelector(".schedule-cancel").click();
+      if (outcome === "the read answers") release(); else fail();
+      await ticks(5);
+      if (outcome === "the read fails") { assert.equal(s.el.querySelector(".schedule-new").disabled, true, `${say}: a list that did not read changes nothing`); continue; }
+      assert.equal(s.rowAction(id, "edit").disabled, false, say);
+      s.rowAction(id, "edit").click(); await ticks();
+      const form = s.el.querySelector("form");
+      assert.equal(sheetOf(s).hidden, false, say); assert.equal(form.elements.enabled.checked, false, `${say}: the definition the read brought`);
+      submit(s); await ticks();
+      assert.deepEqual(saved.map(spec => spec.enabled), [false], `${say}: a save keeps what the list now says`);
+    } finally { s.cleanup(); }
+  }
+});
+
+test("a change's own re-read holds Edit too: after a save, a Delete or a summary's save, no Edit opens on the rows from before it", async () => {
+  for (const change of ["a form's save", "a summary's save"]) {
+    let reads = 0, release;
+    const s = setup({ cliFacts: { features: ["automation-descriptions"] }, read: async () => {
+      if (++reads === 2) await new Promise(resolve => { release = resolve; });
+      return { schedules: [onBb], scheduler };
+    }, mutate: async path => (path.startsWith("/api/capabilities") ? listsBb : {}) });
+    try {
+      await tick();
+      if (change === "a form's save") {
+        s.el.querySelector(".schedule-new").click(); await ticks();
+        const form = s.el.querySelector("form"); form.elements.id.value = "other"; form.elements.task.value = "Check work"; submit(s);
+      } else {
+        s.rowAction("bb-review", "describe").click();
+        const describe = s.el.querySelector(".auto-describe"); describe.querySelector("input").value = "Nightly"; describe.dispatchEvent(new s.dom.window.Event("submit", { cancelable: true }));
+      }
+      await ticks();
+      assert.equal(reads, 2, `${change}: its re-read is in flight`);
+      const edit = s.rowAction("bb-review", "edit"); edit.disabled = false; edit.click(); await ticks();
+      assert.equal(sheetOf(s).hidden, true, `${change}: no Edit on the old rows`);
+      release(); await ticks(5);
+      s.rowAction("bb-review", "edit").click(); await ticks();
+      assert.equal(sheetOf(s).hidden, false, `${change}: and Edit opens once the list is read`);
+    } finally { s.cleanup(); }
   }
 });
 

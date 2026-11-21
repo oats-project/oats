@@ -962,7 +962,7 @@ export function createAutomationsView(host, { kind, read, act = null, status = n
     return [...listHost.querySelectorAll('.auto-row')].find(r => r.dataset.id === id)?.querySelector('.auto-menu summary') || null;
   }
   function closeDescribe() {
-    const id = describing; ++describeSerial; describing = null; describeBusy = false; tellBusy(); sheet.hidden = true; paintSheet();
+    const id = describing; ++describeSerial; describing = null; describeBusy = false; sheet.hidden = true; paintSheet(); // (never under a save: every caller holds back while one runs)
     describeReturn(id)?.focus(); describeOpener = null;
   }
   form.addEventListener('submit', async e => {

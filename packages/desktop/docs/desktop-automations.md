@@ -317,7 +317,7 @@ choose.
 **Who owns a pending Edit.** The form is modal from the press on, so no other
 control is pressed while it reads. Every other way on drops the pending Edit,
 whether its read then answers or fails, and nothing is said of it: a later
-Edit (the form's ticket), a Delete asked, a list read that begins or ends, a
+Edit (the form's ticket), a Delete asked, a list read that begins, a
 change sent from the list, another workspace, and each of the automations
 page's own acts. The page tells those (`createAutomationsView`'s `onBusy`: a
 switch, Run now, Test, a summary's save, begin and end), and while one runs
@@ -325,6 +325,12 @@ the schedule view opens no form, asks no Delete and sends nothing. An act that
 begins under an Edit already in use closes it too, with a notice: the form
 holds the definition from before the act (its Enabled, for one), and saving it
 would undo the act. A New form holds no stored definition and stays.
+
+**No Edit opens while the list is being read** (a Refresh, and the re-read
+that ends a save, a Delete or a summary's save), of any schedule: the rows on
+screen are from before the read, and a form opened on one would hold the old
+definition whichever answer lands first, the list's or the form's own read.
+The row's Edit shows disabled until the read ends.
 
 **A provider that launches only in full mode** (bb:
 `FULL_MODE_ONLY_PROVIDERS` in `packages/client/session-backends.mjs`, the one

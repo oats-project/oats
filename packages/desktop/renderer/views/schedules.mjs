@@ -11,8 +11,8 @@ import { isShown } from "../focus-regions.mjs";
 import { apiJson, postJson, workspaceGeneration, wsQuery, onWorkspaceChange } from "./common.mjs";
 import { wakeScheduleFields } from "../wake-schedule-fields.mjs";
 import { scheduleDraft, descriptionValid, DESCRIPTION_MAX } from "../schedule-read-data.mjs";
-import { localScheduleDefinition, runState } from "../automation-rows.mjs";
-import { sessionBackendNames, sessionProviderNames, listedBackends, fullModeOnly, fullModeProblem } from "../../../client/session-backends.mjs";
+import { localScheduleDefinition, runState, fullModeRefusal } from "../automation-rows.mjs";
+import { sessionBackendNames, sessionProviderNames, listedBackends, fullModeOnly } from "../../../client/session-backends.mjs";
 import { sessionProvider, sessionProviderName } from "../../../client/instance-presentation.mjs";
 import { mountAutomationsPage, automationDescriptionsSupported } from "./automations.mjs";
 import { cliStatus, onCliChange, cliHeldBack } from "./cli-status.mjs";
@@ -96,6 +96,10 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   // The automations page's own acts (a switch, a run, a test, a summary's save: its onBusy). While one runs this
   // view opens no form and sends no change, as while its own `busy`.
   let pageBusy = false;
+  // The list reads in flight. While one runs no Edit opens: the rows on screen are from before it, and a form
+  // opened on one would hold, and save back, a definition the read is about to replace (whichever of the list's
+  // answer and the form's own reads lands first). A New form holds no stored definition and opens.
+  let reading = 0;
   // An Edit of a schedule on a session provider, until its soul's inspection says the kernel lists that backend:
   // `{ definition, name }`, the stored definition and the row's name. The form is open and not yet usable.
   let pendingEdit = null;
@@ -150,17 +154,14 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   }
   /** A backend that launches only in full mode (packages/client/session-backends.mjs `fullModeOnly`) takes
    * Permissions: the form sets YOLO, keeps it set while that backend is chosen, and says why. A schedule stored
-   * without it says what that means for its runs (`fullModeProblem`). Leaving the backend
+   * without it says what that means for its runs (automation-rows.mjs `fullModeRefusal`, its reason). Leaving the backend
    * gives the earlier choice back. */
   function syncYolo() {
     const backend = field("backend").value, locked = field("kind").value === "spawn" && fullModeOnly(backend);
     if (locked && yoloFree === null) { yoloFree = field("yolo").value; field("yolo").value = "true"; }
     else if (!locked && yoloFree !== null) { field("yolo").value = yoloFree; yoloFree = null; }
-    const stored = locked && original?.kind === "spawn" && original.backend === backend ? fullModeProblem({ backend, yolo: original.yolo }) : null;
-    const saves = "Saving it here sets YOLO (permission prompts are skipped).";
-    setNote(".schedule-yolo-note", !locked ? "" : stored
-      ? (stored === "refused" ? `As saved, every run of this schedule is refused: ${backend} launches only in full mode. ${saves}`
-        : `${backend} launches only in full mode, and as saved this schedule makes no permission choice: a run is refused unless its launch configuration sets YOLO. ${saves}`)
+    const stored = locked && original?.kind === "spawn" && original.backend === backend ? fullModeRefusal({ backend, yolo: original.yolo }) : null;
+    setNote(".schedule-yolo-note", !locked ? "" : stored ? `As saved: ${stored.reason} Saving it here sets YOLO (permission prompts are skipped).`
       : `${backend} launches only in full mode, so this schedule is saved with YOLO (permission prompts are skipped). Without it every run is refused.`, !!stored);
     render();
   }
@@ -189,7 +190,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
     if (pending) {
       if (failed || !scheduleDraft(pending.definition, { backends: sessionBackendNames(cli(), inspection) })) {
         closeForm();
-        notice(failed ? `Could not read the session backends of ${target.soul}, so this editor cannot tell whether it keeps ${pending.name}. Try Edit again, or edit it with the CLI.`
+        notice(failed ? `Could not read the session backends of ${target.soul}, so this editor cannot tell whether it keeps ${pending.name}. Try Edit again; if it fails again, edit it with the CLI.`
           : `${pending.name} carries settings this editor cannot keep; edit it with the CLI.`);
         return;
       }
@@ -198,8 +199,8 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
     setProviders(sessionProviderNames(inspection)); providersOf = failed ? null : key;
     setNote(".schedule-backend-note", failed ? `Could not read the session providers of ${target.soul}: only tmux is offered.` : ""); syncYolo();
   }
-  /** A pending Edit holds a definition read before whatever happens next: a Delete asked, a list read begun or
-   * ended, a change sent, one of the page's own acts. It is dropped, and nothing is said of it. */
+  /** A pending Edit holds a definition read before whatever happens next: a Delete asked, a list read begun, a
+   * change sent, one of the page's own acts. It is dropped, and nothing is said of it. */
   function dropPendingEdit() { if (pendingEdit && !sheet.hidden) closeForm(); }
   async function loadOperations(preferred = field("providerOperation").value) {
     const token = ++operationRequest, formToken = formOperation, gen = workspaceGeneration();
@@ -235,7 +236,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   const mutationQuery = (operation) => (operation === "add" || operation === "update") && !sheet.hidden ? deploymentQuery() : wsQuery();
   /** `pending`: an Edit whose backend is a session provider's, admitted for now (editRow); loadBackends decides it. */
   async function openForm(job, soul, pending = null) {
-    if (!canMutate() || busy || pageBusy) return;
+    if (!canMutate() || busy || pageBusy || (job && reading)) return;
     const token = ++formOperation, gen = workspaceGeneration(); ++operationRequest; ++backendRequest;
     pendingEdit = pending; yoloFree = null;
     formDeployment = null; // this form's deployment is read below; never a previous form's
@@ -295,9 +296,10 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
    * A spawn whose `backend` is a session provider's name is admitted for now and opens the form at once, not yet
    * usable (`pendingEdit`): the form reads the soul's inspection and keeps the schedule only when the kernel
    * lists that backend for the soul (loadBackends). No press reaches the list while that read runs (the form is
-   * modal), and whatever else moves on drops it (dropPendingEdit, the form's ticket). */
+   * modal), and whatever else moves on drops it (dropPendingEdit, the form's ticket). No Edit, of any schedule,
+   * opens while the list is being read (`reading`). */
   function editRow(row) {
-    if (busy || pageBusy) return;
+    if (busy || pageBusy || reading) return;
     const definition = localScheduleDefinition(row);
     const provider = definition?.kind === "spawn" && sessionProviderName(definition.backend) && listedBackends([definition.backend]).length ? definition.backend : null;
     const draft = scheduleDraft(definition, provider ? { backends: ["tmux", provider] } : undefined);
@@ -411,7 +413,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   // An unknown last run is checked through the kernel's reconcile, wherever the schedule comes from.
   const rowActions = row => {
     if (!canMutate()) return [];
-    const actions = row.origin.kind === "local" ? [{ label: "Edit", verb: "edit", run: () => editRow(row) }] : [];
+    const actions = row.origin.kind === "local" ? [{ label: "Edit", verb: "edit", enabled: !reading, run: () => editRow(row) }] : [];
     if (row.runsHere && runState(row)?.unknown) actions.push({ label: "Check run state", verb: "reconcile",
       run: () => mutate("reconcile", row.key, null, () => automations({ kind: "schedule", action: "reconcile", key: row.key })) });
     if (row.origin.kind === "local") actions.push({ label: "Delete…", verb: "remove", run: () => askDelete(row) });
@@ -419,11 +421,14 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   };
   const page = mountAutomationsPage(q(".schedule-stage"), ctx, "schedule", call => (automations = call, {
     read: async () => {
-      // A read of the list, when it begins and when it ends: a pending Edit holds a definition from before it.
-      dropPendingEdit();
+      // A read of the list that begins: a pending Edit holds a definition from before it, and until the read
+      // ends no Edit opens (`reading`: a mutation's and a summary's re-read begin here too, before they yield).
+      dropPendingEdit(); reading++;
+      // The page painted its rows before it asked for this read: paint them once more, so Edit shows that it waits.
+      queueMicrotask(() => { if (alive && reading) view()?.repaint(); });
       try { const list = await call({ kind: "schedule", action: "list" }); readOk = true; return list; }
       catch (error) { readOk = false; throw error; }
-      finally { dropPendingEdit(); render(); }
+      finally { reading--; render(); }
     },
     // The page's own acts (Turn off here, Turn on here, Run now, Test, a summary's save). While one runs, no form
     // opens and nothing is sent from here. One that begins under an open Edit closes it: the form holds the

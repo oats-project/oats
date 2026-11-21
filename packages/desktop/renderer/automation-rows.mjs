@@ -449,20 +449,22 @@ export function triggerStatus(json, id, { source = null } = {}) {
   };
 }
 
-/** The one remedy both sentences below end with. */
+/** The remedy both sentences below end with. */
 const SET_YOLO = 'Set its permissions to YOLO (yolo: true).';
 /** What to say of a spawn on a session provider that launches only in full mode (packages/client/session-backends.mjs
- * `fullModeProblem`: the provider refuses any other launch, so nothing is created) → `{ tag, sentence }`, or null
- * when there is nothing to say. `spawn`: `{ backend, yolo }`; a `yolo` that is no boolean is no choice.
+ * `fullModeProblem`: the provider refuses any other launch, so nothing is created) → `{ tag, reason, sentence }`, or
+ * null when there is nothing to say: `reason` is what is so, `sentence` is it with the remedy (the form ends it its
+ * own way, views/schedules.mjs). `spawn`: `{ backend, yolo }`; a `yolo` that is no boolean is no choice.
  *   `yolo: false`  every run is refused
  *   no `yolo`      the run takes its launch configuration's choice (docs/execution-targets.md "Permissions"), so it
  *                  is refused unless that sets YOLO: said as a condition, never as a certainty. */
 export function fullModeRefusal(spawn) {
   const problem = fullModeProblem(spawn);
   if (!problem) return null;
-  return problem === 'refused'
-    ? { tag: 'Refused at each run', sentence: `Every run is refused: ${spawn.backend} launches only in full mode, and this schedule sets the native permission policy. ${SET_YOLO}` }
-    : { tag: 'Needs YOLO', sentence: `${spawn.backend} launches only in full mode, and this schedule makes no permission choice: a run is refused unless its launch configuration sets YOLO. ${SET_YOLO}` };
+  const [tag, reason] = problem === 'refused'
+    ? ['Refused at each run', `Every run is refused: ${spawn.backend} launches only in full mode, and this schedule sets the native permission policy.`]
+    : ['Needs YOLO', `${spawn.backend} launches only in full mode, and this schedule makes no permission choice: a run is refused unless its launch configuration sets YOLO.`];
+  return { tag, reason, sentence: `${reason} ${SET_YOLO}` };
 }
 /** `fullModeRefusal` of a list row: a spawn schedule's only (a trigger's spawn is not this page's to judge). */
 export const scheduleRefusal = row => row?.kind === 'schedule' && row.run === 'spawn' ? fullModeRefusal({ backend: row.backend, yolo: row.yolo }) : null;
