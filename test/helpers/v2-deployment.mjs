@@ -18,7 +18,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, realpathSync, openSync, closeSync, fstatSync, ftruncateSync, writeSync, fchmodSync, constants as fsConstants } from "node:fs";
 import { devNull } from "node:os";
-import { dirname, join, resolve, isAbsolute, relative, sep } from "node:path";
+import { delimiter, dirname, join, resolve, isAbsolute, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import YAML from "yaml";
 import { inertHarnessDir } from "./runtime-stub.mjs";
@@ -157,6 +157,23 @@ export function setProcessEnvironment(target) {
  *
  *  A call of ANOTHER fixture while one is in flight is refused: one process has one environment, so
  *  one of the two would run its kernel calls in the other's deployment, or in none. */
+/** The PATH this process had when the tests began: the host's, where its own harness may be. */
+const HOST_PATH = process.env.PATH || "";
+/** The PATH an in-process spawn looks for its harness on (#2044): `current`, with the fixture's
+ *  inert harnesses (`bin`) put before the host's own directories. What a test put in front itself
+ *  (its fakes) stays in front, so its fake harness is still the one found; without this a spawn
+ *  finds the host's pi, claude or codex and records it as the home's `launch.executable`. A PATH
+ *  that no longer holds the host's (the test replaced it), or that already names `bin`, is left
+ *  as it is. */
+export function fixtureSpawnPath(current, bin, host = HOST_PATH) {
+  const path = current || "";
+  if (path.split(delimiter).includes(bin) || !host) return path;
+  // The host's PATH as whole entries, wherever the test left it (it may have added to either end).
+  const framed = `${delimiter}${path}${delimiter}`, at = framed.indexOf(`${delimiter}${host}${delimiter}`);
+  if (at < 0) return path;
+  return `${path.slice(0, at)}${bin}${delimiter}${path.slice(at)}`;
+}
+
 export function forceEnvironment(owner, name, build) {
   if (inForce && inForce.owner !== owner) {
     throw new Error(`the fixture ${name} cannot force its environment on this process: the fixture ${inForce.name} has an in-process call in flight, and a process has one environment. Await that call first, or run this one as a child with the fixture's env (fx.cli).`);
@@ -318,10 +335,14 @@ function buildDeployment(base, ownTmuxTmpdir, { souls = { dev: {} }, capabilitie
     prepared.toCapabilityRows = toCapabilityRows;
     return { prepared, agent: findAgent(root, soul) };
   };
-  /** An in-process spawn the way `oats spawn` does it (no launch unless asked). */
+  /** An in-process spawn the way `oats spawn` does it (no launch unless asked). It looks for the
+   *  harness on the fixture's PATH (fixtureSpawnPath, above), so the home's recorded
+   *  `launch.executable` is inside the fixture; `hostHarness: true` is the opt-in for a test that
+   *  needs the harness of the machine that runs it. */
   fx.spawn = (soul, opts = {}) => fx.inEnv(async () => {
     const { spawnInstanceAsync } = await import("../../lib/core.mjs");
-    const { providers, ...rest } = opts;
+    const { providers, hostHarness = false, ...rest } = opts;
+    if (!hostHarness) process.env.PATH = fixtureSpawnPath(process.env.PATH, bin);
     const { prepared, agent } = await prepareIn(soul, { providers });
     const work = rest.work || agent.work || "directory";
     const repo = rest.repo ?? (work === "directory" ? dep : member);

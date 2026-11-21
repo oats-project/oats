@@ -67,12 +67,9 @@ async function fixture(t, { names = ["acme.one"], oldMode = "adopt", nextMode = 
   });
   fx.commit({ "oats-workspace.yaml": { yaml: { schemaVersion: 2, name: "fixture", members: [fx.ref], defaults: { knowledge: "none", messaging: "none", tasks: "none" }, packages: { "acme.pkg": `git:${fx.key}@main` } } } });
   const old = lock(fx, "1.0.0");
-  // The in-process spawn looks the harness up on this process's PATH: the fixture's, whose inert
-  // `pi` comes first, so the home records a harness inside the fixture, never one of this machine.
-  const hostPath = process.env.PATH;
-  process.env.PATH = fx.env.PATH;
-  let home;
-  try { ({ home } = await fx.spawn("dev", { name: "seat", noLaunch: true })); } finally { process.env.PATH = hostPath; }
+  // The in-process spawn looks the harness up on the fixture's PATH (fx.spawn), whose inert `pi`
+  // comes first, so the home records a harness inside the fixture, never one of this machine.
+  const { home } = await fx.spawn("dev", { name: "seat", noLaunch: true });
   const recorded = json(join(home, "instance.json")).launch.executable;
   assert.ok(insideFixture(fx.base, recorded), `the home's recorded harness (${recorded}) is a file of the fixture (${fx.base}), never one of this machine`);
   fx.commit(pkg("2.0.0", nextMode, names, nextLaunch));

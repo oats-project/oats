@@ -983,12 +983,16 @@ inherits it (awebai/oats#816):
   `writeFixtureExecutable(fx.base, path, content)`, which refuses a path
   outside the fixture's base, one reached through a link, and a symbolic or
   hard link at the path, with nothing written. `fx.inEnv` keeps the PATH of
-  the process that runs the tests, so an in-process spawn records the
-  harness it finds there, which on a machine with the harness installed is
-  the person's own binary: a spawn whose recorded executable a test will
-  rewrite runs with the fixture's PATH (`process.env.PATH = fx.env.PATH`,
-  put back afterwards; its inert `pi`, `claude` and `codex` come first), and
-  asserts `insideFixture(fx.base, launch.executable)`. The fixture's
+  the process that runs the tests, where a machine with the harness
+  installed has the person's own binary. **An in-process spawn (`fx.spawn`)
+  looks for the harness on the fixture's PATH** (#2044): the fixture's inert
+  `pi`, `claude` and `codex` are put before the host's directories
+  (`fixtureSpawnPath`), after anything the test put in front itself, so a
+  test's own fake harness is still the one found and every recorded
+  `launch.executable` is inside the fixture. A test that needs the harness
+  of the machine it runs on says so: `fx.spawn(soul, { hostHarness: true })`.
+  A spawn whose recorded executable a test will rewrite also asserts
+  `insideFixture(fx.base, launch.executable)`. The fixture's
   environment sets `HOME` and the XDG base directories under the base, and
   `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null` and
   `GIT_TERMINAL_PROMPT=0`, so no host git
