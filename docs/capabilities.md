@@ -2051,8 +2051,10 @@ the instance being spawned. Two of them declaring the same name is
 
 ### The call
 
-Every call runs the **home's own copy** of the capability:
-`node <home>/.oats/modules/<capability>/<script> <args>`. **Its working
+Every call runs the **kernel's copy** of the home's capability, kept outside
+the home, never the home's own copy
+([What the kernel trusts in a provider home](#what-the-kernel-trusts-in-a-provider-home)):
+`node <instances>/.oats-retirement/modules/…/<capability>/<script> <args>`. **Its working
 directory is not the home** (it is the filesystem root): read the home from
 the request (`input.home`) or `OATS_INSTANCE_HOME`, and leave
 nothing of the call's own running in the home (the session's processes work

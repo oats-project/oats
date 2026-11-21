@@ -198,6 +198,10 @@ test("a provider home whose receipt records no composition runs none of its capa
   assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"]);
   assert.match(inspected.error.message, /its receipt records nothing of what it was spawned with.*Retire it and spawn it again/);
   assert.deepEqual([rowOf(fx, "before").running, rowOf(fx, "before").runtimeState], [null, "unreachable"]);
+  // Inspect and readiness of it list no module, and say why.
+  const inspectedHome = fx.cli(["inspect", "--home", home, "--json"]).json().result;
+  assert.deepEqual(inspectedHome.capabilities, []);
+  assert.match(JSON.stringify(inspectedHome), /module-copy-untrusted.*its receipt records nothing of what it was spawned with.*Retire it and spawn it again/);
   assert.equal(await codeOf(() => fx.inEnv(() => restartInstanceSession(home))), "E_SESSION_UNKNOWN");
   assert.deepEqual(fx.calls(), []);
   // It can still be taken away: not without --force (its hooks cannot be identified), and with it.
