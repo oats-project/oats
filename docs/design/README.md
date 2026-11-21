@@ -37,6 +37,8 @@ successor, with a link to its full text.
   built): boundaries declared in the workspace's `sandboxes:`, each listing the souls
   it may run, started by `oats sync` on the machines that list them. Placement no
   longer follows a team (r5).
+- [Human IDs contract](2026-11-21-human-ids-contract.md): the aweb human-ID
+  primitives OATS relies on, how it calls them, who owns what, and the gates.
 
 The Desktop's design brief for designers is in
 [packages/desktop/docs](../../packages/desktop/docs/design-brief.md).
