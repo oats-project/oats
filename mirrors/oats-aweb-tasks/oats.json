@@ -1,8 +1,8 @@
 {
   "capability": "oats.aweb-tasks",
-  "version": "1.47.0",
+  "version": "1.48.0",
   "compatibility": {
-    "oats": ">=0.68.0"
+    "oats": ">=0.70.0"
   },
   "layer": "tasks",
   "description": "Tasks layer via aweb: assignment, claims, status, blockers and handoff using the instance messaging identity.",
