@@ -187,8 +187,10 @@ OATS doesn't use, and doesn't build on, these aw primitives:
     address, roster and routing; revocation refusing the next mint (expected `http_error`
     401 `certificate_revoked`, counted once the run reports it); memberships and history
     kept; clean-up.
-- **G3, Cloud.** Adoption on hosted teams waits for the Cloud release that aweb pairs with
-  aw 1.36.59 to go live. aweb names its version.
+- **G3, Cloud.** Production Cloud (0.8.80, `15591632`, read from its health endpoint on
+  2026-11-21) already has the person's three adoption steps. Adoption on hosted teams still
+  waits for aweb's release decision on the Cloud release it pairs with aw 1.36.59, made on
+  G2's browser evidence. aweb names that version.
 
 ## 6. Revocation
 
