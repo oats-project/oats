@@ -309,6 +309,11 @@ unchanged; not listed, the form closes with "edit it with the CLI"; not read,
 it closes and says the read failed. A `backend` that is no provider's name
 (or "herdr") is refused without a read, as before.
 
+A definition stored without its `repo` (one made with the CLI) shows its soul
+when the roster has exactly one of that name under that agents root, the way
+the server reads it; with two, the Soul field stays empty for the person to
+choose.
+
 **Who owns a pending Edit.** The form is modal from the press on, so no other
 control is pressed while it reads. Every other way on drops the pending Edit,
 whether its read then answers or fails, and nothing is said of it: a later

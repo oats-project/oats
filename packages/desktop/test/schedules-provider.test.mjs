@@ -157,6 +157,23 @@ test("Edit of a schedule on a session provider: the form opens at once, waits fo
   } finally { s.cleanup(); }
 });
 
+test("a schedule made with the CLI, stored without its repository, shows its soul and saves: the one soul of that name under that agents root", async () => {
+  const saved = [], bare = { ...onBb }; delete bare.repo;
+  const twin = { name: "reviewer", repo: "other", repoName: "other", agentsRoot: "/team/src/agents", work: "worktree" };
+  for (const [agents, soul] of [[undefined, JSON.stringify(["reviewer", "src", "/team/src/agents"])], [[{ ...reviewer, repoName: "src" }, twin], ""]]) {
+    const s = setup({ agents, read: async () => ({ schedules: [bare], scheduler }), mutate: async (path, body) => (path.startsWith("/api/capabilities") ? listsBb : saver(saved)(body)) });
+    try {
+      await tick(); s.rowAction("bb-review", "edit").click(); await ticks();
+      const form = s.el.querySelector("form");
+      assert.equal(form.elements.agent.value, soul, soul ? "the one soul" : "two of that name: none is chosen for the person");
+      if (!soul) continue;
+      assert.equal(form.elements.backend.value, "bb"); assert.equal(form.checkValidity(), true);
+      submit(s); await ticks();
+      assert.equal(saved.length, 1); assert.equal(saved[0].agent, "reviewer"); assert.equal(saved[0].backend, "bb"); assert.equal(saved[0].yolo, true);
+    } finally { s.cleanup(); }
+  }
+});
+
 test("a schedule whose backend the kernel does not list for its soul is not kept: an unlisted provider, an answer without the list, a malformed list, a failed read", async () => {
   const cannot = /^bb-review carries settings this editor cannot keep; edit it with the CLI\.$/;
   for (const [answer, said] of [[async () => ({ operationsApi: 2, sessionProviders: [{ name: "other" }] }), cannot], [async () => ({ operationsApi: 2 }), cannot],

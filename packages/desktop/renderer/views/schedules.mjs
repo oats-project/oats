@@ -274,7 +274,16 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
       instances = (panel.instances || []).filter(i => !formDeployment || !i.deployment || i.deployment.id === formDeployment);
       fill(field("agent"), agents.filter(a => a.work !== "attached"), a => `${a.name} · ${a.agentsRoot}`, a => JSON.stringify([a.name, a.repo || null, a.agentsRoot]));
       fill(field("home"), instances, i => `${i.instance} · ${i.home}`, i => i.home);
-      if (job?.agent || soul) field("agent").value = JSON.stringify([job?.agent || soul.name, job?.repo || soul?.repo || null, job?.agentsRoot || soul?.agentsRoot]);
+      if (job?.agent || soul) {
+        const want = [job?.agent || soul.name, job?.repo || soul?.repo || null, job?.agentsRoot || soul?.agentsRoot];
+        field("agent").value = JSON.stringify(want);
+        // A definition stored without its repository (one made with the CLI): its soul is the one of that name
+        // under that agents root, when there is exactly one, as the server reads it (server/schedules.mjs).
+        if (field("agent").selectedIndex < 0 && want[1] === null) {
+          const same = [...field("agent").options].filter(option => { const [name, , root] = JSON.parse(option.value); return name === want[0] && root === want[2]; });
+          if (same.length === 1) field("agent").value = same[0].value;
+        }
+      }
       if (job?.home) field("home").value = job.home;
       baseline.agent = field("agent").value; baseline.home = field("home").value;
       formReady = true; syncKind(job?.operation); render();
