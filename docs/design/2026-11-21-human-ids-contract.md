@@ -51,7 +51,7 @@ Commit ids are background only.
 | P1 | `aw --identity-home <root>/.aw id parent request --domain D --parent H --invitation-id I --out request.json` | An agent, in the root's home, during adoption | Documented step (PR b). D, H and I are copied from the dashboard's invitation, never derived. |
 | P2 | `aw --identity-home <root>/.aw id parent import response.json --domain D` | An agent, in the root's home | Documented step (PR b). |
 | P3 | `aw --json init --join-from=<root> --join-team=<T> --name=<alias> --do-not-touch-agents-md` | The provider's spawn hook, on the root's host, as the deployment's user | Primary identity of every spawned instance (unchanged). After adoption, aw signs the child under the root through a same-machine retained link. |
-| P4 | `aw team invite --team-id <T> --json` in the root, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local --parent <root>/.aw --json` | The provider, joining an instance to an extra team | Joined-team identities. `--parent` is passed only when the root reads `nearest_human`, because an adopted root's invites carry `for_human` (**OPEN A**). An unadopted root's join is unchanged. An adopted root on an aw below 1.36.59 stops before minting any invite and names the floor. |
+| P4 | `aw team invite --team-id <T> --json` in the root, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local --parent <root>/.aw --json` | The provider, joining an instance to an extra team | Joined-team identities. `--parent` is passed only when the root reads `nearest_human`, because an adopted root's invites carry `for_human`. aweb confirms this as the supported, unattended route (native agent-to-agent exchange, same user and HOME). An unadopted root's join is unchanged. An adopted root on an aw below 1.36.59 stops before minting any invite and names the floor. |
 | P5 | `aw --identity-home <home>/.aw who --json` | The provider | C1 and C2 (§4). |
 | P6 | `aw id team remove-member` on a hosted team (route `/api/v1/teams/{team_id}/agents/remove-member`), needing a team-scoped owner/admin API key | **OPEN R** | Revocation (§6). |
 
@@ -90,8 +90,8 @@ OATS doesn't use, and doesn't build on, these aw primitives:
     agent-submitted request is refused with `global_agent_required`.
   - One adoption covers one key. A host with several roots needs one adoption per root.
 - **After adoption:**
-  - The root's invites carry `for_human`. On a hosted team, Cloud sets it by default (**to
-    confirm in OPEN A**).
+  - The root's ordinary hosted member invites default to its verified nearest human
+    (`for_human`). There is no opt-out: `--for-human` can only name another valid person.
   - A `--join-from` child satisfies it.
   - Spawning needs aw's registry and the person's domain DNS. Without them, the spawn is
     refused (`evidence_unavailable`) with no fallback.
@@ -182,9 +182,20 @@ OATS doesn't use, and doesn't build on, these aw primitives:
 - `oats aweb connect <server>`, and `setup --join` with an invite issued by a root on
   another machine, mint away from the issuing root. After that root is adopted they would
   stall.
-- The rule (**OPEN B** until aweb confirms): connect a server before adopting the root that
-  invites it, or invite it from an unadopted member. The remote root is then adopted on its
-  own.
+- The rule (aweb, at `d8d0bfa1e7`):
+  - Invite a server's root only from a root that reads `unknown` / `legacy_no_chain`, that
+    is, genuinely chainless. Its invite carries no condition, and the remote root can be
+    adopted on its own later.
+  - "Unadopted" isn't enough. A root that reads `no_human` has a chain, and a remote root
+    minted under it joins that lineage. An agent-parented root can never be adopted
+    independently.
+  - If the only inviter is chained (`no_human` or `nearest_human`), the supported route is
+    aw's cross-machine file exchange: the inviting root agent signs the remote root as its
+    child, with an operator moving the files and no person signature. The remote root is
+    then under that lineage, not adopted separately.
+  - OATS's connect and `setup --join` check the inviting root's `aw who` first, and refuse
+    to invite a remote root from a chained root unless the operator chose the file
+    exchange.
 
 ## 5. Gates
 
@@ -252,11 +263,8 @@ PR b's revocation text waits for this.
 
 ## 8. Open items
 
-- **A.** Whether `--parent <root>/.aw` on `id team accept-invite` is the supported,
-  unattended route for joined-team mints from an adopted hosted root, and whether Cloud sets
-  `for_human` on a hosted root's invite by default. (aweb)
-- **B.** The connect rule, or a supported way for an adopted root to issue a member invite
-  without the `for_human` condition. (aweb)
-- **C.** Confirm `native_agent_signature_pending` is in the cut SHA. (aweb, at the cut)
+- **A, B: answered** by aweb at `d8d0bfa1e7` (§2 P4, §4 "Where OATS mints").
+- **C.** `native_agent_signature_pending` is implemented on aweb `802f1674` (exit 1, key and
+  request kept, no membership). aweb confirms it is in the cut SHA.
 - **R.** Who removes a root's membership on a hosted team (§6). (decided by the people who
   own the product)
