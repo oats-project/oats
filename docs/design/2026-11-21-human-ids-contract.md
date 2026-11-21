@@ -62,7 +62,7 @@ Commit ids are background only.
 | P3 | `aw init --join-from=<root> --join-team=<T> --name=<alias> --json --do-not-touch-agents-md` (oats-aweb `bin/oats-aweb.mjs:2541`), `<root>` being the root's workspace directory | The provider's spawn hook, on the root's host, as the deployment's user | Primary identity of every spawned instance (unchanged). After adoption, aw signs the child under the root through the mint's same-machine hosted issuer link. |
 | P4 | `aw team invite --team-id <T> --json` with the root as the selected identity, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local [--parent <root>/.aw] --json`, the same token on stdin | The provider, joining an instance to an extra team; `<home>/.aweb-identity-<label>` is fresh, or the same retained target on retry | Joined-team identities. aweb confirms `--parent` as the supported, unattended route (native agent-to-agent exchange through a token-scoped creator link, same user and HOME). The child proves the invite's human before membership is submitted. `--parent` is passed only when the root reads `nearest_human`. That is decided by one bounded P5 read of `<root>/.aw` at join time, falling back to C3's record when the read is `unavailable`. It is omitted for a genuinely chainless root, whose join is unchanged. An adopted root on an aw below 1.36.59 stops before minting any invite, with a code in aw's `--json` style and a README line naming the fix. |
 | P5 | `aw --identity-home <home>/.aw who --json` | The provider | C1 and C2 (§4). |
-| P6 | `aw id team remove-member --namespace D --team NAME --cert-id C [--aweb-url URL] --json` (or `--member`), with a team-scoped owner/admin API key from `--api-key` or the environment, calling `/api/v1/teams/{team_id}/agents/remove-member` | **OPEN R** | Membership removal (§6). A browser session or a person's signing key doesn't satisfy this CLI. |
+| P6 | `aw id team remove-member --namespace D --team NAME --cert-id C [--aweb-url URL] --json` (or `--member`), with a team-scoped owner/admin API key from `--api-key` or the environment, calling `/api/v1/teams/{team_id}/agents/remove-member` | The person, from a terminal (§6) | Membership removal (§6). The documented person-run CLI uses the setup key. The server also accepts signed-in person authority for the same route. A person's signing key is a separate credential. |
 
 Person's steps in Cloud (dashboard, signed in, the root's team selected, from the root's
 Chat or Messages pane):
@@ -226,22 +226,33 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   `--parent` from a chainless root still joins.
   - Development and CI may use `1.36.59-rc.3`, pinned by integrity.
   - `tested` never points at an RC.
-- **G2, the run.** aweb's Cloud journey case (`cloud-journey-case-acxy7-v1`, step hash
-  `85196827b2b0`) runs on a scratch hosted team with a test person, never on a live team or
-  a real person's identities.
-  - Its first green run, with a verdict per step, is the evidence.
-  - The agreed record (v3) is written from it.
-  - Revocation step: the case text (`85196827b2b0`) says a team admin removes R's
-    membership in the dashboard. The released Cloud has no such control (§6), so the step
-    changes, for example to the harness running P6 with the scratch team's admin key, inside
-    its isolated fixture. Per the agreed rule, that change comes to OATS first. Both sides
-    accept it in advance if it keeps the same "must show".
-  - Its steps: adopt R; mint child and grandchild unattended, both verifying to the person;
-    an earlier child unchanged; a control child from an unadopted root matching in alias,
-    address, roster and routing; revocation refusing the next mint, through
-    `aw init --join-from`: `error.code "invite_not_created"` with `http_status` 401 and
-    `reason "certificate_revoked"` (aw init.go:434-442), counted once the run reports it; memberships and history
-    kept; clean-up.
+- **G2, the run.** aweb's Cloud journey case (`cloud-journey-case-acxy7-v1`; original
+  case-text hash `85196827b2b0`) runs on a scratch hosted team with a test person, never on
+  a live team or a real person's identities.
+  - Its first green run is the evidence, recorded with the actual Cloud head, the aw cut SHA
+    and a verdict per step. The agreed record (v3) is written from it.
+  - Its eight steps:
+    1. Before adoption, R mints an early child E.
+    2. The person adopts R through the dashboard's invitation, upload and approval, and
+       download, with P1 and P2 run in R. R then reads `nearest_human`.
+    3. R mints a child C unattended. C verifies to the person, and its chain ends in R then
+       C.
+    4. A grandchild G is minted unattended. Its chain ends in R then G.
+    5. E is unchanged: same ID, key and membership certificate, still `unknown`.
+    6. A control child K, minted from an unadopted root R0, matches C in alias, address,
+       roster and workspace form. Verified mail and chat flow both ways between C and K.
+    7. Revocation, as changed with both sides' agreement from the original "a team admin
+       removes R's membership in the dashboard", which the released Cloud lacks (§6):
+       - P6 runs against the scratch hosted team and R's exact team certificate.
+       - A surviving child reads fresh registry membership and confirms R is absent.
+       - The signed-in person reloads Agents and sees the surviving child and R's absence.
+       - R's next `aw init --join-from` exits nonzero with `error.code`
+         `invite_not_created`, `http_status` 401 and `reason` `certificate_revoked`
+         (aw init.go:434-442).
+       - The surviving members' certificates, mail and chat history are unchanged.
+       - The paired runtime evidence includes P6 run with a fresh dashboard-issued,
+         same-team owner or admin setup key, once Cloud's restoration is composed (§6).
+    8. Clean-up: scratch memberships removed, scratch identities revoked, receipts checked.
 - **G3, Cloud.** Production Cloud (0.8.80, `15591632`, read from its health endpoint on
   2026-11-21) already has the person's three adoption steps. Adoption on hosted teams still
   waits for aweb's release decision on the Cloud release it pairs with aw 1.36.59, made on
@@ -257,26 +268,33 @@ OATS doesn't use, and doesn't build on, these aw primitives:
 - The person can revoke their whole ID, which ends everything under them. OATS neither does
   nor tests that.
 
-**How the membership is removed on a hosted team** (decided by aweb's product owner, 2026-11-21,
-through aweb's maintainers):
-- The paired Cloud release keeps production's removal path. An owner's or admin's key from
-  Cloud's setup flow authorizes P6. The creation-only restriction on that route is withdrawn
-  for this release.
-- There is no new dashboard removal control in this release.
+**How the membership is removed on a hosted team** (decided by aweb's product owner,
+2026-11-21, relayed by aweb's maintainers in their mail `c05ca697`):
+- The paired Cloud release keeps the existing hosted CLI route, P6. The person who runs it
+  is the team's current owner or team admin, using their team's unexpired dashboard setup
+  key, with the existing team and person checks.
+- This restores the setup key's authority on that route, which production (`15591632`)
+  already gives. Until aweb's maintainers name the restoring SHA and the user-path evidence
+  exists, this is a release commitment, not shipped behaviour.
+- There is no dashboard membership-only Remove for a team-only root. Archive and Replace
+  remain for permanent agents.
 - The principle: no user path is harder than production, and extra human-assurance security
   is opt-in.
-- Removing the membership stops that root getting more memberships through that team. It
-  doesn't reverse the person's signed adoption or revoke the ID chain.
+- Removing the membership affects that team and the root's ability to mint there. The
+  signed adoption and identity ancestry stay in place. This is not an undo of adoption.
 
-**OPEN R: who runs P6.** One of:
-- the person runs it, with their own owner or admin key;
-- an agent runs it with an owner key the person delegates.
+**Current behaviour: the person runs P6.** No agent holds or uses the person's owner or
+admin key (principle 2). The ruling above restores a credential's server authority; it
+grants no exception to principle 2.
+
+**OPEN R: whether to allow delegation later.** An agent running P6 with an owner key the
+person delegates would need a separate ruling.
 
 Principle 2 forbids the second unless both OATS owners, aweb's product owner and the OATS
 deployment owner, rule otherwise. Principle 2 binds every OATS deployment, so neither side
 changes it alone.
 
-PR b's revocation text waits for this.
+PR b documents the person-run P6 with the setup key, and no session plumbing.
 
 ## 7. Ownership
 
@@ -294,5 +312,5 @@ PR b's revocation text waits for this.
 - **A, B: answered** by aweb at `d8d0bfa1e7` (§2 P4, §4 "Where OATS mints").
 - **C.** `native_agent_signature_pending` is implemented on aweb `802f1674` (exit 1, key and
   request kept, no membership). aweb confirms it is in the cut SHA.
-- **R.** Whether an agent may run P6 with a delegated owner key, or only the person runs it
-  (§6). (both OATS owners: aweb's product owner and the OATS deployment owner)
+- **R.** Whether an agent may ever run P6 with a delegated owner key (§6). Today only the
+  person runs it. (both OATS owners: aweb's product owner and the OATS deployment owner)
