@@ -1345,7 +1345,8 @@ its own: each blocking one is an extension's (`ctx.ui.select`, `confirm`,
 `input`, `editor` or `custom`; a question tool's, say). The bridge holds a claim
 of producer `oats.pi`, reason `question`, from pi's `ui_prompt_start` to its
 `ui_prompt_end` (pi 0.84.4 and later), in pi's terminal UI and in RPC mode alike,
-so the same holds for a pi in a tmux pane and one a session provider runs. The
+so the same holds for every pi home: a pi in a tmux pane and one a session
+provider runs. The
 message is the dialog's title, made one line and cut to fit as the Claude
 emitter's is; a dialog with no title sets the claim with no text. pi reports
 nested and overlapping dialogs as one span, with the first one's title. The
@@ -1357,6 +1358,34 @@ OATS instance the bridge reports nothing. What it does not see: a screen of pi's
 own (its project trust prompt, a picker a person opened), which fires neither
 event; a question a host asks outside pi (a session provider's own question
 tool); and anything on a pi before 0.84.4.
+
+**Whose claim it is.** More than one bridge can run in a home (a nested pi and
+a subagent's session carry the home's `OATS_INSTANCE_HOME` too), and a pi can
+die with its dialog open. So the bridge that sets the claim, a dialog's or a
+failed turn's, records a mark while the claim stands: `<home>/.pi/oats-pi-claim.json`,
+`{pid, start, token, reason}`, the holder's process (its pid and its start
+time, so a reused pid is not taken for it), the bridge that wrote it, and the
+claim's reason. A bridge tells its own claim by that mark, never by the claim's
+reason, and clears only its own. A holder that is alive keeps its claim: a
+second pi's first run does not clear it, and another pi's `attention` never
+replaces its `question`; only a `question` replaces another live pi's
+`attention`. A claim nobody alive holds is cleared by the home's next pi: a
+`question` whose holder is gone (a pi killed with its dialog open) when that pi
+starts, and a failed turn's, or a claim with no mark (a bridge from before the
+mark left it), at its first run. A session that ends on a failed turn leaves
+the claim and removes its mark. The mark is in the agent's own home and decides
+only claims the agent could set or clear itself, so it needs no protection from
+the agent, in a sandboxed home either. Every write is producer `oats.pi`'s: no
+other producer's claim is touched.
+
+**A pi claim that outlives its dialog.** With no pi left to start in the home,
+a dead pi's `question` stays, and it holds every scheduled wake: the hold reads
+claims, not whether the session runs. For a home on a session provider that
+lasts until the claim is cleared, because a wake never starts such a home; a
+tmux home's next start voids it, as a session boundary voids every claim. A
+hold that runs long is a reason to look: run `oats instance waiting clear
+--producer oats.pi --home <home>` from anywhere. A mark left behind is removed
+by the home's next pi.
 
 **Whether a home is covered** (oats.core 2.11.0). Spawn and launch hooks answer
 [`dialogClaims: "reported"`](#commands-and-hooks), so the home reads `wakeHold:

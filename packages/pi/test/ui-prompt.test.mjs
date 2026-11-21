@@ -7,16 +7,16 @@
 // itself (extension/index.ts) in and outside an instance home.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { liveWaiting, validWaitingMessage, waitingHold } from "../../../lib/instance-events.mjs";
+import { liveWaiting, setWaiting, validWaitingMessage, waitingHold } from "../../../lib/instance-events.mjs";
 
 import { reportFailedTurn } from "../extension/failed-turn.mjs";
 import { reportUiPrompt } from "../extension/ui-prompt.mjs";
-import { claimMessage, waitingClaim } from "../extension/waiting-claim.mjs";
+import { claimMessage, markPath, processStart, waitingClaim } from "../extension/waiting-claim.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const RUNNER = fileURLToPath(new URL("./run-ui-prompt.mjs", import.meta.url));
@@ -84,11 +84,12 @@ test("a dialog sets a question claim with its title, and closing it clears the c
 test("a dialog with no title (a custom screen) sets the claim with no text", async (t) => {
   const { home, calls } = recordingHome(t);
   const fire = session(home);
-  for (const event of [opened("custom"), { ...opened("input"), title: "  \n " }, {}, undefined]) {
+  for (const [n, event] of [opened("custom"), { ...opened("input"), title: "  \n " }, {}, undefined].entries()) {
     await fire("ui_prompt_start", event);
+    await settle(() => calls().length === 2 * n + 1);
     await fire("ui_prompt_end");
+    await settle(() => calls().length === 2 * n + 2);
   }
-  await settle(() => calls().length === 8);
   assert.deepEqual(calls(), Array.from({ length: 4 }, () => [questionArgv(home), clearArgv(home)]).flat());
 });
 
@@ -149,7 +150,9 @@ test("a dialog is shown over a failed turn, and the failed turn again once it cl
   await fire("agent_start");
   await fire("agent_end", failed("422: refused"));
   await fire("agent_settled", { aborted: false });
+  await settle(() => calls().length === 2);
   await fire("ui_prompt_start", opened("confirm", "Retry?"));
+  await settle(() => calls().length === 3);
   await fire("ui_prompt_end");
   await settle(() => calls().length === 4);
   assert.deepEqual(calls(), [clearArgv(home), attentionArgv(home, "Turn failed: 422: refused"), questionArgv(home, "Retry?"), attentionArgv(home, "Turn failed: 422: refused")]);
@@ -238,11 +241,15 @@ test("real kernel: a dialog with no title is a question with no text, and it hol
 
 /** The bridge itself, loaded as pi loads it, in one process: which events it listens to, and
  *  the kernel calls a dialog and the session's end made. */
-function bridge({ home, env = {} }) {
+const RUNNER_ARGV = ["--experimental-strip-types", "--no-warnings", RUNNER];
+function runnerEnv(env) {
   const run = { ...process.env, OATS_PKG_ROOT: REPO_ROOT, ...env };
   delete run.NODE_TEST_CONTEXT;
   if (!("OATS_INSTANCE_HOME" in env)) delete run.OATS_INSTANCE_HOME;
-  const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", RUNNER], { cwd: home, env: run, encoding: "utf8", timeout: 60000 });
+  return run;
+}
+function bridge({ home, env = {}, mode = "dialog-then-quit" }) {
+  const r = spawnSync(process.execPath, [...RUNNER_ARGV, mode], { cwd: home, env: runnerEnv(env), encoding: "utf8", timeout: 60000 });
   assert.equal(r.status, 0, r.stderr);
   return JSON.parse(r.stdout);
 }
@@ -262,4 +269,205 @@ test("no claim outside an OATS home: no instance, or a directory that is not one
     assert.deepEqual(listens, ["resources_discover"]);
   }
   assert.deepEqual(calls(), []);
+  assert.ok(!existsSync(markPath(home)), "and no mark");
+});
+
+// ---- the mark: whose claim it is ----
+
+const markOf = (home) => existsSync(markPath(home)) ? JSON.parse(readFileSync(markPath(home), "utf8")) : null;
+/** A mark another pi process left, with the claim it stands for, through the kernel. */
+function leftBy(home, holder, reason, message) {
+  mkdirSync(join(home, ".pi"), { recursive: true });
+  writeFileSync(markPath(home), `${JSON.stringify({ token: "another-bridge", reason, ...holder })}\n`);
+  setWaiting(home, { producer: "oats.pi", waiting: true, reason, message });
+}
+/** A process that has ended: its pid, and when it started. */
+function gone() {
+  const child = spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], { encoding: "utf8" });
+  return { pid: Number(child.stdout), start: "0" };
+}
+
+test("the mark names the bridge that set the claim, and is there only while the claim stands", async (t) => {
+  const { home, calls } = recordingHome(t);
+  const fire = session(home);
+  assert.equal(markOf(home), null);
+  await fire("ui_prompt_start", opened("select", "Which one?"));
+  await settle(() => calls().length === 1);
+  const { token, ...mark } = markOf(home);
+  assert.deepEqual(mark, { pid: process.pid, start: processStart(process.pid), reason: "question" });
+  assert.match(token, /^[0-9a-f-]{36}$/);
+  assert.equal(typeof mark.start, "string", "this host can say when a process started");
+  await fire("ui_prompt_end");
+  await settle(() => calls().length === 2);
+  await settle(() => markOf(home) === null);
+  await fire("agent_start");
+  await fire("agent_end", failed("422: refused"));
+  await fire("agent_settled", { aborted: false });
+  await settle(() => calls().length === 3);
+  assert.deepEqual({ ...markOf(home), token: undefined }, { ...mark, reason: "attention", token: undefined }, "a failed turn's claim is marked too");
+  assert.equal(markOf(home).token, token, "by the same bridge");
+});
+
+test("a second pi's run in the home leaves the main pi's open dialog: no clear at its first run, and its failed turn does not replace the question", async (t) => {
+  const { home, calls } = recordingHome(t);
+  const main = session(home), nested = session(home);
+  await main("ui_prompt_start", opened("select", "Which one?"));
+  await settle(() => calls().length === 1);
+  const mark = markOf(home);
+  await nested("session_start", { type: "session_start", reason: "startup" });
+  await nested("agent_start");
+  await nested("agent_end", failed("422: refused"));
+  await nested("agent_settled", { aborted: false });
+  await nested("agent_start");
+  await nested("session_shutdown", { type: "session_shutdown", reason: "quit" });
+  await quiet();
+  assert.deepEqual(calls(), [questionArgv(home, "Which one?")], "the nested pi wrote nothing");
+  assert.deepEqual(markOf(home), mark, "and the mark is still the main pi's");
+  await main("ui_prompt_end");
+  await settle(() => calls().length === 2);
+  assert.deepEqual(calls()[1], clearArgv(home), "the main pi clears its own");
+});
+
+test("real kernel: a second pi process that starts, fails a turn and quits in the home leaves the main pi's question and its hold", async (t) => {
+  const home = kernelHome(t);
+  const fire = session(home);
+  await fire("ui_prompt_start", opened("select", "Which option should I take?"));
+  await settle(() => liveWaiting(home) !== null);
+  const before = liveWaiting(home), mark = markOf(home);
+  const { listens } = bridge({ home, env: { OATS_INSTANCE_HOME: home }, mode: "failed-run" });
+  assert.ok(listens.includes("agent_settled"), "the second pi ran the bridge");
+  assert.deepEqual(liveWaiting(home), before, "the same claim, never rewritten");
+  assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.pi" });
+  assert.deepEqual(markOf(home), mark);
+  await fire("ui_prompt_end");
+  await settle(() => liveWaiting(home) === null);
+  await settle(() => markOf(home) === null);
+});
+
+test("a question replaces another live pi's failed turn, which that pi then leaves alone", async (t) => {
+  const { home, calls } = recordingHome(t);
+  const other = session(home), main = session(home);
+  await other("agent_start");
+  await other("agent_end", failed("422: refused"));
+  await other("agent_settled", { aborted: false });
+  await settle(() => calls().length === 2);
+  await main("ui_prompt_start", opened("select", "Which one?"));
+  await settle(() => calls().length === 3);
+  assert.deepEqual(calls()[2], questionArgv(home, "Which one?"));
+  await other("agent_start");
+  await quiet();
+  assert.equal(calls().length, 3, "the other pi's next run does not clear the question");
+  await main("ui_prompt_end");
+  await settle(() => calls().length === 4);
+  assert.deepEqual(calls()[3], clearArgv(home));
+  await settle(() => markOf(home) === null);
+});
+
+test("real kernel: a pi killed with its dialog open leaves its claim, and the home's next pi clears it as it starts", async (t) => {
+  const home = kernelHome(t);
+  const pi = spawn(process.execPath, [...RUNNER_ARGV, "dialog-then-hang"], { cwd: home, env: runnerEnv({ OATS_INSTANCE_HOME: home }), stdio: ["ignore", "pipe", "inherit"] });
+  const exited = new Promise((resolve) => pi.on("exit", resolve));
+  t.after(() => { pi.kill("SIGKILL"); });
+  await settle(() => liveWaiting(home) !== null);
+  assert.equal(markOf(home).pid, pi.pid);
+  pi.kill("SIGKILL");
+  await exited;
+  assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.pi" }, "left behind: it would hold every wake");
+  const fire = session(home);
+  await fire("session_start", { type: "session_start", reason: "startup" });
+  await settle(() => liveWaiting(home) === null);
+  assert.equal(waitingHold(home), null);
+  await settle(() => markOf(home) === null);
+});
+
+test("real kernel: a pid that now belongs to another process is not the holder: the mark's start time tells", async (t) => {
+  const home = kernelHome(t);
+  leftBy(home, { pid: process.pid, start: "not when this process started" }, "question", "Which one?");
+  const fire = session(home);
+  await fire("session_start", { type: "session_start", reason: "startup" });
+  await settle(() => liveWaiting(home) === null);
+  await settle(() => markOf(home) === null);
+});
+
+test("real kernel: a live holder's question is left at a start and at a first run; a holder whose start cannot be read counts as alive", async (t) => {
+  for (const start of [processStart(process.ppid), null]) {
+    const home = kernelHome(t);
+    leftBy(home, { pid: process.ppid, start }, "question", "Which one?");
+    const mark = markOf(home);
+    const fire = session(home);
+    await fire("session_start", { type: "session_start", reason: "startup" });
+    await fire("agent_start");
+    await fire("session_shutdown", { type: "session_shutdown", reason: "quit" });
+    assert.equal(liveWaiting(home)?.message, "Which one?");
+    assert.deepEqual(markOf(home), mark);
+  }
+});
+
+test("real kernel: a failed turn left by a pi that is gone waits for the next run, not the next start", async (t) => {
+  const home = kernelHome(t);
+  leftBy(home, gone(), "attention", "Turn failed: 422: refused");
+  const fire = session(home);
+  await fire("session_start", { type: "session_start", reason: "startup" });
+  await quiet();
+  assert.equal(liveWaiting(home)?.message, "Turn failed: 422: refused", "still shown: nothing has run since");
+  await fire("agent_start");
+  await settle(() => liveWaiting(home) === null);
+  await settle(() => markOf(home) === null);
+});
+
+test("a session that ends on a failed turn leaves the claim and gives up its mark, so the next bridge's first run clears it", async (t) => {
+  const { home, calls } = recordingHome(t);
+  const fire = session(home);
+  await fire("agent_start");
+  await fire("agent_end", failed("422: refused"));
+  await fire("agent_settled", { aborted: false });
+  await fire("session_shutdown", { type: "session_shutdown", reason: "reload" });
+  assert.deepEqual(calls(), [clearArgv(home), attentionArgv(home, "Turn failed: 422: refused")], "no clear: the failed turn still stands");
+  assert.equal(markOf(home), null);
+  const reloaded = session(home);
+  await reloaded("session_start", { type: "session_start", reason: "reload" });
+  await quiet();
+  assert.equal(calls().length, 2, "not at the start");
+  await reloaded("agent_start");
+  await settle(() => calls().length === 3);
+  assert.deepEqual(calls()[2], clearArgv(home));
+});
+
+test("a home where the mark cannot be written still gets its claim set and cleared", async (t) => {
+  const { home, calls } = recordingHome(t);
+  writeFileSync(join(home, ".pi"), "not a directory\n");
+  const fire = session(home);
+  await fire("ui_prompt_start", opened("select", "Which one?"));
+  await settle(() => calls().length === 1);
+  await fire("ui_prompt_end");
+  await settle(() => calls().length === 2);
+  assert.deepEqual(calls(), [questionArgv(home, "Which one?"), clearArgv(home)]);
+});
+
+test("a dialog that opens and closes while an earlier write is under way starts no process: a step shows what stands when it runs", async (t) => {
+  const { home, shim, log, calls } = recordingHome(t);
+  const fire = session(home);
+  writeFileSync(shim, `#!/bin/sh\nsleep 0.3\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(`${shim}.record`)} "$@"\n`);
+  writeFileSync(`${shim}.record`, `require("node:fs").appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "\\n");\n`);
+  await fire("agent_start");
+  await fire("ui_prompt_start", opened("select", "Which one?"));
+  await fire("ui_prompt_end");
+  await fire("session_shutdown", { type: "session_shutdown", reason: "quit" });
+  assert.deepEqual(calls(), [clearArgv(home)], "the first run's clear, and nothing for a dialog already closed");
+  assert.equal(markOf(home), null);
+});
+
+test("real kernel: the bridge clears its own claim and no other producer's", async (t) => {
+  const home = kernelHome(t);
+  setWaiting(home, { producer: "agent", waiting: true, reason: "attention", message: "my own question" });
+  setWaiting(home, { producer: "oats.core", waiting: true, reason: "question", message: "another producer's question" });
+  await new Promise((r) => setTimeout(r, 2));
+  const fire = session(home);
+  await fire("ui_prompt_start", opened("select", "Which one?"));
+  await settle(() => liveWaiting(home)?.producer === "oats.pi");
+  await fire("ui_prompt_end");
+  await fire("session_shutdown", { type: "session_shutdown", reason: "quit" });
+  assert.deepEqual(waitingHold(home), { claimReason: "question", producer: "oats.core" }, "a question of another producer still holds");
+  setWaiting(home, { producer: "oats.core", waiting: false });
+  assert.equal(liveWaiting(home).message, "my own question", "and the agent's own claim stands");
 });

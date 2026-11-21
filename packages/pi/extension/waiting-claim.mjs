@@ -7,8 +7,22 @@
  * open (ui-prompt.mjs) and the last turn failed (failed-turn.mjs). The open
  * dialog is shown over the failed turn, because an Enter would answer it, and a
  * dialog that closes shows the failed turn again while it still stands.
+ *
+ * More than one bridge can run in a home: a nested pi or a subagent's session
+ * carries the home's OATS_INSTANCE_HOME too, and a pi can die with its dialog
+ * open. So the bridge that sets the claim records a mark beside it, in pi's own
+ * project directory: `<home>/.pi/oats-pi-claim.json`, `{ pid, start, token,
+ * reason }`, the holder's process (its pid and start time, so a reused pid is
+ * not taken for it), this bridge (the token) and the claim's reason. A bridge
+ * clears only the claim its own mark stands for, by the mark and never by the
+ * claim's reason, and a holder that is alive keeps its claim: another bridge
+ * leaves it, except that a question replaces a live holder's failed turn. The
+ * mark is in the agent's own home and decides only claims the agent could set
+ * or clear itself.
  */
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** The characters the kernel refuses in a claim's message: a copy of its set
@@ -27,44 +41,145 @@ export function claimMessage(text) {
   return points.length > MESSAGE_MAX ? `${points.slice(0, MESSAGE_MAX - 1).join("")}…` : line;
 }
 
+/** Where a home's mark is. */
+export const markPath = (home) => join(home, ".pi", "oats-pi-claim.json");
+
+/** When a process started, as a string that is the same for every reader while it
+ *  lives, or null where that cannot be read. Linux: the start time in its stat (field
+ *  22, counted after the command's closing parenthesis, which a command name cannot
+ *  spoof). Elsewhere: what `ps` prints for it. */
+export function processStart(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] || null;
+  } catch {
+    try { return execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] }).trim() || null; }
+    catch { return null; }
+  }
+}
+
+/** Whether the process a mark names is still that process. One that cannot be told
+ *  apart from it counts as alive: a live holder's claim taken for a dead one's would
+ *  be cleared under an open dialog. */
+function holderAlive(mark) {
+  try { process.kill(mark.pid, 0); }
+  catch (error) { if (error?.code !== "EPERM") return false; }
+  const start = processStart(mark.pid);
+  return start === null || mark.start === null || start === mark.start;
+}
+
+/** The home's mark, or null: none, or one that does not read as a mark. */
+function readMark(home) {
+  try {
+    const mark = JSON.parse(readFileSync(markPath(home), "utf8"));
+    const valid = Number.isInteger(mark?.pid) && mark.pid > 0 && (mark.start === null || typeof mark.start === "string")
+      && typeof mark.token === "string" && (mark.reason === "question" || mark.reason === "attention");
+    return valid ? mark : null;
+  } catch { return null; }
+}
+
 /** The home's claim: `asked(message)` while a dialog is open (a string, "" for one
  *  with no words) and `asked(undefined)` once it closed; `turnFailed(message)` for a
  *  turn that failed and `turnFailed(undefined)` once that is over.
  *
- *  A write starts a process only when the claim to show changes. This process cannot
- *  know what an earlier pi in the session claimed (a /reload, a pi started again in
- *  the pane), so its first write always goes, a clear included. Writes run one at a
- *  time, so a clear cannot pass the set it answers, and a session that ends waits
- *  for them: a /reload's next bridge starts its own queue, and a set still under way
- *  would land after its clear, and a pi that exits would leave a dialog's claim
- *  behind. A session that ends closes its dialog. A write is bounded by its timeout,
- *  and a failed one is dropped: reporting must never break a session. */
+ *  Each change is one step, and steps run one at a time, so a clear cannot pass the
+ *  set it answers. A step shows what stands when it runs, so a dialog that opened and
+ *  closed while an earlier write was under way starts no process. A step reads the
+ *  mark, then:
+ *  - to show a claim: writes its own mark, then the claim. A live holder's claim
+ *    stays instead, unless this one is a question and that one a failed turn.
+ *  - to show none: clears the claim its own mark stands for, then removes the mark.
+ *    This bridge's first step also clears what nobody alive holds: a mark whose
+ *    holder is gone, or a claim with no mark (a bridge from before the mark left
+ *    it, or a session that ended on a failed turn). After that, a step with no
+ *    claim to clear starts no process.
+ *  - when its session starts (`session_start`): clears only the question of a holder
+ *    that is gone, a pi that died with its dialog open. A failed turn waits for the
+ *    next run, as before.
+ *
+ *  A session that ends closes its dialog and waits for its steps: a /reload's next
+ *  bridge starts its own, a set still under way would land after its clear, and a pi
+ *  that exits would leave a dialog's claim behind. A failed turn's claim outlives the
+ *  session, as before, and gives up its mark, so the next bridge's first run clears
+ *  it. A write is bounded by its timeout, and a failed one is dropped, as is a mark
+ *  that cannot be written: reporting must never break a session. */
 export function waitingClaim(pi, home) {
+  const self = { pid: process.pid, start: processStart(process.pid), token: randomUUID() };
+  const mine = (mark) => mark !== null && mark.pid === self.pid && mark.token === self.token;
   let question;
   let failure;
+  // What this bridge's claim says, "" for none; undefined until its first step.
   let shown;
-  let writes = Promise.resolve();
-  const waiting = (...args) => {
+  let steps = Promise.resolve();
+
+  const waiting = (...args) => new Promise((done) => {
     const argv = ["instance", "waiting", ...args, "--producer", "oats.pi", "--home", home, "--json"];
-    writes = writes.then(() => new Promise((done) => {
-      execFile(join(home, ".oats", "bin", "oats"), argv, { cwd: home, timeout: 5000 }, () => done());
-    }));
+    execFile(join(home, ".oats", "bin", "oats"), argv, { cwd: home, timeout: 5000 }, () => done());
+  });
+  /** Remove a file of the mark's. One that stays is harmless: a mark reads as its holder's while that
+   *  lives and as nobody's after, and a draft is never read. */
+  const drop = (path) => {
+    try { rmSync(path, { force: true }); }
+    catch { /* left where it is */ }
   };
-  const show = () => {
-    const [reason, message] = question !== undefined ? ["question", question] : failure !== undefined ? ["attention", failure] : [];
+  const writeMark = (reason) => {
+    const path = markPath(home), draft = `${path}.${self.pid}.${self.token}`;
+    try {
+      mkdirSync(join(home, ".pi"), { recursive: true });
+      writeFileSync(draft, `${JSON.stringify({ ...self, reason })}\n`);
+      renameSync(draft, path);
+    } catch { drop(draft); }
+  };
+  const removeMark = () => drop(markPath(home));
+  /** One step after the others. A step that throws is dropped: reporting must never break a session. */
+  const then = (run) => { steps = steps.then(run).catch(() => undefined); };
+
+  const wanted = () => question !== undefined ? ["question", question] : failure !== undefined ? ["attention", failure] : [];
+  const step = async () => {
+    const [reason, message] = wanted();
     const next = reason === undefined ? "" : `${reason} ${message}`;
     if (next === shown) return;
+    const first = shown === undefined;
+    const mark = readMark(home);
+    const other = mark !== null && !mine(mark) && holderAlive(mark) ? mark : null;
+    if (reason === undefined) {
+      // Its own claim, when no live holder took it over; on a first step, a leftover too.
+      const clears = other === null && (first || shown !== "");
+      shown = "";
+      if (!clears) return;
+      await waiting("clear");
+      const left = readMark(home);
+      if (left === null || mine(left) || !holderAlive(left)) removeMark();
+      return;
+    }
+    if (other !== null && !(reason === "question" && other.reason === "attention")) {
+      // The holder's claim stays, and this bridge shows none. Blocked on its first step, it has
+      // yet to look for a leftover.
+      shown = first ? undefined : "";
+      return;
+    }
     shown = next;
-    if (reason === undefined) waiting("clear");
-    else waiting("set", "--reason", reason, ...(message ? [`--message=${message}`] : []));
+    writeMark(reason);
+    await waiting("set", "--reason", reason, ...(message ? [`--message=${message}`] : []));
   };
+  const change = () => then(step);
+
+  pi.on("session_start", () => {
+    then(async () => {
+      const mark = readMark(home);
+      if (mark === null || mark.reason !== "question" || mine(mark) || holderAlive(mark)) return;
+      await waiting("clear");
+      removeMark();
+    });
+  });
   pi.on("session_shutdown", () => {
     question = undefined;
-    show();
-    return writes;
+    change();
+    then(() => { if (mine(readMark(home))) removeMark(); });
+    return steps;
   });
   return {
-    asked(message) { question = message; show(); },
-    turnFailed(message) { failure = message; show(); },
+    asked(message) { question = message; change(); },
+    turnFailed(message) { failure = message; change(); },
   };
 }

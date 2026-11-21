@@ -9,9 +9,9 @@
  * and later) says pi will not go on, and a pi without it reports nothing. The last
  * run decides: a retry that worked leaves nothing to report, and an abort is not an
  * error, even one that cancels a retry's backoff, where no agent_end follows the
- * error it was retrying. The next run clears the claim, and this process's first run
- * clears what an earlier pi in the session left (waiting-claim.mjs); after that, a
- * run with no claim to clear starts no process.
+ * error it was retrying. The next run clears the claim, and a bridge's first run
+ * clears what nobody alive holds: what an earlier pi in the session left
+ * (waiting-claim.mjs). After that, a run with no claim to clear starts no process.
  */
 import { claimMessage } from "./waiting-claim.mjs";
 

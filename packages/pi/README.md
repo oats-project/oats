@@ -38,7 +38,15 @@ from the same release tag). This bridge registers no operational tools. It only:
   with it open, which waits for that write. An open dialog is shown over a
   failed turn, which shows again once the dialog closes. Outside an OATS
   instance nothing is reported. A screen of pi's own (its project trust
-  prompt, a picker a person opened) fires neither event and has no claim;
+  prompt, a picker a person opened) fires neither event and has no claim.
+  The bridge that sets the claim, a dialog's or a failed turn's, records a
+  mark while it stands, `<home>/.pi/oats-pi-claim.json` (`{pid, start, token,
+  reason}`), and clears only the claim its own mark stands for: a second pi in
+  the home (a nested one, a subagent's session) leaves a live pi's claim, and
+  never replaces its question. A question left by a pi that died with its
+  dialog open is cleared when the home's next pi starts; with no pi to start,
+  clear it with `oats instance waiting clear --producer oats.pi --home <home>`
+  ([whose claim it is](../../docs/capabilities.md#oatscore-needs-input));
 - journals compaction summaries and sends resume nudges when the active
   knowledge capability created `STATE.md`/`log.md`. A startup gets the nudge
   only when pi kept an earlier session of the home (pi files a session once
