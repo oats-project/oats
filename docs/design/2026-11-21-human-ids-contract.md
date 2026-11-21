@@ -306,6 +306,9 @@ OATS doesn't use, and doesn't build on, these aw primitives:
 **Current behaviour: the person runs P6.** No agent holds or uses the person's owner or
 admin key (principle 2). The ruling above restores a credential's server authority; it
 grants no exception to principle 2.
+- For the OATS deployment owner's deployments, the person-run P6 step is pending their word,
+  because their recorded rule is that agents run every command. PR b's revocation text waits
+  on it.
 
 **OPEN R: whether to allow delegation later.** An agent running P6 with an owner key the
 person delegates would need a separate ruling.
@@ -314,7 +317,8 @@ Principle 2 forbids the second unless both OATS owners, aweb's product owner and
 deployment owner, rule otherwise. Principle 2 binds every OATS deployment, so neither side
 changes it alone.
 
-PR b documents the person-run P6 with the setup key, and no session plumbing.
+Once that word is in, PR b documents the person-run P6 with the setup key, and no session
+plumbing.
 
 ## 7. Ownership
 
