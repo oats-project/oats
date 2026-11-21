@@ -125,7 +125,7 @@ test("a provider home whose kernel copy of a module is gone runs nothing of that
   fx.clearCalls();
   const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
   assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"]);
-  assert.match(inspected.error.message, /the kernel's copy of capability acme\.fake for unkept is not at .*Retire the instance and spawn it again/);
+  assert.match(inspected.error.message, /the kernel's copy of capability acme\.fake for unkept is not at .*Retire the instance with --force \(oats retire unkept --force.*then spawn it again/);
   assert.deepEqual([rowOf(fx, "unkept").running, rowOf(fx, "unkept").runtimeState], [null, "unreachable"]);
   assert.equal(await codeOf(() => fx.inEnv(() => inputInstanceSession(home, "x"))), "E_SESSION_INPUT_FAILED");
   assert.deepEqual([fx.calls(), runtimeOf(home).stoppedAt], [[], null], "the home's own copy was not run in its place");
@@ -196,17 +196,17 @@ test("a provider home whose receipt records no composition runs none of its capa
   fx.clearCalls();
   const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
   assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"]);
-  assert.match(inspected.error.message, /its receipt records nothing of what it was spawned with.*Retire it and spawn it again/);
+  assert.match(inspected.error.message, /its receipt records nothing of what it was spawned with.*Retire it with --force \(oats retire before --force.*then spawn it again/);
   assert.deepEqual([rowOf(fx, "before").running, rowOf(fx, "before").runtimeState], [null, "unreachable"]);
   // Inspect and readiness of it list no module, and say why.
   const inspectedHome = fx.cli(["inspect", "--home", home, "--json"]).json().result;
   assert.deepEqual(inspectedHome.capabilities, []);
-  assert.match(JSON.stringify(inspectedHome), /module-copy-untrusted.*its receipt records nothing of what it was spawned with.*Retire it and spawn it again/);
+  assert.match(JSON.stringify(inspectedHome), /module-copy-untrusted.*its receipt records nothing of what it was spawned with.*Retire it with --force/);
   const unready = fx.cli(["readiness", "--home", home, "--json"]).json().result;
   const why = unready.checks.installed.items.find((i) => i.code === "module-copy-untrusted");
   assert.deepEqual([unready.summary.ready, unready.checks.installed.status, why.status, why.required], [false, "fail", "fail", true]);
   assert.match(why.reason, /its receipt records nothing of what it was spawned with/);
-  assert.match(fx.cli(["readiness", "--home", home]).stdout, /1 failing[^\n]*\n  installed: fail\n[^\n]*its receipt records nothing of what it was spawned with[^\n]*oats retire before, then spawn it again/);
+  assert.match(fx.cli(["readiness", "--home", home]).stdout, /1 failing[^\n]*\n  installed: fail\n[^\n]*its receipt records nothing of what it was spawned with[^\n]*oats retire before --force, then spawn it again/);
   assert.equal(await codeOf(() => fx.inEnv(() => restartInstanceSession(home))), "E_SESSION_UNKNOWN");
   assert.deepEqual(fx.calls(), []);
   // It can still be taken away: not without --force (its hooks cannot be identified), and with it.

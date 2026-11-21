@@ -2368,7 +2368,8 @@ takes no capability setting from it**:
   `runtimeState: "unreachable"`), never stopped; a hook that cannot run
   counts as a failed required hook, so a retire names it and removes the
   home only with `--force`. The home's own copy is never run in its place.
-  The remedy is to retire the instance and spawn it again.
+  The remedy is to retire the instance with `--force` (a hook that cannot
+  be run keeps a plain retire from removing the home) and spawn it again.
 - **What `oats status` and drift report.** The drift rows (`modules`) read
   the home's own record of which modules it holds, from where and at which
   version, as for every home. A provider home's status row also carries
