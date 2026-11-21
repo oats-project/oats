@@ -41,7 +41,8 @@ function session(home) {
   return fire;
 }
 
-/** Wait for what no bridge of this process does: a kernel shim's record, another process. */
+/** Wait by looking, under a bound: for another process (a second pi's claim, a child's exit), where
+ *  no handle of this process's bridge reaches, and for a recording shim's calls. */
 const settle = async (done) => { const end = Date.now() + 15000; while (!done()) { if (Date.now() > end) throw new Error("timed out"); await new Promise((r) => setTimeout(r, 10)); } };
 const quiet = () => new Promise((r) => setTimeout(r, 100));
 
