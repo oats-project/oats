@@ -1340,7 +1340,7 @@ or at a session boundary.
 - **Codex:** not reported. A provider error fires neither its `Stop` hook nor
   `notify` (Codex 0.160.0), so nothing can observe the turn from outside it.
 
-**A pi dialog** (`@awebai/oats-pi` after 0.70.1). pi has no question dialog of
+**A pi dialog** (from `@awebai/oats-pi` 0.70.2). pi has no question dialog of
 its own: each blocking one is an extension's (`ctx.ui.select`, `confirm`,
 `input`, `editor` or `custom`; a question tool's, say). The bridge holds a claim
 of producer `oats.pi`, reason `question`, from pi's `ui_prompt_start` to its
