@@ -76,6 +76,10 @@ test("T1: a spawn with --backend fake launches through the provider and records 
     unset: [], pathPrepend: [join(home, ".oats", "bin")], args: [], promptFile: join(home, "TASK.md"), previous: null,
     // The allowances (test/session-providers-sandbox.test.mjs): no capability here asks for a host.
     sandbox: { domains: [], write: [{ path: join(realpathSync(fx.dep), ".agents", "events"), reason: "oats events" }], missing: [] },
+    // The home's trees (test/provider-home-integrity.test.mjs): work/, and no extra tree here.
+    trees: [join(home, "work")],
+    // The kernel's own state for the home, which a sandbox never lets its agent write.
+    protected: [join(dirname(home), ".oats-retirement")],
   });
 
   // The records: instance.json and the independent receipt carry the endpoint; no tmux in either.
@@ -928,6 +932,7 @@ test("retire when the provider cannot stop the session: it goes on only when no 
   // The provider's capability was removed by an upgrade: inspect is unavailable, the retire still works.
   const { home } = await fx.launch("orphaned");
   rmSync(join(home, ".oats", "modules", FAKE_CAPABILITY), { recursive: true });
+  fx.recordComposition(home); // (as that upgrade records it)
   const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
   assert.equal(inspected.error.code, "E_SESSION_UNAVAILABLE");
   assert.match(inspected.error.message, /capability acme\.fake, which supplies this home's session backend fake, is not among the home's modules/);
@@ -1080,6 +1085,7 @@ test("one wire version: a provider that declares another, or none, is refused by
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   delete manifest.sessionProviders.fake.wire;
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  fx.recordComposition(home); // (as the upgrade that brought that copy records it)
   fx.clearCalls();
   for (const verb of [["start"], ["restart"], ["start", "--resume"]]) {
     const refused = fx.cli(["session", ...verb, "--home", home, "--json"]).json();
@@ -1180,7 +1186,7 @@ test("a provider's check is asked before every launch, and before any hook: a pr
   // With the launch that is planned (test/session-providers-sandbox.test.mjs): the harness, yolo
   // and the allowances as the launch input will carry them, and the launch configuration's own
   // arguments (none here), without what a hook adds.
-  assert.deepEqual(fx.verbs("check")[0].request.input, { home, soul: null, settings: {}, launch: { harness: "claude", yolo: null, args: [], sandbox: fx.verbs("launch")[0].request.input.sandbox } });
+  assert.deepEqual(fx.verbs("check")[0].request.input, { home, soul: null, settings: {}, launch: { harness: "claude", yolo: null, args: [], sandbox: fx.verbs("launch")[0].request.input.sandbox, trees: [join(home, "work")], protected: [join(dirname(home), ".oats-retirement")] } });
   assert.deepEqual(fx.verbs("launch")[0].request.input.args, ["--from-a-hook"]);
   // And with the environment every later call of the home has: its soul, though its record is not written yet.
   const envOf = (call) => [call.soul, call.soulId, call.level];
@@ -1296,6 +1302,7 @@ test("E_BACKEND_AMBIGUOUS at a start: a home whose modules now hold two capabili
   writeFileSync(join(home, ".oats", "modules", "acme.twin", "oats.json"), JSON.stringify({ ...twin, capability: "acme.twin", hooks: undefined, environment: undefined }));
   const record = recordOf(home);
   writeFileSync(join(home, "instance.json"), JSON.stringify({ ...record, modules: { ...record.modules, "acme.twin": record.modules[FAKE_CAPABILITY] } }, null, 2) + "\n");
+  fx.recordComposition(home); // (as the upgrade that brought the module records it)
   fx.clearCalls();
   for (const start of [() => startInstanceSession(home, {}), () => restartInstanceSession(home, {})]) {
     await assert.rejects(fx.inEnv(start), (e) => e.code === "E_BACKEND_AMBIGUOUS" && JSON.stringify(e.details) === JSON.stringify({ backend: "fake", capabilities: [FAKE_CAPABILITY, "acme.twin"] }) && /nothing was stopped or started/.test(e.message));

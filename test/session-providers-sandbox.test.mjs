@@ -197,7 +197,7 @@ test("a start that cannot resolve the deployment's configuration says so in the 
   const { home } = await fx.launch("one");
   // The planned launch reaches the provider's check: what it would be launched with.
   const planned = fx.verbs("check")[0].request.input.launch;
-  assert.deepEqual(planned, { harness: "claude", yolo: null, args: [], sandbox: fx.verbs("launch")[0].request.input.sandbox });
+  assert.deepEqual(planned, { harness: "claude", yolo: null, args: [], sandbox: fx.verbs("launch")[0].request.input.sandbox, trees: fx.verbs("launch")[0].request.input.trees, protected: fx.verbs("launch")[0].request.input.protected });
   assert.deepEqual(planned.sandbox.domains, [{ host: "app.example.org", capability: MSG, setting: "server" }]);
 
   // The workspace stops offering the soul (and this host reads that): nothing resolves for this home any more.

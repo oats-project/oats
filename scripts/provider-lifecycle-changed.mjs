@@ -28,6 +28,8 @@ export const LIFECYCLE_FILES = Object.freeze([
   "lib/dir-lock.mjs",
   "lib/instance-events.mjs",
   "lib/write-through-private-file.mjs",
+  // What the kernel runs of a provider home: its own copies of the modules, and the receipt's rows.
+  "lib/home-integrity.mjs",
   // What tells a live process from one that is gone, and ends a process group.
   "lib/worktree-hooks.mjs",
   "lib/process-group.mjs",

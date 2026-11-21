@@ -851,6 +851,9 @@ async function workspaceOperation(t, { bail, address, layer, opName }) {
   const [script, ...rest] = spec.trim().split(/\s+/);
   const abs = lp?.executable(script);
   if (!abs) return bail("E_CAPABILITY_BROKEN", `${mod.name} ${op.command}: script not found (${script})`);
+  // A provider home's own copy is never run: the kernel runs its copy of it (a guard; `dir` is that copy).
+  const untrustedCopy = lp.dir ? (await import("../lib/home-integrity.mjs")).moduleCopyProblemAt(lp.dir) : null;
+  if (untrustedCopy) return bail("E_CAPABILITY_BLOCKED", `${address} was not run: ${untrustedCopy}`);
   const settings = lp.settings;
   const cwd = op.context === "home" ? t.home : t.deployment;
   const env = { ...lp.env(mod.name, settings), OATS_OPERATION: address, OATS_CONTEXT: t.deployment, OATS_ROOT: t.agentsRoot, PI_AGENTS_ROOT: t.agentsRoot };
@@ -2803,6 +2806,9 @@ function printStatus({ root, agents: data, ws, problems }, verbose) {
       if (s && (verbose || s.status !== "current")) console.log(`          ${soulDriftLine(s, a.name)}`);
       const rows = ws?.drift.get(key) || [];
       for (const r of rows) if (verbose || r.status !== "current") console.log(`          ${driftLine(r)}`);
+      // A provider home: the kernel runs its own copy of the home's modules; said when the home's
+      // own record of them is not the receipt's, and always with --verbose.
+      if (i.moduleCopy && (verbose || i.moduleCopy.homeCopy === "differs")) console.log(`          modules: the kernel runs its own copy${i.moduleCopy.homeCopy === "differs" ? `; the home's own record differs${i.moduleCopy.differs.length ? ` for ${i.moduleCopy.differs.join(", ")}` : ""} (oats readiness --home ${i.home} compares the files)` : "; the home's record of them is the same"}`);
     }
     for (const f of a.retireFailures || []) {
       console.log(`      ! deferred retirement of ${f.instance} FAILED${f.completedAt ? ` at ${f.completedAt}` : ""}: ${f.error || (f.incomplete || []).join("; ") || "see result file"} — retry with \`oats retire ${f.instance}\``);
@@ -4153,8 +4159,13 @@ async function capabilityCommand() {
     try {
       if (metaFile && existsSync(metaFile)) {
         const meta = JSON.parse(readFileSync(metaFile, "utf8"));
-        activeIds = (meta.capabilities || []).map((c) => c.id);
-        for (const c of meta.capabilities || []) { capSettings[c.id] = c.settings || {}; capOrigins[c.id] = c.settingsOrigins || {}; }
+        // A provider home's capabilities and their settings are its receipt's, never its own
+        // record's, which its agent can write (lib/home-integrity.mjs).
+        const { capabilityRuntimeOf, providerHomeTrust } = await import("../lib/home-integrity.mjs");
+        const trust = providerHomeTrust(instanceHome);
+        const rows = trust ? capabilityRuntimeOf(instanceHome, meta, trust) : meta.capabilities || [];
+        activeIds = rows.map((c) => c.id);
+        for (const c of rows) { capSettings[c.id] = c.settings || {}; capOrigins[c.id] = c.settingsOrigins || {}; }
         // Workspace-model homes only (lead decision c3 Q2).
         if (isCapturedHome(meta)) { const e = capturedHomeRefusal(instanceHome, "nothing was dispatched"); bail(e.code, e.message, e.details); }
         if (!isWorkspaceHome(meta)) { const e = preWorkspaceHome(instanceHome, "nothing was dispatched"); bail(e.code, e.message); }
@@ -4247,6 +4258,9 @@ async function capabilityCommand() {
     try { abs = capabilityExecutablePath(withDir, script); }
     catch (e) { bail("E_CAPABILITY_BROKEN", e.message); }
     if (!abs) bail("E_CAPABILITY_BROKEN", `${cmd} ${sub}: script not found (${join(dir, script)})`);
+    // A provider home's own copy is never run: the kernel runs its copy of it (a guard; `dir` is that copy).
+    const untrustedCopy = (await import("../lib/home-integrity.mjs")).moduleCopyProblemAt(dir);
+    if (untrustedCopy) bail("E_CAPABILITY_BLOCKED", `oats ${cmd} ${sub} was not run: ${untrustedCopy}`);
     // The soul the command acts for → { dir, cleanup, agent, id }: a home's recorded soul directory, or
     // (operator dispatch) the soul read at its resolved commit, whose temporary copy goes when this
     // process exits; with its name and stable id, as the soul's lifecycle hooks get them.

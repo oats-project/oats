@@ -691,7 +691,8 @@ operation, a retire or a trigger is given (`OATS_CAPABILITY`, `OATS_LAYER`,
 `OATS_OPERATION`, `OATS_REPO`, `OATS_BRANCH`, `OATS_WORK`, `OATS_KIND`,
 `OATS_TASK`, `OATS_HARNESS`, `OATS_HARNESS_EXECUTABLE`,
 `OATS_PREVIOUS_HARNESS`, `OATS_RUNTIME`,
-`OATS_PREVIOUS_RUNTIME`, `OATS_LAUNCH_PREVIEW`, `OATS_RETIRE_INTENT`,
+`OATS_PREVIOUS_RUNTIME`, `OATS_BACKEND`, `OATS_PREVIOUS_BACKEND`,
+`OATS_LAUNCH_PREVIEW`, `OATS_RETIRE_INTENT`,
 `OATS_TRIGGER_EVENT_FILE`, `OATS_TEST_LOGIN_SHELL` (a test seam that replaces
 the login shell, honoured only for a process whose `HOME` is not your home
 directory; a launch configuration cannot set it),
@@ -978,6 +979,26 @@ Its receipt records `runtime: {launched, backend, provider, endpoint,
 stoppedAt}`. The two must agree as for tmux: `E_RUNTIME_AUTHORITY_MISMATCH`
 otherwise, whose `details.fields` are `backend`, `session.provider` and
 `session.endpoint`.
+
+The receipt of a provider home also records its **composition**:
+`composition: { version: 1, store: "<name>", modules: { "<capability>": {
+from, commit } }, capabilityRuntime: [ <row> ], previous?: { store, modules,
+capabilityRuntime } }`: which store holds the
+kernel's own copies of the home's modules
+(`<instances>/.oats-retirement/modules/<hash of the home>/<store>/`), which
+modules the home has and where each came from, and the capability rows the
+spawn resolved; `previous`, after an upgrade, is the pair that upgrade
+replaced, which an undo names again. For such a home the kernel runs its own copy of a module,
+never the home's, and reads a capability's settings and hook commands from
+this record alone
+([What the kernel trusts in a provider home](capabilities.md#what-the-kernel-trusts-in-a-provider-home)).
+A tmux home's receipt has no such key, and the kernel keeps no copy of its
+modules. A kernel from before it ignores the key: one from before session
+providers still refuses every session verb on a provider home, and one that
+knows providers and not this record runs the home's own copies, as it
+always did. A provider home whose receipt has no `composition` (a kernel
+from before it spawned the home) runs nothing on this kernel: retire it and
+spawn it again.
 
 **The lifecycle of a provider home is one state machine**, set out in
 [its design record](design/2026-11-20-provider-home-lifecycle.md): the

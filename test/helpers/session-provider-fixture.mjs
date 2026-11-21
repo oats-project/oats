@@ -20,6 +20,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { join } from "node:path";
 import { v2Deployment } from "./v2-deployment.mjs";
 import { SESSION_PROVIDER_WIRE } from "../../lib/session-providers.mjs";
+import { compositionOf } from "../../lib/home-integrity.mjs";
+import { findRetirementBaseline } from "../../lib/session-receipt.mjs";
 
 export const FAKE_CAPABILITY = "acme.fake";
 export const FAKE_SERVER = "http://127.0.0.1:9";
@@ -119,7 +121,7 @@ const HOOK_SCRIPT = `import { appendFileSync, mkdirSync, readFileSync } from "no
 import { join } from "node:path";
 const dir = join(process.env.HOME, "fake-session");
 mkdirSync(dir, { recursive: true });
-appendFileSync(join(dir, "calls.log"), JSON.stringify({ hook: process.env.OATS_EVENT, instance: process.env.OATS_INSTANCE, backend: process.env.OATS_BACKEND ?? null, harness: process.env.OATS_HARNESS ?? null, preview: process.env.OATS_LAUNCH_PREVIEW ?? null }) + "\\n");
+appendFileSync(join(dir, "calls.log"), JSON.stringify({ hook: process.env.OATS_EVENT, instance: process.env.OATS_INSTANCE, backend: process.env.OATS_BACKEND ?? null, harness: process.env.OATS_HARNESS ?? null, preview: process.env.OATS_LAUNCH_PREVIEW ?? null, previousBackend: process.env.OATS_PREVIOUS_BACKEND ?? null, capability: process.env.OATS_CAPABILITY ?? null, settings: process.env.OATS_SETTINGS ?? null }) + "\\n");
 // hook-launch.json, when a test wrote it (fx.hookLaunch): the hook's launch arguments, by harness.
 let launch;
 try { launch = JSON.parse(readFileSync(join(dir, "hook-launch.json"), "utf8")); } catch (e) { if (e.code !== "ENOENT") throw e; }
@@ -167,6 +169,16 @@ export function providerDeployment(t, { manifest = fakeManifest(), capabilities 
   fx.verbs = (verb) => fx.calls().filter((c) => c.verb !== undefined && (verb === undefined || c.verb === verb));
   fx.hooks = (event) => fx.calls().filter((c) => c.hook !== undefined && (event === undefined || c.hook === event));
   fx.clearCalls = () => rmSync(join(fx.fake, "calls.log"), { force: true });
+  /** The kernel takes the home's module copies as they are now, which is what `oats instance
+   *  upgrade` does of the ones it moves: for a test that edits a copy by hand to stand for what an
+   *  upgrade brings: the kernel's own copies are made again from the home's, and the receipt
+   *  names them. Without it, the kernel goes on running the copies its spawn made. */
+  fx.recordComposition = (home) => {
+    const path = findRetirementBaseline(home), receipt = JSON.parse(readFileSync(path, "utf8"));
+    // (The rows name the store that goes: re-pointed here at the one that is made.)
+    const earlier = receipt.composition.store, made = compositionOf(home, receipt.composition.capabilityRuntime);
+    writeFileSync(path, JSON.stringify({ ...receipt, composition: JSON.parse(JSON.stringify(made).replaceAll(`/${earlier}/`, `/${made.store}/`)) }, null, 2));
+  };
   /** A stateful fake's events so far, oldest first (sessionsOf reads them), and a test's own event. */
   fx.events = () => (existsSync(join(fx.fake, "events.log")) ? eventsOf(readFileSync(join(fx.fake, "events.log"), "utf8")) : []);
   fx.emit = (event) => appendFileSync(join(fx.fake, "events.log"), `${JSON.stringify({ ...event, at: Date.now() })}\n`);

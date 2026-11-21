@@ -74,7 +74,14 @@ Inside one trust group, none of these hold:
   [Trust is the workspace's declaration](capabilities.md#mental-model) of a
   member repo or a package. The kernel then checks that what it is about to
   run is the copy made at spawn. That copy is in the agent's home, so the
-  check is no defence against the agent.
+  check is no defence against the agent. For a home on a session provider
+  the kernel does not run the home's copy at all: it runs its own copy of
+  the home's modules, kept outside the home and made at the spawn, and
+  takes the capability settings and hook commands from the home's receipt,
+  kept there too
+  ([What the kernel trusts in a provider home](capabilities.md#what-the-kernel-trusts-in-a-provider-home)).
+  That holds against an agent that cannot write outside its home, which is
+  the provider's sandbox to ensure, not OATS's.
 - That a harness's sandbox is a boundary. OATS counts none as one and relies
   on none. Where a harness restricts what its agent can write, that is the
   harness's property and not a promise of OATS.
