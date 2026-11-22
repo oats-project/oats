@@ -567,7 +567,7 @@ split into sections) is `packages/client/roster-sections.mjs`.
   loading.mjs adds it; its rows two compact lines (`.ctx-name` 13px/17px 400, `.ctx-row-detail` 11.5px/15px
   `--muted`), the dot 12px in (`--dot-inset`, which the guides read), "new" a 1px-ringed lower-case pill; then
   the foot (`#nav-foot`, pushed to the bottom, under a `--border` line, 8px 14px 10px), one bar (`#sidebar-bar`,
-  `role="group"` "Sidebar tools"), `[need you] … [New agent][?]`, built by `sidebar-foot.mjs`: **N need you**
+  `role="group"` "Sidebar tools"), `[need you] … [?]` (New agent ends the roster since slice 3d), built by `sidebar-foot.mjs`: **N need you**
   (`#sidebar-need-you`, hidden at 0; the needs-input mark and "2 need you" in `--fg` 13px 400, its name "2 agents need
   you. Go to the first"; its mark on the rows' dots, 24px in: the foot's 14px, its own 5px, half the
   10px mark; it runs `focusFirstNeedingYou`, which focuses the first row in the roster's order with a claim, itself: chosen
@@ -575,15 +575,16 @@ split into sections) is `packages/client/roster-sections.mjs`.
   held parent hides is found though it draws no roll-up; its section opened, its collapsed ancestors expanded,
   then the list painted again and the row focused, its terminal not opened),
   painted by every roster paint from this workspace's rows with a claim (`waitingClaim`, the held-stale gate);
-  **New agent** (`#sidebar-spawn`, `app.quickOpenSouls`: Quick Open), a + and its words (24px tall, 12px
+  **New agent** (`#sidebar-spawn`, `app.quickOpenSouls`: Quick Open), since slice 3d at the roster's end, after its
+  list (the prototype's quiet `.row.add`): a 34px row, its + on the dots' column and its words 40px in, 13px
   `--muted`, no fill at rest; `--surface-2` on hover and `--sel` on keyboard focus, in rules it shares with the
-  count) with no hint element, its chord in its title (`applyChordTitles`); and 6px after it **?**
-  (`#sidebar-help`, `app.shortcuts`: the shortcuts editor), a 24px `.side-icon-button`, centred 25px in from the
-  right edge (the foot's 10px, the bar's 3px, half its 24px). No mark, no sidebar toggle (`sidebar.toggle` is
+  count, with no hint element, its chord in its title (`applyChordTitles`); and at the bar's right end **?**
+  (`#sidebar-help`, `app.shortcuts`: the shortcuts editor), a round 22px `.side-icon-button`, centred 25px in from
+  the right edge (the foot's 14px, half its 22px). No mark, no sidebar toggle (`sidebar.toggle` is
   ⌘B / Ctrl+Shift+B, the palette's and Show sidebar's) and no settings cog (Theme…, Font… and Keyboard
   shortcuts… are the palette's). The foot's nouns are `DESKTOP_NOUNS`' (desktop-terms.mjs: "agent", D3 decided; the CLI and the docs keep
   "instance"), never in the markup.
-  Every `#nav-foot [data-action]` runs its action through the same registry as the keys. The workspace rows'
+  Every `#nav-foot [data-action]`, and `#sidebar-spawn`, runs its action through the same registry as the keys. The workspace rows'
   names are the sidebar's 13px (the current one at 650), the roster's machine labels (`.ctx-deployment`) 11px 650
   muted capitals, its agent groups 12px apart (`.ctx-group`) and each top-level bundle inside a group 12px after
   the one before (`.ctx-bundle-gap`, a spacer: no row box is spaced). The palette has no button: it has its own
@@ -593,7 +594,7 @@ split into sections) is `packages/client/roster-sections.mjs`.
   filter field (the TUI keeps its own): the palette finds an instance by name. `sidebar.focusFilter`
   keeps its id, chord and leader key (**Focus the instance roster**): `focusRoster` lands on
   `rosterEntry()`, the roster's current row, else its first row, else a control it shows under its heading
-  (Retry), else, on an empty roster, its one action, the foot's **New agent** (Quick Open; F6's stop in an
+  (Retry), else, on an empty roster, its one action, **New agent** at its end (Quick Open; F6's stop in an
   empty roster too: one way in, the product owner's rule), else, while the roster is hidden (a window with no
   workspace), the list of workspaces' stop, else **Add local workspace…**, so focus never falls to `<body>`.
   The same entry takes focus when the last terminal tab closes, and a focused Retry that goes on an empty

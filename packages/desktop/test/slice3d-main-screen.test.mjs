@@ -11,7 +11,7 @@ import { statusLineCSS, createStatusLine } from '../renderer/status-line.mjs';
 import { sheetCSS } from '../renderer/sheet.mjs';
 import { mailSheetCSS } from '../renderer/mail-sheet.mjs';
 import { appearanceCSS } from '../renderer/theme-picker.mjs';
-import { createAgentBoard, createHiddenFacts } from '../renderer/agent-board.mjs';
+import { createAgentBoard, createHiddenFacts, defaultMeasure, outerHeight } from '../renderer/agent-board.mjs';
 import { createTabChrome } from '../renderer/tab-a11y.mjs';
 import { numberTabStrips } from '../renderer/tab-numbers.mjs';
 import { boardData } from '../../client/instance-board.mjs';
@@ -163,6 +163,24 @@ test('slice3d question card head, hint, boxed options with number badges', t => 
   assert.deepEqual([fact.get('min-height'), fact.get('border-radius'), fact.get('background')], ['28px', '6px', 'var(--surface)']);
   assert.ok(u.$('.agent-fact > .agent-fact-pin'), 'the pin');
   assert.equal(decl('.agent-fact-focus > .agent-fact-updated').get('margin-left'), 'auto', 'the time at the right');
+});
+
+// Round 1's finding: the card's inset (8px above, 12px below) is the terminal's loss as much as the card is, so the
+// board's budget (agent-board.mjs fit: the terminal keeps max(120px, 40% of the pane)) counts every child's outer
+// height, margins included. jsdom lays nothing out (offsetHeight 0), so the margins it reads are the shipped CSS's.
+test('slice3d the card\'s inset counts in the terminal\'s budget', t => {
+  const u = page(t, '<div class="tab-pane active"><div class="term-wrap"></div></div>', [shellCSS]);
+  const pane = u.$('.tab-pane');
+  const view = createAgentBoard({ pane, home: '/h', name: 'dev-a', now: () => NOW, type: () => true, focusTerminal: () => {}, openLink: () => {},
+    hidden: createHiddenFacts({ getItem: () => null, setItem: () => {} }), observe: () => () => {} });
+  t.after(() => view.dispose());
+  view.update(boardData(board({ questions: [board().questions[0]] })));
+  const zone = u.$('.agent-questions');
+  assert.equal(outerHeight(zone), 20, 'the card\'s 8px and 12px, its own box unmeasured here');
+  assert.equal(defaultMeasure.used(pane), 20, 'the pane\'s budget counts them; the terminal counts nothing');
+  // A laid-out box: its height and its margins.
+  Object.defineProperty(zone, 'offsetHeight', { configurable: true, value: 150 });
+  assert.equal(defaultMeasure.used(pane), 170);
 });
 
 /* ── the key bar ─────────────────────────────────────────────────────────────────────────────────────────── */

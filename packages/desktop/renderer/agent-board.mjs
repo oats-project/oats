@@ -115,11 +115,18 @@ export const CONTEXT_MIN_PX = 54;
 /** The least of the terminal that must be on screen for a number to type: a terminal the board squeezed below it
  * (a pane too short for the board) is not one the person can see their answer land in. */
 export const TERMINAL_TYPE_MIN_PX = 36;
+/** An element's height in its column, its vertical margins included: slice 3d's question card sits inset in the pane
+ * (8px above, 12px below), and that inset is taken from the terminal as surely as the card is. */
+export function outerHeight(el) {
+  const style = el.ownerDocument?.defaultView?.getComputedStyle?.(el);
+  const margin = style ? (Number.parseFloat(style.marginTop) || 0) + (Number.parseFloat(style.marginBottom) || 0) : 0;
+  return el.offsetHeight + margin;
+}
 /** The pane's height for the board (its room) and the height the board takes now, from the DOM. */
-const defaultMeasure = {
+export const defaultMeasure = {
   room: pane => pane.clientHeight > 0 ? pane.clientHeight - Math.max(TERMINAL_MIN_PX, pane.clientHeight * TERMINAL_MIN_SHARE) : null,
-  // Everything in the pane but the terminal: the facts, the zone and a waiting row beside them.
-  used: pane => [...pane.children].reduce((n, el) => n + (el.classList.contains('term-wrap') ? 0 : el.offsetHeight), 0),
+  // Everything in the pane but the terminal: the facts, the zone and a waiting row beside them, margins included.
+  used: pane => [...pane.children].reduce((n, el) => n + (el.classList.contains('term-wrap') ? 0 : outerHeight(el)), 0),
   height: el => el.offsetHeight,
   // The terminal's height on screen; null where nothing is laid out (no measure: not a reason to refuse).
   terminal: pane => { const wrap = pane.querySelector(':scope > .term-wrap'); return wrap && pane.clientHeight > 0 ? wrap.offsetHeight : null; },
