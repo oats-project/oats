@@ -2,7 +2,7 @@
  * label inside one of Desktop's sentences. The result is lossy and for display only: it is never evidence
  * of identity and never authority for an action, and it is not fit for a name that identifies something.
  * Pure: no DOM, no IO, never throws. A contract module: the server imports it too, so it imports nothing.
- * Mirrored by oats-bb plugin/app/ui/text.ts: re-record its test/fixtures/desktop/display-text.json when this changes. */
+ * Mirrored by oats-bb plugin/app/ui/text.ts: re-record plugin/test/fixtures/desktop/display-text.json when this changes. */
 
 /** Not text a one-line note may hold, an exact set (the maintainer's decision for the kernel's
  * validWaitingMessage): control characters (Cc: C0, DEL, C1), the line and paragraph separators, the bidi
