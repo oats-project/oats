@@ -300,17 +300,18 @@ README, “Human attribution”; the contract:
   wait on them, and clear it when they answer.
   1. Ask the person to choose **Adopt** in the root's Chat or Messages pane and
      to give you the three values it shows: the invitation id (`I`), their ID
-     (`H`) and the domain (`D`). Copy them exactly; never derive them.
+     (`H`) and the domain (`<domain>`, not the deployment `D`). Copy them exactly;
+     never derive them.
   2. Write the request, and tell the person the fingerprint it prints over a
      channel other than the file:
      ```bash
-     aw --identity-home <root>/.aw id parent request --domain <D> --parent <H> --invitation-id <I> --out request.json
+     aw --identity-home <root>/.aw id parent request --domain <domain> --parent <H> --invitation-id <I> --out request.json
      ```
   3. Ask the person to upload `request.json`, choose **Approve and prepare
      response**, download `response.json` and put it in the directory.
   4. Install it:
      ```bash
-     aw --identity-home <root>/.aw id parent import response.json --domain <D>
+     aw --identity-home <root>/.aw id parent import response.json --domain <domain>
      ```
 - **Effects:** the root carries an identity chain that ends at the person. From
   then on, its mints and joins carry it. Existing instances keep their identity,
