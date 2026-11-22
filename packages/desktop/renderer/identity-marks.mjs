@@ -37,9 +37,11 @@ function runtimeMark(doc, { viewBox, paint, paths }) {
   for (const d of paths) { const path = doc.createElementNS(SVG_NS, 'path'); path.setAttribute('d', d); svg.append(path); }
   return svg;
 }
-/** A roster row's harness mark (slice 3d, on Juan's request relayed 2026-11-22, superseding slice 1's removal): the
- * known harness's own mark, monochrome in the ink of the line it sits on (currentColor), decorative (aria-hidden: the
- * row's title says "harness · model"); null for a harness this Desktop doesn't know, so an unknown one shows nothing. */
+/** A roster row's harness mark (slice 3d, Joan's decision 2026-11-22 on Juan's request, superseding slice 1's removal):
+ * the known harness's own mark, monochrome. It paints currentColor by default; on a roster row, shell.css
+ * `.ctx-row-detail > .ctx-harness[fill|stroke="currentColor"]` repaints it in --tree-link, as a graphic, lighter than
+ * the line's text. Decorative (aria-hidden: the row's title says "harness · model"); null for a harness this Desktop
+ * doesn't know, so an unknown one shows nothing. */
 export function createHarnessMark(doc, value) {
   const known = runtimeMarks.get(typeof value === 'string' ? value.trim().toLowerCase() : '');
   if (!known) return null;
