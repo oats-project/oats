@@ -480,12 +480,12 @@ test("slice3d harness mark on line 2 for claude, codex and pi, none when unknown
   const u = fixture(t);
   u.render([local("by-claude"), local("by-codex", { harness: "codex", model: "gpt-5" }), remote("by-pi"),
     local("by-other", { harness: "aider" }), local("by-none", { harness: undefined })]);
-  for (const [name, harness] of [["by-claude", "Claude"], ["by-codex", "Codex"], ["by-pi", "Pi"]]) {
+  for (const [name, harness, soul] of [["by-claude", "Claude", "oats-desktop-developer"], ["by-codex", "Codex", "oats-desktop-developer"], ["by-pi", "Pi", "reviewer"]]) {
     const r = u.row(name), meta = r.querySelector(".ctx-meta.ctx-row-detail"), mark = meta.firstElementChild;
     assert.ok(mark && mark.getAttribute("class") === "runtime-mark ctx-harness", `${name}: the mark leads line 2`);
     assert.equal(mark.getAttribute("aria-hidden"), "true", `${name}: decorative`);
     assert.equal(meta.querySelectorAll(".ctx-harness").length, 1);
-    assert.match(meta.textContent, /^oats-/, `${name}: then the soul, the line's text unchanged`);
+    assert.ok(meta.textContent.startsWith(soul), `${name}: then the soul, the line's text unchanged`);
     assert.match(r.title, new RegExp(`${harness}`), `${name}: the title still names the harness`);
     assert.equal(r.querySelectorAll(".ctx-harness").length, 1, `${name}: line 2's alone: line 1 stays the dot and the name`);
     assert.equal(r.firstElementChild.classList.contains("ctx-dot"), true);
