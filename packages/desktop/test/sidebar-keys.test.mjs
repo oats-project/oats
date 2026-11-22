@@ -86,7 +86,7 @@ test("each sidebar key fires on a workspace list row, a roster row, a nav button
   assert.equal(r.doc.getElementById("nav").previousElementSibling, r.doc.getElementById("ws-list"), "the nav sits under the list");
   assert.equal(r.doc.getElementById("nav").nextElementSibling, r.doc.getElementById("instance-roster"), "the instances under the nav");
   assert.ok(r.doc.getElementById("nav").contains(r.nav));
-  assert.deepEqual(r.controls.map(b => b.id), ["ws-add-open", "sidebar-need-you", "sidebar-spawn", "sidebar-help"]);
+  assert.deepEqual(r.controls.map(b => b.id), ["ws-add-open", "sidebar-spawn", "sidebar-need-you", "sidebar-help"]);
   // The list is buttons, not a listbox, and the guard names no popup of it: the plain keys stay live there.
   assert.equal(r.doc.querySelector('#ws-list[role], #ws-options[role], .ws-group[role="listbox"]'), null);
   assert.doesNotMatch(shell.match(/function updateActiveContexts\([^]*?\n\}/)[0], /ws-menu/);
