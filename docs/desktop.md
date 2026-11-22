@@ -365,8 +365,8 @@ The instances have no search field: to find one by name, type it in the
 command palette, which opens its terminal. ⌘F / Alt+F (**Focus the
 instance roster**) and `/` in the sidebar go to the roster's current row;
 on an empty roster, which says "No agents yet · ⌘P starts one" (New
-agent's key, Alt+P off macOS, as you bound it), to its one action, the foot's **New
-agent**, where F6 lands too (a failed read's **Retry** comes first).
+agent's key, Alt+P off macOS, as you bound it), to its one action, **New
+agent** at its end, where F6 lands too (a failed read's **Retry** comes first).
 
 The sidebar is 288px wide, and you can make it wider or narrower: drag its
 right edge, between 240px and 480px (or 45% of the window, when that is

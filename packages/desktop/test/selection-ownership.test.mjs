@@ -423,7 +423,7 @@ for (const outcome of ["resolve", "reject"]) {
       assert.equal(s.document.activeElement, focused);
       if (action === "close-last") {
         assert.equal(s.c.tabLayerVisible, false);
-        // The roster's entry (rosterEntry): with no rows, its one action, the foot's Spawn instance (2026-10-26).
+        // The roster's entry (rosterEntry): with no rows, its one action, New agent at the roster's end (2026-10-26).
         assert.equal(focused, s.document.getElementById("sidebar-spawn"));
       }
     });
@@ -574,7 +574,7 @@ test("sidebar.focusFilter's run focuses the roster's tab stop, else the sidebar'
   s.focusRoster();
   assert.equal(s.document.activeElement, rows[1], "the roving stop, not the first row");
   assert.deepEqual(rows.map(r => r.tabIndex), [-1, 0]);
-  // No instances: the roster's one action, the foot's Spawn instance (the product owner, 2026-10-26), never <body>.
+  // No instances: the roster's one action, New agent at the roster's end (the product owner, 2026-10-26), never <body>.
   s.c.contextInstances = []; s.renderContextRoster([]);
   s.focusRoster();
   assert.equal(s.document.activeElement, s.document.getElementById("sidebar-spawn"));

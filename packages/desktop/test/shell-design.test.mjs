@@ -859,7 +859,7 @@ test('focusRoster exits focus mode, reveals the sidebar and focuses the roster\'
   assert.equal(listActions().find(a => a.id === 'sidebar.focusFilter')?.label, 'Focus the instance roster', 'same id, relabelled');
 });
 
-test('focusRoster without a roving stop lands on the first row, else Retry, else the foot\'s New agent, else (no roster) the workspace list: never nothing', t => {
+test('focusRoster without a roving stop lands on the first row, else Retry, else New agent at the roster\'s end, else (no roster) the workspace list: never nothing', t => {
   const s = shell(t), q = id => s.document.getElementById(id), list = s.document.querySelector('#instance-roster .ctx-list');
   const rows = s.paintRows(-1);
   q('sidebar-spawn').focus(); runAction('sidebar.focusFilter');
@@ -867,7 +867,7 @@ test('focusRoster without a roving stop lands on the first row, else Retry, else
   assert.equal(rows[0].tabIndex, 0, 'and it becomes the stop');
   list.innerHTML = '<div class="loading-failed"><button type="button" class="act">Retry</button></div>';
   q('sidebar-spawn').focus(); runAction('sidebar.focusFilter');
-  assert.equal(s.document.activeElement.textContent, 'Retry', 'a failed first read: its Retry, never the foot\'s New agent before it');
+  assert.equal(s.document.activeElement.textContent, 'Retry', 'a failed first read: its Retry, never New agent at the roster\'s end before it');
   // A stale notice's Retry sits between the heading and the list (instance-tree-view.mjs createRosterLoading).
   list.innerHTML = '<div class="ctx-empty">No instances.</div>';
   const notice = s.document.createElement('div'); notice.className = 'ctx-status'; notice.innerHTML = '<button type="button" class="act">Retry</button>';
@@ -879,7 +879,7 @@ test('focusRoster without a roving stop lands on the first row, else Retry, else
   list.innerHTML = '<div class="ctx-empty">No instances.</div>';
   q('ws-options').innerHTML = '<ul class="ws-group"><li class="ws-option-row"><button type="button" class="ws-option" aria-current="true" tabindex="0">A</button></li></ul>';
   q('ws-add-open').focus(); runAction('sidebar.focusFilter');
-  assert.equal(s.document.activeElement, q('sidebar-spawn'), 'an empty roster: the foot\'s New agent');
+  assert.equal(s.document.activeElement, q('sidebar-spawn'), 'an empty roster: New agent at the roster\'s end');
   // A window with no workspace hides the roster: the list of workspaces' stop.
   q('instance-roster').hidden = true;
   q('sidebar-spawn').blur(); runAction('sidebar.focusFilter');
@@ -891,7 +891,7 @@ test('focusRoster without a roving stop lands on the first row, else Retry, else
 
 // One rule for an empty roster (the product owner): its keyboard way in is its one action, New agent at the roster's end, by
 // F6 (the region cycle needs a stop inside the roster) and by ⌘F / Alt+F alike; a failed read's Retry comes first.
-test('an empty roster: F6 and ⌘F / Alt+F (sidebar.focusFilter) both land on the foot\'s New agent, a Retry before it', t => {
+test('an empty roster: F6 and ⌘F / Alt+F (sidebar.focusFilter) both land on New agent at the roster\'s end, a Retry before it', t => {
   const s = shell(t), q = id => s.document.getElementById(id), list = s.document.querySelector('#instance-roster .ctx-list');
   const regions = createFocusRegions({ doc: s.document });
   s.document.getElementById('nav').innerHTML = '<button type="button" class="nav-item" aria-current="page">Workspace overview</button>';

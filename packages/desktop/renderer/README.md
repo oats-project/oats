@@ -49,7 +49,7 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   confirmed `/api/spawn?ws=` transaction. An empty opening instruction waits
   for instructions; attached-mode souls cannot launch standalone. The shell's
   `app.chooseSoul` (⌘N / Ctrl+Shift+N, **Souls: choose a soul to spawn (Workspace › Souls)**) navigates to soul
-  selection, and the sidebar foot's **New agent** opens Quick Open (`app.quickOpenSouls`); neither launches.
+  selection, and **New agent** at the roster's end opens Quick Open (`app.quickOpenSouls`); neither launches.
   Capability facts and source provenance use negotiated read-only inspection,
   never inferred membership, installation or remote discovery. Shared CLI recovery
   stays visible across subtabs; incompatible installations are observation-only.
@@ -1864,9 +1864,9 @@ section is the module map.
   outside a terminal; `focus.leaveTerminal` from inside one): workspaces →
   views (`#nav`, under the list) → roster → main → instance panel, hidden regions skipped, each region's
   current item focused, never `<body>`. The head's control (Add local workspace…) counts as workspaces. The
-  foot (its bar: N need you, New agent, ?) is no region: Tab reaches it,
-  F6 from it goes on to main, Shift+F6 back to the roster. An empty roster's stop is the foot's New
-  instance (after a failed read's Retry), and Shift+F6 from that stop goes back as from the roster. F6 and
+  foot (its bar: N need you and ?) is no region: Tab reaches it,
+  F6 from it goes on to main, Shift+F6 back to the roster. An empty roster's stop is New agent at its end
+  (after a failed read's Retry), the roster's own control (slice 3d). F6 and
   the tab switches are no-ops
   under an open modal.
 - **surface-return.mjs** — "back to where you were" after a flow that moved

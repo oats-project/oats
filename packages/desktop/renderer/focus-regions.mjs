@@ -18,8 +18,8 @@
 //   panel   its selected tab (or the first control of a stage's content). A closed panel is out
 //           of the cycle (Spec B): from a terminal, panel.toggle's chord opens it.
 // The tab strip, the split controls and Show sidebar / Show instance panel count as main. The head's control
-// (Add local workspace…) counts as workspaces. The sidebar's foot (slice 1 of the Desktop UI rework: N need you,
-// New agent and ?) is not a region: Tab reaches it, and F6 from there moves on as from between the
+// (Add local workspace…) counts as workspaces. New agent, at the roster's end since slice 3d, is the roster's. The
+// sidebar's foot (slice 1 of the Desktop UI rework: N need you and ?) is not a region: Tab reaches it, and F6 from there moves on as from between the
 // roster and main (on to main, Shift+F6 back to the roster). The sidebar's width handle (#sidebar-resizer,
 // sidebar-width.mjs), the Tab stop after the foot, counts as the foot.
 

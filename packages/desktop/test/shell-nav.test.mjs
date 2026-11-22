@@ -120,8 +120,8 @@ test("showStage routes a NAV_TABS name to openWorkspaceSouls(tab); showStageFocu
   assert.match(src, /const WORKSPACE_TAB_NAMES = \{ machines: "Machines", souls: "Souls", capabilities: "Capabilities", teams: "Teams", sources: "Setup" \};/);
 });
 
-// The nav sits under the list of workspaces, outside the foot; the foot's bar's controls (New agent and ?, slice 1;
-// "N need you" is sidebar-foot.mjs's) are wired by one loop over the foot's [data-action], which never reaches the nav,
+// The nav sits under the list of workspaces, outside the foot; the foot's ? and New agent at the roster's end (slice 3d;
+// "N need you" is sidebar-foot.mjs's) are wired by one loop over the foot's [data-action] and #sidebar-spawn, which never reaches the nav,
 // so a nav button runs its action once (its own listener), not twice. The shipped nav build and that wiring, run on
 // the shipped index.html.
 test("a nav button runs its stage action once; New agent and ? run their own once; the nav is under the list", () => {

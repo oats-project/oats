@@ -197,7 +197,7 @@ test("nav/footer rhythm: pinned rows in the prototype's style, 34px, beside the 
   assert.equal(u.style("#nav .nav-item .icon").width, "16px", "16px icons, as the shell's");
   assert.equal(shell.match(/#nav \.nav-item\b|#nav \.shell-icon|#nav-foot \.shell-icon|#nav-foot > \.side-icon-button/), null, "no compact nav rules are left, nor the foot's of 2026-10-23");
   assert.equal(shell.match(/\.nav-title|#nav-title/), null, "no title over the views: no rule left for it");
-  // The foot (slice 1 of the Desktop UI rework): one bar (N need you at the left, New agent and ? at the right),
+  // The foot (slice 1 of the Desktop UI rework): one bar (N need you at the left, ? at the right; New agent ends the roster),
   // under the --border line.
   const foot = u.style("#nav-foot");
   assert.deepEqual([foot.display, foot.flexDirection, foot.flexShrink, foot.marginTop], ["flex", "column", "0", "auto"]);
@@ -257,7 +257,7 @@ test("the right-hand column: the workspace rows' needs-input mark and the foot's
   const switcher = read("workspace-switcher.mjs");
   const sizes = [...switcher.matchAll(/iconElement\(document, "attention", \{ size: (\d+), className: "ws-waiting attn-mark" \}\)/g)].map(m => Number(m[1]));
   assert.deepEqual(sizes, [14, 14], "the mark is 14px wherever the switcher draws it");
-  // Each is the last thing on its line; the AGENTS heading ends in its count (no + in it: New agent is the foot's).
+  // Each is the last thing on its line; the AGENTS heading ends in its count (no + in it: New agent ends the roster).
   assert.equal(u.get(".roster-head").lastElementChild, u.get(".ctx-count"));
   assert.equal(u.get(".side-head").lastElementChild, u.get("#ws-add-open"));
   assert.deepEqual([...u.get(".side-head").children].map(el => el.id), ["ws-heading", "ws-add-open"]);
@@ -292,9 +292,9 @@ test("the refreshing Instances heading shows the indicator's words after the cou
   assert.equal(u.get(".roster-head button"), null, "no button in the heading");
 });
 
-// The bar (slice 1 of the Desktop UI rework): [N need you] … [New agent][?], the foot's one row. The count's mark
-// centres on the rows' circles (18px in from the left), ? in the right-hand column (25px in from the right), New
-// instance 6px before ?, all computed from the rules.
+// The bar (slice 1 of the Desktop UI rework): [N need you] … [?], the foot's one row (slice 3d: New agent ends the
+// roster). The count's mark and New agent's + centre on the rows' circles (24px in from the left), ? in the right-hand
+// column (25px in from the right), all computed from the rules.
 test("the bar: the count's mark on the rows' circles (24px in), ? in the right-hand column (25px from the right); New agent's + on the dots' column", t => {
   const u = fixture(t), px = value => { assert.match(value, /^-?\d+(\.\d+)?px$|^0$/, value); return parseFloat(value); };
   const foot = u.style("#nav-foot"), bar = u.style("#sidebar-bar"), help = u.style("#sidebar-help");

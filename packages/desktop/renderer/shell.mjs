@@ -3144,7 +3144,7 @@ window.addEventListener('pagehide', () => mailSheet.dispose(), { once: true });
 
 /** The sidebar's way into the instances, never nothing (the roster's filter was that once): the roster's current
  * row (the roving stop), else its first row, else a control the roster shows (Retry, after a failed read), else, on
- * an empty roster, its one action, the foot's Spawn instance (F6's stop there too, focus-regions.mjs:
+ * an empty roster, its one action, New agent at the roster's end (F6's stop there too, focus-regions.mjs:
  * one way into an empty roster), else, while the roster is hidden (no workspace), the list of workspaces' stop, else
  * its Add local workspace…, always shown with the sidebar. */
 function rosterEntry() {

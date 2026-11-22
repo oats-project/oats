@@ -181,8 +181,8 @@ test("a key on a row's tool targets that row, not the active terminal's instance
   assert.equal(leaderTargetId(row), "/h/b");
   assert.equal(leaderTargetId(menuItem), "/h/b", "an item of its context menu");
   assert.equal(leaderTargetId(start), "/h/b", "Check result");
-  const foot = ["sidebar-need-you", "sidebar-spawn", "sidebar-help"];
-  for (const id of foot) assert.equal(leaderTargetId(doc.getElementById(id)), "/h/a", `${id} (a foot control): the active terminal's`);
+  const foot = ["sidebar-need-you", "sidebar-spawn", "sidebar-help"]; // the foot's two and New agent at the roster's end
+  for (const id of foot) assert.equal(leaderTargetId(doc.getElementById(id)), "/h/a", `${id} (not a row): the active terminal's`);
   context.activeTab = null;
   assert.equal(leaderTargetId(menuItem), "/h/b", "with no terminal open too");
   for (const id of foot) assert.equal(leaderTargetId(doc.getElementById(id)), null, id);

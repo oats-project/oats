@@ -32,7 +32,7 @@ function shell(t, { tabs = false } = {}) {
     ? `<button class="nav-item active" data-view="${v.name}" aria-current="page">${v.label}</button>`
     : `<button class="nav-item" data-view="${v.name}">${v.label}</button>`).join("");
   doc.querySelector("#instance-roster .ctx-list").innerHTML = `<div class="ctx-tree-row"><button class="ctx-inst" tabindex="-1" data-tree-instance="a">a</button></div><div class="ctx-tree-row active"><button class="ctx-inst active" tabindex="0" data-tree-instance="b">b</button></div><div class="ctx-tree-row ctx-spawn-row ctx-spawn-unknown"><button class="ctx-inst pending" tabindex="-1" aria-disabled="true" data-tree-instance="c">c</button><span class="ctx-row-tools ctx-spawn-tools"><button class="act ctx-start ctx-spawn-check">Check result</button></span></div>`;
-  // The foot as the shell paints it while one row needs you (sidebar-foot.mjs): its count shown, New agent's words.
+  // The foot's count while one row needs you, and New agent's words at the roster's end, as sidebar-foot.mjs paints them.
   const need = doc.getElementById("sidebar-need-you"); need.hidden = false; need.textContent = "1 need you";
   doc.getElementById("sidebar-spawn").textContent = "New agent";
   doc.getElementById("stagehost").innerHTML = `<div><div class="workspace-tabs"><button role="tab" aria-selected="true" tabindex="0">Souls</button></div><input class="filter"></div>`;

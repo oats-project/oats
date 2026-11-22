@@ -166,8 +166,8 @@ test("focus: one global 1px inset accent edge and tint replace every 2px ring an
 
 test("focus: keyboard focus on plain shell controls paints the tint and the edge", t => {
   const u = fixture(t);
-  // The pinned rows (the nav's items), the head's Add local workspace… and the foot's controls (N need you, New
-  // instance, ?) are plain controls (the product owner, 2026-10-26; slice 1 of the Desktop UI rework).
+  // The pinned rows (the nav's items), the head's Add local workspace…, New agent (the roster's end) and the foot's
+  // controls (N need you, ?) are plain controls (the product owner, 2026-10-26; slice 1 of the Desktop UI rework).
   for (const selector of [".ws-option.ws-other", ".ws-option.ws-current", ".side-icon-button", "#nav .nav-item:not(.active)", "#nav .nav-item.active", "#ws-add-open",
     "#sidebar-need-you", "#sidebar-spawn", "#sidebar-help", ".ctx-inst", ".tab-trigger", ".tab .close",
     "#tab-actions button", ".ws-suggestion", ".ws-dialog-foot .secondary", ".kb-chord", ".kb-close", ".ws-segmented [aria-pressed=false]",
@@ -237,7 +237,7 @@ for (const palette of ["light", "solarized", "dark"]) test(`${palette}: selected
   }
   assert.equal(u.style(".ws-segmented [aria-pressed=true]").color, "var(--accent)");
   assert.equal(u.rule("#ws-suggestion-search:focus-visible").borderColor, "var(--accent)");
-  // The pinned rows, the head's icon button and the foot's controls (N need you, New agent, ?): their ink, idle
+  // The pinned rows, the head's icon button, New agent and the foot's controls (N need you, ?): their ink, idle
   // and keyboard-focused, on the --sel tint they focus to, through the effective tokens (the edge is checked above).
   for (const selector of ["#nav .nav-item:not(.active)", "#nav .nav-item.active", "#ws-add-open", "#sidebar-need-you", "#sidebar-spawn", "#sidebar-help"]) {
     const idle = u.style(selector).color, focus = u.focused(selector);

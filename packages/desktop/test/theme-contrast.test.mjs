@@ -1141,7 +1141,7 @@ for (const [name] of palettes) test(`${name}: Show sidebar / Show instance panel
     const detail = doc.createElement('span'); detail.className = 'ctx-meta ctx-row-detail'; detail.textContent = 'dev';
     copy.append(detail); button.append(copy); wrap.append(button); list.append(wrap);
   }
-  // The foot as the shell paints it (sidebar-foot.mjs): New agent's words, and its count while two rows need you.
+  // The foot's count and New agent (at the roster's end) as the shell paints them (sidebar-foot.mjs), two rows needing you.
   createSidebarFoot(doc, { nouns: DESKTOP_NOUNS }).paint(2);
   // Spec D: the "N below" roll-up pill paints its own surface, on an idle and a selected row (a waiting row's own mark
   // is its dot since 2026-10-26: the test after the workspace rows').

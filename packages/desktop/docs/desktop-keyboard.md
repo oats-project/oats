@@ -375,7 +375,7 @@ The three Linux / Windows columns are [the chord families](#the-chord-families):
 | Theme cycle: Light, Solarized, Dark, System (`app.themeToggle`) | none | none | none | none | – (the palette keeps it) |
 | Keyboard shortcuts (`app.shortcuts`) | ⌘, | Ctrl+, | the same | the same | yes |
 | The leader, then one key (`app.leader`; see "The leader"; Ctrl+X a choice on the Keyboard shortcuts sheet) | ⌃Space | Ctrl+Space | the same | the same | yes (a named exception, principle 2: it sends NUL, which the leader pressed twice gives the program; on macOS by principle 3's exception) |
-| New agent: the palette on its souls (`app.newAgent`; also Alt+P, the foot's **New agent**; Desktop UI rework, decided 2026-11-19) | ⌥⌘N | Alt+N | Ctrl+Alt+N | Ctrl+Alt+N | yes (ESC n, which Esc, then n still sends: readline's and zsh's history search forward) |
+| New agent: the palette on its souls (`app.newAgent`; also Alt+P, **New agent** at the roster's end; Desktop UI rework, decided 2026-11-19) | ⌥⌘N | Alt+N | Ctrl+Alt+N | Ctrl+Alt+N | yes (ESC n, which Esc, then n still sends: readline's and zsh's history search forward) |
 | Copy the terminal selection (`terminal.copySelection`) | ⌘C (Edit › Copy, the menu role; the action has no macOS default) | Ctrl+Shift+C | the same | the same | yes |
 | Terminal zoom (`terminal.fontBigger`, `…Smaller`, `…Reset`; also Settings → Terminal; reset lands on the default, 13px on Omarchy and 15px elsewhere) | ⌘= ⌘- ⌘0 | Ctrl+= Ctrl+- Ctrl+0 | the same | the same | yes |
 | Open a file read-only (`app.openFile`) | ⌘O | Ctrl+O | the same | the same | no (Ctrl+O is a byte programs read) |
@@ -1020,13 +1020,13 @@ F6 moves focus to the next region, Shift+F6 to the previous one, in this order:
    sits under the list.
 3. **Instance roster**: its one tab stop, the selected row (the one whose
    terminal is the active tab), else the first row; with no rows, a control it
-      shows (Retry), else the foot's **New agent**, its one action. It has
+      shows (Retry), else **New agent** at the roster's end, its one action. It has
    no filter: the command palette finds an instance by name.
-   The sidebar's foot (one bar: **N need you** while an instance needs input,
-   **New agent** and **?**) and the sidebar's width handle after it are no
-   region: Tab reaches them after the roster, and F6 from there goes on to
-   Main, Shift+F6 back to the roster. From an empty roster's stop there (New
-   instance), Shift+F6 goes back as from the roster, to the views.
+   **New agent**, at the roster's end, is the roster's own control. The
+   sidebar's foot (one bar: **N need you** while an instance needs input, and
+   **?**) and the sidebar's width handle after it are no region: Tab reaches
+   them after the roster, and F6 from there goes on to Main, Shift+F6 back to
+   the roster.
 4. **The agent's facts** (the agent view, while the active tab shows its
    facts strip, above the terminal): its first fact, else its fold. In the
    cycle only while it shows.
@@ -1278,9 +1278,9 @@ the rig). "Fixed" marks a gap this change closed.
 | Rows whose state is unknown or that the kernel does not report addressable | **Focusable, `aria-disabled` with the reason as a description (fixed: were `disabled`, which hid their tools from the keyboard)** | Activation does nothing; their context menu works |
 | A row's context menu (Open in split, Open pull request…, Knowledge & capabilities…, Start…, Restart with…, Stop…, Retire instance…; Forget… alone on a row its server no longer lists). The row has no ⋯ button | Shift+F10 or the ContextMenu key on the focused row (it opens on the row); a right-click (where you click, once the button is released; the row is not activated) | Focus on its first act; arrows, Home/End move; Enter/Space choose; Esc or Tab close it, back on the row. While it is held (a stale roster, one of its acts still running, a row that can't be used from here) it opens nothing, the focus stays on the row and the line at the bottom of the main area says why |
 | Start / Restart dialog, lifecycle dialog | From the row, its context menu, the instance panel or the leader | Esc (Cancel before anything is sent, Close or Done after); trapped; the lifecycle dialog starts on Cancel and focuses Close or Done when it ends; **focus returns to the row (fixed: fell to `<body>`)**, and after a retire to the row that followed it |
-| N need you (at the left of the sidebar's foot, a bar named "Sidebar tools"; shown while an agent of this workspace needs input; its name: "2 agents need you. Go to the first") | Tab, after the roster | Enter/Space focus the first row that needs you, in the roster's order, itself: a collapsed parent above it is expanded, or the Background section opened, first; its terminal is not opened |
-| New agent (at the right of the sidebar's foot, a + and its words; its chord in its tooltip) | Tab, after N need you; on an empty roster, its one way in: F6, ⌘F / Alt+F (`sidebar.focusFilter`) and the sidebar's `/` land on it (a failed read's Retry first) | Enter/Space run `app.quickOpenSouls` (Quick Open), as its chord does |
-| ? (Keyboard shortcuts, at the right end of the sidebar's foot; a red dot while a shortcut you set clashes) | Tab, after New agent | Enter/Space open the shortcuts editor (`app.shortcuts`), as ⌘, / Ctrl+, do |
+| N need you (at the left of the sidebar's foot, a bar named "Sidebar tools"; shown while an agent of this workspace needs input; its name: "2 agents need you. Go to the first") | Tab, after New agent | Enter/Space focus the first row that needs you, in the roster's order, itself: a collapsed parent above it is expanded, or the Background section opened, first; its terminal is not opened |
+| New agent (at the roster's end, a row of a + and its words; its chord in its tooltip) | Tab, after the roster's rows; on an empty roster, its one way in: F6, ⌘F / Alt+F (`sidebar.focusFilter`) and the sidebar's `/` land on it (a failed read's Retry first) | Enter/Space run `app.quickOpenSouls` (Quick Open), as its chord does |
+| ? (Keyboard shortcuts, at the right end of the sidebar's foot; a red dot while a shortcut you set clashes) | Tab, after N need you | Enter/Space open the shortcuts editor (`app.shortcuts`), as ⌘, / Ctrl+, do |
 | Sidebar width (the handle on the sidebar's right edge: a vertical `separator` labelled "Sidebar width", `aria-valuenow`, `-valuemin` and `-valuemax` in px; the split separator's resizer, its hover and focus the accent fill) | Tab, after the foot's ? (the last stop of the sidebar); F6 from it goes on to Main, Shift+F6 back to the roster | ←/→ narrow and widen it by 8px, Shift+←/→ by 32px; Home and End go to 240px and to the most the window allows (480px, or 45% of a narrower window); Enter or a double-click go back to 288px, as **Sidebar: reset width** does; a drag with the pointer. The width is remembered on this computer and kept while the sidebar is hidden |
 | Show sidebar (start of the main area's top bar, while the sidebar is hidden or in focus mode) | Tab, first in the Main region; hiding the sidebar moves focus to it | Enter/Space: `sidebar.toggle` (leaves focus mode too), focus back on the roster's current row (on an empty roster, New agent) |
 | Tab bar | One roving stop per tablist (per group when split); F6 (main). Tabs shrink to fit (spec F); the active tab is scrolled fully into view in its own strip on every activation, close and strip resize, and a focused control is revealed in its strip, never by scrolling an ancestor | Left/Right/Home/End select; Delete closes the focused tab, and the keymap's `tabs.close` (⌘W / Alt+W, rebindable; the close button's tooltip names it) closes the active one; Ctrl+Tab, Alt+→/← (⌥⌘→/←) and go-to-tab (each tab shows its number) from anywhere in the tab layer, a terminal included, **keeping focus in the content (fixed: fell to `<body>`)** |
