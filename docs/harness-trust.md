@@ -235,7 +235,7 @@ names where the launch gets the file from:
 
 `<where from>` is, for example, `the CLAUDE_CONFIG_DIR of launch
 configuration work`, `the CODEX_HOME of tmux session agents` or `under the
-global HOME of the OATS tmux server (<socket>)`. Two more answers:
+global HOME of the OATS tmux server (<socket>)`. Three more answers:
 
 - **The pane's environment could not be read** (a spawn or a start, and
   readiness with a server running): `<harness> folder trust: the
@@ -249,9 +249,14 @@ global HOME of the OATS tmux server (<socket>)`. Two more answers:
   CODEX_HOME (not set), this process's HOME`). The readiness item is then
   `unknown` whether or not that file establishes trust; a spawn with
   `--no-launch` warns only when it does not.
+- **A home on a session provider** (`--backend <provider>`, for example
+  bb): the provider runs the harness, with no OATS pane, so no file is read.
+  The readiness item is `not-applicable`, with `file` null; the provider's
+  own readiness item (`checks.providers`), where the provider declares a
+  `check`, answers for its launch.
 
 A missing root entry does not prove that the harness will prompt (a native
-gate can skip the question), so neither says the session will stop. A launch
+gate can skip the question), so no warning says the session will stop. A launch
 configuration whose reference is not set on this host is named instead of a
 file. OATS never answers a folder-trust prompt, and launch consent authorizes
 no trust write.
