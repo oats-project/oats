@@ -39,6 +39,9 @@ export const TEXT_PAIRS = Object.freeze([
   ["term-fg", "surface-2"], ["muted", "term-bg"],
   ["fg", "term-bg"], ["accent", "term-bg"], ["violet", "term-bg"], ["violet", "surface-2"],
   ...["fg", "muted", "faint", "accent", "warn", "ok"].map((fg) => [fg, "sel"]),
+  // Slice 3d: the Automations row's "1 failed" (shell.css .nav-failed), in --danger on the row's fills: plain and hovered
+  // are pairs above; selected, while the Automations page is open, is this one.
+  ["danger", "sel"],
   ...["fg", "muted", "accent", "violet", "ok", "warn"].map((fg) => [fg, "md-code-bg"]),
   ...ANSI_TOKENS.map((fg) => [fg, "term-bg"]),
   // Workspace v4: amber attention chips/nodes, and reason/tag chips.

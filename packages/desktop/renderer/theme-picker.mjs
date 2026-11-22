@@ -21,14 +21,17 @@ import { openSheet } from './sheet.mjs';
 export const appearanceCSS = `
 .appearance-sheet { width:min(420px,calc(100vw - 32px)); }
 .appearance-section { display:grid; gap:6px; margin:0; padding:0; border:0; min-width:0; }
-.appearance-section h3 { margin:0; font-size:12px; font-weight:650; color:var(--muted); }
+.appearance-section h3 { margin:6px 0 0; font-size:11px; line-height:16px; font-weight:500; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
 .appearance-note { margin:0; color:var(--muted); font-size:12px; line-height:1.45; }
 .appearance-list { list-style:none; margin:0; padding:0; display:grid; gap:2px; }
-.theme-picker-row { width:100%; display:flex; align-items:center; gap:10px; padding:8px 10px; border:0; border-radius:7px; background:var(--surface); color:var(--fg); font:inherit; font-size:13px; text-align:left; cursor:pointer; }
+.theme-picker-row { width:100%; display:flex; align-items:center; gap:12px; min-height:36px; padding:4px 10px; border:0; border-radius:6px; background:var(--surface); color:var(--fg); font:inherit; font-size:13px; text-align:left; cursor:pointer; }
 .theme-picker-row:hover { background:var(--surface-2); }
 .theme-picker-row:focus-visible { background:var(--sel); }
 .theme-picker-row.appearance-more { color:var(--accent); }
-.theme-picker-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+/* Slice 3d: the prototype's option rows: the name, then what it does on the same line, muted. */
+.theme-picker-text { flex:1; min-width:0; display:flex; flex-wrap:wrap; align-items:baseline; column-gap:12px; row-gap:0; }
+.theme-picker-label { flex:0 0 132px; min-width:0; }
+.theme-picker-text > .theme-picker-note { flex:1 1 120px; min-width:0; }
 .theme-picker-note { color:var(--muted); font-size:12px; }
 .theme-picker-current { flex:none; display:flex; align-items:center; gap:4px; color:var(--accent); font-size:12px; font-weight:600; }
 .appearance-sheet .forge-card { padding:0; border:0; background:none; }

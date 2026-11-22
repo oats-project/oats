@@ -35,20 +35,25 @@ export function failedRuns(answers) {
 /** `onHost(name)`: the schedule list's `host.name`, this machine's name as the kernel reports it (oats-local.yaml
  * `host.name`), after each owned read that answers: the name, or null when the answer records none (so a name taken
  * away stops showing); a failed read hands on nothing and the last name stands. */
-export function createAutomationsFailure({ read, supported = () => true, onChange = () => {}, onHost = () => {}, now = () => Date.now(), ttl = AUTOMATIONS_FAILURE_TTL }) {
-  let ws = null, failed = false, readAt = -Infinity, serial = 0, inFlight = false;
-  const set = (value) => { if (value !== failed) { failed = value; onChange(value); } };
+export function createAutomationsFailure({ read, supported = () => true, onChange = () => {}, onCount = () => {}, onHost = () => {}, now = () => Date.now(), ttl = AUTOMATIONS_FAILURE_TTL }) {
+  let ws = null, failed = false, count = 0, readAt = -Infinity, serial = 0, inFlight = false;
+  // The verdict, and how many rows failed (slice 3d: the row's "1 failed"); onCount is told each change of the count.
+  const set = (n) => {
+    const value = n > 0;
+    if (value !== failed) { failed = value; onChange(value); }
+    if (n !== count) { count = n; onCount(n); }
+  };
   return {
     async refresh(next) {
-      if (next !== ws) { ws = next; readAt = -Infinity; serial++; inFlight = false; set(false); }
-      if (!ws || !supported()) { if (!ws) set(false); return; }
+      if (next !== ws) { ws = next; readAt = -Infinity; serial++; inFlight = false; set(0); }
+      if (!ws || !supported()) { if (!ws) set(0); return; }
       if (inFlight || now() - readAt < ttl) return;
       const ticket = ++serial, asked = ws;
       inFlight = true;
       try {
         const answers = await Promise.all(["schedule", "trigger"].map(async (kind) => [kind, await read(asked, kind)]));
         if (ticket !== serial || asked !== ws) return;
-        readAt = now(); set(failedRuns(answers) > 0);
+        readAt = now(); set(failedRuns(answers));
         const host = automationRows(answers[0][1], "schedule")?.host?.name;
         onHost(typeof host === "string" && host ? host : null);
       } catch {
@@ -59,5 +64,6 @@ export function createAutomationsFailure({ read, supported = () => true, onChang
       }
     },
     get failed() { return failed; },
+    get count() { return count; },
   };
 }

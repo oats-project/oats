@@ -303,6 +303,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
 
   function paintFact(f) {
     const li = node(doc, 'li', 'agent-fact'); li.dataset.key = f.key;
+    // The strip's mark (slice 3d, the prototype's pinned facts): a pin, decorative, before the fact.
+    li.append(iconElement(doc, 'pin', { size: 12, className: 'shell-icon agent-fact-pin' }));
     const body = node(doc, 'span', 'agent-fact-focus'); body.tabIndex = -1;
     const label = node(doc, 'span', 'agent-fact-label', f.withheld ? displayLine(f.label) : f.label);
     const value = node(doc, 'b', 'agent-fact-value', f.withheld ? displayLine(f.value) : f.value); value.dir = 'auto';

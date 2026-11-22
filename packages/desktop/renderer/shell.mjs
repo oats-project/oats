@@ -171,9 +171,9 @@ const automationsFailure = createAutomationsFailure({
   },
   supported: () => automationsSupported(cliStatus()),
   onChange: (failed) => {
-    paintAutomationsFailed(failed);
     for (const listener of automationsFailedListeners) { try { listener(failed); } catch (e) { console.error(e); } }
   },
+  onCount: (count) => paintAutomationsFailed(count),
   onHost: (name) => { if (name !== thisHostName) { thisHostName = name; if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } },
 });
 // A workspace switch (or the chooser) revokes the mark and any read in flight at once, before the new workspace's
@@ -2735,17 +2735,18 @@ for (const v of PINNED) {
   b.addEventListener("click", () => runAction(`stage.${v.name}`));
   navEl.append(b);
 }
-/** Show or clear the Automations row's failure mark: the --danger dot and, after the name, its words (the row's
- * accessible name then says "Automations, a run failed"). Absent while nothing failed, so it says nothing then. */
-function paintAutomationsFailed(failed) {
+/** Show or clear the Automations row's failure mark: after the name, "N failed" in the failure ink (slice 3d, the
+ * prototype's), and its words for assistive tech (the row's accessible name then says "Automations, a run failed").
+ * Absent while nothing failed, so it says nothing then. `count`: how many rows failed their last run. */
+function paintAutomationsFailed(count) {
   const row = document.querySelector('#nav .nav-item[data-view="automations"]');
   if (!row) return;
   row.querySelector(":scope > .nav-failed")?.remove();
-  if (!failed) return;
+  if (!(count > 0)) return;
   const mark = document.createElement("span"); mark.className = "nav-failed";
-  const dot = document.createElement("span"); dot.className = "nav-failed-dot"; dot.setAttribute("aria-hidden", "true");
+  const shown = document.createElement("span"); shown.className = "nav-failed-count"; shown.setAttribute("aria-hidden", "true"); shown.textContent = `${count} failed`;
   const said = document.createElement("span"); said.className = "sr-only"; said.textContent = FAILED_RUN_TEXT;
-  mark.append(dot, said); row.append(mark);
+  mark.append(shown, said); row.append(mark);
 }
 
 // The foot's controls use exactly the same registry as keyboard actions (the nav's buttons run theirs above): New

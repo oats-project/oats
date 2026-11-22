@@ -55,7 +55,7 @@
   /* Workspace v4: running dot (graphic only), amber attention (text is --warn), neutral
      reason/tag fill, and the soft border of a selected card. */
   --live: #7aa2f7; --attn-bg: #2f2b22; --attn-border: #6b5a30; --tag-bg: #292e42; --sel-border: #3d59a1; --attn-dot: #e0af68;
-  --bar-h: 48px;          /* one top-bar height everywhere — borders align across panes */
+  --bar-h: 44px;          /* one top-bar height everywhere — borders align across panes (slice 3d: the prototype's 44px tab row) */
   /* The terminal's colours stay as they were (slice 3c changes the chrome only; terminals are out of its scope). */
   --term-bg: #0a0d12;     /* transcript surface follows the theme */
   --term-fg: #e6edf3;

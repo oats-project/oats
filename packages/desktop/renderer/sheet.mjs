@@ -26,13 +26,14 @@ export const sheetCSS = `
 @media (prefers-reduced-motion: reduce) {
   .palette-overlay.${SHEET_BACKDROP}, .${SHEET_BACKDROP} > .${SHEET} { animation:none; }
 }
-.sheet-panel { width:min(440px,calc(100vw - 32px)); box-sizing:border-box; display:flex; flex-direction:column; border:1px solid var(--border); border-radius:12px; background:var(--surface); color:var(--fg); box-shadow:var(--shadow-modal); overflow:hidden; }
-.sheet-head { min-height:52px; flex:none; display:flex; align-items:center; gap:10px; padding:0 12px 0 20px; border-bottom:1px solid var(--border); }
-.sheet-head h2 { margin:0; font-size:15px; font-weight:700; }
+.sheet-panel { width:min(440px,calc(100vw - 32px)); box-sizing:border-box; display:flex; flex-direction:column; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--fg); box-shadow:var(--shadow-modal); overflow:hidden; }
+/* Slice 3d: the prototype's sheet head: the title in 15px 600 on the sheet's own surface, no rule under it. */
+.sheet-head { min-height:44px; flex:none; display:flex; align-items:center; gap:10px; padding:10px 12px 6px 18px; }
+.sheet-head h2 { margin:0; font-size:15px; font-weight:600; line-height:20px; }
 .sheet-close { flex:none; margin-left:auto; width:28px; height:28px; display:grid; place-items:center; border:0; border-radius:6px; background:var(--surface); color:var(--muted); cursor:pointer; font:inherit; font-size:16px; }
 .sheet-close:hover { background:var(--surface-2); color:var(--fg); }
 .sheet-close:focus-visible { background:var(--sel); color:var(--fg); }
-.sheet-body { overflow-y:auto; min-height:0; padding:14px 20px 18px; display:grid; gap:16px; }
+.sheet-body { overflow-y:auto; min-height:0; padding:4px 18px 18px; display:grid; gap:16px; }
 `;
 
 /** The controls Tab walks in `container`, in document order: enabled, not hidden, not taken out of the order. */
