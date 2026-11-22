@@ -2144,15 +2144,20 @@ changed device number is accepted as follows:
 - **Linux and other systems:** an equal inode and an equal recorded birth time
   are both needed. A home whose spawn recorded no birth time (a kernel before
   0.58.0) or a birth time of `0` (a filesystem that has none, as NFS often does)
-  still needs its device number to match, and refuses to start after it
-  changes; spawn it again. The rule is stricter than on macOS because btrfs
+  still needs its device number to match. After it changes, the start refuses
+  with `directory home is on a volume whose device number changed since
+  spawn`: retire the instance and spawn it again. The rule is stricter than on macOS because btrfs
   numbers the inodes of every subvolume from the same start, while Linux has
   no call that sets a birth time, so a copy of a directory gets a new one.
 
-Accepting a changed device number lets one thing through that a matching one
-refused: a snapshot or a block-level copy of the volume that holds the home,
-mounted at the same path, which keeps both inodes and birth times. That is
-the home itself, as it was when the snapshot was taken.
+Accepting a changed device number lets through what a matching one refused:
+any filesystem mounted at the home's path that shows the recorded inode and
+birth time. A snapshot or a block-level copy of the volume that holds the
+home does, since it keeps both: that is the home itself, as it was when the
+snapshot was taken. So can a filesystem the home's own user mounts there,
+such as a FUSE mount that reports those values. That user can already rewrite
+the spawn record, so the check was never a defence against it
+([Trust model](trust-model.md#what-oats-does-not-promise)).
 
 ### `workspace` — cross-repo coordinator
 

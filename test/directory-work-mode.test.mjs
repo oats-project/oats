@@ -420,6 +420,7 @@ function soleBaseline(home) {
   return join(dir, name);
 }
 const EXCHANGED = (name) => (e) => e.code === "E_WORK_INSPECTION_FAILED" && e.message === `directory ${name} was exchanged; restore the owned root before retrying start`;
+const UNCONFIRMED = (name) => (e) => e.code === "E_WORK_INSPECTION_FAILED" && e.message === `directory ${name} is on a volume whose device number changed since spawn (a reboot or a remount, as on btrfs), and its spawn recorded no birth time to show it is the same directory; retire the instance and spawn it again`;
 
 test("#1261: a directory start refuses a home or work that another directory was renamed into", async (t) => {
   const f = fixture(t);
@@ -438,14 +439,14 @@ test("#1261: a directory start refuses a home or work that another directory was
   }
 });
 
-test("#1261: a released baseline with no birth time whose recorded dev changed (a macOS remount) starts on darwin and is refused elsewhere", async (t) => {
+test("#1261: a released baseline with no birth time whose recorded dev changed (a macOS remount) starts on darwin and is refused elsewhere, saying why", async (t) => {
   const f = fixture(t);
   const result = await f.spawn("remount"), file = soleBaseline(result.home), baseline = readJson(file);
   const moved = ({ dev, ino }) => ({ dev: dev + 1, ino });
   writeFileSync(file, JSON.stringify({ ...baseline, directoryRoots: { home: moved(baseline.directoryRoots.home), work: moved(baseline.directoryRoots.work) } }), { mode: 0o600 });
   // The guard is the start's first check of the roots; past it, this fixture's start stops at the launch, which finds no tmux.
   if (process.platform === "darwin") assert.throws(() => startInstanceSession(result.home), (e) => e.code === "E_RUNTIME_ENDPOINT_UNKNOWN" && /tmux was not found/.test(e.message));
-  else assert.throws(() => startInstanceSession(result.home), EXCHANGED("home"));
+  else assert.throws(() => startInstanceSession(result.home), UNCONFIRMED("home"));
 });
 
 test("#1266: a baseline whose recorded dev changed (a btrfs reboot) starts when the birth time matches, and is refused when it does not", async (t) => {
@@ -458,7 +459,7 @@ test("#1266: a baseline whose recorded dev changed (a btrfs reboot) starts when 
   write((root) => ({ ...root, dev: root.dev + 1 }));
   // Off darwin a changed dev needs a recorded birth time; a filesystem that has none records "0".
   if (process.platform === "darwin" || roots.home.birthtimeNs !== "0") assert.throws(() => startInstanceSession(result.home), PASSED_GUARD);
-  else assert.throws(() => startInstanceSession(result.home), EXCHANGED("home"));
+  else assert.throws(() => startInstanceSession(result.home), UNCONFIRMED("home"));
   write((root) => ({ ...root, dev: root.dev + 1, birthtimeNs: String(BigInt(root.birthtimeNs) + 1n) }));
   assert.throws(() => startInstanceSession(result.home), EXCHANGED("home"));
 });

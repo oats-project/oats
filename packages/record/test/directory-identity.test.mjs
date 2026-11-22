@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sameDirectory } from "../lib/directory-identity.mjs";
+import { sameDirectory, unconfirmedRemount } from "../lib/directory-identity.mjs";
 
 const recorded = { dev: 16777233, ino: 1227913745 };
 const born = { ...recorded, birthtimeNs: "1792080083113723159" };
@@ -58,4 +58,17 @@ test("a missing record or reading is never the same directory", () => {
     assert.equal(sameDirectory(undefined, remounted, platform), false);
     assert.equal(sameDirectory(born, undefined, platform), false);
   }
+});
+
+test("unconfirmedRemount: off darwin, the same inode on a new dev with no recorded birth time, and nothing else", () => {
+  for (const platform of ["linux", "freebsd"]) {
+    assert.equal(unconfirmedRemount(recorded, remounted, platform), true);
+    assert.equal(unconfirmedRemount({ ...recorded, birthtimeNs: "0" }, remounted, platform), true);
+    assert.equal(unconfirmedRemount(born, { ...remounted, birthtimeNs: "1792080083113723160" }, platform), false);
+    assert.equal(unconfirmedRemount(recorded, { ...remounted, ino: recorded.ino + 1 }, platform), false);
+    assert.equal(unconfirmedRemount(recorded, { ...recorded, birthtimeNs: "5" }, platform), false);
+    assert.equal(unconfirmedRemount(undefined, remounted, platform), false);
+    assert.equal(unconfirmedRemount(recorded, undefined, platform), false);
+  }
+  assert.equal(unconfirmedRemount(recorded, remounted, "darwin"), false);
 });

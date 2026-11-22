@@ -1,3 +1,13 @@
+## Upgrade
+
+- **A directory-mode home on Linux spawned before 0.58.0** recorded no birth
+  time, so after a reboot that changes its volume's device number (btrfs, a
+  remounted overlay) it still refuses to start. The refusal now reads
+  "directory home is on a volume whose device number changed since spawn (a
+  reboot or a remount, as on btrfs), and its spawn recorded no birth time to
+  show it is the same directory; retire the instance and spawn it again":
+  do that. Homes spawned since 0.58.0 need nothing.
+
 ## Fixed
 
 - **Session: a directory-mode home on Linux starts after a reboot that gives
@@ -6,10 +16,10 @@
   directory-mode home refused `oats session start` after a reboot with
   "directory home was exchanged; restore the owned root before retrying
   start", though nothing was exchanged (#1266). A changed device number is now
-  accepted when the root's inode and the birth time its spawn recorded both
-  match, as macOS has done since 0.58.0, where the inode alone is enough when
-  no birth time was recorded. Homes spawned since 0.58.0 record a birth time
-  and start again with no change by hand. A Linux home whose spawn recorded
-  none, or `0`, still needs its device number to match: spawn it again. A
+  accepted on Linux when the root's inode and the birth time its spawn
+  recorded both match (macOS keeps its rule from 0.58.0). Homes spawned since
+  0.58.0 record a birth time and start again with no change by hand. A Linux
+  home whose spawn recorded none, or `0`, still needs its device number to
+  match, and its refusal now says so and what to do (see Upgrade). A
   directory renamed into the home's or `work/`'s place is still refused
   ([`directory` work mode](../souls-and-instances.md#directory--independent-execution)).
