@@ -169,7 +169,7 @@ for (const [verb, row] of Object.entries(CELLS)) {
   });
 }
 
-test("settling leaves a planned home planned and a launched one stopped, the record rewritten to agree and the stop an operator's unless the host's was recorded", async (t) => {
+test("settling leaves a planned home planned and a launched one stopped, the record rewritten to agree and the stop an operator's, also where the host's was recorded and a start settles it", async (t) => {
   const fx = providerDeployment(t);
   fx.controls = {};
   // sent → planned.
@@ -180,12 +180,15 @@ test("settling leaves a planned home planned and a launched one stopped, the rec
   const resent = await STATES["resent (not stopped)"](fx, "s2");
   await fx.inEnv(() => stopInstanceSession(resent, {}));
   assert.deepEqual([Number.isFinite(Date.parse(runtimeOf(resent).stoppedAt)), Object.hasOwn(runtimeOf(resent), "launchSent"), stopReceiptOf(resent).resume ?? false], [true, false, false]);
-  // resent on a home the host had stopped, settled by a start that then fails to launch: stopped, and still the host's stop.
+  // resent on a home the host had stopped, settled by a start that then fails to launch: stopped,
+  // and the stop an operator's now. A start is its person's own act on the home: it ends the
+  // host stop's claim to be resumed before it asks the provider to stop anything, so no resume is
+  // owed through a session those stops (which carry no reason) ended.
   const hosted = await STATES["stopped (host)"](fx, "s3");
   writeRuntime(hosted, { ...runtimeOf(hosted), launchSent: SENT_AT });
   fx.control({ s3: { launch: { error: { code: "E_BACKEND_NOT_READY", message: "down" } } } });
   assert.equal(await answerOf(fx, "start", hosted), "E_BACKEND_NOT_READY");
-  assert.deepEqual([stateOf(hosted), stopReceiptOf(hosted).reason], ["stopped", "host-stop"]);
+  assert.deepEqual([stateOf(hosted), stopReceiptOf(hosted).reason, stopReceiptOf(hosted).resume], ["stopped", undefined, undefined]);
   // A settle the provider does not confirm changes nothing, and the next verb asks again.
   const stuck = await STATES.sent(fx, "s4");
   fx.control({ s4: { stop: { exit: 1 } } });
@@ -491,6 +494,28 @@ test("the host's stop of a home whose launch was sent and never recorded: the re
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(fx.verbs("stop").map((c) => [c.request.input.endpoint === null ? "null" : "E", c.request.input.reason ?? null]), [["E", "host"], ["null", null]]);
   assert.equal(stopReceiptOf(home).reason, "host-stop");
+});
+
+// A home stopped with the host whose launch mark is still there: the host's stop of a resent home
+// that the provider did not confirm leaves it so, and the sweep skips it (unknown) until a verb settles it.
+test("a home stopped with the host and unsettled: the next host shutdown's settle stops its recorded session with reason: host; a start makes the stop an operator's before its settle, so a launch that fails leaves it stopped by OATS", async (t) => {
+  const fx = providerDeployment(t);
+  fx.controls = {};
+  const build = async (name) => { const home = await STATES["stopped (host)"](fx, name); writeRuntime(home, { ...runtimeOf(home), launchSent: SENT_AT }); return home; };
+  const stops = () => fx.verbs("stop").map((c) => [c.request.input.endpoint === null ? "null" : "E", c.request.input.reason ?? null]);
+  // (A) The host shuts down again: the home stays stopped with the host, still to resume through E.
+  const again = await build("ua");
+  fx.clearCalls();
+  const r = spawnSync(process.execPath, [HOST_STOP_CHILD, again, "20000"], { cwd: fx.dep, env: fx.env, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual([stops(), stopReceiptOf(again).resume, stateOf(again)], [[["E", "host"], ["null", null]], true, "stopped"]);
+  // (B) A person starts it, and the launch is refused: both stops without a reason, and no resume is owed.
+  const started = await build("ub");
+  fx.controls = { ub: { launch: { error: { code: "E_BACKEND_NOT_READY", message: "down" } } } };
+  fx.control(fx.controls);
+  fx.clearCalls();
+  assert.equal(await answerOf(fx, "start", started), "E_BACKEND_NOT_READY");
+  assert.deepEqual([stops(), stopReceiptOf(started).resume, stateOf(started)], [[["E", null], ["null", null]], undefined, "stopped"]);
 });
 
 test("a resume's notice that fails without a refusal leaves a home stopped with the host stopped, still to resume, and has the provider asked to stop that session again", async (t) => {

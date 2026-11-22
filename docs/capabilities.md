@@ -2349,8 +2349,9 @@ started by a killed spawn is ever stopped.
 `"reason": "host"` is on every stop of a recorded session after which the
 home stays stopped with the host: the stop that `oats host run`'s shutdown
 gives, the stop the kernel asks again when the resume notice of such a home
-failed without your refusal, and the one it asks again when an input
-crossed a stop with the host. A stop with `endpoint: null` never carries
+failed without your refusal, the one it asks again when an input crossed a
+stop with the host, and the recorded session's stop when the host's
+shutdown settles a home that was stopped with the host already. A stop with `endpoint: null` never carries
 it, at the host's shutdown either: it stops what a launch that was never
 recorded started, which no resume brings back. No other stop carries a `reason` (an operator's, a restart's, a
 start's, a retire's). An ordinary start of a home stopped with the host is

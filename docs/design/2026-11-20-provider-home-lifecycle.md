@@ -99,7 +99,10 @@ on it (stop, start, restart, retire), under that verb's claim:
    - from *sent* → **planned** (record `launched: false`, `endpoint: null`);
    - from *resent* → **stopped** (record `launched: true`, `endpoint: E`;
      receipt `stoppedAt` set if it was null, `launchSent` removed; the stop
-     receipt as an operator's, unless it already says the host's).
+     receipt as an operator's, unless it already says the host's and it is
+     the host's shutdown that settles the home: the recorded session's stop
+     then carries `reason: "host"`. A start and an operator's stop make a
+     host's stop an operator's before they ask the provider anything).
 
 *resent* settles to *stopped*, never to *running*. Step 1 does not reach the
 session at `E`: it is older than the launch (a start of a lost home stops it
@@ -251,7 +254,7 @@ orders of "A launch" and of the stop rule:
 | during a spawn's rollback, between its record and its receipt | unsettled: the launch still marked, the record already planned (not compared) | settles |
 | during a spawn, before its record (while the provider's `check` is asked, or its hooks run) | not a home of the table yet: a receipt, where there is one, says planned, and the record is the one its files were composed with. A read answers that it is being spawned (`E_SESSION_UNAVAILABLE`), never that its records disagree | as for any spawn that ended before its record: the kernel has no verb for it yet (not this change's) |
 | during a spawn, between the planned record and its last receipt | planned (the receipt was written before the record) | acts on it |
-| during a resume of a home stopped with the host, after its notice | stopped with the host; its session may run again | the sweep sends the notice again; a stop or a start asks `stop {E}` |
+| during a resume of a home stopped with the host, after its notice | stopped with the host; its session may run again | the resume reads the session: running, it adopts the home with no second notice; gone, it sends the notice again. A stop or a start asks `stop {E}` |
 | during that resume, after `stoppedAt` was cleared | running, with the host's stop receipt left | acts on a running home; a later loss of that start is a loss like any other, counted (a stop receipt says the host's stop only beside a receipt that says stopped), and a later stop removes that receipt before it records its own |
 
 **An input in flight across a state change.** An input holds no claim and a
