@@ -78,7 +78,7 @@ import { shellIcon, mountShellIcons, iconElement } from "./shell-icons.mjs";
 import { createSidebarFoot, emptyRosterText } from "./sidebar-foot.mjs";
 import { createAutomationsFailure, FAILED_RUN_TEXT } from "./automations-failure.mjs";
 import { automationsSupported } from "./views/automations.mjs";
-import { identityCSS } from "./identity-marks.mjs";
+import { identityCSS, createHarnessMark } from "./identity-marks.mjs";
 import { rowFactsTitle } from "./row-facts-title.mjs";
 import { createContextPanel, contextPanelCSS } from "./context-panel.mjs";
 import { createInstanceTeamsSection, teamsCSS } from "./instance-teams.mjs";
@@ -1326,9 +1326,9 @@ function renderContextRoster(instances) {
           elsewhere && i.running !== false ? elsewhere.sentence : null].filter(Boolean).join(" · ");
         // Slice 1 (the Desktop UI rework): no hover card. An unavailable row keeps its reason as a title; every row's
         // waiting facts are its description, and the instance panel shows them in full (its Needs input line).
-        // Line 2: `<soul> · <machine>`, the shared row facts (packages/client roster-row-facts.mjs), the machine in
-        // this Desktop's words for this one. The repository, the branch, the harness and the pull request are the
-        // instance panel's; a row's reason is its description.
+        // Line 2: the harness's mark, then `<soul>`, and ` · <machine>` for another machine's row (slice 3d), the shared
+        // row facts (packages/client roster-row-facts.mjs). The repository, the branch, the harness's name and model and
+        // the pull request are the instance panel's and the row's title; a row's reason is its description.
         const facts = rosterRowFacts(i, DESKTOP_TERMS, { deployments: contextDeployments, here: thisHostName });
         const heldStale = rowHeldStale(i);
         // Needs input: this row's own claim (waitingClaim is the only gate), and the waiting rows hidden under it.
@@ -1376,6 +1376,10 @@ function renderContextRoster(instances) {
         const meta = document.createElement("span");
         meta.className = "ctx-meta ctx-row-detail";
         meta.textContent = facts.detail;
+        // Line 2 leads with the harness's mark (slice 3d, Juan's request: which agent am I talking to): monochrome, the
+        // line's own ink, decorative (the row's title says "harness · model"); none for an unknown harness.
+        const harnessMark = createHarnessMark(document, i.harness);
+        if (harnessMark) meta.prepend(harnessMark);
         // #802: a quarantined home reads its state (text, never colour alone) and what finishes it, muted; its
         // repository and branch stay in the instance panel.
         const heldLines = [];

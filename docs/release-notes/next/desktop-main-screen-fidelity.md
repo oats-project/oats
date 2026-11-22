@@ -7,8 +7,9 @@
   - **The sidebar:**
     - **WORKSPACES** and **AGENTS** are small capitals headings, and the
       sidebar sits a shade darker than the main area in the Dark theme;
-    - each agent is two compact lines: its name, then its soul, smaller and
-      muted. The machine shows only for an agent on another machine
+    - each agent is two compact lines: its name, then its harness's mark
+      (Claude, Codex or Pi, in grey) and its soul, smaller and muted. The
+      machine shows only for an agent on another machine
       ("oats-maintainer · polaris"). This computer's name shows once, at the
       right of the status line;
     - **+ New agent** is at the end of the list of agents. Its key and its

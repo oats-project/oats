@@ -37,6 +37,16 @@ function runtimeMark(doc, { viewBox, paint, paths }) {
   for (const d of paths) { const path = doc.createElementNS(SVG_NS, 'path'); path.setAttribute('d', d); svg.append(path); }
   return svg;
 }
+/** A roster row's harness mark (slice 3d, on Juan's request relayed 2026-11-22, superseding slice 1's removal): the
+ * known harness's own mark, monochrome in the ink of the line it sits on (currentColor), decorative (aria-hidden: the
+ * row's title says "harness · model"); null for a harness this Desktop doesn't know, so an unknown one shows nothing. */
+export function createHarnessMark(doc, value) {
+  const known = runtimeMarks.get(typeof value === 'string' ? value.trim().toLowerCase() : '');
+  if (!known) return null;
+  const svg = runtimeMark(doc, known);
+  svg.setAttribute('class', 'runtime-mark ctx-harness');
+  return svg;
+}
 /** A reported harness's display name (Claude, Pi, Codex), else the value verbatim. */
 export function harnessName(value) {
   const reported = typeof value === 'string' ? value.trim() : '';

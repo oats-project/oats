@@ -395,6 +395,9 @@ body {
 .ctx-repo-label { display: block; color: var(--muted); font-family: var(--mono); font-size: 11.5px; font-weight: 400; line-height: normal; }
 /* Line 2 (the Desktop UI rework, slice 1): `<soul> · <machine>` in the UI face, muted, one line cut at its end. */
 .ctx-meta.ctx-row-detail { color: var(--muted); font-size: 11.5px; font-weight: 400; line-height: 15px; }
+/* The harness's mark first on line 2 (slice 3d, Juan's request relayed 2026-11-22): its own shape at the line's size,
+   in the line's --muted ink (currentColor), no fill or colour of its own; the dot carries the state. */
+.ctx-row-detail > .ctx-harness { display: inline-block; width: 11px; height: 11px; margin-right: 5px; vertical-align: -1.5px; color: inherit; }
 .ctx-empty { padding: 20px 10px; color: var(--muted); text-align: center; font-size: 12px; }
 /* The pinned destinations (the Desktop UI rework, slice 1): rows in the roster rows' style, one line: the icon in the
    column of the roster's dots (the nav's 4px and the row's 6px, centred 18px in), the name in the roster's name type. */

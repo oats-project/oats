@@ -252,7 +252,7 @@ test("the right-hand column: the workspace rows' needs-input mark and the foot's
   assert.deepEqual([u.style(".ws-list").marginLeft, u.style(".ws-list").marginRight], ["8px", "8px"]);
   assert.deepEqual([u.style(".ctx-list").paddingLeft, u.style(".ctx-list").paddingRight], ["8px", "8px"]);
   assert.equal(u.style(".ctx-inst").paddingRight, "10px");
-  assert.equal(u.get(".ctx-inst .ctx-runtime, .ctx-inst .runtime-badge"), null, "no harness mark on an instance row");
+  assert.equal(u.get(".ctx-inst .ctx-runtime, .ctx-inst .runtime-badge"), null, "no harness chip at a row's right: its mark leads line 2 (sidebar-slice1.test.mjs)");
   // The needs-input mark's size is the switcher's (an svg's width attribute, not a rule): 14px, on a row and on "N more below".
   const switcher = read("workspace-switcher.mjs");
   const sizes = [...switcher.matchAll(/iconElement\(document, "attention", \{ size: (\d+), className: "ws-waiting attn-mark" \}\)/g)].map(m => Number(m[1]));

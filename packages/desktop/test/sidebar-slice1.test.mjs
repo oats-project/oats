@@ -103,7 +103,7 @@ test("slice1 row shows name and soul, and the machine only for another machine's
     const r = u.row(name), copy = r.querySelector(".ctx-copy");
     assert.deepEqual([...copy.children].filter(el => !el.classList.contains("sr-only")).map(el => el.className), ["ctx-name", "ctx-meta ctx-row-detail"], `${name}: exactly two lines`);
     assert.doesNotMatch(r.textContent, /desktop-repo|b\//, `${name}: no repository, no branch`);
-    assert.equal(r.querySelector(".runtime-badge, .ctx-runtime"), null, `${name}: no harness badge`);
+    assert.equal(r.querySelector(".runtime-badge, .ctx-runtime"), null, `${name}: no harness badge (the chip): line 2's mark is all`);
     assert.equal(r.lastElementChild, copy, `${name}: nothing after the two lines`);
     assert.equal(r.firstElementChild.classList.contains("ctx-dot"), true, `${name}: the dot leads the row`);
   }
@@ -469,4 +469,29 @@ test("slice1 nouns come from desktop-terms", t => {
   assert.match(fn("emptyRosterLine"), /getBinding\("app\.quickOpenSouls", mac\)[\s\S]*emptyRosterText\(DESKTOP_NOUNS, chord \? formatChord\(chord, mac\) : ""\)/);
   assert.match(read("desktop-terms.mjs"), /export const DESKTOP_NOUNS = Object\.freeze\(\{ instance: 'agent', instances: 'agents' \}\);/, "one line to change");
   assert.doesNotMatch(html.slice(html.indexOf('<div id="nav-foot">'), html.indexOf("</aside>")), /instance|agent/i, "no noun in the foot's markup");
+});
+
+// Slice 3d (Juan's request relayed 2026-11-22: "which agent am I talking to", superseding slice 1's removal of the harness
+// badge): line 2 leads with the harness's own mark, monochrome in line 2's ink, decorative (the row's title keeps
+// "harness · model"); an unknown or unreported harness shows none. Line 1 stays the dot and the name.
+test("slice3d harness mark on line 2 for claude, codex and pi, none when unknown", t => {
+  const u = fixture(t);
+  u.render([local("by-claude"), local("by-codex", { harness: "codex", model: "gpt-5" }), remote("by-pi"),
+    local("by-other", { harness: "aider" }), local("by-none", { harness: undefined })]);
+  for (const [name, harness] of [["by-claude", "Claude"], ["by-codex", "Codex"], ["by-pi", "Pi"]]) {
+    const r = u.row(name), meta = r.querySelector(".ctx-meta.ctx-row-detail"), mark = meta.firstElementChild;
+    assert.ok(mark && mark.getAttribute("class") === "runtime-mark ctx-harness", `${name}: the mark leads line 2`);
+    assert.equal(mark.getAttribute("aria-hidden"), "true", `${name}: decorative`);
+    assert.equal(meta.querySelectorAll(".ctx-harness").length, 1);
+    assert.match(meta.textContent, /^oats-/, `${name}: then the soul, the line's text unchanged`);
+    assert.match(r.title, new RegExp(`${harness}`), `${name}: the title still names the harness`);
+    assert.equal(r.querySelectorAll(".ctx-harness").length, 1, `${name}: line 2's alone: line 1 stays the dot and the name`);
+    assert.equal(r.firstElementChild.classList.contains("ctx-dot"), true);
+  }
+  assert.equal(u.row("by-codex").title.includes("Codex · gpt-5"), true, "harness · model in the title");
+  for (const name of ["by-other", "by-none"]) assert.equal(u.row(name).querySelector(".ctx-harness, .runtime-mark"), null, `${name}: no mark for an unknown harness`);
+  // Its look: the line's size and ink (currentColor in --muted), no fill or colour of its own.
+  const rule = css.match(/^\.ctx-row-detail > \.ctx-harness \{([^}]*)\}/m)?.[1] ?? "";
+  assert.match(rule, /width: 11px; height: 11px;/); assert.match(rule, /color: inherit;/);
+  assert.doesNotMatch(rule, /background|var\(--runtime|var\(--(?!muted)/, "no colour of its own");
 });

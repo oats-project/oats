@@ -274,8 +274,9 @@ of workspaces; a thin line; three pinned rows, **Home**, **Workspace** and
 **Automations** (Automations says "1 failed" after its name, in red, while a
 schedule's last run failed: see [Scheduling agents](#scheduling-agents-and-wake-messages));
 **AGENTS**, the same small heading with the running count, over the list of
-agents, two compact lines each (the name, then the soul, smaller and muted,
-with the machine after it for an agent on another machine), then **+ New
+agents, two compact lines each (the name, then the harness's mark and the
+soul, smaller and muted, with the machine after it for an agent on another
+machine), then **+ New
 agent**, which opens the command palette on its souls (⌘P / Alt+P, named in
 its tooltip) to pick a soul and then the spawn dialog; and, over a line, the
 foot, one bar: at its left **N need you**, the
@@ -1355,8 +1356,10 @@ command palette (which still finds the instance by its name), its terminal tab,
 a screen reader and the `oats` CLI all use the instance's real name. The TUI's
 sidebar shows the same words. A long name is cut at its end with "…".
 
-A row's second line says its soul, "oats-expert", and, for an agent on another
-machine, that machine too, "oats-maintainer · polaris"; the machine alone when
+A row's second line starts with its harness's mark (Claude's, Codex's or Pi's, in
+the line's own grey; none when the harness isn't one of those) and says its soul,
+"oats-expert", and, for an agent on another machine, that machine too,
+"oats-maintainer · polaris"; the machine alone when
 its soul isn't known (this computer's rows then name it by the host name OATS
 records for it, `host.name` in its `oats-local.yaml`, else "This Mac"). This
 computer's own name shows once, at the right of the status line. That's all a row
