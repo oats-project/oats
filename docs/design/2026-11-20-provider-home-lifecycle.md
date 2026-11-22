@@ -149,12 +149,12 @@ reads the launch from its receipt and record, never from the marker.
 
 | Verb (claim) | planned | sent | running | stopped | resent |
 |---|---|---|---|---|---|
-| **inspect**, **status** (none) | not launched; — | unknown (`E_SESSION_UNAVAILABLE`; row `unreachable`); — | the provider's `inspect`; unknown when it fails; gone reads *lost* | stopped; — for inspect. Status reads the home's presence in the provider's `inspectMany` batch, for `outsideOats` alone (below): the row is stopped whatever it answers | unknown; — |
+| **inspect**, **status** (none) | not launched; — | unknown (`E_SESSION_UNAVAILABLE`; row `unreachable`); — | the provider's `inspect`; unknown when it fails; gone reads *lost* | stopped; — for inspect. Status reads the home's presence in the provider's `inspectMany` batch (below): an operator's stop is stopped whatever it answers, with `outsideOats` for a live harness; a host's stop reads running for a live harness | unknown; — |
 | **input** (none) | `E_SESSION_NOT_RUNNING`; — | `E_SESSION_NOT_RUNNING`; — | `inspect`, then `input` (below) | `E_SESSION_NOT_RUNNING`; — | `E_SESSION_NOT_RUNNING` when `stoppedAt` is set, else `E_SESSION_INPUT_FAILED`; — |
 | **stop** (`stop`) | nothing to stop | settle → planned; answers stopped | the stop rule → stopped | operator's: asks `stop {E}` again, and takes a host's stop as its own. Host's: nothing | as of *running* or of *stopped* by its `stoppedAt` (the stop rule, or `stop {E}` again), then settle → stopped; answers stopped |
 | **start** (`start`) | launch | settle, launch | `inspect`: there → `E_SESSION_RUNNING` or `E_SESSION_UNKNOWN`; gone → launch | launch | `stop {E}`, settle, launch |
 | **restart** (`start`) | launch | settle, launch | `inspect` (unknown refuses): there → the stop rule, launch; gone → launch | launch | `stop {E}`, settle, launch |
-| **resume** (`resume`) | `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` | gone → count, then `input` (the notice); there → `E_SESSION_RUNNING` / `E_RESUME_NOT_LOST` | host's stop → `input` (the notice), then `stoppedAt` cleared, then the stop receipt removed → running; operator's → `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` |
+| **resume** (`resume`) | `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` | gone → count, then `input` (the notice); there → `E_SESSION_RUNNING` / `E_RESUME_NOT_LOST` | host's stop → `inspect`; gone, or unknown → `input` (the notice), then `stoppedAt` cleared, then the stop receipt removed → running; there with a live harness → adopted: `stoppedAt` cleared and the stop receipt removed, no notice (`E_SESSION_RUNNING`) → running; operator's → `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` |
 | **retire** (`retire`) | remove | settle, scan, remove | the stop rule, scan, remove | `stop {E}` again, scan, remove | the stop rule, settle, scan, remove |
 
 **A harness that runs in a stopped home** (feature `provider-outside-oats`).
@@ -171,7 +171,11 @@ does not answer leaves the row stopped, without the key. `oats instance
 upgrade` asks the same of a stopped home with one `inspect`, and refuses a
 live harness with `E_SESSION_RUNNING`; `oats instance stop` and `oats
 retire` ask `stop {E}` again, as the table says, which is how such a harness
-is stopped.
+is stopped. That is for a home an operator stopped. A home stopped with the
+host is one OATS means to run: the provider's stop was told `reason: "host"`,
+every listing that asks providers asks about it in the same batch, a live
+harness there reads running with no key, and the resume adopts it (the table's
+resume row).
 
 **The stop rule: fence, drain, stop.** Every stop the kernel asks of a
 provider, whatever the verb, is made by one function, in this order:

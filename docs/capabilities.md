@@ -2291,15 +2291,23 @@ fails or is not one result per home, and an entry that is neither a result
 nor a refusal, fall back to that home's own `inspect`, never to "stopped".
 Without `inspectMany`, status calls `inspect` per home.
 
-**The kernel never calls `inspect` for a home OATS stopped, and never reads
-such a home as running** (below). `oats status` does include a stopped home
-in your `inspectMany` call, with the endpoint of its last session: answer it
-as any other, by what is there. A session your product started again
-without OATS (`present: true`, `running` `true` or `null`) is reported on
-the home's row as running outside OATS; the row stays stopped, and the
-kernel acts on nothing else of that answer. `oats instance upgrade` asks
-`inspect` once for a stopped home, to refuse an upgrade under a harness that
-runs.
+**A home OATS stopped is read by its record, and you are still asked what
+is there.** `oats status` includes a stopped home in your `inspectMany`
+call, with the endpoint of its last session (never in an `inspect` of its
+own): answer it as any other, by what is there. A session your product
+started again without OATS (`present: true`, `running` `true` or `null`):
+
+- in a home an operator stopped, is reported on the home's row as running
+  outside OATS. The row stays stopped, and the kernel acts on nothing else
+  of that answer;
+- in a home stopped with the host, which OATS means to run, reads running,
+  and its resume adopts it
+  ([below](#what-the-kernel-does-around-the-verbs)).
+
+`oats instance upgrade` asks `inspect` once for a stopped home, to refuse an
+upgrade under a harness that runs, and the resume of a home stopped with the
+host asks it once before its notice. `oats session inspect` never asks you
+about a stopped home.
 
 ### input
 
@@ -2318,7 +2326,7 @@ leaves such a mail unread; a scheduled wake records it not delivered.
 
 ### stop
 
-In: `{ "home", "endpoint", "graceSeconds", "launchSent"? }`. Out: `{ "stopped": true }`.
+In: `{ "home", "endpoint", "graceSeconds", "launchSent"?, "reason"? }`. Out: `{ "stopped": true }`.
 `endpoint` is `null` when the kernel has no endpoint for a session you may
 have started: a launch whose answer was lost, and a launch it sent whose
 spawn or start ended before recording your answer (it was killed while you
@@ -2329,6 +2337,15 @@ when it has one: what the launch started was created at or after it, so you
 can leave alone what was in the home's place before (a person's own session
 there). **The kernel relies on this stop**: it is the only way a session
 started by a killed spawn is ever stopped.
+
+`"reason": "host"` is on the stop that `oats host run`'s shutdown gives, and
+on no other (an operator's stop, a restart's, a retire's carry no `reason`).
+The kernel resumes that home later through `input` to this same endpoint, so
+**leave a session stopped with `reason: "host"` able to take that input**: a
+provider that archives or deletes what it stops does not do so for this one.
+The key is optional and only read: never refuse a stop that lacks it (a
+kernel before it sends none), and the result is `{ "stopped": true }` either
+way. The wire version is unchanged.
 
 ### check (optional)
 
@@ -2659,9 +2676,10 @@ the feature.
   restart's stop, a retire, `oats host run`'s shutdown) the kernel records
   `stoppedAt` in the home's receipt **before** it calls `stop`, and a start
   clears it. While it is set, inspect answers stopped (`present: false`,
-  `running: false`) without calling the provider, the status row is stopped
-  whatever the provider answers (a live harness there is reported beside
-  it, as `outsideOats`, and changes nothing), and every input (a
+  `running: false`) without calling the provider, the status row of a home an
+  operator stopped is stopped whatever the provider answers (a live harness
+  there is reported beside it, as `outsideOats`, and changes nothing), and
+  every input (a
   person's `oats session input`, a scheduled wake, a client, the messaging
   broker) is refused `E_SESSION_NOT_RUNNING` before any call. A provider
   whose product restarts a session on its next input can rely on this.
@@ -2680,9 +2698,15 @@ the feature.
   that is killed while you launch leaves it there: the home then reads as
   unknown, and the next stop, start or retire first calls `stop` with
   `endpoint: null`.
-- **Which stop it was** is on the home's stop receipt, never a field of
-  yours: `oats host run`'s shutdown is a loss that the sweep resumes, an
-  operator's stop is the intent that keeps the home down.
+- **Which stop it was** is on the home's stop receipt: `oats host run`'s
+  shutdown is a loss that the sweep resumes, an operator's stop is the
+  intent that keeps the home down. The kernel tells you the first with
+  `reason: "host"` on its stop ([stop](#stop)); it never reads that from you.
+- **A home stopped with the host whose session runs again** (you answer it
+  there, with `running` `true` or `null`: a person's message reached it, or
+  it came back) is one OATS means to run. Status reads it running from your
+  answer, and the resume adopts it: the stop is cleared and **no resume
+  notice is sent into a session that already runs**.
 - **A lost session is resumed through `input`.** A home whose session you
   answer as gone, and that OATS did not stop, is resumed by the sweep with
   one notice, and any other input to it is a resume too. The kernel counts
@@ -2690,8 +2714,8 @@ the feature.
   within one boot), refuses at the cap with `E_SESSION_NOT_RUNNING` without
   calling you, and first waits (a resume) or refuses (an input) while a
   process still works in the home. So an `inspect` precedes every `input` to
-  a home OATS did not stop (the resume of a home stopped with the host sends
-  its notice without one).
+  a home OATS did not stop, and the resume of a home stopped with the host
+  (which sends its notice when you answer the session gone, or cannot say).
   An input you refuse (`ok: false`: nothing was sent) is not counted. One
   whose call fails or answers outside the rules stays counted: you may have
   restarted the session on it.

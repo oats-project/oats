@@ -8,16 +8,25 @@
 // test/provider-home-integrity.test.mjs, beside the other upgrades of a provider home.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { listInstances } from "../lib/core.mjs";
 import { KERNEL_FEATURES } from "../lib/kernel-features.mjs";
 import { rosterGroups, writeServers } from "../lib/servers.mjs";
-import { readOutsideOats } from "../lib/session-providers.mjs";
+import { SESSION_PROVIDER_WIRE, readOutsideOats } from "../lib/session-providers.mjs";
 import { FAKE_CAPABILITY, LOST, fakeManifest, fakeProvider, providerDeployment, sessionsOf } from "./helpers/session-provider-fixture.mjs";
 
 const FEATURE = "provider-outside-oats";
+const HOST_STOP_CHILD = join(dirname(fileURLToPath(import.meta.url)), "..", "lib", "host-stop-child.mjs");
+/** The stop `oats host run` gives a home when the host stops: its own child, as the run starts it. */
+function hostStop(fx, home) {
+  const r = spawnSync(process.execPath, [HOST_STOP_CHILD, home, "20000"], { cwd: fx.dep, env: fx.env, encoding: "utf8" });
+  const answer = JSON.parse(r.stdout.trim().split("\n").pop());
+  assert.deepEqual([answer.ok, answer.stopped], [true, true], r.stdout);
+}
 const LIVE = Object.freeze({ present: true, state: "unknown", running: true });
 const receiptOf = (home) => join(dirname(home), ".oats-retirement", "baselines", `${createHash("sha256").update(home).digest("hex")}.json`);
 const runtimeOf = (home) => JSON.parse(readFileSync(receiptOf(home), "utf8")).runtime;
@@ -79,6 +88,8 @@ test("a stopped home whose provider answers a live harness carries outsideOats, 
   assert.deepEqual([recordedOf(other), Object.hasOwn(other, "outsideOats")], [STOPPED, false]);
   assert.deepEqual(fx.verbs().map((c) => [c.verb, c.request.input.homes.map((h) => h.instance)]), [["inspectMany", ["stray", "tame"]]]);
   assert.deepEqual(status.problems ?? [], [], "no problem is added for it");
+  // Text status says it on a line under the row, and of that row only.
+  assert.deepEqual(fx.cli(["status"]).stdout.split("\n").filter((line) => line.trim().startsWith("!")).map((line) => line.trim()), [`! ${outsideOf("stray").message}`]);
   // Nothing was written by the read: the receipt (its `stoppedAt`), the record, the stop receipt
   // and the resume counts are the bytes they were.
   assert.deepEqual(recordsOf(fx, stray), before);
@@ -247,4 +258,87 @@ test("oats retire of a stopped home whose harness runs stops it first, by its en
   assert.deepEqual(fx.verbs("stop").map((c) => c.request.input.endpoint.threadId), [thread]);
   assert.equal(sessionsOf(fx.events()).get(thread).running, false, "the harness that ran outside OATS was stopped");
   assert.equal(existsSync(stray), false);
+});
+
+// ------------------------------------------------------------ a home stopped with the host (A16)
+// `oats host run`'s shutdown stops a home that OATS means to run again: the sweep resumes it through
+// an input to that same session. So the provider is told which stop it is, and a harness that runs
+// in such a home again is no harness outside OATS.
+
+test("the host shutdown's stop tells the provider reason: host; an operator's stop, a retire's and a second stop carry no reason", async (t) => {
+  const fx = providerDeployment(t);
+  const hosted = await fx.launch("hosted"), operated = await fx.launch("operated"), leaving = await fx.launch("leaving");
+  fx.clearCalls();
+  hostStop(fx, hosted.home);
+  operatorStop(fx, "operated");
+  // An operator's stop of the home the host stopped takes it as its own: it asks again, with no reason.
+  operatorStop(fx, "hosted");
+  JSON.parse(fx.cli(["retire", "leaving", "--json"]).stdout);
+  const endpoint = (name) => ({ server: "http://127.0.0.1:9", threadId: `thr_${name}_${{ hosted: 1, operated: 2, leaving: 3 }[name]}` });
+  assert.deepEqual(fx.verbs("stop").map((c) => c.request.input), [
+    { home: hosted.home, endpoint: endpoint("hosted"), graceSeconds: 20, reason: "host" },
+    { home: operated.home, endpoint: endpoint("operated"), graceSeconds: 20 },
+    { home: hosted.home, endpoint: endpoint("hosted"), graceSeconds: 20 },
+    { home: leaving.home, endpoint: endpoint("leaving"), graceSeconds: 20 },
+  ]);
+  // The wire is the one it was (an optional key a provider only reads).
+  assert.equal(SESSION_PROVIDER_WIRE, "1.3");
+});
+
+test("a home stopped with the host whose harness runs again is not outside OATS: it reads running with no key, the read writes nothing, and the sweep adopts it with no resume input and nothing counted", async (t) => {
+  const fx = providerDeployment(t);
+  fx.control({ stateful: true });
+  const back = await fx.launch("back"), down = await fx.launch("down");
+  hostStop(fx, back.home);
+  hostStop(fx, down.home);
+  const thread = runtimeOf(back.home).endpoint.threadId;
+  // Both read lost, which the sweep resumes; then a person's message restarts one's harness.
+  assert.deepEqual(rowsOf(fx).map((r) => [r.instance, r.running, r.runtimeState, r.sessionEnd]), [["back", false, "stopped", "lost"], ["down", false, "stopped", "lost"]]);
+  fx.emit({ ev: "input", thread });
+  const before = recordsOf(fx, back.home);
+  assert.equal(JSON.parse(Buffer.from(before.stop, "base64").toString()).reason, "host-stop");
+
+  fx.clearCalls();
+  const [row, other] = rowsOf(fx);
+  assert.deepEqual([row.instance, row.running, row.runtimeState, row.sessionEnd ?? null, Object.hasOwn(row, "outsideOats"), row.open?.label ?? null], ["back", true, "unknown", null, false, "Open in fake"]);
+  assert.deepEqual([other.instance, other.running, other.runtimeState, other.sessionEnd, Object.hasOwn(other, "outsideOats")], ["down", false, "stopped", "lost", false]);
+  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.request.input.homes.map((h) => h.instance)]), [["inspectMany", ["back", "down"]]]);
+  assert.deepEqual(recordsOf(fx, back.home), before, "the status read wrote nothing: the home is still recorded stopped with the host");
+  // Every listing that asks providers reads it so, the sweep's own included.
+  assert.deepEqual((await fx.inEnv(() => listInstances(fx.root))).flatMap((a) => a.instances).map((r) => [r.instance, r.running]), [["back", true], ["down", false]]);
+
+  // A plan says what the sweep will answer, and changes nothing.
+  const sweep = (...flags) => fx.cli(["session", "resume", "--deployment", fx.dep, ...flags, "--json"]).json();
+  const planned = sweep("--plan");
+  assert.deepEqual(planned.result.rows.map((r) => [r.instance, r.outcome, r.backend]), [["back", "already-running", "fake"], ["down", "resumed", "fake"]]);
+  assert.deepEqual(recordsOf(fx, back.home), before);
+  // The sweep adopts the one that runs: its stop is cleared and its stop receipt removed, with no
+  // input sent into the running harness; the other is resumed by the notice, as before.
+  fx.clearCalls();
+  const swept = sweep();
+  assert.deepEqual(swept.result.rows.map((r) => [r.instance, r.outcome, r.backend]), [["back", "already-running", "fake"], ["down", "resumed", "fake"]]);
+  assert.deepEqual(fx.verbs("input").map((c) => c.instance), ["down"], "no resume notice went to the harness that already ran");
+  assert.deepEqual([runtimeOf(back.home).stoppedAt, existsSync(join(back.home, ".oats-stop.json"))], [null, false]);
+  assert.deepEqual(recordsOf(fx, back.home).resumes, before.resumes, "nothing was counted against a resume cap");
+  assert.equal(fx.events().filter((e) => e.ev === "input" && e.thread === thread).length, 1, "the one input its session got is the person's");
+  // It is an ordinary running home from here: its input is taken, and the next sweep finds it there.
+  fx.clearCalls();
+  assert.deepEqual(sweep().result.rows.map((r) => [r.instance, r.outcome]), [["back", "already-running"], ["down", "already-running"]]);
+  assert.deepEqual(fx.verbs("input"), []);
+  const text = join(fx.base, "input.txt");
+  writeFileSync(text, "hello again\n");
+  assert.equal(fx.cli(["session", "input", "--home", back.home, "--text-file", text, "--json"]).json().ok, true);
+});
+
+test("a resume by hand of a home stopped with the host whose harness runs adopts it too: E_SESSION_RUNNING, the stop cleared, nothing sent", async (t) => {
+  const fx = providerDeployment(t);
+  fx.control({ stateful: true });
+  const { home } = await fx.launch("byhand");
+  hostStop(fx, home);
+  fx.emit({ ev: "input", thread: runtimeOf(home).endpoint.threadId });
+  fx.clearCalls();
+  const answer = fx.cli(["session", "start", "--resume", "--home", home, "--json"]).json();
+  assert.deepEqual([answer.ok, answer.error.code], [false, "E_SESSION_RUNNING"]);
+  assert.match(answer.error.message, /its harness runs again on fake after its stop with the host, so that stop was cleared and no resume notice was sent/);
+  assert.deepEqual([fx.verbs().map((c) => c.verb), runtimeOf(home).stoppedAt, existsSync(join(home, ".oats-stop.json"))], [["inspect"], null, false]);
 });

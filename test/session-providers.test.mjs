@@ -342,13 +342,17 @@ test("T6: a stop with the host is resumed by the sweep; an operator's stop is no
   fx.clearCalls();
   const plan = sweep(fx, "--plan");
   assert.deepEqual(plan.result.rows.map((r) => [r.instance, r.outcome, r.backend]), [["hosted", "resumed", "fake"]]);
-  assert.deepEqual(fx.verbs(), [], "a plan calls no provider for a stopped home");
+  // A plan never asks about a home an operator stopped. Of one stopped with the host it asks, in one
+  // batch, whether its harness came back (it is then adopted, not resumed: test/provider-outside-oats.test.mjs).
+  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.request.input.homes.map((h) => h.instance)]), [["inspectMany", ["hosted"]]]);
+  fx.clearCalls();
   const swept = sweep(fx);
   assert.deepEqual(swept.result.rows.map((r) => [r.instance, r.outcome, r.backend]), [["hosted", "resumed", "fake"]], "the operator's stop has no row: it stays stopped");
   // Resumed: the stop is cleared, the endpoint kept, and one resume notice went through the provider's input.
   assert.deepEqual(runtimeOf(hosted.home), { launched: true, backend: "fake", provider: FAKE_CAPABILITY, endpoint: endpointOf("hosted", 1), stoppedAt: null });
   assert.equal(stopReceiptOf(hosted.home), null, "the stop is over: its receipt is gone");
-  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.instance, c.request.input.text ?? null]), [["input", "hosted", PROVIDER_RESUME_NOTICE]]);
+  // (The listing's batch and the resume's own read of the session, which is gone, come first.)
+  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.instance, c.request.input.text ?? null]), [["inspectMany", "hosted", null], ["inspect", "hosted", null], ["input", "hosted", PROVIDER_RESUME_NOTICE]]);
   assert.equal(PROVIDER_RESUME_NOTICE.includes("\n"), false, "one line");
   assert.equal(fx.hooks().length, 0, "nothing is launched: no launch hook runs");
   assert.deepEqual([runtimeOf(operated.home).stoppedAt !== null, rowOf(fx, "operated").sessionEnd], [true, "stopped"]);
@@ -387,7 +391,7 @@ test("T6: an operator's stop after the host's withdraws the resume; a notice tha
   setWaiting(other.home, { producer: "oats.core", waiting: true, reason: "permission", message: "Claude needs your permission to use Bash" });
   fx.clearCalls();
   await assert.rejects(fx.inEnv(() => startInstanceSession(other.home, { resume: true })), (e) => e.code === "E_SESSION_PROMPT_OPEN" && /has a permission claim open/.test(e.message));
-  assert.deepEqual(fx.verbs(), [], "nothing was sent");
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspect"], "the session was read (it is gone, so it is not adopted); nothing was sent");
   stillToResume();
   // The sweep reports the refusal, and tries again later.
   const refused = sweep(fx).result.rows.find((r) => r.instance === "retry");

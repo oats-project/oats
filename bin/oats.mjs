@@ -2797,6 +2797,8 @@ function printStatus({ root, agents: data, ws, problems }, verbose) {
       // Feature instance-background: the row is marked; it is listed like any other.
       console.log(`      • ${i.instance}${i.background === true ? " [background]" : ""}  ${statusWord(i)}  (branch ${i.branch || "?"}, ${i.work || "?"}${i.session ? `, on ${i.backend}` : ""})${i.runtimeError ? `  ${i.runtimeError}` : ""}`);
       { const lost = lostLine(i); if (lost) console.log(`          ${lost}`); }
+      // Feature provider-outside-oats: a harness runs in a provider home OATS recorded stopped.
+      if (i.outsideOats) console.log(`          ! ${i.outsideOats.message}`);
       // Feature waiting-on-you: non-null only on a running row; the reader has
       // already validated the message (one line, no control characters).
       { const waiting = waitingLine(i); if (waiting) console.log(`          ${waiting}`); }
@@ -4499,6 +4501,8 @@ async function serverCmd() {
       for (const i of g.instances) {
         console.log(`      • ${i.instance}${i.background === true ? " [background]" : ""}  ${i.missingRemotely ? "GONE on the host (saved route is stale: oats server forget)" : livenessWord(i)}${i.retirePending ? " RETIRING" : ""}${i.rollbackIncomplete ? " QUARANTINED" : ""}${i.savedRoute ? "" : "  (observed only, no saved route)"}${i.runtimeError ? `  ${i.runtimeError}` : ""}`);
         const lost = lostLine(i, { host: g.target.sshHost || g.server }); if (lost) console.log(`          ${lost}`);
+        // (Relayed in the kernel's own shape only: one line, lib/servers.mjs rowOutsideOats.)
+        if (i.outsideOats) console.log(`          ! ${i.outsideOats.message} (on the host)`);
       }
       for (const f of g.retireFailures || []) console.log(`      ! deferred retirement of ${f.instance} (${f.agent}) FAILED there${f.error?.message ? `: ${f.error.message}` : ""}${f.retry ? ` — retry on the host: ${f.retry}` : ""}`);
     }

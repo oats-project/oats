@@ -302,7 +302,7 @@ test("an upgrade of a provider home exchanges the kernel's copy of each moved mo
 test("an upgrade refuses a home recorded stopped whose harness runs, at the plan and at the apply, naming the stop; nothing is upgraded under a running harness", async (t) => {
   const { fx, home, plan, apply } = await upgradable(t, "astray");
   const live = { astray: { inspect: { result: { present: true, state: "unknown", running: true } } } };
-  const refused = (e) => e.code === "E_SESSION_RUNNING" && /a harness runs in it on fake, outside OATS; no modules were upgraded/.test(e.message) && e.message.includes("oats instance stop astray");
+  const refused = (e) => e.code === "E_SESSION_RUNNING" && /is recorded stopped, and a harness runs in it on fake; no modules were upgraded/.test(e.message) && e.message.includes("oats instance stop astray");
   const receipt = () => readFileSync(receiptOf(home), "utf8");
   const before = receipt();
   fx.control(live);
@@ -331,6 +331,18 @@ test("an upgrade refuses a home recorded stopped whose harness runs, at the plan
   fx.control({});
   await fx.inEnv(() => stopInstanceSession(home, {}));
   assert.equal((await apply({ planRevision: planned.planRevision, idempotencyKey: "astray-2" })).status, "complete");
+});
+
+// A home stopped with the host is one OATS means to run, and reads running when its harness came
+// back (no `outsideOats`): an upgrade refuses it all the same.
+test("an upgrade refuses a home stopped with the host whose harness runs again", async (t) => {
+  const { fx, home, plan } = await upgradable(t, "hostdown");
+  await fx.inEnv(() => startInstanceSession(home));
+  await fx.inEnv(() => stopInstanceSession(home, { withHost: true }));
+  assert.equal(readJson(join(home, ".oats-stop.json")).reason, "host-stop");
+  fx.control({ hostdown: { inspect: { result: { present: true, state: "unknown", running: true } } } });
+  await assert.rejects(plan(), (e) => e.code === "E_SESSION_RUNNING" && /is recorded stopped, and a harness runs in it on fake; no modules were upgraded/.test(e.message) && e.message.includes("oats instance stop hostdown"));
+  assert.equal(readJson(receiptOf(home)).runtime.stoppedAt !== null, true, "the refusal clears no stop");
 });
 
 test("an undo of a provider home's upgrade names the kernel's previous copies and rows again, in one write, and runs the previous module's hook from the kernel's copy; a second undo has nothing to go back to", async (t) => {
