@@ -165,7 +165,8 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
   - A person who has claimed a human ID and is the root's recorded creator, a team
     admin, or an owner or admin of the owning organisation.
 - **The steps.** One root at a time. The setup agent runs the commands, on the
-  root's host, as the deployment's user; the person does three things in the aweb
+  root's host, as the deployment's user, the two `aw id parent` commands from the
+  directory that holds the two files; the person does three things in the aweb
   dashboard, signed in, with the root's team selected.
   1. The person chooses **Adopt** from the root's Chat or Messages pane. The
      dashboard shows an invitation id (I), the person's ID (H) and a domain (D).
@@ -184,10 +185,11 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
 - **The check.**
   - `aw --identity-home <root>/.aw who --json` answers `outcome: "nearest_human"`
     with the person's `human_id`.
-  - `oats aweb setup --check-only --json` lists the root in `roots` with that
-    attribution and no warnings.
+  - `oats aweb setup --soul <soul> --check-only --json`, run as the provider runs
+    its setup commands (in the deployment directory, outside an instance session),
+    lists the root in `roots` with that attribution and no warnings.
   - Spawn one throwaway instance from that team and read its `attributedHuman` in
-    `oats status --json`, or **Owning human** in the Desktop
+    `oats status --dir <deployment> --json`, or **Owning human** in the Desktop
     ([Attributed human](desktop-cli-api.md#attributed-human)); then retire it.
 - **Limits.**
   - One adoption per root key. A host with several roots adopts each one.

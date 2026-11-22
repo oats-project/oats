@@ -291,10 +291,13 @@ README, “Human attribution”; the contract:
   - `response.json`: the person downloads it from the dashboard and puts it
     there, or gives it to you to put there.
   Never write a token, a key or an email into them, that directory or a message.
-- **Commands.** You run every command, from that directory, as the deployment's
-  user. The person does three things in the aweb dashboard, signed in, with the
-  root's team selected. Set needs-input (`oats instance attention --message …`)
-  each time you wait on them, and clear it when they answer.
+- **Commands.** You run every command, as the deployment's user: the two
+  `aw id parent` commands from that directory (they name the root with
+  `--identity-home`, and the directory only holds the files), and every `oats`
+  command as this skill's inputs say. The person does three things in the aweb
+  dashboard, signed in, with the root's team selected. Set needs-input
+  (`oats instance attention --message …`, from your instance home) each time you
+  wait on them, and clear it when they answer.
   1. Ask the person to choose **Adopt** in the root's Chat or Messages pane and
      to give you the three values it shows: the invitation id (`I`), their ID
      (`H`) and the domain (`D`). Copy them exactly; never derive them.
@@ -316,10 +319,13 @@ README, “Human attribution”; the contract:
 - **Success:**
   - `aw --identity-home <root>/.aw who --json` answers `outcome:
     "nearest_human"` and the person's `human_id`;
-  - `oats aweb setup --check-only --json`: the root's entry in `roots` has that
-    attribution and no warnings;
-  - one throwaway instance spawned in `L` shows the person in `attributedHuman`
-    (`oats status --json`) or as **Owning human** in the Desktop. Retire it.
+  - `oats aweb setup --soul S --check-only --json`, run as `/oats-aweb` §8 runs
+    setup commands (in D, outside an instance session): the root's entry in
+    `roots` has that attribution and no warnings;
+  - one throwaway instance spawned in `L` (`/oats-operate`, from your instance
+    home with `--dir D`) shows the person in `attributedHuman`
+    (`oats status --dir D --json`) or as **Owning human** in the Desktop.
+    Retire it.
 - **Next:** tell the operator the limits below; return to `/oats-onboarding`'s
   completion check.
 - **Limits:** one adoption per root key. No un-adopt: the way out is removing
