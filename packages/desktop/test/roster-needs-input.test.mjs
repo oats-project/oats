@@ -255,7 +255,7 @@ test("the second line: soul · machine only, no repository, branch, PR or harnes
   assert.equal(meta.className, "ctx-meta ctx-row-detail");
   assert.equal(meta.previousElementSibling.className, "ctx-name", "under the name");
   assert.equal(meta.textContent, "desktop-dev");
-  assert.equal(meta.children.length, 0, "one line of text");
+  assert.deepEqual([...meta.children].map(el => el.getAttribute("class")), ["runtime-mark ctx-harness"], "one line of text, after the harness's mark (slice 3d)");
   assert.equal(u.row("dev-a").querySelector(".ctx-pr, .runtime-badge, .ctx-runtime"), null, "no chip and no harness badge");
   assert.doesNotMatch(u.row("dev-a").textContent, /#317|feature|desktop-repo/);
   // A row whose state is unknown: the same two facts; its reason is its title and description.

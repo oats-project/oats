@@ -317,7 +317,7 @@ test("sidebar metadata uses the reported soul and the machine, no repository, br
   u.render([{ ...roster[0], agent: "soul-<literal>", branch: "feature/<branch>", harness: "pi" }]);
   const row = u.doc.querySelector(".ctx-inst");
   assert.equal(row.querySelector(".ctx-meta").textContent, "soul-<literal>");
-  assert.equal(row.querySelector(".ctx-meta").children.length, 0);
+  assert.deepEqual([...row.querySelector(".ctx-meta").children].map(el => el.getAttribute("class")), ["runtime-mark ctx-harness"], "its text, after Pi's mark (slice 3d), no markup from the row");
   assert.doesNotMatch(row.textContent, /feature|desktop-repo/, "neither the branch nor the repository is on the row");
   assert.equal(row.querySelector(".ctx-runtime, .runtime-badge"), null, "no harness badge on the row");
   assert.equal(row.querySelector("literal, branch"), null);
