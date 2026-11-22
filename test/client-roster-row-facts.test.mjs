@@ -13,8 +13,8 @@ test("slice1 shared row facts", () => {
   assert.deepEqual(rosterRowFacts({ instance: "desktop-mockups", agent: "oats-desktop-developer", running: true, repoName: "oats", harness: "claude" }, TERMS),
     { name: "Desktop mockups", detail: "oats-desktop-developer", soul: "oats-desktop-developer", machine: "Here", local: true });
   // A remote row: its server's label, whatever its state (a machine that didn't answer keeps both lines).
-  assert.deepEqual(rosterRowFacts({ instance: "release-0-68", agent: "oats-maintainer", server: "srv-1", repoName: "polaris", running: null, serverUnreached: true }, TERMS),
-    { name: "Release 0 68", detail: "oats-maintainer · polaris", soul: "oats-maintainer", machine: "polaris", local: false });
+  assert.deepEqual(rosterRowFacts({ instance: "release-0-68", agent: "reviewer", server: "srv-1", repoName: "build-host", running: null, serverUnreached: true }, TERMS),
+    { name: "Release 0 68", detail: "reviewer · build-host", soul: "reviewer", machine: "build-host", local: false });
   // A row with no soul known: the machine alone.
   assert.deepEqual(rosterRowFacts({ instance: "forgotten-one", running: false }, TERMS),
     { name: "Forgotten one", detail: "Here", soul: null, machine: "Here", local: true });
@@ -22,23 +22,23 @@ test("slice1 shared row facts", () => {
 
 test("the machine: a tagged deployment's machine; else a server's label, else its id; else this machine", () => {
   assert.equal(rowMachine({ server: "srv-2" }, TERMS), "srv-2");
-  const deployments = [{ id: "/a", machine: null, local: true }, { id: "ssh://b", machine: "polaris", local: false }];
-  assert.equal(rowMachine({ deployment: { id: "ssh://b" } }, TERMS, { deployments }), "polaris");
+  const deployments = [{ id: "/a", machine: null, local: true }, { id: "ssh://b", machine: "build-host", local: false }];
+  assert.equal(rowMachine({ deployment: { id: "ssh://b" } }, TERMS, { deployments }), "build-host");
   assert.equal(rowMachine({ deployment: { id: "/a" } }, TERMS, { deployments }), "Here");
   assert.equal(rowMachine({ deployment: { id: "/gone" } }, TERMS, { deployments }), "Here");
   // A view's remote row carries `server` and its repository in `repoName`: its deployment's machine comes first.
-  assert.equal(rowMachine({ deployment: { id: "ssh://b" }, server: "b-id", repoName: "web" }, TERMS, { deployments }), "polaris");
+  assert.equal(rowMachine({ deployment: { id: "ssh://b" }, server: "b-id", repoName: "web" }, TERMS, { deployments }), "build-host");
   assert.equal(rowMachine({ deployment: { id: "/gone" }, server: "b-id", repoName: "label" }, TERMS, { deployments }), "label", "untagged: the server's label");
   assert.equal(rowMachine({}, TERMS), "Here");
   // This machine's own name, when the caller knows it (the kernel's host.name): a local row, and a row of this
   // machine's own deployment whatever label it carries; a remote row keeps its own; an unusable name falls back.
   assert.equal(rowMachine({}, TERMS, { here: "falcon" }), "falcon");
   assert.equal(rowMachine({ deployment: { id: "/a" } }, TERMS, { deployments: [{ id: "/a", machine: "Here", local: true }], here: "falcon" }), "falcon");
-  assert.equal(rowMachine({ deployment: { id: "ssh://b" } }, TERMS, { deployments, here: "falcon" }), "polaris");
+  assert.equal(rowMachine({ deployment: { id: "ssh://b" } }, TERMS, { deployments, here: "falcon" }), "build-host");
   assert.equal(rowMachine({ server: "srv-2" }, TERMS, { here: "falcon" }), "srv-2");
   assert.equal(rowMachine({}, TERMS, { here: "" }), "Here"); assert.equal(rowMachine({}, TERMS, { here: "a\u0000b" }), "Here");
   assert.equal(rosterRowFacts({ instance: "x", agent: "s" }, TERMS, { here: "falcon" }).detail, "s", "this machine's row: its soul alone");
-  assert.equal(rosterRowFacts({ instance: "x", agent: "s", deployment: { id: "ssh://b" } }, TERMS, { deployments, here: "falcon" }).detail, "s · polaris");
+  assert.equal(rosterRowFacts({ instance: "x", agent: "s", deployment: { id: "ssh://b" } }, TERMS, { deployments, here: "falcon" }).detail, "s · build-host");
 });
 
 test("only display lines: a withheld or multi-line soul or label never reaches the row", () => {

@@ -1,8 +1,8 @@
 /** The two text facts of an instance row in a sidebar roster (the Desktop UI rework, slice 1), shared so the
  * Terminal UI can draw the same row: line 1 the display name, line 2 `<soul>`, and ` · <machine>` only for a row of
- * another machine (slice 3d, the prototype's "oats-maintainer · polaris": on this computer's rows it was noise).
+ * another machine (slice 3d, the prototype's "reviewer · build-host": on this computer's rows it was noise).
  *
- *   rosterRowFacts(row, terms, { deployments, here }) -> { name, detail, soul, machine }
+ *   rosterRowFacts(row, terms, { deployments, here }) -> { name, detail, soul, machine, local }
  *
  *   name     the instance name as words (instance-display-name.mjs), else the name as reported, else ''
  *   soul     the row's soul (`agent`), one display line, else null (a forgotten or malformed row)
@@ -26,8 +26,9 @@ import { serverLabel } from './remote-address.mjs';
 import { displayLine, DETAIL_WITHHELD } from './display-text.mjs';
 import { requireTerms } from './client-terms.mjs';
 
-/** One display line, or null for nothing to show (absent, not text, withheld). */
-const shown = (value) => {
+/** One display line, or null for nothing to show (absent, not text, withheld): the rule for every machine or soul
+ * name the Desktop shows, here and on the status line (status-line.mjs `setMachine`). */
+export const shownLine = (value) => {
   const line = typeof value === 'string' ? displayLine(value) : null;
   return line && line !== DETAIL_WITHHELD ? line : null;
 };
@@ -42,10 +43,10 @@ function rowPlace(row, terms, { deployments = [], here = null } = {}) {
   requireTerms(terms, 'rowMachine');
   const id = typeof row?.deployment?.id === 'string' ? row.deployment.id : null;
   const deployment = id && Array.isArray(deployments) ? deployments.find((d) => d?.id === id) : null;
-  const server = typeof row?.server === 'string' && row.server ? shown(serverLabel(row)) ?? shown(row.server) : null;
-  const thisMachine = shown(here) ?? terms.thisMachine;
+  const server = typeof row?.server === 'string' && row.server ? shownLine(serverLabel(row)) ?? shownLine(row.server) : null;
+  const thisMachine = shownLine(here) ?? terms.thisMachine;
   if (deployment?.local === true) return { machine: thisMachine, local: true };
-  const other = shown(deployment?.machine) ?? server;
+  const other = shownLine(deployment?.machine) ?? server;
   return other ? { machine: other, local: false } : { machine: thisMachine, local: true };
 }
 
@@ -54,7 +55,7 @@ export function rosterRowFacts(row, terms, { deployments = [], here = null } = {
   requireTerms(terms, 'rosterRowFacts');
   const instance = typeof row?.instance === 'string' ? row.instance : '';
   const name = instanceDisplayName(instance) || instance;
-  const soul = shown(row?.agent);
+  const soul = shownLine(row?.agent);
   const { machine, local } = rowPlace(row, terms, { deployments, here });
   return { name, detail: soul && local ? soul : [soul, machine].filter(Boolean).join(' · '), soul, machine, local };
 }

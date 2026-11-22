@@ -1360,7 +1360,7 @@ A row's second line starts with its harness's mark (Claude's, Codex's or Pi's,
 small, in a grey lighter than the line's text; none when the harness isn't one of
 those) and says its soul,
 "oats-expert", and, for an agent on another machine, that machine too,
-"oats-maintainer · polaris"; the machine alone when
+"reviewer · build-host"; the machine alone when
 its soul isn't known (this computer's rows then name it by the host name OATS
 records for it, `host.name` in its `oats-local.yaml`, else "This Mac"). This
 computer's own name shows once, at the right of the status line. A limit for
