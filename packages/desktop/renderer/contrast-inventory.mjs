@@ -64,7 +64,8 @@ export const TEXT_PAIRS = Object.freeze([
 export const GRAPHIC_PAIRS = Object.freeze([
   ...["bg", "surface", "surface-2"].map(bg => Object.freeze(["graph-edge", bg])),
   // The sidebar's dotted sibling link (shell.css .ctx-guide.link-*), the sibling cue alone on its column (issue 1312),
-  // on every row fill: plain, hovered and selected.
+  // on every row fill: plain, hovered and selected. The harness mark on a row's line 2
+  // (shell.css .ctx-row-detail > .ctx-harness, slice 3d) is drawn in --tree-link too, on the same fills, so it relies on these pairs.
   ...["sidebar", "surface", "surface-2", "sel"].map(bg => Object.freeze(["tree-link", bg])),
   // The roster's solid lines (shell.css .ctx-guide line, elbow, down): drawn for related work only, so the line is the
   // sign of it (the related-work lines), on every row fill it crosses: plain, hovered and selected.
