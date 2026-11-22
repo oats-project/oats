@@ -14,7 +14,7 @@ export const needYouName = (count, nouns) => `${count} ${count === 1 ? `${nouns.
 /** The empty roster: "No agents yet · Alt+P starts one", with the spawn action's chord when it has one. */
 export const emptyRosterText = (nouns, chord = "") => `No ${nouns.instances} yet${chord ? ` · ${chord} starts one` : ""}`;
 
-/** Wire the foot's controls in `doc`: `#sidebar-need-you` and `#sidebar-spawn`. `onNeedYou()` runs on the count's
+/** Wire `#sidebar-need-you` (the foot's count) and paint `#sidebar-spawn` (New agent, at the roster's end) in `doc`. `onNeedYou()` runs on the count's
  * activation. Returns { paint(count) }: the count of the current workspace's rows that need you (0 hides it). */
 export function createSidebarFoot(doc, { nouns, onNeedYou = () => {} }) {
   const need = doc.getElementById("sidebar-need-you"), spawn = doc.getElementById("sidebar-spawn");

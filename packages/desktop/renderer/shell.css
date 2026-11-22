@@ -120,8 +120,8 @@ body {
    2026-10-26). */
 #nav { display: flex; flex: none; flex-direction: column; padding: 8px 8px 4px; gap: 1px; }
 /* The foot (the Desktop UI rework, slice 1): one bar. "N need you" at the left, the needs-input mark and its count
-   (hidden at 0); New instance, a small button, and ? (Keyboard shortcuts), a 24px box, at the right. Each has no
-   ground at rest: hover and keyboard focus give it theirs. */
+   (hidden at 0); ? (Keyboard shortcuts), a 22px circle, at the right (New agent ends the roster since slice 3d).
+   Neither has a ground at rest: hover and keyboard focus give it theirs. */
 #nav-foot { margin-top: auto; flex: none; display: flex; flex-direction: column; padding: 8px 14px 10px;
             border-top: 1px solid var(--border); }
 #sidebar-bar { display: flex; align-items: center; gap: 4px; min-height: 24px; padding: 0; }

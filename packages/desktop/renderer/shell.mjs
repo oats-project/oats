@@ -3189,7 +3189,7 @@ function focusFirstNeedingYou() {
 
 /** sidebar.focusFilter, kept under its id (a keys.json rebind still applies) since the roster's filter went
  * (the command palette finds an instance by name): focus the roster's current row, else rosterEntry's next best
- * (an empty roster's Spawn instance). */
+ * (an empty roster's New agent, at its end). */
 function focusRoster() {
   tabOpenIntents.invalidate(); // also when the roster already has DOM focus
   contextPanel.setFocusMode(false);
