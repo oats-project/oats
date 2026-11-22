@@ -44,7 +44,7 @@ const markup = `<div id="app"><aside id="sidebar">
   <section id="ws-list" class="ws-list"><div id="ws-options" class="ws-options"><ul class="ws-group">
     <li class="ws-option-row"><button class="ws-option ws-current" aria-current="true">One</button></li>
     <li class="ws-option-row"><button class="ws-option ws-other">Two</button></li></ul></div></section>
-  <nav id="nav"><button class="nav-item active" aria-current="page"><span class="icon"></span><span class="label">Workspace overview</span></button><button class="nav-item"><span class="icon"></span><span class="label">Automations</span><span class="nav-failed"><span class="nav-failed-dot" aria-hidden="true"></span><span class="sr-only">, a run failed</span></span></button></nav>
+  <nav id="nav"><button class="nav-item active" aria-current="page"><span class="icon"></span><span class="label">Workspace overview</span></button><button class="nav-item"><span class="icon"></span><span class="label">Automations</span><span class="nav-failed"><span class="sr-only">, </span><span class="nav-failed-count">1 failed</span></span></button></nav>
   <section id="instance-roster">
     <div class="ctx-head"><span>Instances</span><span class="ctx-count"></span></div>
     <div class="ctx-list"><div class="ctx-tree-row"><button class="ctx-inst">Row</button></div></div></section>

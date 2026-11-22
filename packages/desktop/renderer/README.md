@@ -1766,7 +1766,7 @@ the keyboard audit are documented in `../docs/desktop-keyboard.md`; this
 section is the module map.
 
 - **⌘F / Alt+F** reveals the sidebar and focuses the instance roster (its current row; on an empty roster, the
-    foot's New agent); **⌘N /
+    New agent at its end); **⌘N /
   Ctrl+Shift+N** opens Workspace's soul chooser, never automatically spawning
   an instance. Visible hints and tooltips follow the effective bindings
   (including explicit unbinds). Existing user overrides are retained.

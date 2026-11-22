@@ -3501,7 +3501,7 @@ for (const [id, action, label] of [['instance.openSplit', 'open-split', 'Instanc
 /** The leader's target (leaderTargetId) where the palette was opened from: its instance entries act on it. */
 let paletteTargetId = null;
 registerAction({ id: "app.palette", label: "Open the command palette", context: "global", run: () => { tabOpenIntents.invalidate(); if (!palette.isOpen()) paletteTargetId = leaderTargetId(document.activeElement); palette.toggle(); } });
-// New agent (Alt+N, the Desktop UI rework's key; decided 2026-11-19): what the foot's New agent and Alt+P do.
+// New agent (Alt+N, the Desktop UI rework's key; decided 2026-11-19): what New agent at the roster's end and Alt+P do.
 registerAction({ id: "app.newAgent", label: `New ${DESKTOP_NOUNS.instance}`, context: "global", run: () => openPaletteOnSouls() });
 // New agent (slice 4): the palette on its souls ("+"); pressed again while it is open, it closes it.
 registerAction({ id: "app.quickOpenSouls", label: `New ${DESKTOP_NOUNS.instance}: choose a soul`, context: "global", run: () => openPaletteOnSouls() });

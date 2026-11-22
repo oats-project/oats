@@ -132,7 +132,7 @@ export const homeCSS = `
 .home-tile-name { font-size:12px; font-weight:600; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .home-tile-count { font-size:16px; font-weight:650; line-height:20px; color:var(--fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .home-tile-count.pending { font-size:12.5px; font-weight:500; color:var(--muted); }
-/* Automations' failure mark: the sidebar row's --danger dot (shell.css .nav-failed-dot), at the tile's corner. */
+/* Automations' failure mark: a --danger dot at the tile's corner (the sidebar's row says "N failed" since slice 3d). */
 .home-tile-failed { position:absolute; top:9px; right:10px; width:8px; height:8px; border-radius:50%; background:var(--danger); }
 .home-dot { flex:none; width:8px; height:8px; border-radius:50%; background:var(--faint); }
 .home-dot.on { background:var(--live); }

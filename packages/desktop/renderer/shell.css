@@ -409,8 +409,8 @@ body {
   padding: 0 10px 0 8px; cursor: pointer;
 }
 .nav-item > .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A run failed (automations-failure.mjs): a --danger dot at the row's far right, its words for assistive tech. */
-/* Slice 3d: after the name, "1 failed" in the failure ink, as the prototype's (the count is the failed rows'). */
+/* A run failed (automations-failure.mjs; slice 3d): after the name, "1 failed" in the failure ink, as the prototype's
+   (the count is the failed rows'), shown and said. */
 .nav-failed { flex: none; display: inline-flex; align-items: center; margin-left: 2px; color: var(--danger); font-weight: 400; }
 .nav-item:hover { background: var(--surface-2); color: var(--fg); }
 .nav-item.active { background: var(--sel); color: var(--fg); font-weight: 500; }

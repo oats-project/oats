@@ -1,5 +1,6 @@
-/* The Automations row's failure mark (the Desktop UI rework, slice 1): the sidebar's pinned Automations row shows a
-   --danger dot, and says "a run failed", while any automation of the workspace failed its last run. Read from the
+/* The Automations row's failure mark (the Desktop UI rework, slice 1; slice 3d's words): the sidebar's pinned
+   Automations row says how many failed after its name ("1 failed", also in its accessible name), and Home's tile shows
+   a --danger dot, while any automation of the workspace failed its last run. Read from the
    kernel's own list answers (POST /api/automations { kind, action: "list" }, the read the Automations page makes), the
    existing `lastRun` facts only: no new field.
 
