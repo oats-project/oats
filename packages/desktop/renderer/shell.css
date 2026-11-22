@@ -579,18 +579,15 @@ body {
   appearance: none; border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
 }
 .tab-trigger:focus-visible { background: var(--sel); }
-/* dot · name · branch · number (Redesign v3): the name keeps priority, the branch
-   takes what is left and ellipsizes first.
-   The number (.tab-num, tab-numbers.mjs) never crowds out the name: the trigger
-   wraps, and only its first line shows. Line breaking sees the name at no more
-   than --tab-name-min (its flex basis; it grows from there to its whole width,
-   max-content, never past it), so while the strip has room the name shows whole
-   beside its number; under pressure the name truncates down to that minimum,
-   and only then does the number move to the second line, clipped by the
-   trigger's overflow: it disappears whole, never as a half-clipped digit. A name
-   shorter than the minimum keeps its number for as long as both fit, at the
-   floor too. The basis is also never more than the line holds after the widest
-   lead (an artifact's 14px icon and its gap), so the name itself never wraps.
+/* number · name · dot · branch (slice 3d, the prototype's "1 name ●"; the DOM keeps dot · name · branch · number,
+   CSS order lays the line out): the name keeps priority, the branch takes what is left and ellipsizes first.
+   The floor (--tab-min) budgets the number, the name's minimum and the dot, so none of them is crowded out: the
+   trigger wraps, and only its first line shows. Line breaking sees the name at no more than --tab-name-min (its
+   flex basis; it grows from there to its whole width, max-content, never past it), so while the strip has room the
+   name shows whole between its number and its dot; under pressure the name truncates down to that minimum, and
+   what still does not fit is the trailing branch, which wraps to the second line and is clipped by the trigger's
+   overflow, whole. The basis is also never more than the line holds after the widest lead (the number and its gap,
+   then an artifact's 14px icon and its gap), so the name itself never wraps.
    The ::before is a zero-width spacer of the trigger's full height, its gap
    cancelled: the first line is the whole tab tall, so its content stays
    vertically centred, and everything that wraps lands below the clip. */
@@ -602,8 +599,8 @@ body {
 .tab-dot.off { box-sizing: border-box; background: transparent; border: 1.5px solid var(--faint); }
 .tab-dot.on[data-instance-color] { background: var(--instance-color); }
 .tab-dot.off[data-instance-color] { border-color: var(--instance-color); }
-/* Needs input (#558): the alert glyph takes the dot's slot. 12px wide with a -5px end margin, it advances
-   exactly as the 7px dot does, so the label never moves; --warn as a graphic (≥ 3:1 on every tab background). */
+/* Needs input (#558): the alert glyph takes the dot's slot, after the name. 12px wide with a -5px end margin, it
+   advances exactly as the 7px dot does, so nothing after it moves; --warn as a graphic (≥ 3:1 on every tab background). */
 .tab-attn { width: 12px; height: 12px; flex: none; margin-right: -5px; display: grid; place-items: center; color: var(--warn); }
 .tab-attn > .shell-icon { width: 12px; height: 12px; }
 .tab-icon { flex: none; display: grid; place-items: center; color: var(--muted); }
@@ -624,7 +621,8 @@ body {
 .tab-detail { order: 2; min-width: 0; flex: 1 1 0px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
               margin-left: -8px; padding-left: 8px;
               font-weight: 400; font-size: 11px; line-height: normal; font-family: inherit; color: var(--faint); }
-/* The go-to-tab number, last: quiet text like the branch (--faint holds 4.5:1 on --bg, --surface and --sel). */
+/* The go-to-tab number, first (slice 3d): quiet text like the branch (--faint holds 4.5:1 on --bg, --surface and
+   --sel); the active tab's is the accent (above). */
 .tab-num { order: -1; flex: none; white-space: nowrap; font-weight: 400; font-size: 11px; line-height: normal; font-family: inherit; color: var(--faint); }
 .tab-num[hidden] { display: none; }
 /* Slice 3d, the prototype's tab: "1 name ●". The number leads, the status dot (or the Needs input glyph) follows the
