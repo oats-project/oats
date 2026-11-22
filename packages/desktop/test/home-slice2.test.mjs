@@ -83,7 +83,8 @@ test("slice2 board groups", async (t) => {
   // Needs you, newest claim first, with its message; Running in the roster's order; stopped and unknown are counted only.
   assert.deepEqual(needs(), ["waits-new", "waits-old"]);
   assert.match(u.agentButton("waits-new").textContent, /Newer question/);
-  assert.match(u.agentButton("waits-new").textContent, /oats-expert · falcon/, "soul · machine, as the roster says it");
+  assert.match(u.agentButton("waits-new").textContent, /oats-expert/, "its soul, as the roster says it (slice 3d: no machine for a local agent)");
+  assert.doesNotMatch(u.agentButton("waits-new").textContent, /· falcon/);
   assert.deepEqual([...u.el.querySelectorAll('[data-home-section="running"] [data-home-agent]')].map((b) => b.dataset.homeAgent), ["runs-new", "runs-old"]);
   assert.doesNotMatch(u.agentButton("runs-new").textContent, /\brunning\b/, "the heading says it, not each row");
   assert.equal(summary(), "7 agents · 2 running · 2 need you · 1 stopped · 2 status unknown");
@@ -153,7 +154,7 @@ test("slice2 home agents flat list", async (t) => {
   u.openButton("agents").click();
   const listed = [...u.el.querySelectorAll("[data-home-agent]")];
   assert.deepEqual(listed.map((b) => b.dataset.homeAgent), ["lone", "child", "lead-one", "plain-runs"], "every agent, running or stopped, newest first");
-  assert.match(listed[1].textContent, /Child.*oats-expert · falcon.*stopped · started by Lead one/s);
+  assert.match(listed[1].textContent, /Child.*oats-expert.*stopped · started by Lead one/s);
   // The roster's dot grammar (the lead's return): a waiting row wears the needs-input mark and says "needs you" first.
   assert.match(listed[2].textContent, /needs you · started by Joan/);
   assert.match(listed[2].querySelector(".home-row-copy").textContent, /Pick the copy/, "its claim's message, as merged (review r1, slice 2b)");

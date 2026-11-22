@@ -268,19 +268,22 @@ workspace on a server: `name — server`).
 
 ## Workspaces
 
-The sidebar, top to bottom: the **Workspace** heading, with **Add local
-workspace…** (the **+**) at its end, over the list of workspaces; a thin line;
-three pinned rows, **Home**, **Workspace** and **Automations**, drawn like the
-instance rows (Automations shows a red dot, and says "a run failed", while a
+The sidebar, top to bottom: the **WORKSPACES** heading, small and in
+capitals, with **Add local workspace…** (the **+**) at its end, over the list
+of workspaces; a thin line; three pinned rows, **Home**, **Workspace** and
+**Automations** (Automations says "1 failed" after its name, in red, while a
 schedule's last run failed: see [Scheduling agents](#scheduling-agents-and-wake-messages));
-another line; **Agents**, a heading with the running count over the list of
-agents; and, over a line, the foot, one bar: at its left **N need you**, the
+**AGENTS**, the same small heading with the running count, over the list of
+agents, two compact lines each (the name, then the harness's mark and the
+soul, smaller and muted, with the machine after it for an agent on another
+machine), then **+ New
+agent**, which opens the command palette on its souls (⌘P / Alt+P, named in
+its tooltip) to pick a soul and then the spawn dialog; and, over a line, the
+foot, one bar: at its left **N need you**, the
 number of this workspace's agents that need input (hidden when none does;
 it takes you to the first of them, in the roster's order, expanding a collapsed
 parent or opening the Background section to show it), and at its right
-**New agent**, which opens the command palette on its souls (⌘P / Alt+P,
-named in its tooltip) to pick a soul and then the spawn dialog, and **?**,
-which opens the keyboard shortcuts. The foot has no mark, no Hide sidebar
+**?**, which opens the keyboard shortcuts. The foot has no mark, no Hide sidebar
 button and no settings menu: ⌘B / Ctrl+Shift+B and the palette's **Sidebar:
 toggle (hide/show)** hide the sidebar, and the palette's **Appearance…** and
 **Keyboard shortcuts…** open the two sheets for the theme and the fonts, and
@@ -302,7 +305,7 @@ have. It is one centred column. Top to bottom:
   doesn't guess it.
 - **The workspace, as one row of tiles**, each a button with its count:
   **Agents**, **Souls**, **Capabilities**, **Teams**, **Machines** and
-  **Automations** (with the sidebar row's red dot while a run failed). A count
+  **Automations** (with a red dot while a run failed; the sidebar's row says "1 failed"). A count
   still being read says "Counting…", and one that couldn't be read says so;
   nothing is guessed. Enter opens that part of the Workspace page on its tab
   (Machines on its List), and Esc there comes back to Home; Automations opens
@@ -339,7 +342,9 @@ agents (the sidebar's tree, the one you used last on top), the sections
 and one **New agent: <soul>** row per soul. Type to narrow it; `>` keeps only
 the commands and `+` only the souls.
 
-**The status line** runs along the bottom of the window. It shows the three
+**The status line** runs along the bottom of the window, one quiet 28px line:
+each key in the window's own type, what it does muted after it, a small dot
+between two. It shows the three
 keys most useful where you are (in the roster: Enter, Stop and the palette;
 in a terminal: the leader, close tab and the palette); on the Workspace pages,
 their own keys: **↑↓ move · Enter open · v table · Esc Home** on Souls (**v
@@ -360,8 +365,8 @@ The instances have no search field: to find one by name, type it in the
 command palette, which opens its terminal. ⌘F / Alt+F (**Focus the
 instance roster**) and `/` in the sidebar go to the roster's current row;
 on an empty roster, which says "No agents yet · ⌘P starts one" (New
-agent's key, Alt+P off macOS, as you bound it), to its one action, the foot's **New
-agent**, where F6 lands too (a failed read's **Retry** comes first).
+agent's key, Alt+P off macOS, as you bound it), to its one action, **New
+agent** at its end, where F6 lands too (a failed read's **Retry** comes first).
 
 The sidebar is 288px wide, and you can make it wider or narrower: drag its
 right edge, between 240px and 480px (or 45% of the window, when that is
@@ -918,8 +923,9 @@ it is marked **Refused at each run** or **Needs YOLO** in the list. A wake to
 an agent on a session provider is sent as its session's input and never
 starts a stopped one: it is delivered once the agent runs again. Launching an agent is reported separately from
 the end of its run; neither means its task succeeded. While a schedule's last
-run is **launch failed** or **invalid**, the sidebar's **Automations** shows a
-red dot, and a screen reader hears "Automations, a run failed"; it clears once
+run is **launch failed** or **invalid**, the sidebar's **Automations** says how
+many after its name in red ("1 failed"), and a screen reader hears "Automations,
+1 failed"; it clears once
 no last run has failed. The sidebar reads both lists when the workspace opens
 and then at most once a minute. A trigger's last run carries no outcome, so a
 trigger never marks it.
@@ -1127,8 +1133,8 @@ agent writes it with `oats instance board set` and `oats instance board ask`,
 [docs/desktop-cli-api.md](desktop-cli-api.md)), an agent's terminal tab is its
 **agent view**. Top to bottom:
 
-1. **Facts**: what the agent keeps in your view, one compact row each,
-   `label · value unit`, with "updated 4 min ago". At most three show; **N
+1. **Facts**: what the agent keeps in your view, one raised strip each, a
+   pin, then `label · value unit`, with "updated 4 min ago" at its right. At most three show; **N
    more** unfolds the rest. While the view is open the Desktop reads each
    fact's history once, and a number that changed draws a small sparkline.
    A link shows as the agent's, with its host (`dev-a says: github.com…`). A
@@ -1148,8 +1154,9 @@ agent writes it with `oats instance board set` and `oats instance board ask`,
    keeps its terminal smaller, and a number types only while at least two of
    its lines show. It gives up exactly the rows the
    facts and the questions take.
-3. **Questions**: one at a time, under the terminal, so they sit right by the
-   agent's input line at the bottom of its screen. "question 2 of 3", ‹ › and
+3. **Questions**: one at a time, on a card under the terminal, so they sit right by the
+   agent's input line at the bottom of its screen: "needs you" and when it was
+   asked, the question, then its options as boxed rows, each with its number. "question 2 of 3", ‹ › and
    the dots turn them, and so do Tab / Shift+Tab and ← / → while the questions
    have the focus. A question with context has a **Context** fold, attributed
    to the agent, as plain text: **c** opens or closes it and moves the focus
@@ -1349,14 +1356,19 @@ command palette (which still finds the instance by its name), its terminal tab,
 a screen reader and the `oats` CLI all use the instance's real name. The TUI's
 sidebar shows the same words. A long name is cut at its end with "…".
 
-A row's second line says its soul and the machine it runs on, "oats-expert ·
-falcon", or the machine alone when its soul isn't known. This computer's rows
-name it by the host name OATS records for it (`host.name` in its
-`oats-local.yaml`); with none recorded, they say "This Mac". A limit for now:
-the Desktop learns that name from its Automations read, so these rows say
-"This Mac" until that read answers, and keep saying it where the installed
-OATS serves no automations ([#1972](https://github.com/oats-project/oats/issues/1972)
-tracks reading it from the status answer instead). That's all a row
+A row's second line starts with its harness's mark (Claude's, Codex's or Pi's,
+small, in a grey lighter than the line's text; none when the harness isn't one of
+those) and says its soul,
+"oats-expert", and, for an agent on another machine, that machine too,
+"oats-maintainer · polaris"; the machine alone when
+its soul isn't known (this computer's rows then name it by the host name OATS
+records for it, `host.name` in its `oats-local.yaml`, else "This Mac"). This
+computer's own name shows once, at the right of the status line. A limit for
+now: the Desktop learns that name from its Automations read, so until that read
+answers the status line shows no name and a soul-less local row says "This Mac",
+and both stay so where the installed OATS serves no automations
+([#1972](https://github.com/oats-project/oats/issues/1972) tracks reading it
+from the status answer instead). That's all a row
 says: its repository, branch, pull request and harness are in the instance
 panel. Rows are 44px tall, the dot centred on the row.
 
@@ -1371,7 +1383,7 @@ Elsewhere, a dot that flags a problem is red: a keyboard shortcut that clashes
 with another (on the foot's **?**), Setup or Teams needing attention (on the
 Workspace page's tabs), the sidebar's **Automations** while a last run failed,
 and an automation that doesn't run here or a scheduler that is off.
-The row keeps its soul and machine on its second line. A screen reader
+The row keeps its second line (its soul, and another machine's name). A screen reader
 hears "Needs input" after the name, then the reason and when it started
 waiting; the instance panel's **Needs input** section gives the reason, how
 long it has waited and the agent's message. A collapsed parent shows "! N
@@ -1537,7 +1549,7 @@ letters. So `oats-desktop-expert` is DE, `oats-okf--knowledge-maintainer` KM and
 
 Soul cards, the soul page, the context panel and the spawn dialog show each
 instance's or soul's harness as a small badge, next to its name (a roster row
-doesn't: its second line is its soul and machine). The badge names the harness the CLI reports; it says nothing about
+doesn't: its second line is its soul, and its machine when that is another one). The badge names the harness the CLI reports; it says nothing about
 whether that harness is installed or signed in. Pi's badge is the official
 pi.dev press-kit mark (MIT), and Claude Code's is Anthropic's Claude spark
 in the theme's colours. The Codex badge is OATS's own drawing, not OpenAI's

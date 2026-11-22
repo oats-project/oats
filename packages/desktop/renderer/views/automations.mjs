@@ -24,7 +24,7 @@ import { cliStatus, cliCard, cliKnownUnavailable, onCliChange, cliAboveTested, a
 export const automationsCSS = `
 .automations { display:flex; flex-direction:column; height:100%; min-height:0; min-width:0; background:var(--bg); color:var(--fg); container-type:inline-size; }
 .automations[hidden], .automations [hidden] { display:none !important; }
-.auto-header { flex:none; display:flex; align-items:center; gap:12px; height:48px; padding:0 calc(16px + var(--main-trail-inset, 0px)) 0 calc(16px + var(--main-lead-inset, 0px)); box-sizing:border-box; border-bottom:1px solid var(--border); background:var(--surface); }
+.auto-header { flex:none; display:flex; align-items:center; gap:12px; height:var(--bar-h); padding:0 calc(16px + var(--main-trail-inset, 0px)) 0 calc(16px + var(--main-lead-inset, 0px)); box-sizing:border-box; border-bottom:1px solid var(--border); background:var(--surface); }
 .auto-header h2 { display:flex; align-items:baseline; gap:8px; margin:0; font-size:14px; font-weight:700; }
 .auto-count { color:var(--muted); font-size:10.5px; line-height:normal; font-family:var(--mono,monospace); font-weight:400; }
 /* The Automations bar, in the Workspace's tab style: Schedules | Triggers, then the page's tools. */

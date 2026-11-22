@@ -20,7 +20,7 @@ import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
 import { iconElement, shellIcon, mountShellIcons } from "../renderer/shell-icons.mjs";
 import { createSidebarFoot, newLabel, needYouText, needYouName, emptyRosterText } from "../renderer/sidebar-foot.mjs";
 import { DESKTOP_NOUNS, DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
-import { createAutomationsFailure, failedRuns, lastRunFailed, FAILED_RUN_TEXT, AUTOMATIONS_FAILURE_TTL } from "../renderer/automations-failure.mjs";
+import { createAutomationsFailure, failedRuns, lastRunFailed, AUTOMATIONS_FAILURE_TTL } from "../renderer/automations-failure.mjs";
 import { automationRow } from "../renderer/automation-rows.mjs";
 import { createWorkspaceSwitcher } from "../renderer/workspace-switcher.mjs";
 import { createFocusRegions } from "../renderer/focus-regions.mjs";
@@ -85,17 +85,17 @@ function fixture(t, { context: extra = {}, nouns = DESKTOP_NOUNS } = {}) {
   return { dom, doc, context, render, list, row, lines, menu, need: doc.getElementById("sidebar-need-you") };
 }
 
-test("slice1 row shows name and soul · machine only", t => {
+test("slice1 row shows name and soul, and the machine only for another machine's (slice 3d)", t => {
   const u = fixture(t);
   u.render([local("desktop-mockups"), remote("release-0-68"), local("forgotten-one", { agent: undefined, running: false })]);
-  assert.deepEqual(u.lines("desktop-mockups"), ["Desktop mockups", "oats-desktop-developer · This Mac"], "a running local row: this machine in DESKTOP_TERMS' words");
+  assert.deepEqual(u.lines("desktop-mockups"), ["Desktop mockups", "oats-desktop-developer"], "a running local row: its soul alone (slice 3d, superseding slice 1's this-machine name)");
   assert.deepEqual(u.lines("release-0-68"), ["Release 0 68", "oats-maintainer · polaris"], "a remote row: its server's label");
   assert.deepEqual(u.lines("forgotten-one"), ["Forgotten one", "This Mac"], "a row with no soul known: the machine only");
-  // Joan's call: a local row names this machine as a remote row names its own, by the host name the kernel reports
-  // (oats-local.yaml host.name, read from the schedule list); with none known, today's term.
+  // Slice 3d (Joan's 1:1 ask, superseding slice 1's call that a local row names this machine): a local row says no
+  // machine, whatever host name the kernel reports (oats-local.yaml host.name, read from the schedule list).
   u.context.thisHostName = "falcon";
   u.render([local("desktop-mockups"), remote("release-0-68")]);
-  assert.deepEqual(u.lines("desktop-mockups"), ["Desktop mockups", "oats-desktop-developer · falcon"]);
+  assert.deepEqual(u.lines("desktop-mockups"), ["Desktop mockups", "oats-desktop-developer"]);
   assert.deepEqual(u.lines("release-0-68"), ["Release 0 68", "oats-maintainer · polaris"], "a remote row keeps its own");
   u.context.thisHostName = null;
   u.render([local("desktop-mockups"), remote("release-0-68"), local("forgotten-one", { agent: undefined, running: false })]);
@@ -103,7 +103,7 @@ test("slice1 row shows name and soul · machine only", t => {
     const r = u.row(name), copy = r.querySelector(".ctx-copy");
     assert.deepEqual([...copy.children].filter(el => !el.classList.contains("sr-only")).map(el => el.className), ["ctx-name", "ctx-meta ctx-row-detail"], `${name}: exactly two lines`);
     assert.doesNotMatch(r.textContent, /desktop-repo|b\//, `${name}: no repository, no branch`);
-    assert.equal(r.querySelector(".runtime-badge, .ctx-runtime"), null, `${name}: no harness badge`);
+    assert.equal(r.querySelector(".runtime-badge, .ctx-runtime"), null, `${name}: no harness badge (the chip): line 2's mark is all`);
     assert.equal(r.lastElementChild, copy, `${name}: nothing after the two lines`);
     assert.equal(r.firstElementChild.classList.contains("ctx-dot"), true, `${name}: the dot leads the row`);
   }
@@ -131,11 +131,11 @@ test("slice1 row shows name and soul · machine only", t => {
   assert.equal(u.row("desktop-mockups").hasAttribute("aria-description"), false);
   assert.equal(u.doc.querySelector(".ctx-tip, [role=tooltip]"), null);
   // A row with no terminal has no instance panel: its runtime error, with its speaker, is its title and description
-  // (the hover card said it), and line 2 stays soul · machine.
+  // (the hover card said it), and line 2 stays its soul (a local row's: no machine).
   u.render([local("broken", { running: false, runtimeError: "the last start failed", runtimeErrorOrigin: "kernel" })]);
   assert.equal(u.row("broken").title, "OATS says: the last start failed\nRepository: desktop-repo · Branch: b/broken · Claude", "its error, then its facts");
   assert.equal(u.row("broken").getAttribute("aria-description"), "OATS says: the last start failed");
-  assert.deepEqual(u.lines("broken"), ["Broken", "oats-desktop-developer · This Mac"]);
+  assert.deepEqual(u.lines("broken"), ["Broken", "oats-desktop-developer"]);
   u.render([remote("far", { running: null, serverUnreached: true, runtimeError: "ssh failed" })]);
   // The two facts are the shared function's (packages/client roster-row-facts.mjs), never the row's own composition.
   assert.equal(u.lines("far")[1], rosterRowFacts(remote("far"), DESKTOP_TERMS).detail);
@@ -284,37 +284,45 @@ test("slice1 automations failure mark", async t => {
   assert.equal(failedRuns(answer(schedule("unknown"))), 0, "an unknown outcome is no failure");
   assert.equal(lastRunFailed(automationRow({ qualifiedId: "t", lastRun: { outcome: "launch-failed" } }, "trigger")), false, "a trigger's last run carries no outcome of its own");
   assert.equal(failedRuns([["schedule", null], ["trigger", "garbage"]]), 0, "an answer that isn't a list counts none");
-  // The shipped nav build and its mark: absent, then "Automations, a run failed", then cleared.
+  // The shipped nav build and its mark: absent, then "Automations, 1 failed" (its shown words in its name), then cleared.
   const dom = new JSDOM(html);
   t.after(() => dom.window.close());
   const doc = dom.window.document;
   const block = shell.slice(shell.indexOf('const navEl = document.getElementById("nav");'), shell.indexOf("// The foot's controls use exactly the same registry"));
-  const { paintAutomationsFailed } = runInNewContext(`${block}\n({ paintAutomationsFailed })`, { document: doc, NAV, PINNED, shellIcon, runAction() {}, FAILED_RUN_TEXT });
+  const { paintAutomationsFailed } = runInNewContext(`${block}\n({ paintAutomationsFailed })`, { document: doc, NAV, PINNED, shellIcon, runAction() {} });
   const row = doc.querySelector('#nav .nav-item[data-view="automations"]');
-  const name = () => row.textContent.replace(/\s+/g, " ").trim();
+  // Its accessible name: the text that is not aria-hidden.
+  const name = () => [...row.querySelectorAll("*")].filter(el => !el.children.length && !el.closest("[aria-hidden=true]")).map(el => el.textContent).join("").replace(/\s+/g, " ").trim();
   assert.equal(name(), "Automations"); assert.equal(row.querySelector(".nav-failed"), null);
-  paintAutomationsFailed(true);
-  assert.equal(name(), "Automations, a run failed", "its accessible name says so");
-  assert.equal(row.querySelector(".nav-failed-dot").getAttribute("aria-hidden"), "true", "the dot is decoration beside the words");
+  paintAutomationsFailed(1);
+  assert.equal(name(), "Automations, 1 failed", "its accessible name says what it shows (the label in the name, WCAG 2.5.3)");
+  // Slice 3d: the prototype's "1 failed" after the name, shown and said; a comma before it for assistive tech only.
+  const count = row.querySelector(".nav-failed-count");
+  assert.deepEqual([count.textContent, count.getAttribute("aria-hidden")], ["1 failed", null], "the count shown and said");
+  assert.equal(count.previousElementSibling.className, "sr-only");
   assert.equal(row.querySelectorAll(".nav-failed").length, 1);
-  paintAutomationsFailed(true); assert.equal(row.querySelectorAll(".nav-failed").length, 1, "never doubled");
-  paintAutomationsFailed(false);
+  paintAutomationsFailed(2); assert.equal(row.querySelectorAll(".nav-failed").length, 1, "never doubled");
+  assert.equal(row.querySelector(".nav-failed-count").textContent, "2 failed", "the count follows");
+  assert.equal(name(), "Automations, 2 failed");
+  paintAutomationsFailed(0);
   assert.equal(name(), "Automations"); assert.equal(row.querySelector(".nav-failed"), null, "cleared when no last run is failed");
   // The reader: a latest-intent token per read; a new workspace clears the mark at once; a late answer for another
   // workspace, or a failure, changes nothing; re-read after the TTL.
-  let clock = 0; const verdicts = [], gates = [];
-  const reader = createAutomationsFailure({ now: () => clock, onChange: v => verdicts.push(v),
+  let clock = 0; const verdicts = [], counts = [], gates = [];
+  const reader = createAutomationsFailure({ now: () => clock, onChange: v => verdicts.push(v), onCount: n => counts.push(n),
     read: (ws, kind) => new Promise((resolve, reject) => gates.push({ ws, kind, resolve, reject })) });
   const failing = { schedules: [{ qualifiedId: "s", kind: "spawn", lastRun: { outcome: "launch-failed" } }] }, fine = { schedules: [], triggers: [] };
   let pending = reader.refresh("A");
   assert.deepEqual(gates.map(g => [g.ws, g.kind]), [["A", "schedule"], ["A", "trigger"]]);
   gates[0].resolve(failing); gates[1].resolve({ triggers: [] }); await pending;
   assert.deepEqual(verdicts, [true]); assert.equal(reader.failed, true);
+  assert.deepEqual(counts, [1], "the count, told as it changes (slice 3d: the row's \"1 failed\")"); assert.equal(reader.count, 1);
   await reader.refresh("A"); assert.equal(gates.length, 2, "within the TTL: no read");
   clock = AUTOMATIONS_FAILURE_TTL;
   pending = reader.refresh("A"); const late = gates.slice(2);
   const switched = reader.refresh("B");
   assert.deepEqual(verdicts, [true, false], "a switch clears the mark at once");
+  assert.deepEqual(counts, [1, 0], "and its count");
   late[0].resolve(failing); late[1].resolve({ triggers: [] }); await pending;
   assert.equal(reader.failed, false, "A's late answer changes nothing for B");
   const forB = gates.slice(4); forB[0].reject(new Error("down")); forB[1].resolve(fine); await switched;
@@ -330,7 +338,7 @@ test("slice1 automations failure mark", async t => {
   hostName = null; await named.refresh("A"); assert.deepEqual(hosts, ["falcon", null], "a machine with no name recorded: null");
   hostName = "falcon"; await named.refresh("A"); fail = true; await named.refresh("A");
   assert.deepEqual(hosts, ["falcon", null, "falcon"], "a failed read hands on nothing");
-  assert.match(shell, /onHost: \(name\) => \{ if \(name !== thisHostName\) \{ thisHostName = name;/);
+  assert.match(shell, /onHost: \(name\) => \{ statusLine\.setMachine\(name\); if \(name !== thisHostName\) \{ thisHostName = name;/, "and the key bar's right shows it (slice 3d)");
   assert.match(shell, /rosterRowFacts\(i, DESKTOP_TERMS, \{ deployments: contextDeployments, here: thisHostName \}\)/);
   // The shell's wiring: a workspace switch (or the chooser) revokes the mark and the read in flight at once, before
   // the new workspace's roster answers, so a late answer for the workspace left marks nothing.
@@ -413,7 +421,8 @@ test("slice1 foot and palette", t => {
   const dom = new JSDOM(html);
   t.after(() => dom.window.close());
   const doc = dom.window.document;
-  assert.deepEqual([...doc.getElementById("sidebar-bar").children].map(el => el.id), ["sidebar-need-you", "sidebar-spawn", "sidebar-help"]);
+  assert.deepEqual([...doc.getElementById("sidebar-bar").children].map(el => el.id), ["sidebar-need-you", "sidebar-help"]);
+  assert.equal(doc.getElementById("sidebar-spawn").parentElement, doc.getElementById("instance-roster"), "New agent at the roster's end (slice 3d)");
   assert.equal(doc.querySelector("#sidebar .sidebar-brand, #sidebar img, #sidebar-settings, #sidebar-toggle"), null, "no brand mark, no cog, no Hide sidebar in the foot");
   assert.equal(doc.getElementById("sidebar-help").dataset.action, "app.shortcuts", "? opens the keyboard shortcuts sheet that exists today");
   assert.equal(doc.getElementById("sidebar-spawn").dataset.action, "app.quickOpenSouls", "New opens the existing spawn flow");
@@ -462,4 +471,35 @@ test("slice1 nouns come from desktop-terms", t => {
   assert.match(fn("emptyRosterLine"), /getBinding\("app\.quickOpenSouls", mac\)[\s\S]*emptyRosterText\(DESKTOP_NOUNS, chord \? formatChord\(chord, mac\) : ""\)/);
   assert.match(read("desktop-terms.mjs"), /export const DESKTOP_NOUNS = Object\.freeze\(\{ instance: 'agent', instances: 'agents' \}\);/, "one line to change");
   assert.doesNotMatch(html.slice(html.indexOf('<div id="nav-foot">'), html.indexOf("</aside>")), /instance|agent/i, "no noun in the foot's markup");
+});
+
+// Slice 3d (Juan's request relayed 2026-11-22: "which agent am I talking to", superseding slice 1's removal of the harness
+// badge): line 2 leads with the harness's own mark, monochrome in line 2's ink, decorative (the row's title keeps
+// "harness · model"); an unknown or unreported harness shows none. Line 1 stays the dot and the name.
+test("slice3d harness mark on line 2 for claude, codex and pi, none when unknown", t => {
+  const u = fixture(t);
+  u.render([local("by-claude"), local("by-codex", { harness: "codex", model: "gpt-5" }), remote("by-pi"),
+    local("by-other", { harness: "aider" }), local("by-none", { harness: undefined })]);
+  for (const [name, harness] of [["by-claude", "Claude"], ["by-codex", "Codex"], ["by-pi", "Pi"]]) {
+    const r = u.row(name), meta = r.querySelector(".ctx-meta.ctx-row-detail"), mark = meta.firstElementChild;
+    assert.ok(mark && mark.getAttribute("class") === "runtime-mark ctx-harness", `${name}: the mark leads line 2`);
+    assert.equal(mark.getAttribute("aria-hidden"), "true", `${name}: decorative`);
+    assert.equal(meta.querySelectorAll(".ctx-harness").length, 1);
+    assert.match(meta.textContent, /^oats-/, `${name}: then the soul, the line's text unchanged`);
+    assert.match(r.title, new RegExp(`${harness}`), `${name}: the title still names the harness`);
+    assert.equal(r.querySelectorAll(".ctx-harness").length, 1, `${name}: line 2's alone: line 1 stays the dot and the name`);
+    assert.equal(r.firstElementChild.classList.contains("ctx-dot"), true);
+  }
+  assert.equal(u.row("by-codex").title.includes("Codex · gpt-5"), true, "harness · model in the title");
+  for (const name of ["by-other", "by-none"]) assert.equal(u.row(name).querySelector(".ctx-harness, .runtime-mark"), null, `${name}: no mark for an unknown harness`);
+  // Its look (Joan, 2026-11-22: "monochrome a bit more discrete"): 10px, in the faint --tree-link (held at 3:1 on the
+  // row's fills, and lighter than line 2's --muted: slice3d-main-screen.test.mjs), no fill or harness colour of its own.
+  const rule = css.match(/^\.ctx-row-detail > \.ctx-harness \{([^}]*)\}/m)?.[1] ?? "";
+  assert.match(rule, /width: 10px; height: 10px;/);
+  assert.doesNotMatch(rule, /background|color|var\(--runtime/, "no harness colour of its own, and no text colour: it is a graphic");
+  // Painted as a graphic, fill or stroke as each mark is drawn (Claude's and Pi's filled, Codex's stroked).
+  assert.match(css, /^\.ctx-row-detail > \.ctx-harness\[fill="currentColor"\] \{ fill: var\(--tree-link\); \}$/m);
+  assert.match(css, /^\.ctx-row-detail > \.ctx-harness\[stroke="currentColor"\] \{ stroke: var\(--tree-link\); \}$/m);
+  for (const [name, paint] of [["by-claude", "fill"], ["by-pi", "fill"], ["by-codex", "stroke"]])
+    assert.equal(u.row(name).querySelector(".ctx-harness").getAttribute(paint), "currentColor", `${name}: its ${paint} takes the rule`);
 });

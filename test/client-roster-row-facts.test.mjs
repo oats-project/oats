@@ -1,5 +1,6 @@
 // The two text facts of a roster row (packages/client/roster-row-facts.mjs), shared by the Desktop's sidebar and,
-// later, the Terminal UI's: line 1 the display name, line 2 `<soul> · <machine>` (the Desktop UI rework, slice 1).
+// later, the Terminal UI's: line 1 the display name, line 2 `<soul>`, with ` · <machine>` for another machine's row (the
+// Desktop UI rework, slice 1; slice 3d: this machine's name only where it says something, as the prototype has it).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { rosterRowFacts, rowMachine } from "../packages/client/roster-row-facts.mjs";
@@ -8,15 +9,15 @@ import { clientTerms } from "../packages/client/client-terms.mjs";
 const TERMS = clientTerms({ name: "Client", self: "this client", selfInitial: "This client", update: "the client", thisMachine: "Here" });
 
 test("slice1 shared row facts", () => {
-  // A running local row: its soul and this machine.
+  // A running local row: its soul alone (slice 3d); the machine is still given, and that it is this one.
   assert.deepEqual(rosterRowFacts({ instance: "desktop-mockups", agent: "oats-desktop-developer", running: true, repoName: "oats", harness: "claude" }, TERMS),
-    { name: "Desktop mockups", detail: "oats-desktop-developer · Here", soul: "oats-desktop-developer", machine: "Here" });
+    { name: "Desktop mockups", detail: "oats-desktop-developer", soul: "oats-desktop-developer", machine: "Here", local: true });
   // A remote row: its server's label, whatever its state (a machine that didn't answer keeps both lines).
   assert.deepEqual(rosterRowFacts({ instance: "release-0-68", agent: "oats-maintainer", server: "srv-1", repoName: "polaris", running: null, serverUnreached: true }, TERMS),
-    { name: "Release 0 68", detail: "oats-maintainer · polaris", soul: "oats-maintainer", machine: "polaris" });
+    { name: "Release 0 68", detail: "oats-maintainer · polaris", soul: "oats-maintainer", machine: "polaris", local: false });
   // A row with no soul known: the machine alone.
   assert.deepEqual(rosterRowFacts({ instance: "forgotten-one", running: false }, TERMS),
-    { name: "Forgotten one", detail: "Here", soul: null, machine: "Here" });
+    { name: "Forgotten one", detail: "Here", soul: null, machine: "Here", local: true });
 });
 
 test("the machine: a tagged deployment's machine; else a server's label, else its id; else this machine", () => {
@@ -36,7 +37,8 @@ test("the machine: a tagged deployment's machine; else a server's label, else it
   assert.equal(rowMachine({ deployment: { id: "ssh://b" } }, TERMS, { deployments, here: "falcon" }), "polaris");
   assert.equal(rowMachine({ server: "srv-2" }, TERMS, { here: "falcon" }), "srv-2");
   assert.equal(rowMachine({}, TERMS, { here: "" }), "Here"); assert.equal(rowMachine({}, TERMS, { here: "a\u0000b" }), "Here");
-  assert.equal(rosterRowFacts({ instance: "x", agent: "s" }, TERMS, { here: "falcon" }).detail, "s · falcon");
+  assert.equal(rosterRowFacts({ instance: "x", agent: "s" }, TERMS, { here: "falcon" }).detail, "s", "this machine's row: its soul alone");
+  assert.equal(rosterRowFacts({ instance: "x", agent: "s", deployment: { id: "ssh://b" } }, TERMS, { deployments, here: "falcon" }).detail, "s · polaris");
 });
 
 test("only display lines: a withheld or multi-line soul or label never reaches the row", () => {

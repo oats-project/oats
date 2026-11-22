@@ -55,7 +55,7 @@ ${machinesCSS}
 ${computerTeamsCSS}
 ${syncCSS}
 ${capabilityWarningsCSS}
-.workspace-header { height:var(--bar-h); min-height:48px; flex:none; display:flex; align-items:stretch; flex-wrap:nowrap; gap:22px; padding:0 calc(16px + var(--main-trail-inset, 0px)) 0 calc(16px + var(--main-lead-inset, 0px)); border-bottom:1px solid var(--border); background:var(--surface); box-sizing:border-box; }
+.workspace-header { height:var(--bar-h); min-height:var(--bar-h); flex:none; display:flex; align-items:stretch; flex-wrap:nowrap; gap:22px; padding:0 calc(16px + var(--main-trail-inset, 0px)) 0 calc(16px + var(--main-lead-inset, 0px)); border-bottom:1px solid var(--border); background:var(--surface); box-sizing:border-box; }
 .workspace-header[hidden] { display:none; }
 .oats-view .workspace-header .field { min-height:28px; height:28px; padding:4px 8px; font-size:12px; }
 ${tabBarCSS('.workspace-tabs')}

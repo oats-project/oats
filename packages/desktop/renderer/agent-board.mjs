@@ -54,7 +54,9 @@ export const DETAIL_NOTES = Object.freeze({
 export const BOARD_MALFORMED = "This agent's board could not be read.";
 export const boardDropped = n => `${n} ${n === 1 ? 'entry' : 'entries'} of this agent's board could not be shown.`;
 /** The zone's key hint: the shown question's own number keys. */
-export const zoneHint = count => `1–${count} put the answer on the input line · Enter there sends it · c the context · Esc back to the terminal`;
+/** Slice 3d: the prototype's short form, at the right of the card's head: a number puts the answer on the terminal's
+ * input line, Enter there sends it, c the context, Esc back to the terminal. */
+export const zoneHint = count => `1–${count} choose · Enter sends · c context · Esc terminal`;
 const HIDDEN_STORE = 'oats.desktop.board.hidden';
 
 /** The person's hidden facts on this computer, by agent home: `{ [home]: { [key]: value } }` in `storage`
@@ -113,11 +115,18 @@ export const CONTEXT_MIN_PX = 54;
 /** The least of the terminal that must be on screen for a number to type: a terminal the board squeezed below it
  * (a pane too short for the board) is not one the person can see their answer land in. */
 export const TERMINAL_TYPE_MIN_PX = 36;
+/** An element's height in its column, its vertical margins included: slice 3d's question card sits inset in the pane
+ * (8px above, 12px below), and that inset is taken from the terminal as surely as the card is. */
+export function outerHeight(el) {
+  const style = el.ownerDocument?.defaultView?.getComputedStyle?.(el);
+  const margin = style ? (Number.parseFloat(style.marginTop) || 0) + (Number.parseFloat(style.marginBottom) || 0) : 0;
+  return el.offsetHeight + margin;
+}
 /** The pane's height for the board (its room) and the height the board takes now, from the DOM. */
-const defaultMeasure = {
+export const defaultMeasure = {
   room: pane => pane.clientHeight > 0 ? pane.clientHeight - Math.max(TERMINAL_MIN_PX, pane.clientHeight * TERMINAL_MIN_SHARE) : null,
-  // Everything in the pane but the terminal: the facts, the zone and a waiting row beside them.
-  used: pane => [...pane.children].reduce((n, el) => n + (el.classList.contains('term-wrap') ? 0 : el.offsetHeight), 0),
+  // Everything in the pane but the terminal: the facts, the zone and a waiting row beside them, margins included.
+  used: pane => [...pane.children].reduce((n, el) => n + (el.classList.contains('term-wrap') ? 0 : outerHeight(el)), 0),
   height: el => el.offsetHeight,
   // The terminal's height on screen; null where nothing is laid out (no measure: not a reason to refuse).
   terminal: pane => { const wrap = pane.querySelector(':scope > .term-wrap'); return wrap && pane.clientHeight > 0 ? wrap.offsetHeight : null; },
@@ -180,7 +189,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   const next = node(doc, 'button', 'agent-q-turn', '›'); next.type = 'button'; next.setAttribute('aria-label', 'Next question'); next.title = 'Next question (Tab, →)';
   nav.append(prev, dots, next);
   const age = node(doc, 'span', 'agent-q-age');
-  head.append(tag, nav, age);
+  // The card's head leads with the needs-input mark (slice 3d: the prototype's "● needs you"; yellow is that mark only).
+  head.append(iconElement(doc, 'attention', { size: 10, className: 'attn-mark agent-q-mark' }), tag, nav, age);
   const text = node(doc, 'p', 'agent-q-text'); text.dir = 'auto'; text.id = `agent-q-${Math.random().toString(36).slice(2, 10)}`;
   const options = node(doc, 'ol', 'agent-q-options');
   const note = node(doc, 'p', 'agent-q-note'); note.setAttribute('role', 'status');
@@ -190,8 +200,10 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   const contextSummary = node(doc, 'summary', null, 'Context');
   const contextBody = node(doc, 'div', 'agent-q-context-body');
   context.append(contextSummary, contextBody);
-  const hint = node(doc, 'p', 'agent-q-hint');
-  zone.append(head, text, options, typedNote, note, context, hint);
+  // The keys sit at the head's right (slice 3d, the prototype's "1–2 choose · type · Enter sends").
+  const hint = node(doc, 'span', 'agent-q-hint');
+  head.append(hint);
+  zone.append(head, text, options, typedNote, note, context);
   zone.setAttribute('aria-describedby', text.id);
   prev.addEventListener('click', () => turn(-1));
   next.addEventListener('click', () => turn(1));
@@ -303,6 +315,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
 
   function paintFact(f) {
     const li = node(doc, 'li', 'agent-fact'); li.dataset.key = f.key;
+    // The strip's mark (slice 3d, the prototype's pinned facts): a pin, decorative, before the fact.
+    li.append(iconElement(doc, 'pin', { size: 12, className: 'shell-icon agent-fact-pin' }));
     const body = node(doc, 'span', 'agent-fact-focus'); body.tabIndex = -1;
     const label = node(doc, 'span', 'agent-fact-label', f.withheld ? displayLine(f.label) : f.label);
     const value = node(doc, 'b', 'agent-fact-value', f.withheld ? displayLine(f.value) : f.value); value.dir = 'auto';
@@ -488,7 +502,9 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   }
   /** The budget: the terminal keeps at least TERMINAL_MIN_PX (or TERMINAL_MIN_SHARE) of the pane. Where the board would
    * take more, it gives way in steps: the facts show one (the rest behind "N more", which the person may still open),
-   * then the zone drops its key hint, then an open context gives up the rest, down to three lines (it scrolls in its
+   * then the zone drops its key hint (on the head's line since slice 3d, so this step frees the head's width, not
+   * height: the card is already a line shorter than before at every step),
+   * then an open context gives up the rest, down to three lines (it scrolls in its
    * fold). On a repaint, a resize and the context's toggle. Where even that is too tall (a pane too short for the
    * board), a number refuses to type until the terminal is on screen again (TERMINAL_TYPE_MIN_PX). */
   function fit() {

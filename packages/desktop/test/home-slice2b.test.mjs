@@ -87,7 +87,7 @@ test("slice2b needs you first, capped at 8 with show all", (t) => {
   const first = u.el.querySelector('[data-home-agent="agent-10"]');
   assert.ok(first.querySelector(".attn-mark"), "the needs-input mark");
   assert.equal(first.querySelector(".home-row-name").textContent, "Agent 10");
-  assert.equal(first.querySelector(".home-row-meta").textContent, "oats-expert · falcon");
+  assert.equal(first.querySelector(".home-row-meta").textContent, "oats-expert", "a local agent: its soul alone (slice 3d)");
   assert.equal(first.querySelector(".home-row-message").textContent, "Question 10");
   const showAll = () => u.el.querySelector('[data-home-more="needs"]');
   const more = showAll();

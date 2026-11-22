@@ -18,16 +18,18 @@ const contrast = (a, b) => { const x = luminance(a), y = luminance(b); return (M
 const token = value => value.replace(/^.*var\(--([\w-]+)\).*$/, '$1');
 
 // [text selector, its painted surface's selector, the surface token]
+// Slice 3d: each fact is a strip on --surface over the facts' --bg ground; the question is a card on --surface, its
+// options boxed rows on --bg with their number badges on --surface-2.
 const TEXTS = [
-  ['.agent-fact-label', '.agent-facts', 'surface'], ['.agent-fact-value', '.agent-facts', 'surface'], ['.agent-fact-updated', '.agent-facts', 'surface'],
+  ['.agent-fact-label', '.agent-fact', 'surface'], ['.agent-fact-value', '.agent-fact', 'surface'], ['.agent-fact-updated', '.agent-fact', 'surface'],
   ['.agent-fact-link', '.agent-fact-link', 'surface'], ['.agent-fact-says', '.agent-fact-link', 'surface'], ['.agent-fact-host', '.agent-fact-link', 'surface'],
-  ['.agent-fact-hide', '.agent-fact-hide', 'surface'], ['.agent-facts-fold', '.agent-facts-fold', 'surface'],
-  ['.agent-fact-url-text', '.agent-facts', 'surface'], ['.agent-fact-url-open', '.agent-fact-url-open', 'surface'],
-  ['.agent-q-tag', '.agent-questions', 'attn-bg'], ['.agent-q-age', '.agent-questions', 'attn-bg'], ['.agent-q-text', '.agent-questions', 'attn-bg'],
-  ['.agent-q-option:not(:disabled)', '.agent-q-option:not(:disabled)', 'surface'], ['.agent-q-option:not(:disabled) .agent-q-num', '.agent-q-option:not(:disabled) .agent-q-num', 'surface-2'],
-  ['.agent-q-option:disabled', '.agent-q-option:disabled', 'surface'], ['.agent-q-option:disabled .agent-q-num', '.agent-q-option:disabled .agent-q-num', 'surface-2'],
-  ['.agent-q-turn', '.agent-q-turn', 'surface'], ['.agent-q-note', '.agent-questions', 'attn-bg'], ['.agent-q-hint', '.agent-questions', 'attn-bg'], ['.agent-q-typed', '.agent-questions', 'attn-bg'],
-  ['.agent-q-context > summary', '.agent-questions', 'attn-bg'], ['.agent-q-says', '.agent-questions', 'attn-bg'], ['.agent-q-context-text', '.agent-questions', 'attn-bg'],
+  ['.agent-fact-hide', '.agent-fact', 'surface'], ['.agent-facts-fold', '.agent-facts', 'bg'],
+  ['.agent-fact-url-text', '.agent-fact-url', 'surface'], ['.agent-fact-url-open', '.agent-fact-url-open', 'surface'],
+  ['.agent-q-tag', '.agent-questions', 'surface'], ['.agent-q-age', '.agent-questions', 'surface'], ['.agent-q-text', '.agent-questions', 'surface'],
+  ['.agent-q-option:not(:disabled)', '.agent-q-option:not(:disabled)', 'bg'], ['.agent-q-option:not(:disabled) .agent-q-num', '.agent-q-option:not(:disabled) .agent-q-num', 'surface-2'],
+  ['.agent-q-option:disabled', '.agent-q-option:disabled', 'bg'], ['.agent-q-option:disabled .agent-q-num', '.agent-q-option:disabled .agent-q-num', 'surface-2'],
+  ['.agent-q-turn', '.agent-q-turn', 'surface-2'], ['.agent-q-note', '.agent-questions', 'surface'], ['.agent-q-hint', '.agent-questions', 'surface'], ['.agent-q-typed', '.agent-questions', 'surface'],
+  ['.agent-q-context > summary', '.agent-questions', 'surface'], ['.agent-q-says', '.agent-questions', 'surface'], ['.agent-q-context-text', '.agent-questions', 'surface'],
 ];
 
 for (const name of ['light', 'solarized', 'dark']) test(`${name}: the agent view's text meets computed AA on its surface`, () => {

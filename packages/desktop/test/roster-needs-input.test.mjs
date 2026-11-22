@@ -103,13 +103,13 @@ test("a running, waiting row's dot is the needs-input mark; its second line stay
   assert.equal(u.rollup("dev-a"), null, "no Needs input pill");
   const line = u.row("dev-a").querySelector(".ctx-meta");
   assert.equal(line.className, "ctx-meta ctx-row-detail");
-  assert.equal(line.textContent, "dev · This Mac");
+  assert.equal(line.textContent, "dev");
   // The words, once, right after the name: visually hidden (the name's own sr-only copy is its real name).
   const said = u.row("dev-a").querySelectorAll(".ctx-copy > .sr-only:not(.ctx-state, .ctx-relation)");
   assert.equal(said.length, 1);
   assert.equal(said[0].textContent, " Needs input");
   assert.equal(said[0].previousElementSibling.className, "ctx-name");
-  assert.equal(spokenText(u.row("dev-a")), "dev-a Needs inputdev · This Mac, running", "in the row button's name, its state last");
+  assert.equal(spokenText(u.row("dev-a")), "dev-a Needs inputdev, running", "in the row button's name, its state last");
   assert.match(spokenText(u.row("dev-a")).replace(/dev-a/, ""), /^ Needs input/, "said once, after the name");
   assert.equal(u.row("dev-a").querySelector(".ctx-name-line"), null, "the name line is the name alone");
   // No repository and no branch on the row (the instance panel's); its description says the wait, in absolute time.
@@ -117,7 +117,7 @@ test("a running, waiting row's dot is the needs-input mark; its second line stay
   assert.equal(u.said("dev-a"), `Needs input: Waiting for a tool approval since ${waitingClock(SINCE)}`);
   const kept = u.row("dev-b").querySelector(".ctx-meta");
   assert.equal(kept.className, "ctx-meta ctx-row-detail", "a row without a mark keeps its second line");
-  assert.equal(kept.textContent, "dev · This Mac");
+  assert.equal(kept.textContent, "dev");
   assert.equal(u.said("dev-b"), null, "a row with nothing to wait on has no description");
   assert.ok(u.row("dev-b").querySelector(".ctx-dot.on"), "a row that is not waiting keeps its liveness dot");
   assert.equal(u.marks("dev-b").length, 0);
@@ -210,7 +210,7 @@ test("with New: New stays on the name line, Needs input is said after it, and th
   assert.deepEqual([...line.children].map(el => el.className), ["ctx-name", "ctx-new"]);
   assert.deepEqual([line.nextElementSibling.className, line.nextElementSibling.textContent], ["sr-only", " Needs input"]);
   assert.equal(line.nextElementSibling.nextElementSibling.className, "ctx-meta ctx-row-detail");
-  assert.equal(spokenText(u.row("dev-a")), "dev-aNew Needs inputdev · This Mac, running");
+  assert.equal(spokenText(u.row("dev-a")), "dev-aNew Needs inputdev, running");
   assert.ok(u.own("dev-a"));
 });
 
@@ -218,7 +218,7 @@ test("a waiting row with a pull request: no chip, no branch and no tool on the r
   const u = fixture(t);
   u.render([instance("dev-a", undefined, { waitingOnYou: claim(), branch: "feature/x" })]);
   assert.equal(u.row("dev-a").querySelector(".ctx-pr"), null, "no chip on the row");
-  assert.equal(u.row("dev-a").querySelector(".ctx-meta").textContent, "dev · This Mac", "its soul and machine");
+  assert.equal(u.row("dev-a").querySelector(".ctx-meta").textContent, "dev", "its soul and machine");
   assert.ok(u.own("dev-a"));
   assert.equal(u.row("dev-a").parentElement.querySelector(".ctx-row-tools, .ctx-pr-open"), null, "no row tools (slice 1)");
   const menu = u.row("dev-a").parentElement.querySelector(".ctx-instance-menu");
@@ -233,14 +233,14 @@ test("an unavailable row whose mark replaced its second line says its soul and m
   const root = u.row("root"), said = root.getAttribute("aria-description");
   assert.equal(root.getAttribute("aria-disabled"), "true");
   assert.equal(u.marks("root")[0].textContent, "1 below need input");
-  assert.match(said, / · dev · This Mac · 1 below need input: kid$/, "why, then the line it replaced, then the wait");
+  assert.match(said, / · dev · 1 below need input: kid$/, "why, then the line it replaced, then the wait");
   assert.equal(root.title.split("\n")[0], said);
   // A row whose line is its own (no mark) keeps its description as it was.
   u.render([instance("root", undefined, { running: null, runtimeState: "unreachable", branch: "feature/root" })]);
   assert.doesNotMatch(u.row("root").getAttribute("aria-description") ?? "", /This Mac/);
   // An enabled row's roll-up says the same, before the wait.
   u.render(rows.map(r => r.instance === "root" ? { ...r, running: true, runtimeState: "running" } : r));
-  assert.equal(u.said("root"), "dev · This Mac · 1 below need input: kid");
+  assert.equal(u.said("root"), "dev · 1 below need input: kid");
 });
 
 // The second line (slice 1 of the Desktop UI rework): `<soul> · <machine>`, one span, the shared row facts; no
@@ -254,16 +254,16 @@ test("the second line: soul · machine only, no repository, branch, PR or harnes
   const meta = u.row("dev-a").querySelector(".ctx-meta");
   assert.equal(meta.className, "ctx-meta ctx-row-detail");
   assert.equal(meta.previousElementSibling.className, "ctx-name", "under the name");
-  assert.equal(meta.textContent, "desktop-dev · This Mac");
-  assert.equal(meta.children.length, 0, "one line of text");
+  assert.equal(meta.textContent, "desktop-dev");
+  assert.deepEqual([...meta.children].map(el => el.getAttribute("class")), ["runtime-mark ctx-harness"], "one line of text, after the harness's mark (slice 3d)");
   assert.equal(u.row("dev-a").querySelector(".ctx-pr, .runtime-badge, .ctx-runtime"), null, "no chip and no harness badge");
   assert.doesNotMatch(u.row("dev-a").textContent, /#317|feature|desktop-repo/);
   // A row whose state is unknown: the same two facts; its reason is its title and description.
-  assert.equal(u.row("dev-u").querySelector(".ctx-meta").textContent, "dev · This Mac");
+  assert.equal(u.row("dev-u").querySelector(".ctx-meta").textContent, "dev");
   assert.equal(u.said("dev-u"), "dev-u: status unknown", "its reason, as its description");
   // A waiting row's line is the same: its dot carries the mark (the product owner, 2026-10-26).
   const line = u.row("dev-w").querySelector(".ctx-meta");
-  assert.equal(line.textContent, "dev · This Mac");
+  assert.equal(line.textContent, "dev");
   // CSS: one line, muted, in the UI face, cut at its end.
   const rule = selector => css.match(new RegExp(`^${selector.replace(/[.]/g, "\\.")} \\{([^}]*)\\}`, "m"))?.[1].replace(/\s+/g, " ");
   assert.match(rule(".ctx-meta.ctx-row-detail"), /color: var\(--muted\);/);
@@ -321,7 +321,7 @@ test("a collapsed parent surfaces waiting rows its collapse hides; expanding it 
   assert.equal(mark.textContent, "2 below need input", "the visible “2 below” plus the visually hidden rest");
   assert.equal(mark.querySelector(".sr-only").textContent, " need input");
   assert.match(u.row("root").textContent, /2 below need input/, "the row's accessible name says it");
-  assert.equal(u.said("root"), "dev · This Mac · 2 below need input: dev-a, dev-b", "the line the mark replaced, then the rows it stands for");
+  assert.equal(u.said("root"), "dev · 2 below need input: dev-a, dev-b", "the line the mark replaced, then the rows it stands for");
   assert.equal(u.marks("solo").length, 0);
   collapsed.clear();
   u.render(rows);
@@ -338,7 +338,7 @@ test("a waiting, collapsed parent: its dot is the mark and its second line the r
   assert.equal(u.rollup("root").parentElement.className, "ctx-meta ctx-attn-line");
   // The disclosure's ", 1 below" (the rows under it, the product owner, 2026-11-19) follows the name, then the wait.
   assert.equal(spokenText(u.row("root")), "root, 1 below Needs input1 below need input, running", "both, each said once");
-  assert.equal(u.said("root"), `dev · This Mac · Needs input: Waiting for a tool approval since ${waitingClock(SINCE)} · 1 below need input: dev-a`);
+  assert.equal(u.said("root"), `dev · Needs input: Waiting for a tool approval since ${waitingClock(SINCE)} · 1 below need input: dev-a`);
 });
 
 test("names up to three, then “and N more”; nested collapses attribute to the nearest visible ancestor", async t => {
@@ -348,7 +348,7 @@ test("names up to three, then “and N more”; nested collapses attribute to th
   u.render(rows);
   assert.equal(u.row("mid"), undefined);
   assert.equal(u.marks("root")[0].textContent, "5 below need input");
-  assert.equal(u.said("root"), "dev · This Mac · 5 below need input: k1, k2, k3 and 2 more");
+  assert.equal(u.said("root"), "dev · 5 below need input: k1, k2, k3 and 2 more");
 });
 
 test("no roll-up from a stale or non-running row", async t => {

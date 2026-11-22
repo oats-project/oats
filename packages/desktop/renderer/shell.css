@@ -38,21 +38,25 @@ body {
 /* ── nav rail ── */
 #sidebar {
   position: relative; width: var(--sidebar-w); min-width: var(--sidebar-w); flex: none;
-  background: var(--surface);
+  background: var(--sidebar); /* slice 3d: the prototype's sunken sidebar in Dark; --surface in the other themes */
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
 }
 /* The head (2026-10-26): the Workspace heading over its list, with no line between them, the first row close under it:
-   the heading sits where it sat in the 48px bar (its centre 24px down), and the head ends 8px under it. */
+   the kicker's centre 24px down, beside the 44px tab bar (slice 3d), and the head ends close over its list. */
+/* Slice 3d (the main screen, 1:1 with the prototype's frame A): the head is the prototype's kicker, "WORKSPACES" small
+   and uppercase over the list, its + a quiet 26x24 control; the heading's left edge on the rows' dots' left edge (20px in). */
 .side-head {
-  height: 40px; flex: none; display: flex; align-items: center; box-sizing: border-box;
-  padding: 8px 10px 0 13px; white-space: nowrap;
+  height: 34px; margin-top: 4px; flex: none; display: flex; align-items: center; box-sizing: border-box;
+  padding: 6px 10px 0 20px; white-space: nowrap;
 }
 .side-kicker { color: var(--muted); font-size: 10px; line-height: 1.2; font-weight: 650; letter-spacing: .075em; text-transform: uppercase; }
 .shell-icon { display: block; width: 16px; height: 16px; flex: none; }
 /* The list's heading, then Add local workspace… at the end. */
-.ws-heading { flex: 1; min-width: 0; color: var(--fg); font-size: 13.5px; line-height: 1.2; font-weight: 700;
-              overflow: hidden; text-overflow: ellipsis; }
+.ws-heading { flex: 1; min-width: 0; color: var(--muted); font-size: 10px; line-height: 1.2; font-weight: 650;
+              letter-spacing: .075em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; }
+.side-head > .side-icon-button { width: 26px; height: 24px; }
+.side-head > .side-icon-button .shell-icon { width: 14px; height: 14px; }
 /* The sidebar's icon buttons, one control style: the head's Add local workspace… and the foot's ? (Keyboard
    shortcuts). */
 .side-icon-button { flex: none; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px;
@@ -72,7 +76,7 @@ body {
 /* The sidebar's left inset (the product owner, 2026-10-26: "closer to the left border of the window"): the lists
    4px from the edge (was 8px), so the rows' circles, the headings (13px) and the foot's mark keep one column, 4px
    further left; the right side is as before. */
-.ws-list { flex: none; padding: 0 8px 6px 4px; border-bottom: 1.5px solid var(--border); }
+.ws-list { flex: none; margin: 0 8px; padding: 2px 0 8px; border-bottom: 1.5px solid var(--border); }
 .ws-options { max-height: 276px; overflow-y: auto; scrollbar-width: none; } /* as the roster's: "N more below" says it */
 .ws-options::-webkit-scrollbar { display: none; }
 .ws-group { margin: 0; padding: 0; list-style: none; }
@@ -81,8 +85,8 @@ body {
 /* A row is one line: the instance roster's circle, the workspace's name, and at the far right the needs-input dot;
    no machine, no state. The circle is the roster's own .ctx-dot, its ring in the row's fill (--row-solid), in the
    column of the roster's top-level dots (the list's 4px and the row's 10px, as .ctx-list and .ctx-inst). */
-.ws-option { --row-solid: var(--surface); width: 100%; min-width: 0; display: flex; align-items: center; gap: 9px; padding: 4px 8px 4px 10px; border: 0;
-             min-height: 24px; border-radius: 6px; background: transparent; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.ws-option { --row-solid: var(--sidebar); width: 100%; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 12px; border: 0;
+             min-height: 28px; border-radius: 6px; background: transparent; color: var(--fg); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
 .ws-option:hover { --row-solid: var(--surface-2); background: var(--surface-2); }
 .ws-option:focus-visible { --row-solid: var(--sel); background: var(--sel); }
 /* The current workspace, by style alone (aria-current says it to assistive tech): its circle filled like a running
@@ -114,27 +118,31 @@ body {
 .deployment-mark > .shell-icon { width: 12px; height: 12px; }
 /* The same room above Home and below Automations, between the two lines (the product owner,
    2026-10-26). */
-#nav { display: flex; flex: none; flex-direction: column; padding: 8px 8px 8px 4px; gap: 1px; }
+#nav { display: flex; flex: none; flex-direction: column; padding: 8px 8px 4px; gap: 1px; }
 /* The foot (the Desktop UI rework, slice 1): one bar. "N need you" at the left, the needs-input mark and its count
-   (hidden at 0); New instance, a small button, and ? (Keyboard shortcuts), a 24px box, at the right. Each has no
-   ground at rest: hover and keyboard focus give it theirs. */
-#nav-foot { margin-top: auto; flex: none; display: flex; flex-direction: column; padding: 4px 10px 4px 6px;
+   (hidden at 0); ? (Keyboard shortcuts), a 22px circle, at the right (New agent ends the roster since slice 3d).
+   Neither has a ground at rest: hover and keyboard focus give it theirs. */
+#nav-foot { margin-top: auto; flex: none; display: flex; flex-direction: column; padding: 8px 14px 10px;
             border-top: 1px solid var(--border); }
-#sidebar-bar { display: flex; align-items: center; gap: 1px; min-height: 28px; padding: 0 3px 0 2px; }
-#sidebar-bar > .side-icon-button { width: 24px; height: 24px; border-radius: 5px; position: relative; }
+#sidebar-bar { display: flex; align-items: center; gap: 4px; min-height: 24px; padding: 0; }
+#sidebar-bar > .side-icon-button { width: 22px; height: 22px; border-radius: 50%; position: relative; }
 #sidebar-bar .shell-icon { width: 14px; height: 14px; }
-#sidebar-help { font-size: 13px; font-weight: 600; line-height: 1; }
+/* ? is the prototype's quiet round control: a 22px circle in the border's line, its mark in the muted ink. */
+#sidebar-help { margin-left: auto; font-size: 12px; font-weight: 400; line-height: 1; box-shadow: inset 0 0 0 1px var(--border); } /* at the bar's right end */
 /* Budgeted for the 240px minimum in both font choices (a monospace face runs wider): compact padding and gaps, and
    the count alone may give way (its words end in "…" only past two digits there), never pushing ? out. */
 #sidebar-need-you, #sidebar-spawn { flex: none; display: flex; align-items: center; gap: 4px; height: 24px; min-height: 24px;
-                 padding: 0 6px; border: 0; border-radius: 5px; background: transparent; color: var(--muted);
+                 padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--muted);
                  font-family: inherit; font-size: 11.5px; line-height: 1; font-weight: 500; white-space: nowrap; cursor: pointer; }
-#sidebar-need-you { flex: 0 1 auto; min-width: 0; padding-left: 5px; color: var(--fg); font-weight: 600; } /* its mark on the rows' dots, 18px in */
+#sidebar-need-you { flex: 0 1 auto; min-width: 0; gap: 10px; padding-left: 5px; color: var(--fg); font-size: 13px; font-weight: 400; } /* "● 3 need you": its mark on the rows' dots, 24px in */
 #sidebar-need-you > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #sidebar-need-you[hidden] { display: none; }
 #sidebar-need-you > .attn-mark { width: 10px; height: 10px; flex: none; }
-#sidebar-spawn { margin: 0 0 0 auto; padding: 0 5px; }
-#sidebar-spawn > .shell-icon { width: 12px; height: 12px; }
+/* New agent at the roster's end (slice 3d, the prototype's quiet ".row.add"): a 34px row, its + on the dots' column
+   (24px in: the list's 8px, its 9px, half the 14px icon), its words 40px in with the names, in the muted ink. */
+#sidebar-spawn { flex: none; align-self: stretch; height: 34px; min-height: 34px; margin: 0 8px 8px; padding: 0 10px 0 9px; gap: 9px;
+                 border-radius: 7px; font-size: 13px; font-weight: 400; }
+#sidebar-spawn > .shell-icon { width: 14px; height: 14px; }
 #sidebar-need-you:hover, #sidebar-spawn:hover:not(:disabled) { background: var(--surface-2); color: var(--fg); }
 #sidebar-need-you:focus-visible, #sidebar-spawn:focus-visible { background: var(--sel); color: var(--fg); }
 .shortcut-hint { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -144,16 +152,17 @@ body {
 
 /* ── persistent instance tree (the same shell sidebar, never a second) ── */
 /* The line before the instances (the product owner, 2026-10-26): the roster's top border, the sidebar's full width. */
-#instance-roster { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+#instance-roster { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 /* A window with no workspace has no instances to list (#481, shell.mjs showChooser). */
 #instance-roster[hidden] { display: none; }
-.ctx-head { height: 36px; flex: none; padding: 6px 12px 0 13px; display: flex; align-items: center; gap: 6px;
-            color: var(--nav-fg); font-size: 13px; font-weight: 500; }
-/* The head reads like the nav items above it (human, 2026-09-26); "● 4 running" only, the full breakdown in its title. */
-.ctx-count { margin-left: auto; display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11.5px; font-weight: 500;
-             white-space: nowrap; }
+/* Slice 3d: "AGENTS", the prototype's kicker (small, uppercase), its left edge on the dot column; "● 4 running" only,
+   quieter, the full breakdown in its title. */
+.ctx-head { height: 32px; flex: none; padding: 9px 18px 0 20px; display: flex; align-items: center; gap: 6px;
+            color: var(--muted); font-size: 10px; line-height: 16px; font-weight: 650; letter-spacing: .075em; text-transform: uppercase; }
+.ctx-count { margin-left: auto; display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 400;
+             letter-spacing: normal; text-transform: none; white-space: nowrap; }
 .ctx-count-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--accent); }
-.ctx-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 8px 4px; }
+.ctx-list { flex: 0 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 4px; } /* New agent follows it (slice 3d) */
 /* The roster scrolls (the wheel, the touchpad, revealInScrollport for keyboard focus) with no scrollbar,
    like the tab strips: on Linux Chromium draws a heavy classic one beside the rows. */
 .ctx-list { scrollbar-width: none; }
@@ -207,7 +216,7 @@ body {
    set background-color only: the background shorthand resets the clip to
    border-box, which painted the gap and made a selected row and a hovered
    neighbour touch (human, 2026-10-03). */
-.ctx-tree-row { --tree-step: 18px; --tree-branch-offset: 5px; --tree-link-shift: 2px; --row-gap: 2px; --row-solid: var(--surface); position: relative; width: 100%; min-height: 44px;
+.ctx-tree-row { --tree-step: 18px; --tree-branch-offset: 5px; --tree-link-shift: 2px; --row-gap: 2px; --dot-inset: 12px; --row-solid: var(--sidebar); position: relative; width: 100%; min-height: 44px;
                 box-sizing: border-box; display: flex; align-items: center;
                 border-top: var(--row-gap) solid transparent; border-bottom: var(--row-gap) solid transparent;
                 background-clip: padding-box; border-radius: 7px / 9px;
@@ -269,8 +278,8 @@ body {
 .launch-config-editor { margin-top: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; }
 .launch-config-editor summary { cursor: pointer; }
 .launch-preview-output { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--surface-2); max-height: 240px; overflow: auto; }
-.ctx-inst { position: relative; min-width: 0; flex: 1; min-height: 40px; height: auto; display: flex; align-items: center; gap: 9px;
-            padding: 0 8px 0 10px; border: 0; border-radius: 7px; background: none; color: var(--fg);
+.ctx-inst { position: relative; min-width: 0; flex: 1; min-height: 40px; height: auto; display: flex; align-items: center; gap: 12px;
+            padding: 0 10px 0 0; padding-left: var(--dot-inset, 10px); border: 0; border-radius: 7px; background: none; color: var(--fg);
             font: inherit; text-align: left; cursor: pointer; }
 .ctx-inst.idle, .ctx-inst:disabled, .ctx-inst[aria-disabled="true"] { color: var(--muted); }
 .ctx-inst:disabled, .ctx-inst[aria-disabled="true"] { cursor: default; }
@@ -291,20 +300,20 @@ body {
    The guides span the row's transparent borders too, so lines cross the gap between rows. */
 .ctx-guides { position: absolute; inset: calc(-1 * var(--row-gap)) auto calc(-1 * var(--row-gap)) 0; width: 100%; pointer-events: none; }
 .ctx-guide { position: absolute; box-sizing: border-box; width: 0;
-             left: calc(13.25px + var(--tree-branch-offset) + var(--guide-level) * var(--tree-step));
+             left: calc(var(--dot-inset, 10px) + 3.25px + var(--tree-branch-offset) + var(--guide-level) * var(--tree-step));
              border-left: 1.5px solid var(--tree-stroke); }
 .ctx-guide.line { top: 0; bottom: 0; }
 /* From the offset column to 1px inside the next level's dot ring (ring: 6px around the dot centre). */
 .ctx-guide.elbow { top: -2px; height: calc(50% + 2px); width: calc(var(--tree-step) - var(--tree-branch-offset) - 4.25px);
                    border-bottom: 1.5px solid var(--tree-stroke); border-bottom-left-radius: 5px; }
 .ctx-guide.down { top: 50%; bottom: 0; }
-.ctx-guide.link-in, .ctx-guide.link-out, .ctx-guide.link-through { left: calc(13.25px - var(--tree-link-shift, 0px) + var(--guide-level) * var(--tree-step));
+.ctx-guide.link-in, .ctx-guide.link-out, .ctx-guide.link-through { left: calc(var(--dot-inset, 10px) + 3.25px - var(--tree-link-shift, 0px) + var(--guide-level) * var(--tree-step));
                                                                    border-left: 1.5px dotted var(--tree-link); }
 .ctx-guide.link-in { top: 0; height: 50%; }
 .ctx-guide.link-out { top: 50%; bottom: 0; }
 .ctx-guide.link-through { top: 0; bottom: 0; }
 .ctx-dot { position: relative; z-index: 1; box-sizing: border-box; width: 8px; height: 8px; flex: none; border-radius: 50%;
-           border: 1.5px solid var(--faint); background: var(--surface); box-shadow: 0 0 0 2px var(--row-solid, var(--surface)); }
+           border: 1.5px solid var(--faint); background: var(--row-solid, var(--surface)); box-shadow: 0 0 0 2px var(--row-solid, var(--surface)); }
 .ctx-dot.on { border-color: var(--accent); background: var(--accent); }
 /* Unknown liveness (the product owner, 2026-10-26: yellow means needs input, and only that): a --muted bullseye at
    the same 8px, its ring and a 2px centre with the row's fill between them (an inset ring of --row-solid), so it is
@@ -339,11 +348,11 @@ body {
 /* #802: the muted line under a held home's state ("since 14:03", "Retire it to clean up"): --muted text that
    meets AA on every row fill, never opacity. */
 .ctx-held-hint { color: var(--muted); font-size: 11.5px; line-height: normal; }
-.ctx-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
-/* An instance's name: 12.5px (--name-size, which the font choice no longer sets since D2). */
-.ctx-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--name-size, 12.5px); font-weight: 600; line-height: 15px; }
+.ctx-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+/* An instance's name (slice 3d, the prototype's two-line row): 13px/17px in the body weight; line 2 is 11.5px/15px. */
+.ctx-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 400; line-height: 17px; }
 .ctx-meta { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Spec E: "New" on a just-spawned row the operator was not taken to: text and a dot, until it is first opened. */
+/* Spec E: "New" on a just-spawned row the operator was not taken to: the word (a pill since slice 3d), until it is first opened. */
 /* The one visually-hidden utility (#560): read by assistive technology, never painted. Anchored at its
    containing block (top/left 0), so it cannot stretch a scroller (renderer/README.md, workspace-sticky test);
    clip-path, with the legacy clip as a fallback. Used by the roster's "N below need input", the terminal's
@@ -352,8 +361,9 @@ body {
   clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .ctx-name-line { max-width: 100%; min-width: 0; display: flex; align-items: center; gap: 6px; }
 .ctx-name-line > .ctx-name { min-width: 0; }
-.ctx-new { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 10.5px; font-weight: 600; line-height: 15px; }
-.ctx-new-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--accent); }
+/* Slice 3d: the prototype's "new" pill, its word lower-case in a 1px border's ring (no dot). */
+.ctx-new { flex: none; display: inline-flex; align-items: center; padding: 0 4px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--border);
+           color: var(--muted); font-size: 11px; font-weight: 400; line-height: 14px; text-transform: lowercase; }
 /* The disclosure (the product owner, 2026-11-19; roster-disclosure.mjs): a parent's chevron and the count of the rows
    under it, on the name line right after the name (the product owner, 2026-11-20), so every name starts on its
    level's column; a long name ellipsizes before it, and an instance row has no tools over its end (slice 1) to cover
@@ -383,23 +393,33 @@ body {
 .ctx-meta.ctx-attn-line { display: flex; min-width: 0; }
 .ctx-repo-label { display: block; color: var(--muted); font-family: var(--mono); font-size: 11.5px; font-weight: 400; line-height: normal; }
 /* Line 2 (the Desktop UI rework, slice 1): `<soul> · <machine>` in the UI face, muted, one line cut at its end. */
-.ctx-meta.ctx-row-detail { color: var(--muted); font-size: 11.5px; font-weight: 400; line-height: normal; }
+.ctx-meta.ctx-row-detail { color: var(--muted); font-size: 11.5px; font-weight: 400; line-height: 15px; }
+/* The harness's mark first on line 2 (slice 3d; Joan's decision 2026-11-22, "yes but monochrome a bit more
+   discrete"): its own shape, 10px, in --tree-link, the faintest ink held at 3:1 (a graphic) on every fill the row
+   paints (--sidebar, --surface-2 hovered, --sel selected; contrast-inventory.mjs) in every theme and "This computer",
+   and lighter than the line's --muted text; no fill of its own; the dot carries the state. */
+.ctx-row-detail > .ctx-harness { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+/* A graphic, so it is painted as one (fill or stroke, as identity-marks.mjs draws each mark), never as text colour. */
+.ctx-row-detail > .ctx-harness[fill="currentColor"] { fill: var(--tree-link); }
+.ctx-row-detail > .ctx-harness[stroke="currentColor"] { stroke: var(--tree-link); }
 .ctx-empty { padding: 20px 10px; color: var(--muted); text-align: center; font-size: 12px; }
 /* The pinned destinations (the Desktop UI rework, slice 1): rows in the roster rows' style, one line: the icon in the
    column of the roster's dots (the nav's 4px and the row's 6px, centred 18px in), the name in the roster's name type. */
+/* Slice 3d: the prototype's one-line rows, 34px, the 16px icon centred on the dots' column (24px in: the nav's 8px, the
+   row's 8px, half the icon), the name 40px in, in 13px 500. */
 .nav-item {
-  display: flex; align-items: center; gap: 9px; min-height: 32px;
+  display: flex; align-items: center; gap: 8px; min-height: 34px;
   background: none; border: none; border-radius: 7px;
-  color: var(--fg); font: inherit; font-size: var(--name-size, 12.5px); font-weight: 600; text-align: left;
-  padding: 4px 8px 4px 6px; cursor: pointer;
+  color: var(--fg); font-family: inherit; font-size: 13px; font-weight: 500; line-height: inherit; text-align: left;
+  padding: 0 10px 0 8px; cursor: pointer;
 }
 .nav-item > .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A run failed (automations-failure.mjs): a --danger dot at the row's far right, its words for assistive tech. */
-.nav-failed { flex: none; margin-left: auto; margin-right: 2px; display: grid; place-items: center; width: 14px; } /* centred 25px from the right, the marks' column */
-.nav-failed-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+/* A run failed (automations-failure.mjs; slice 3d): after the name, "1 failed" in the failure ink, as the prototype's
+   (the count is the failed rows'), shown and said. */
+.nav-failed { flex: none; display: inline-flex; align-items: center; margin-left: 2px; color: var(--danger); font-weight: 400; }
 .nav-item:hover { background: var(--surface-2); color: var(--fg); }
-.nav-item.active { background: var(--sel); color: var(--fg); font-weight: 650; }
-.nav-item .icon { width: 16px; flex: none; text-align: center; color: var(--nav-fg); }
+.nav-item.active { background: var(--sel); color: var(--fg); font-weight: 500; }
+.nav-item .icon { width: 16px; flex: none; display: flex; color: var(--muted); }
 .nav-item.active .icon, .nav-item.active > .shell-icon { color: var(--accent); }
 .nav-item:disabled { background: transparent; color: var(--faint); cursor: default; }
 
@@ -474,7 +494,7 @@ body {
    tab strip with tabs open, else the stage's own header), shell-owned and in the Main region's tab
    order (first and last child of #main). Each top bar reserves their room as a leading/trailing inset
    while they are shown, so they never cover a view's content nor sit on a terminal, and the bar keeps
-   its 48px and its rule. */
+   its --bar-h (44px since slice 3d) and its rule. */
 #main:has(> #show-sidebar:not([hidden])) { --main-lead-inset: 40px; }
 #main:has(> #show-panel:not([hidden])) { --main-trail-inset: 40px; }
 .main-edge-control { position: absolute; top: calc((var(--bar-h) - 1px - 28px) / 2); z-index: 3;
@@ -495,9 +515,9 @@ body {
 .leader-hint-line { margin: 0; color: var(--fg); }
 /* The Desktop UI rework, slice 4: the hint's line is said on the status line (status-line.mjs): drawn over it, the
    window's bottom line, in its place and its type, for as long as it stays (the next key, click or focus change). */
-.leader-hint[data-mode="line"] { position: fixed; left: 0; right: 0; bottom: 0; z-index: 46; max-height: none; min-height: 26px;
-  padding: 3px 12px; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none;
-  background: var(--surface-2); font-size: 11.5px; line-height: 1.4; }
+.leader-hint[data-mode="line"] { position: fixed; left: 0; right: 0; bottom: 0; z-index: 46; max-height: none; min-height: 28px;
+  display: flex; align-items: center; padding: 0 16px; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none;
+  background: var(--bg); font-size: 12px; line-height: 18px; } /* the status line's own box, ground and type (slice 3d) */
 #show-sidebar { left: 6px; }
 #show-panel { right: 6px; }
 .main-edge-control:hover { color: var(--fg); background: var(--surface-2); }
@@ -515,11 +535,13 @@ body {
 #tabbar-row { display: flex; min-width: 0; padding-left: var(--main-lead-inset); padding-right: var(--main-trail-inset); }
 #tabbar {
   display: flex; flex: 1; min-width: 0;
-  overflow-x: auto; height: calc(var(--bar-h) - 1px); /* the strip's rule is the 48th pixel */
+  overflow-x: auto; height: calc(var(--bar-h) - 1px); /* the strip's rule is the bar's last pixel */
 }
+
 /* A tab strip scrolls (the wheel, revealInStrip) with no scrollbar, like the other tab bars:
    on Linux Chromium draws a classic one, arrows included, under the tabs. */
-#tabbar, .group-tabbar { scrollbar-width: none; }
+/* Slice 3d: the prototype's tab row: pills 28px tall, 4px apart, 12px in from the strip's ends, centred in the bar. */
+#tabbar, .group-tabbar { align-items: center; gap: 4px; padding-left: 12px; padding-right: 12px; scrollbar-width: none; }
 #tabbar::-webkit-scrollbar, .group-tabbar::-webkit-scrollbar { display: none; }
 /* tab-strip split controls (shown while the active tab is a terminal) */
 #tab-actions { display: flex; align-items: center; gap: 2px; padding: 0 8px; flex: none;
@@ -537,39 +559,39 @@ body {
    never exceeds the design's 280px long-label cap. Under pressure they shrink
    evenly down to --tab-min; below that the strip scrolls. The full name stays in
    the trigger's title and accessible name.
-   --tab-min = 168px, measured live at 12.5px in the active tab's bold (System font; Omarchy's font names
-   are 12px, --name-size, so the same px budget holds more of a name): less
-   --tab-chrome (51px) the trigger keeps 117px, the 7px status dot and its 8px
-   gap, then 102px of name: the start and an ellipsis ("oats-…", 44px) and the
+   --tab-min = 176px (168px before slice 3d), measured live at 12.5px in bold in the System font, a budget the
+   regular weight of slice 3d's tabs never exceeds: less --tab-chrome (44px since slice 3d's pills) the trigger
+   keeps 132px; the number leads (slice 3d, the prototype's "1 name ●": about 7px and its 8px gap), the 7px status
+   dot and its 8px gap follow the name, then 102px of name: the start and an ellipsis ("oats-…", 44px) and the
    protected 8-character tail (the widest real one, "awn-flow", is 57px), so a
    shrunk tab reads "oats-…palette" (middle truncation, below).
-   The close stays on every tab, the active one included. */
+   The close keeps its room on every tab; it shows on the active, a hovered and a focused one (below). */
 .tab {
-  --tab-min: 168px; --tab-max: 280px;
-  --tab-chrome: 51px; /* padding 14 + 8, gap 8, close 20, the 1px border: what the trigger cannot use */
-  --tab-name-min: 102px; /* the name the floor budgets: --tab-min less --tab-chrome less the dot and its gap (7 + 8) */
+  --tab-min: 176px; --tab-max: 280px;
+  --tab-chrome: 44px; /* padding 12 + 4, gap 8, close 20: what the trigger cannot use */
+  --tab-name-min: 102px; /* the name the floor budgets: --tab-min less --tab-chrome, the number and its gap (7 + 8), the dot and its gap (7 + 8) */
   display: flex; flex: 1 1 0px; align-items: center; gap: 8px; min-width: var(--tab-min); max-width: fit-content;
-  white-space: nowrap; padding: 0 8px 0 14px; background: transparent; border-right: 1px solid var(--border);
-  color: var(--muted); font-size: var(--name-size, 12.5px); /* 12px in Omarchy's font (theme.mjs fontStacks) */
+  height: 28px; white-space: nowrap; padding: 0 4px 0 12px; background: transparent; border-radius: 8px;
+  color: var(--muted); font-size: 12.5px;
 }
 .tab[hidden] { display: none; }
-.tab.active { background: var(--surface); color: var(--fg); box-shadow: inset 0 2px 0 var(--accent); font-weight: 600; }
+.tab:hover { background: var(--surface); }
+/* The active tab is the prototype's: the raised fill and the bright ink, its number in the accent; no edge, no bold. */
+.tab.active { background: var(--surface-2); color: var(--fg); }
+.tab.active .tab-num { color: var(--accent); }
 .tab-trigger, .tab .close {
   appearance: none; border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
 }
 .tab-trigger:focus-visible { background: var(--sel); }
-/* dot · name · branch · number (Redesign v3): the name keeps priority, the branch
-   takes what is left and ellipsizes first.
-   The number (.tab-num, tab-numbers.mjs) never crowds out the name: the trigger
-   wraps, and only its first line shows. Line breaking sees the name at no more
-   than --tab-name-min (its flex basis; it grows from there to its whole width,
-   max-content, never past it), so while the strip has room the name shows whole
-   beside its number; under pressure the name truncates down to that minimum,
-   and only then does the number move to the second line, clipped by the
-   trigger's overflow: it disappears whole, never as a half-clipped digit. A name
-   shorter than the minimum keeps its number for as long as both fit, at the
-   floor too. The basis is also never more than the line holds after the widest
-   lead (an artifact's 14px icon and its gap), so the name itself never wraps.
+/* number · name · dot · branch (slice 3d, the prototype's "1 name ●"; the DOM keeps dot · name · branch · number,
+   CSS order lays the line out): the name keeps priority, the branch takes what is left and ellipsizes first.
+   The floor (--tab-min) budgets the number, the name's minimum and the dot, so none of them is crowded out: the
+   trigger wraps, and only its first line shows. Line breaking sees the name at no more than --tab-name-min (its
+   flex basis; it grows from there to its whole width, max-content, never past it), so while the strip has room the
+   name shows whole between its number and its dot; under pressure the name truncates down to that minimum, and
+   what still does not fit is the trailing branch, which wraps to the second line and is clipped by the trigger's
+   overflow, whole. The basis is also never more than the line holds after the widest lead (the number and its gap,
+   then an artifact's 14px icon and its gap), so the name itself never wraps.
    The ::before is a zero-width spacer of the trigger's full height, its gap
    cancelled: the first line is the whole tab tall, so its content stays
    vertically centred, and everything that wraps lands below the clip. */
@@ -581,15 +603,15 @@ body {
 .tab-dot.off { box-sizing: border-box; background: transparent; border: 1.5px solid var(--faint); }
 .tab-dot.on[data-instance-color] { background: var(--instance-color); }
 .tab-dot.off[data-instance-color] { border-color: var(--instance-color); }
-/* Needs input (#558): the alert glyph takes the dot's slot. 12px wide with a -5px end margin, it advances
-   exactly as the 7px dot does, so the label never moves; --warn as a graphic (≥ 3:1 on every tab background). */
+/* Needs input (#558): the alert glyph takes the dot's slot, after the name. 12px wide with a -5px end margin, it
+   advances exactly as the 7px dot does, so nothing after it moves; --warn as a graphic (≥ 3:1 on every tab background). */
 .tab-attn { width: 12px; height: 12px; flex: none; margin-right: -5px; display: grid; place-items: center; color: var(--warn); }
 .tab-attn > .shell-icon { width: 12px; height: 12px; }
 .tab-icon { flex: none; display: grid; place-items: center; color: var(--muted); }
 .tab-icon > .shell-icon { width: 14px; height: 14px; }
 /* The name grows (weighted 1000:1 over the branch) from its minimum to its whole width and no further. */
 .tab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-             flex-grow: 1000; flex-shrink: 1; flex-basis: min(var(--tab-name-min), 100% - 22px); max-width: max-content; }
+             flex-grow: 1000; flex-shrink: 1; flex-basis: min(var(--tab-name-min), 100% - 37px); max-width: max-content; }
 /* Middle truncation: names share long prefixes (the soul), so the head gives way
    and the end of the name stays ("oats-…palette"); a name that fits shows whole. */
 .tab-label.split { display: flex; }
@@ -600,12 +622,19 @@ body {
 /* The branch grows from zero into what the name leaves, so it ellipsizes and then
    disappears first. Its gap is its own padding, cancelled by a negative margin:
    a hidden branch takes no space from the name. */
-.tab-detail { min-width: 0; flex: 1 1 0px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.tab-detail { order: 2; min-width: 0; flex: 1 1 0px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
               margin-left: -8px; padding-left: 8px;
-              font-weight: 400; font-size: 11px; line-height: normal; font-family: var(--ui-font, ui-monospace, Menlo, monospace); color: var(--faint); }
-/* The go-to-tab number, last: quiet text like the branch (--faint holds 4.5:1 on --bg, --surface and --sel). */
-.tab-num { flex: none; white-space: nowrap; font-weight: 400; font-size: 11px; line-height: normal; font-family: var(--ui-font, ui-monospace, Menlo, monospace); color: var(--faint); }
+              font-weight: 400; font-size: 11px; line-height: normal; font-family: inherit; color: var(--faint); }
+/* The go-to-tab number, first (slice 3d): quiet text like the branch (--faint holds 4.5:1 on --bg, --surface and
+   --sel); the active tab's is the accent (above). */
+.tab-num { order: -1; flex: none; white-space: nowrap; font-weight: 400; font-size: 11px; line-height: normal; font-family: inherit; color: var(--faint); }
 .tab-num[hidden] { display: none; }
+/* Slice 3d, the prototype's tab: "1 name ●". The number leads, the status dot (or the Needs input glyph) follows the
+   name, then the branch; the DOM keeps its order (the trigger's name is its aria-label), the line reads the order. */
+.tab-dot, .tab-attn { order: 1; } /* .tab-num leads (order -1), .tab-detail comes last (order 2): their own rules */
+/* The close shows on the active tab, a hovered one and one holding the focus, so a keyboard reaches it (Tab from the
+   trigger) and Delete and the close chord work on every tab; elsewhere it keeps its room, unseen, so nothing moves. */
+.tab:not(.active):not(:hover):not(:focus-within) > .close { visibility: hidden; }
 .tab .close { display: grid; place-items: center; flex: none; width: 20px; height: 20px; color: var(--faint);
               margin: 0; padding: 0; border-radius: 4px; font-size: 13px; }
 .tab .close > .shell-icon { width: 13px; height: 13px; }
@@ -629,7 +658,7 @@ body {
 .split-resizer:hover, .split-resizer:focus-visible { background: var(--accent); outline: none; }
 #tabhost.split-row > .group-cell + .group-cell { border-left: 1px solid var(--border); }
 #tabhost.split-col > .group-cell + .group-cell { border-top: 1px solid var(--border); }
-/* 48px including the bottom rule, like the tab strip: tabs fill the 47px
+/* --bar-h (44px) including the bottom rule, like the tab strip: tabs fill the 43px
    above it, so the rule stays visible under the active tab. */
 .group-tabbar { display: flex; flex: none; box-sizing: border-box; min-width: 0; overflow-x: auto; overflow-y: hidden;
                 height: var(--bar-h); background: var(--bg); border-bottom: 1px solid var(--border);
@@ -705,15 +734,22 @@ body {
    the attributed link button, which opens the system browser on a press. Tokens only (contrast-inventory.mjs). */
 .tab-pane.active.agent-view { display: flex; flex-direction: column; }
 .tab-pane.agent-view > .term-wrap { position: relative; inset: auto; flex: 1 1 0; min-height: 0; height: auto; }
-.agent-facts { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 12px;
-  border-bottom: 1px solid var(--border); background: var(--surface); color: var(--fg); font-size: 12.5px; line-height: 18px; }
-.agent-fact-list { display: contents; list-style: none; margin: 0; padding: 0; }
-.agent-fact { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
-.agent-fact-focus { display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 1px 4px; border-radius: 5px; outline: none; }
+.agent-facts { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 12px 20px 8px;
+  background: var(--bg); color: var(--fg); font-size: 12.5px; line-height: 18px; }
+/* Slice 3d: each fact is one of the prototype's pinned strips: a 28px row on the raised surface, the pin, the label and its
+   value, the time at the right, then the fact's own controls; the fold and its notes follow, quiet, on the ground. */
+.agent-fact-list { display: flex; flex-direction: column; gap: 2px; list-style: none; margin: 0; padding: 0; }
+.agent-fact { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 28px; padding: 3px 4px 3px 10px; border-radius: 6px;
+  background: var(--surface); white-space: nowrap; }
+.agent-fact > .agent-fact-pin { flex: none; width: 12px; height: 12px; color: var(--muted); }
+/* A long value wraps inside its strip (the board allows 80 characters): the strip grows, the value is never cut. */
+.agent-fact-focus { display: flex; flex-wrap: wrap; flex: 1 1 auto; align-items: baseline; gap: 0 4px; min-width: 0; padding: 1px 4px; border-radius: 5px; outline: none; white-space: normal; }
+.agent-fact-focus > .agent-fact-updated { margin-left: auto; padding-left: 10px; }
+.agent-facts > :is(.agent-facts-fold, .agent-facts-unhide, .agent-facts-note) { align-self: flex-start; }
 .agent-fact-focus:focus-visible { background: var(--sel); }
 .agent-fact-label, .agent-fact-unit, .agent-fact-updated, .agent-fact-sparknote, .agent-fact-says { color: var(--muted); }
-.agent-fact-value { color: var(--fg); font-weight: 650; overflow-wrap: anywhere; }
-.agent-fact-updated, .agent-fact-sparknote { font-size: 11.5px; }
+.agent-fact-value { min-width: 0; color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
+.agent-fact-updated, .agent-fact-sparknote { font-size: 11px; }
 .agent-fact-spark { width: 48px; height: 14px; color: var(--accent); flex: none; }
 .agent-fact-link { min-width: 0; max-width: 100%; padding: 1px 6px; border: 1px solid var(--border); border-radius: 5px; text-align: start;
   background: var(--surface); color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
@@ -733,49 +769,56 @@ body {
 .tab-pane.agent-tight .agent-q-hint { display: none; }
 .agent-fact-host { color: var(--accent); font-weight: 700; }
 .agent-fact-link:hover, .agent-fact-link:focus-visible { background: var(--sel); outline: none; }
-.agent-fact-hide, .agent-facts-fold, .agent-facts-unhide { display: inline-flex; align-items: center; justify-content: center; min-height: 22px;
-  padding: 0 6px; border: 1px solid transparent; border-radius: 5px; background: var(--surface); color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.agent-fact-hide, .agent-facts-fold, .agent-facts-unhide { flex: none; display: inline-flex; align-items: center; justify-content: center; min-height: 22px;
+  padding: 0 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
 .agent-fact-hide { width: 22px; padding: 0; }
 .agent-fact-hide:hover, .agent-fact-hide:focus-visible, .agent-facts-fold:hover, .agent-facts-fold:focus-visible,
 .agent-facts-unhide:hover, .agent-facts-unhide:focus-visible { background: var(--sel); color: var(--fg); outline: none; }
 .agent-facts-fold[hidden], .agent-facts-unhide[hidden], .agent-facts-note[hidden] { display: none; }
 .agent-facts-note { color: var(--muted); font-size: 11.5px; }
-.agent-questions { flex: none; box-sizing: border-box; padding: 8px 12px 6px;
-  border-top: 1px solid var(--attn-border); background-color: var(--attn-bg); color: var(--fg); font-size: 13px; line-height: 18px; outline: none; }
-.agent-questions:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
-.agent-q-head { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-.agent-q-tag { color: var(--warn); font-weight: 650; }
+/* Slice 3d: the question is the prototype's card ("needs you" in the waiting colour, its age; the question line; the options
+   as boxed rows, each with its number badge; the context fold), raised on the pane's ground, in the waiting border. */
+.agent-questions { flex: none; box-sizing: border-box; margin: 8px 20px 12px; padding: 9px 16px 7px; border: 1px solid var(--attn-border);
+  border-radius: 8px; background-color: var(--surface); color: var(--fg); font-size: 13px; line-height: 18px; outline: none; }
+.agent-questions:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.agent-q-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; line-height: 18px; white-space: nowrap; overflow: hidden; }
+.agent-q-mark { width: 10px; height: 10px; }
+.agent-q-tag { color: var(--warn); font-weight: 400; }
 .agent-q-age, .agent-q-hint, .agent-q-typed, .agent-q-says, .agent-q-context-none { color: var(--muted); }
 .agent-q-nav { display: inline-flex; align-items: center; gap: 4px; }
 .agent-q-nav[hidden] { display: none; }
-.agent-q-turn { min-width: 22px; min-height: 22px; padding: 0 4px; border: 1px solid var(--attn-border); border-radius: 5px;
-  background: var(--surface); color: var(--fg); font: inherit; cursor: pointer; }
+.agent-q-turn { min-width: 20px; min-height: 20px; padding: 0 4px; border: 0; border-radius: 4px;
+  background: var(--surface-2); color: var(--fg); font: inherit; font-size: 15px; line-height: 18px; cursor: pointer; }
 .agent-q-turn:hover, .agent-q-turn:focus-visible { background: var(--sel); outline: none; }
-.agent-q-dots { display: inline-flex; gap: 4px; }
-.agent-q-dot { width: 10px; height: 10px; padding: 0; border: 1px solid var(--muted); border-radius: 50%; background: transparent; cursor: pointer; }
+.agent-q-dots { display: inline-flex; gap: 5px; padding: 0 3px; }
+.agent-q-dot { width: 7px; height: 7px; padding: 0; border: 1px solid var(--muted); border-radius: 50%; background: transparent; cursor: pointer; }
 .agent-q-dot.on { background: var(--fg); border-color: var(--fg); }
 .agent-q-dot:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
-.agent-q-text { margin: 4px 0 6px; font-weight: 600; overflow-wrap: anywhere; }
-.agent-q-options { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 4px; padding: 0; list-style: none; }
-.agent-q-option { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 2px 10px 2px 4px; border: 1px solid var(--attn-border);
-  border-radius: 6px; background: var(--surface); color: var(--fg); font: inherit; font-size: 12.5px; text-align: start; cursor: pointer; }
-.agent-q-num { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 4px;
-  background: var(--surface-2); color: var(--accent); font-weight: 700; font-size: 11.5px; }
-.agent-q-option:hover, .agent-q-option:focus-visible { background: var(--sel); outline: none; }
-.agent-q-option:disabled { color: var(--muted); cursor: default; border-style: dashed; }
-.agent-q-option:disabled .agent-q-num { color: var(--muted); }
+.agent-q-text { margin: 0 0 8px; color: var(--fg); font-size: 14px; line-height: 20px; font-weight: 500; overflow-wrap: anywhere; }
+.agent-q-options { display: flex; flex-direction: column; gap: 3px; margin: 0 0 6px; padding: 0; list-style: none; }
+.agent-q-options > li { display: flex; }
+.agent-q-option { flex: 1 1 auto; display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 5px 10px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; font-size: 13px; line-height: 19px; font-weight: 600; text-align: start; cursor: pointer; }
+.agent-q-num { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 4px;
+  background: var(--surface-2); color: var(--fg); font-weight: 600; font-size: 11.5px; }
+.agent-q-option:hover, .agent-q-option:focus-visible { border-color: var(--accent); background: var(--sel); outline: none; }
+.agent-q-option:hover .agent-q-num, .agent-q-option:focus-visible .agent-q-num { background: var(--accent); color: var(--accent-fg); }
+.agent-q-option:disabled { color: var(--muted); cursor: default; border-style: dashed; background: var(--bg); }
+.agent-q-option:disabled .agent-q-num { color: var(--muted); background: var(--surface-2); }
 .agent-q-note { margin: 2px 0 4px; color: var(--fg); font-weight: 600; }
 .agent-q-note[hidden], .agent-q-context[hidden] { display: none; }
-.agent-q-context { margin: 2px 0; }
+.agent-q-context { margin: 0; font-size: 12px; line-height: 22px; }
 .agent-q-context > summary { color: var(--fg); cursor: pointer; width: max-content; border-radius: 4px; padding: 0 2px; }
+.agent-q-context > summary::marker { color: var(--muted); font-size: 10px; }
 .agent-q-context > summary:focus-visible { background: var(--sel); outline: none; }
-.agent-q-context-body { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 0; }
+.agent-q-context-body { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 0; padding-top: 6px; border-top: 1px solid var(--border); line-height: 19px; }
 .agent-q-says { margin: 0; font-size: 11.5px; }
 .agent-q-context-text { margin: 0; max-height: 12lh; overflow-y: auto; outline: none; padding: 1px 0 1px 8px; border-left: 2px solid var(--attn-border); color: var(--fg);
   font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-q-context-text:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
 .agent-q-context-none { margin: 0; }
-.agent-q-hint, .agent-q-typed { margin: 2px 0 0; font-size: 11.5px; }
+.agent-q-typed { margin: 2px 0 0; font-size: 11.5px; }
+.agent-q-hint { margin: 0 0 0 auto; padding-left: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
 .term-banner {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   background: var(--term-bg); color: var(--warn); font-size: 15px; z-index: 5;
@@ -849,10 +892,10 @@ body {
 .kb-editor {
   width: min(640px, 92vw); max-height: 74vh; display: flex; flex-direction: column;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; box-shadow: var(--shadow-modal); overflow: hidden;
+  border-radius: 10px; box-shadow: var(--shadow-modal); overflow: hidden;
 }
-.kb-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
-.kb-title { margin: 0; flex: none; font-size: 14px; font-weight: 650; color: var(--fg); }
+.kb-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px 18px; border-bottom: 1px solid var(--border); }
+.kb-title { margin: 0; flex: none; font-size: 15px; font-weight: 600; color: var(--fg); }
 /* The search's own frame is its wrapper (the glyph sits inside it); the input is bare. */
 .kb-search-field { flex: 1; min-width: 120px; display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 9px;
   border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--muted); }
@@ -883,12 +926,12 @@ body {
 .kb-group[hidden], .kb-row[hidden], .kb-nomatch[hidden] { display: none; }
 /* A group's heading sticks to the top of the scroll area while its rows scroll, on an opaque
    surface that spans the body's width, and the next group's heading pushes it up. */
-.kb-context { position: sticky; top: 0; z-index: 1; margin: 0 -10px; padding: 12px 16px 5px; background: var(--surface);
-  color: var(--muted); font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .065em; }
-.kb-row { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 4px 6px; border-radius: 8px; }
+.kb-context { position: sticky; top: 0; z-index: 1; margin: 0 -10px; padding: 14px 16px 6px; background: var(--surface);
+  color: var(--muted); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; }
+.kb-row { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 2px 6px; border-radius: 6px; }
 .kb-row:hover { background: var(--surface-2); }
 .kb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.kb-label { color: var(--fg); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-label { color: var(--fg); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kb-conflict { color: var(--warn); font-size: 11px; }
 .kb-conflict:empty { display: none; }
 .kb-marks { flex: none; width: 112px; display: flex; justify-content: flex-end; gap: 8px; }
@@ -938,17 +981,19 @@ body {
 }
 /* The leader's help sheet (leader-hint.mjs; the Desktop UI rework, slice 4, D15): small, at the window's bottom right
    above the status line, while the leader waits (and pinned with the leader then ?). It never takes the pointer. */
-.leader-help { position: fixed; right: 16px; bottom: 38px; z-index: 45; width: min(300px, calc(100vw - 32px)); max-height: 60vh;
-               overflow: auto; box-sizing: border-box; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
-               background: var(--surface); color: var(--fg); box-shadow: var(--shadow-popover); font-size: 12px; line-height: 1.5;
+.leader-help { position: fixed; right: 16px; bottom: 40px; z-index: 45; width: min(312px, calc(100vw - 32px)); max-height: 60vh;
+               overflow: auto; box-sizing: border-box; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px;
+               background: var(--surface); color: var(--fg); box-shadow: var(--shadow-popover); font-size: 12px; line-height: 17px;
                pointer-events: none; animation: sheet-in 150ms ease both; }
 .leader-help[hidden] { display: none; }
-.leader-help-title { margin: 0 0 6px; color: var(--muted); font-weight: 600; }
-.leader-help-keys { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 0; }
-.leader-help-keys dt { margin: 0; }
-.leader-help-keys dd { margin: 0; color: var(--fg); overflow-wrap: anywhere; }
-.leader-help-keys kbd { font: inherit; font-family: var(--mono); color: var(--accent); }
-.leader-help-foot { margin: 8px 0 0; color: var(--muted); }
+/* Slice 3d: the prototype's help sheet: the heading small and uppercase, keys in the bright ink in the chrome's sans, what
+   they do muted, a rule over the foot. */
+.leader-help-title { margin: 0 0 6px; color: var(--muted); font-size: 11px; font-weight: 400; text-transform: uppercase; letter-spacing: .06em; }
+.leader-help-keys { display: grid; grid-template-columns: minmax(0, 122px) minmax(0, 1fr); gap: 2px 8px; margin: 0; }
+.leader-help-keys dt { margin: 0; white-space: nowrap; overflow: hidden; }
+.leader-help-keys dd { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+.leader-help-keys kbd { font: inherit; font-weight: 500; color: var(--fg); }
+.leader-help-foot { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
 @media (prefers-reduced-motion: reduce) { .leader-help { animation: none; } }
 /* The keyboard shortcuts sheet's help setting (keybindings-editor.mjs): one checkbox line under the head. */
 .kb-help-setting { display: flex; gap: 8px; align-items: center; padding: 8px 16px 0; color: var(--fg); font-size: 12px; }

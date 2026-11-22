@@ -64,7 +64,7 @@ ${soulTeamsHereCSS}
 .workspace-main { display:flex; flex-direction:column; min-height:0; min-width:0; }
 .soul-inspector { width:340px; max-width:100%; min-width:0; min-height:0; box-sizing:border-box; overflow:auto; background:var(--surface); border-left:1px solid var(--border); }
 .soul-inspector[hidden] { display:none; }
-.soul-inspector .inspector-head { min-height:48px; box-sizing:border-box; padding:0 14px; margin:0; flex-wrap:nowrap; border-bottom:1px solid var(--border); }
+.soul-inspector .inspector-head { min-height:var(--bar-h); box-sizing:border-box; padding:0 14px; margin:0; flex-wrap:nowrap; border-bottom:1px solid var(--border); }
 .soul-inspector .inspector-head h2 { min-width:0; font-size:14px; line-height:20px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .soul-inspector .inspector-head button { flex:none; }
 .soul-inspector .inspector-head .identity-mark { width:28px; height:28px; border-radius:7px; font-size:13px; }

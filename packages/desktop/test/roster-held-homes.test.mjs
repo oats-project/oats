@@ -429,7 +429,7 @@ test("the same row reads every state of its retire in turn, and back to an ordin
   const meta = read({});
   assert.doesNotMatch(meta, /Retir/);
   assert.equal(u.row("dev-r").querySelector(".ctx-meta").className, "ctx-meta ctx-row-detail", "its own second line again: the soul and the machine");
-  assert.equal(meta, "dev · This Mac");
+  assert.equal(meta, "dev");
   assert.ok(u.row("dev-r").querySelector(".ctx-dot.on"), "and its liveness on its dot");
   assert.deepEqual(u.menu("dev-r"), ["open-split", "open-pr", "inspect", "restart", "stop", "retire"]);
 });

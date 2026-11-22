@@ -97,12 +97,12 @@ test('03 (F7): a soul opens as a page in the main area — it replaces the grid,
   assert.equal(u.css('.souls-body').gridTemplateColumns, 'minmax(0,1fr)', 'no side column for a soul');
   assert.equal(u.css('.soul-inspector').width, '340px', 'the instance sidebar keeps its width');
   for (const selector of ['.workspace-header']) {
-    assert.equal(u.css(selector).minHeight, '48px');
+    assert.equal(u.css(selector).minHeight, 'var(--bar-h)', 'the one top-bar height (44px since slice 3d), so its rule lines up with the tab strip\'s');
     assert.equal(u.css(selector).boxSizing, 'border-box');
     assert.equal(u.css(selector).paddingTop, '0px');
     assert.equal(u.css(selector).paddingBottom, '0px', 'no 32px control + 16px padding + 1px border = 49px conflict');
   }
-  assert.equal(u.css('.workspace-header').flexWrap, 'nowrap', 'ordinary header controls shrink/scroll rather than breaking the 48px baseline');
+  assert.equal(u.css('.workspace-header').flexWrap, 'nowrap', 'ordinary header controls shrink/scroll rather than breaking the bar\'s baseline');
   assert.equal(u.css('.workspace-tabs').flexWrap, 'nowrap');
   assert.equal(u.css('.workspace-tabs button').flexShrink, '0');
   assert.equal(u.css('.souls-bar .filter').height, '28px'); assert.equal(u.css('.souls-bar .filter').minHeight, '28px', 'generic 36px field floor is explicitly overridden');
