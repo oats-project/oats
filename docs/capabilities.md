@@ -2296,7 +2296,7 @@ is there.** `oats status` includes a stopped home in your `inspectMany`
 call, with the endpoint of its last session (beside the running homes of
 its group, or in one call where none of your homes runs; never in an
 `inspect` of its own): answer it as any other, by what is there. A session your product
-started again without OATS (`present: true`, `running` `true` or `null`):
+started again without OATS (`present: true`, `running: true`):
 
 - in a home an operator stopped, is reported on the home's row as running
   outside OATS. The row stays stopped, and the kernel acts on nothing else
@@ -2309,6 +2309,13 @@ started again without OATS (`present: true`, `running` `true` or `null`):
 upgrade under a harness that runs, and the resume of a home stopped with the
 host asks it once before its notice. `oats session inspect` never asks you
 about a stopped home.
+
+**Answer `running` for a stopped home's session as exactly as you can:**
+`true` only when its harness runs, `false` when you know it does not, and
+`null` when you cannot tell. The kernel acts on `true` alone: with `null` a
+home stays as OATS recorded it (no report, no adoption, and an upgrade goes
+on), so a provider that answers `null` for every idle session never shows a
+harness that was restarted and sits idle.
 
 ### input
 
@@ -2339,8 +2346,11 @@ can leave alone what was in the home's place before (a person's own session
 there). **The kernel relies on this stop**: it is the only way a session
 started by a killed spawn is ever stopped.
 
-`"reason": "host"` is on the stop that `oats host run`'s shutdown gives, and
-on no other (an operator's stop, a restart's, a retire's carry no `reason`).
+`"reason": "host"` is on every stop after which the home stays stopped with
+the host: the stop that `oats host run`'s shutdown gives, and the stop the
+kernel asks again when the resume notice of such a home failed without your
+refusal. No other stop carries a `reason` (an operator's, a restart's, a
+start's, a retire's).
 The kernel resumes that home later through `input` to this same endpoint, so
 **leave a session stopped with `reason: "host"` able to take that input**: a
 provider that archives or deletes what it stops does not do so for this one.
@@ -2704,8 +2714,8 @@ the feature.
   intent that keeps the home down. The kernel tells you the first with
   `reason: "host"` on its stop ([stop](#stop)); it never reads that from you.
 - **A home stopped with the host whose session runs again** (you answer it
-  there, with `running` `true` or `null`: a person's message reached it, or
-  it came back) is one OATS means to run. Status reads it running from your
+  there, with `running: true`: a person's message reached it, or it came
+  back) is one OATS means to run. Status reads it running from your
   answer, and the resume adopts it: the stop is cleared and **no resume
   notice is sent into a session that already runs**.
 - **A lost session is resumed through `input`.** A home whose session you

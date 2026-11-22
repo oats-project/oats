@@ -164,8 +164,8 @@ its stopped homes in the `inspectMany` call it makes for the running ones
 of their group (one call for the provider, after the running homes' reads,
 where none of its homes runs; never an `inspect` per home, and never for a
 home a lifecycle command holds, whose stop may be in flight), and a
-home whose provider answers a live harness (there, and `running` not
-`false`) carries `outsideOats: {code: "running-outside-oats", backend,
+home whose provider answers a live harness (there, and `running: true`;
+`null`, a provider that cannot tell, leaves the home as recorded) carries `outsideOats: {code: "running-outside-oats", backend,
 message}` on its row. Nothing else follows from that read: the row stays
 stopped, no record is written, cleared or moved, an input stays refused and
 the sweep does what the stop receipt says. A provider that fails, refuses or

@@ -5229,11 +5229,12 @@ or a parent's home. It uses the lifecycle claim and requires a stopped,
 readable session. A running or unreadable session is `E_SESSION_RUNNING`,
 naming `oats instance stop <instance>`, upgrade, then session start. So is a
 provider home OATS recorded stopped whose provider answers a live harness
-(feature `provider-outside-oats`, [`outsideOats`](#row-outside-oats)): the
+(there, with `running: true`; feature `provider-outside-oats`, [`outsideOats`](#row-outside-oats)): the
 plan and the apply each ask the provider once (`inspect`), and nothing is
 upgraded under a harness that runs. It holds for a home stopped with the
-host too. An upgrade whose provider cannot be asked or does not answer goes
-on, since the home is as OATS recorded it: stopped. It does
+host too. An upgrade whose provider cannot be asked, does not answer or
+cannot tell (`running: null`) goes on, since the home is as OATS recorded
+it: stopped. It does
 not support `--server` or several homes in one call.
 
 A read-only plan stages package copies outside the home, verifies the locked
@@ -7548,9 +7549,11 @@ A launch that fails otherwise is `E_SESSION_START_FAILED`.
   stop it: the sweep resumes a lost one. Absent otherwise. **A home stopped
   with the host whose harness runs again** (a person's message reached its
   session before the sweep, or the harness came back) is one OATS means to
-  run: its row reads running from the provider's answer (`running`,
-  `runtimeState: "unknown"`, `open`), with no `sessionEnd` and no
-  `outsideOats`. The status read writes nothing; the next sweep adopts the
+  run: when the provider answers it there with `running: true`, its row
+  reads running from that answer (`running: true`, `runtimeState`, `open`),
+  with no `sessionEnd` and no `outsideOats`. With `running: null` (the
+  provider cannot tell) the row stays `lost`, and the sweep resumes it by
+  its notice. The status read writes nothing; the next sweep adopts the
   home ([the sweep](#provider-sweep)). It is read in the same call as
   `outsideOats`, below, by every listing that asks providers.
 - <a id="row-outside-oats"></a>**`outsideOats`** (feature
@@ -7576,8 +7579,10 @@ A launch that fails otherwise is `E_SESSION_START_FAILED`.
   `backend` is the row's; `message` is one line that names the remedy: `oats
   instance stop <name>` asks the provider to stop the session again, and a
   start from OATS stops it and launches a new one. "A live harness" is a
-  session the provider answers as there with `running` `true` or `null`;
-  one that is gone, or left at its shell, has no key.
+  session the provider answers as there with `running: true`. One that is
+  gone, one left at its shell, and one the provider cannot tell live from
+  settled (`running: null`) have no key: an answer that does not know
+  leaves the home as OATS recorded it.
 
   How it is read: a stopped home rides in the `inspectMany` call status
   makes for the running homes of its group (the homes that share the
@@ -7748,7 +7753,7 @@ manifest's key, exactly as declared) and, only when there is one,
 <a id="provider-sweep"></a>**The sweep.** A row of `oats session resume` for a provider home carries
 `backend`. Its outcomes: `resumed` (a lost session: the notice was sent),
 `already-running` (a session is there; also a home stopped with the host
-whose harness runs again, which the sweep adopts: its stop is cleared, no
+whose harness runs again, `running: true`, which the sweep adopts: its stop is cleared, no
 notice is sent into the running harness and nothing is counted. `oats
 session start --resume --home <abs>` of such a home does the same and
 answers `E_SESSION_RUNNING`, saying so), `refused` with `keeps-getting-lost`

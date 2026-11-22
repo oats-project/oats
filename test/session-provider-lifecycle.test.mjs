@@ -491,6 +491,8 @@ test("a resume's notice that fails without a refusal leaves a home stopped with 
   fx.clearCalls();
   assert.equal(await answerOf(fx, "resume", home), "E_SESSION_INPUT_FAILED");
   assert.deepEqual([callsOf(fx, home), runtimeOf(home).stoppedAt, stopReceiptOf(home)?.resume], [["inspect", "input", "stop:E"], stoppedAt, true]);
+  // That stop restores the host's: the provider is told so, and keeps the session for the next resume.
+  assert.deepEqual(fx.verbs("stop").map((c) => c.request.input.reason), ["host"]);
   fx.control({});
   assert.equal(await answerOf(fx, "resume", home), "resumed");
 });

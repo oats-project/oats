@@ -140,7 +140,8 @@ A kept package module moves only by a respawn; `oats session start` and
 One provider refusal refuses the whole move. A running or unreadable session
 refuses with `E_SESSION_RUNNING`; stop it first. So does a home on a session
 provider that OATS recorded stopped while its provider runs a harness there
-(`outsideOats` on its status row): `oats instance stop <name>` stops it. A stale plan returns
+(a home an operator stopped says so on its status row, as `outsideOats`):
+`oats instance stop <name>` stops it. A stale plan returns
 `E_PLAN_STALE` and a fresh plan to review.
 
 Modules move whole, with skills, instructions and hooks recomposed from the

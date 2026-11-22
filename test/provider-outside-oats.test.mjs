@@ -126,7 +126,7 @@ test("a stopped home whose provider answers a live harness carries outsideOats, 
   assert.equal(Object.hasOwn(rowOf(fx, "tame"), "outsideOats"), false);
 });
 
-test("the key is for a live harness only: a session the provider reads gone, stopped at its shell, or refuses, has none; one it cannot tell idle from settled has it", async (t) => {
+test("the key is for a harness the provider says runs: a session it reads gone, left at its shell, cannot tell live from settled, or refuses, has none", async (t) => {
   const fx = providerDeployment(t);
   for (const name of ["gone", "shell", "idle", "turn", "refused", "malformed"]) { await fx.launch(name); operatorStop(fx, name); }
   fx.control({
@@ -136,7 +136,7 @@ test("the key is for a live harness only: a session the provider reads gone, sto
   });
   fx.clearCalls();
   const rows = rowsOf(fx);
-  assert.deepEqual(rows.map((r) => [r.instance, r.outsideOats?.code ?? null]), [["gone", null], ["idle", "running-outside-oats"], ["malformed", null], ["refused", null], ["shell", null], ["turn", "running-outside-oats"]]);
+  assert.deepEqual(rows.map((r) => [r.instance, r.outsideOats?.code ?? null]), [["gone", null], ["idle", null], ["malformed", null], ["refused", null], ["shell", null], ["turn", "running-outside-oats"]]);
   for (const row of rows) assert.deepEqual(recordedOf(row), STOPPED, row.instance);
   // One call for all six: an entry that is refused or is no answer is not asked again on its own.
   assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspectMany"]);
@@ -378,6 +378,30 @@ test("a home stopped with the host whose harness runs again is not outside OATS:
   const text = join(fx.base, "input.txt");
   writeFileSync(text, "hello again\n");
   assert.equal(fx.cli(["session", "input", "--home", back.home, "--text-file", text, "--json"]).json().ok, true);
+});
+
+test("a home stopped with the host whose provider cannot tell whether its session runs stays lost: no key, no adoption, and the sweep resumes it by its notice", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("idle");
+  hostStop(fx, home);
+  // As a provider answers an idle thread it cannot tell live from settled: there, `running: null`.
+  const idle = { present: true, state: "unknown", running: null };
+  fx.control({ idle: { inspect: { result: idle } } });
+  const row = rowOf(fx, "idle");
+  assert.deepEqual([row.running, row.runtimeState, row.sessionEnd, Object.hasOwn(row, "outsideOats")], [false, "stopped", "lost", false]);
+  const sweep = (...flags) => fx.cli(["session", "resume", "--deployment", fx.dep, ...flags, "--json"]).json();
+  assert.deepEqual(sweep("--plan").result.rows.map((r) => [r.instance, r.outcome]), [["idle", "resumed"]]);
+  fx.clearCalls();
+  assert.deepEqual(sweep().result.rows.map((r) => [r.instance, r.outcome]), [["idle", "resumed"]]);
+  assert.deepEqual(fx.verbs("input").map((c) => c.request.input.text), ["OATS resumed this session after it was interrupted. Continue from where you were."], "the resume notice was sent");
+  assert.deepEqual([runtimeOf(home).stoppedAt, existsSync(join(home, ".oats-stop.json"))], [null, false]);
+  // A state word other than `unknown` with `running: true` is adopted all the same: the rule is `running`.
+  const odd = await fx.launch("odd");
+  hostStop(fx, odd.home);
+  fx.control({ odd: { inspect: { result: { present: true, state: "shell", running: true } } } });
+  fx.clearCalls();
+  assert.deepEqual(sweep().result.rows.filter((r) => r.instance === "odd").map((r) => r.outcome), ["already-running"]);
+  assert.deepEqual([fx.verbs("input"), runtimeOf(odd.home).stoppedAt], [[], null]);
 });
 
 test("a resume by hand of a home stopped with the host whose harness runs adopts it too: E_SESSION_RUNNING, the stop cleared, nothing sent", async (t) => {

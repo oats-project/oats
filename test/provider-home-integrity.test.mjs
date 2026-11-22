@@ -316,11 +316,9 @@ test("an upgrade refuses a home recorded stopped whose harness runs, at the plan
   fx.control(live);
   await assert.rejects(apply({ planRevision: planned.planRevision, idempotencyKey: "astray-1" }), refused);
   assert.equal(receipt(), before, "no module moved, and the receipt is the bytes it was");
-  // A session the provider reads idle, which it cannot tell from a live one, refuses as well; one
-  // that is gone, or left at its shell, does not.
-  fx.control({ astray: { inspect: { result: { present: true, state: "unknown", running: null } } } });
-  await assert.rejects(plan(), refused);
-  for (const quiet of [{ present: false, state: "stopped", running: false }, { present: true, state: "shell", running: false }]) {
+  // Only a harness the provider says runs refuses: a session that is gone, one left at its shell,
+  // and one the provider cannot tell live from settled leave the home as OATS recorded it.
+  for (const quiet of [{ present: false, state: "stopped", running: false }, { present: true, state: "shell", running: false }, { present: true, state: "unknown", running: null }]) {
     fx.control({ astray: { inspect: { result: quiet } } });
     assert.equal((await plan()).planRevision, planned.planRevision, JSON.stringify(quiet));
   }
