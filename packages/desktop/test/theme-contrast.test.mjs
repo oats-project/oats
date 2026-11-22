@@ -795,7 +795,7 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
     if (current) b.setAttribute("aria-current", "page");
     b.innerHTML = `<span class="icon"><svg class="shell-icon" aria-hidden="true"></svg></span><span class="label">${label}</span>`;
     // The failure mark, as paintAutomationsFailed draws it.
-    if (label === "Automations") b.insertAdjacentHTML("beforeend", `<span class="nav-failed"><span class="nav-failed-count" aria-hidden="true">1 failed</span><span class="sr-only">, a run failed</span></span>`);
+    if (label === "Automations") b.insertAdjacentHTML("beforeend", `<span class="nav-failed"><span class="sr-only">, </span><span class="nav-failed-count">1 failed</span></span>`);
     doc.getElementById("nav").append(b);
   }
   const root = win.getComputedStyle(doc.documentElement);
@@ -814,7 +814,7 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
     assert.ok(!bg || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(bg), `#${id} paints nothing of its own: the sidebar shows under it (${bg})`);
   }
   const controls = [...doc.querySelectorAll("#nav button")];
-  assert.deepEqual(controls.map(b => b.id || b.textContent), ["Workspace", "Automations1 failed, a run failed"]);
+  assert.deepEqual(controls.map(b => b.id || b.textContent), ["Workspace", "Automations, 1 failed"]);
   assert.equal(doc.getElementById("nav-title"), null, "no title over the views");
   for (const control of controls) {
     const what = control.id || control.textContent, current = control.classList.contains("active");

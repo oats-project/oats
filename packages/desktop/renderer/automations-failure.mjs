@@ -12,7 +12,8 @@ import { automationRows } from "./automation-rows.mjs";
 export const FAILED_OUTCOMES = Object.freeze(["launch-failed", "invalid"]);
 /** Re-read at most this often per workspace (the roster's poll asks on every read). */
 export const AUTOMATIONS_FAILURE_TTL = 60_000;
-/** What the mark says, after the row's name: "Automations, a run failed". */
+/** What Home's Automations tile says after its name: "Automations, 4, a run failed" (the sidebar's row says its
+ * shown count instead, "Automations, 2 failed", slice 3d). */
 export const FAILED_RUN_TEXT = ", a run failed";
 
 /** Whether one automation row (automation-rows.mjs `automationRow`) failed its last run. */

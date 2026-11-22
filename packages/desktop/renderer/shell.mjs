@@ -76,7 +76,7 @@ import { createWorkspaceSwitcher } from "./workspace-switcher.mjs";
 import { NAV, NAV_TABS, PINNED, pinnedRowFor, navTab, stageSidebarMode, loadStageView } from "./shell-nav.mjs";
 import { shellIcon, mountShellIcons, iconElement } from "./shell-icons.mjs";
 import { createSidebarFoot, emptyRosterText } from "./sidebar-foot.mjs";
-import { createAutomationsFailure, FAILED_RUN_TEXT } from "./automations-failure.mjs";
+import { createAutomationsFailure } from "./automations-failure.mjs";
 import { automationsSupported } from "./views/automations.mjs";
 import { identityCSS, createHarnessMark } from "./identity-marks.mjs";
 import { rowFactsTitle } from "./row-facts-title.mjs";
@@ -2723,8 +2723,8 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
 // instance tree in the sidebar is the instances surface itself — selecting
 // an instance opens its terminal; there is no separate Instances stage.
 // The pinned destinations (the Desktop UI rework, slices 1, 2 and 2b): Home, Workspace and Automations, rows under the
-// switcher in the roster rows' style. Automations carries a --danger dot while a run failed (automations-failure.mjs,
-// paintAutomationsFailed), its words after the name, so the row's name says it ("Automations, a run failed").
+// switcher in the roster rows' style. Automations says "N failed" after its name while a run failed (slice 3d;
+// automations-failure.mjs, paintAutomationsFailed), the words its name says too ("Automations, 2 failed").
 const navEl = document.getElementById("nav");
 for (const v of PINNED) {
   const b = document.createElement("button");
@@ -2740,17 +2740,18 @@ for (const v of PINNED) {
   navEl.append(b);
 }
 /** Show or clear the Automations row's failure mark: after the name, "N failed" in the failure ink (slice 3d, the
- * prototype's), and its words for assistive tech (the row's accessible name then says "Automations, a run failed").
- * Absent while nothing failed, so it says nothing then. `count`: how many rows failed their last run. */
+ * prototype's). The shown words are in its accessible name ("Automations, 2 failed": the label in the name, WCAG
+ * 2.5.3), a comma for assistive tech before them. Absent while nothing failed, so it says nothing then. `count`: how
+ * many rows failed their last run. */
 function paintAutomationsFailed(count) {
   const row = document.querySelector('#nav .nav-item[data-view="automations"]');
   if (!row) return;
   row.querySelector(":scope > .nav-failed")?.remove();
   if (!(count > 0)) return;
   const mark = document.createElement("span"); mark.className = "nav-failed";
-  const shown = document.createElement("span"); shown.className = "nav-failed-count"; shown.setAttribute("aria-hidden", "true"); shown.textContent = `${count} failed`;
-  const said = document.createElement("span"); said.className = "sr-only"; said.textContent = FAILED_RUN_TEXT;
-  mark.append(shown, said); row.append(mark);
+  const comma = document.createElement("span"); comma.className = "sr-only"; comma.textContent = ", ";
+  const shown = document.createElement("span"); shown.className = "nav-failed-count"; shown.textContent = `${count} failed`;
+  mark.append(comma, shown); row.append(mark);
 }
 
 // The foot's controls use exactly the same registry as keyboard actions (the nav's buttons run theirs above): ?

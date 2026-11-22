@@ -10,8 +10,8 @@
 //   workspaces  the list of workspaces' tab stop (the row last focused, else the current one), else
 //               the heading's Add local workspace…
 //   roster  the roster's tab stop (the selected row), else its first control (Retry after a failed read),
-//           else, for an empty roster, the foot's New agent (its one action; F6 goes on from there as
-//           from the roster)
+//           else, for an empty roster, New agent at its end (its one action, the roster's own control since
+//           slice 3d)
 //   views   the current view's nav item (aria-current), else the first one
 //   main    the active tab's content (a terminal's input) through the shell's hook, else the
 //           stage's first control

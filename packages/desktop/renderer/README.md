@@ -560,8 +560,8 @@ split into sections) is `packages/client/roster-sections.mjs`.
   `.ws-option`, 0 8px 0 12px, 28px tall, 13px); the pinned rows (`#nav`, PINNED: Home, Workspace, Automations;
   8px above the first, 4px below the last, 8px in as the roster's list; a column of 34px `.nav-item`s: the 16px
   icon centred on the dots' column, 24px in, the name 40px in, 13px 500 `--fg`, the current one on `--sel`;
-  Automations carries `.nav-failed`, "N failed" right after its name in `--danger` (aria-hidden) and the sr-only
-  ", a run failed", while `automations-failure.mjs` counts a failed run (`onCount`): `paintAutomationsFailed(count)`
+  Automations carries `.nav-failed`, "N failed" right after its name in `--danger`, in its accessible name too (an
+  sr-only ", " before it: "Automations, 2 failed", the label in the name), while `automations-failure.mjs` counts a failed run (`onCount`): `paintAutomationsFailed(count)`
   adds it and removes it); the roster (`#instance-roster`, no line before it) under its heading, a `.ctx-head`
   (the WORKSPACES kicker's type) holding "Agents" and the count (11px), with "Refreshing…" after the count when
   loading.mjs adds it; its rows two compact lines (`.ctx-name` 13px/17px 400, `.ctx-row-detail` 11.5px/15px

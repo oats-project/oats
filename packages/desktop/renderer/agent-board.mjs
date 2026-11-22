@@ -502,7 +502,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   }
   /** The budget: the terminal keeps at least TERMINAL_MIN_PX (or TERMINAL_MIN_SHARE) of the pane. Where the board would
    * take more, it gives way in steps: the facts show one (the rest behind "N more", which the person may still open),
-   * then the zone drops its key hint (on the head's line since slice 3d: it gives the line's room back to the head),
+   * then the zone drops its key hint (on the head's line since slice 3d, so this step frees the head's width, not
+   * height: the card is already a line shorter than before at every step),
    * then an open context gives up the rest, down to three lines (it scrolls in its
    * fold). On a repaint, a resize and the context's toggle. Where even that is too tall (a pane too short for the
    * board), a number refuses to type until the terminal is on screen again (TERMINAL_TYPE_MIN_PX). */

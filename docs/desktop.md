@@ -925,7 +925,7 @@ starts a stopped one: it is delivered once the agent runs again. Launching an ag
 the end of its run; neither means its task succeeded. While a schedule's last
 run is **launch failed** or **invalid**, the sidebar's **Automations** says how
 many after its name in red ("1 failed"), and a screen reader hears "Automations,
-a run failed"; it clears once
+1 failed"; it clears once
 no last run has failed. The sidebar reads both lists when the workspace opens
 and then at most once a minute. A trigger's last run carries no outcome, so a
 trigger never marks it.
@@ -1362,7 +1362,12 @@ the line's own grey; none when the harness isn't one of those) and says its soul
 "oats-maintainer · polaris"; the machine alone when
 its soul isn't known (this computer's rows then name it by the host name OATS
 records for it, `host.name` in its `oats-local.yaml`, else "This Mac"). This
-computer's own name shows once, at the right of the status line. That's all a row
+computer's own name shows once, at the right of the status line. A limit for
+now: the Desktop learns that name from its Automations read, so until that read
+answers the status line shows no name and a soul-less local row says "This Mac",
+and both stay so where the installed OATS serves no automations
+([#1972](https://github.com/oats-project/oats/issues/1972) tracks reading it
+from the status answer instead). That's all a row
 says: its repository, branch, pull request and harness are in the instance
 panel. Rows are 44px tall, the dot centred on the row.
 

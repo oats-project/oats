@@ -20,7 +20,7 @@ import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
 import { iconElement, shellIcon, mountShellIcons } from "../renderer/shell-icons.mjs";
 import { createSidebarFoot, newLabel, needYouText, needYouName, emptyRosterText } from "../renderer/sidebar-foot.mjs";
 import { DESKTOP_NOUNS, DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
-import { createAutomationsFailure, failedRuns, lastRunFailed, FAILED_RUN_TEXT, AUTOMATIONS_FAILURE_TTL } from "../renderer/automations-failure.mjs";
+import { createAutomationsFailure, failedRuns, lastRunFailed, AUTOMATIONS_FAILURE_TTL } from "../renderer/automations-failure.mjs";
 import { automationRow } from "../renderer/automation-rows.mjs";
 import { createWorkspaceSwitcher } from "../renderer/workspace-switcher.mjs";
 import { createFocusRegions } from "../renderer/focus-regions.mjs";
@@ -284,24 +284,26 @@ test("slice1 automations failure mark", async t => {
   assert.equal(failedRuns(answer(schedule("unknown"))), 0, "an unknown outcome is no failure");
   assert.equal(lastRunFailed(automationRow({ qualifiedId: "t", lastRun: { outcome: "launch-failed" } }, "trigger")), false, "a trigger's last run carries no outcome of its own");
   assert.equal(failedRuns([["schedule", null], ["trigger", "garbage"]]), 0, "an answer that isn't a list counts none");
-  // The shipped nav build and its mark: absent, then "Automations, a run failed", then cleared.
+  // The shipped nav build and its mark: absent, then "Automations, 1 failed" (its shown words in its name), then cleared.
   const dom = new JSDOM(html);
   t.after(() => dom.window.close());
   const doc = dom.window.document;
   const block = shell.slice(shell.indexOf('const navEl = document.getElementById("nav");'), shell.indexOf("// The foot's controls use exactly the same registry"));
-  const { paintAutomationsFailed } = runInNewContext(`${block}\n({ paintAutomationsFailed })`, { document: doc, NAV, PINNED, shellIcon, runAction() {}, FAILED_RUN_TEXT });
+  const { paintAutomationsFailed } = runInNewContext(`${block}\n({ paintAutomationsFailed })`, { document: doc, NAV, PINNED, shellIcon, runAction() {} });
   const row = doc.querySelector('#nav .nav-item[data-view="automations"]');
   // Its accessible name: the text that is not aria-hidden.
   const name = () => [...row.querySelectorAll("*")].filter(el => !el.children.length && !el.closest("[aria-hidden=true]")).map(el => el.textContent).join("").replace(/\s+/g, " ").trim();
   assert.equal(name(), "Automations"); assert.equal(row.querySelector(".nav-failed"), null);
   paintAutomationsFailed(1);
-  assert.equal(name(), "Automations, a run failed", "its accessible name says so");
-  // Slice 3d: the prototype's "1 failed" after the name, shown, the words beside it for assistive tech.
+  assert.equal(name(), "Automations, 1 failed", "its accessible name says what it shows (the label in the name, WCAG 2.5.3)");
+  // Slice 3d: the prototype's "1 failed" after the name, shown and said; a comma before it for assistive tech only.
   const count = row.querySelector(".nav-failed-count");
-  assert.deepEqual([count.textContent, count.getAttribute("aria-hidden")], ["1 failed", "true"], "the count shown, decoration beside the words");
+  assert.deepEqual([count.textContent, count.getAttribute("aria-hidden")], ["1 failed", null], "the count shown and said");
+  assert.equal(count.previousElementSibling.className, "sr-only");
   assert.equal(row.querySelectorAll(".nav-failed").length, 1);
   paintAutomationsFailed(2); assert.equal(row.querySelectorAll(".nav-failed").length, 1, "never doubled");
   assert.equal(row.querySelector(".nav-failed-count").textContent, "2 failed", "the count follows");
+  assert.equal(name(), "Automations, 2 failed");
   paintAutomationsFailed(0);
   assert.equal(name(), "Automations"); assert.equal(row.querySelector(".nav-failed"), null, "cleared when no last run is failed");
   // The reader: a latest-intent token per read; a new workspace clears the mark at once; a late answer for another
