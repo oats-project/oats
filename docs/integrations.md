@@ -199,9 +199,11 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
     they are. A new root has a new key. The person removes it themselves, from
     their own terminal, with a fresh dashboard setup key for that team (one team;
     it expires 24 hours after it's made if unused, and 15 minutes after its first
-    use), passed with `--api-key` or `AWEB_API_KEY`:
+    use), in `AWEB_API_KEY`, read without echo, never on the command line:
     ```bash
+    stty -echo; printf 'Setup key: '; read -r AWEB_API_KEY; stty echo; export AWEB_API_KEY
     aw id team remove-member --namespace <team namespace> --team <team name> --member <team namespace>/<root alias> --json
+    unset AWEB_API_KEY
     ```
     (or `--cert-id <certificate id>` in place of `--member`). No agent holds or uses
     that key. This works once aweb's Cloud release with it is live; until then, the
