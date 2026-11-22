@@ -438,7 +438,7 @@ test("#1261: a directory start refuses a home or work that another directory was
   }
 });
 
-test("#1261: a released baseline whose recorded dev changed (a macOS remount) starts on darwin and is refused elsewhere", async (t) => {
+test("#1261: a released baseline with no birth time whose recorded dev changed (a macOS remount) starts on darwin and is refused elsewhere", async (t) => {
   const f = fixture(t);
   const result = await f.spawn("remount"), file = soleBaseline(result.home), baseline = readJson(file);
   const moved = ({ dev, ino }) => ({ dev: dev + 1, ino });
@@ -446,6 +446,21 @@ test("#1261: a released baseline whose recorded dev changed (a macOS remount) st
   // The guard is the start's first check of the roots; past it, this fixture's start stops at the launch, which finds no tmux.
   if (process.platform === "darwin") assert.throws(() => startInstanceSession(result.home), (e) => e.code === "E_RUNTIME_ENDPOINT_UNKNOWN" && /tmux was not found/.test(e.message));
   else assert.throws(() => startInstanceSession(result.home), EXCHANGED("home"));
+});
+
+test("#1266: a baseline whose recorded dev changed (a btrfs reboot) starts when the birth time matches, and is refused when it does not", async (t) => {
+  const f = fixture(t);
+  const result = await f.spawn("reboot"), file = soleBaseline(result.home), baseline = readJson(file);
+  const roots = baseline.directoryRoots;
+  const write = (shift) => writeFileSync(file, JSON.stringify({ ...baseline, directoryRoots: { home: shift(roots.home), work: shift(roots.work) } }), { mode: 0o600 });
+  // The guard is the start's first check of the roots; past it, this fixture's start stops at the launch, which finds no tmux.
+  const PASSED_GUARD = (e) => e.code === "E_RUNTIME_ENDPOINT_UNKNOWN" && /tmux was not found/.test(e.message);
+  write((root) => ({ ...root, dev: root.dev + 1 }));
+  // Off darwin a changed dev needs a recorded birth time; a filesystem that has none records "0".
+  if (process.platform === "darwin" || roots.home.birthtimeNs !== "0") assert.throws(() => startInstanceSession(result.home), PASSED_GUARD);
+  else assert.throws(() => startInstanceSession(result.home), EXCHANGED("home"));
+  write((root) => ({ ...root, dev: root.dev + 1, birthtimeNs: String(BigInt(root.birthtimeNs) + 1n) }));
+  assert.throws(() => startInstanceSession(result.home), EXCHANGED("home"));
 });
 
 test("retirement preserves work in place if recovery storage is unusable", async (t) => {

@@ -2133,10 +2133,26 @@ A start refuses a directory home whose home or `work/` is no longer the
 directory the spawn recorded (`directory home was exchanged` or `directory work
 was exchanged`), for example when another directory was renamed into its
 place. The spawn records each root's device, inode and birth time. A root is
-the same directory when its device and inode match. On macOS, which gives a
-volume a new device number each time it is mounted (every reboot), an equal
-inode is enough, provided the birth time also matches when one was recorded
-(a home spawned by a kernel that recorded none is judged by the inode alone).
+the same directory when its device and inode match. Some volumes get a new
+device number each time they are mounted, so it changes at every reboot: an
+APFS volume on macOS, a btrfs subvolume or an overlay mount on Linux. There a
+changed device number is accepted as follows:
+
+- **macOS:** an equal inode is enough, provided the birth time also matches
+  when one was recorded (a home spawned by a kernel that recorded none is
+  judged by the inode alone).
+- **Linux and other systems:** an equal inode and an equal recorded birth time
+  are both needed. A home whose spawn recorded no birth time (a kernel before
+  0.58.0) or a birth time of `0` (a filesystem that has none, as NFS often does)
+  still needs its device number to match, and refuses to start after it
+  changes; spawn it again. The rule is stricter than on macOS because btrfs
+  numbers the inodes of every subvolume from the same start, while Linux has
+  no call that sets a birth time, so a copy of a directory gets a new one.
+
+Accepting a changed device number lets one thing through that a matching one
+refused: a snapshot or a block-level copy of the volume that holds the home,
+mounted at the same path, which keeps both inodes and birth times. That is
+the home itself, as it was when the snapshot was taken.
 
 ### `workspace` — cross-repo coordinator
 
