@@ -2469,9 +2469,10 @@ for (const [name] of palettes) test(`${name}: the leader's hint meets AA on its 
     for (let node = el; node; node = node.parentElement) assert.equal(dom.window.getComputedStyle(node).opacity, "1", `${selector}: no opacity`);
   };
   hint.say("No instance is focused or selected.");
-  check(".leader-hint-line", "fg", ".leader-hint", "surface-2");
+  // Slice 3d: drawn over the status line in its own ground (--bg), box and type.
+  check(".leader-hint-line", "fg", ".leader-hint", "bg");
   // The hint is opaque: its surface is a token, never a blend over the terminal behind it.
-  assert.equal(dom.window.getComputedStyle(hint.element).background, "var(--surface-2)");
+  assert.equal(dom.window.getComputedStyle(hint.element).background, "var(--bg)");
   assert.notEqual(dom.window.getComputedStyle(hint.element).clipPath, "inset(50%)", "a line is drawn");
 });
 
