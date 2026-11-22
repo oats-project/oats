@@ -86,7 +86,7 @@ test('slice3d sidebar heads uppercase and rows two-line compact', () => {
   const fresh = decl('.ctx-new');
   assert.deepEqual([fresh.get('font-size'), fresh.get('border-radius'), fresh.get('padding'), fresh.get('line-height'), fresh.get('box-shadow'), fresh.get('text-transform')],
     ['11px', '4px', '0 4px', '14px', 'inset 0 0 0 1px var(--border)', 'lowercase']);
-  assert.equal(decl('.ctx-new-dot').get('display'), 'none');
+  assert.equal(shellCSS.match(/\.ctx-new-dot\b/), null, 'no dot: the pill is the word');
   // The foot: "● 3 need you" in the body ink, 13px, and ?, .foot .q — a 22px circle in the hairline.
   assert.deepEqual([decl('#sidebar-need-you').get('font-size'), decl('#sidebar-need-you').get('font-weight'), decl('#sidebar-need-you').get('color')], ['13px', '400', 'var(--fg)']);
   assert.deepEqual([decl('#sidebar-bar > .side-icon-button').get('width'), decl('#sidebar-bar > .side-icon-button').get('border-radius')], ['22px', '50%']);
@@ -167,6 +167,11 @@ test('slice3d question card head, hint, boxed options with number badges', t => 
   assert.deepEqual([fact.get('min-height'), fact.get('border-radius'), fact.get('background')], ['28px', '6px', 'var(--surface)']);
   assert.ok(u.$('.agent-fact > .agent-fact-pin'), 'the pin');
   assert.equal(decl('.agent-fact-focus > .agent-fact-updated').get('margin-left'), 'auto', 'the time at the right');
+  // The Opus read: a value is never cut (the board allows 80 characters): it wraps inside its strip, which grows.
+  const value = decl('.agent-fact-value'), focus = decl('.agent-fact-focus');
+  assert.deepEqual([value.get('overflow-wrap'), value.get('text-overflow'), value.get('overflow')], ['anywhere', undefined, undefined]);
+  assert.deepEqual([focus.get('flex-wrap'), focus.get('white-space'), focus.get('overflow')], ['wrap', 'normal', undefined]);
+  assert.equal(fact.get('height'), undefined, 'a min-height, not a fixed line');
 });
 
 // Round 1's finding: the card's inset (8px above, 12px below) is the terminal's loss as much as the card is, so the
@@ -204,6 +209,10 @@ test('slice3d key bar layout', t => {
   assert.deepEqual([key.get('font'), key.get('font-weight'), key.get('color')], ['inherit', '500', 'var(--fg)']);
   assert.equal(key.get('font-family'), undefined, 'no monospace of its own');
   assert.equal(decl('.status-key', statusLineCSS).get('gap'), '5px');
+  // The leader's line, drawn over it, takes its box, ground and type: 28px tall exactly, on --bg, centred.
+  const leader = decl('.leader-hint[data-mode="line"]');
+  assert.deepEqual([leader.get('min-height'), leader.get('padding'), leader.get('background'), leader.get('display'), leader.get('align-items'), leader.get('font-size')],
+    ['28px', '0 16px', 'var(--bg)', 'flex', 'center', '12px']);
   const sep = decl('.status-key + .status-key::before', statusLineCSS);
   assert.deepEqual([sep.get('content'), sep.get('width'), sep.get('height'), sep.get('border-radius'), sep.get('background')], ['""', '3px', '3px', '50%', 'var(--muted)'],
     'a drawn dot, no character for a screen reader to say');
@@ -237,9 +246,9 @@ test('slice3d tokens not page-local', () => {
 
 // Every ink/fill pair the slice's rules paint, as [what, foregrounds, surfaces].
 const CHANGED_PAIRS = [
-  ['the WORKSPACES and AGENTS heads, a row\'s second line, the count', ['muted'], ['surface', 'surface-2', 'sel']],
-  ['the pinned rows and the workspace rows', ['fg'], ['surface', 'surface-2', 'sel']],
-  ['"1 failed"', ['danger'], ['surface', 'surface-2', 'sel']],
+  ['the WORKSPACES and AGENTS heads, a row\'s second line, the count', ['muted'], ['sidebar', 'surface-2', 'sel']],
+  ['the pinned rows and the workspace rows', ['fg'], ['sidebar', 'surface-2', 'sel']],
+  ['"1 failed"', ['danger'], ['sidebar', 'surface-2', 'sel']],
   ['a tab at rest, hovered, focused: its name and number', ['muted', 'faint'], ['bg', 'surface', 'sel']],
   ['the active tab: its name and number', ['fg', 'accent'], ['surface-2', 'sel']],
   ['the facts: label, value, time', ['fg', 'muted', 'accent'], ['surface']],

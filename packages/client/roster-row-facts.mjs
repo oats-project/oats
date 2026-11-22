@@ -13,7 +13,8 @@
  *            machine's too, whatever label the deployment carries. A view's row may carry `server` and a repository
  *            in `repoName`, so its deployment's machine comes first. Always a label: a row that names no machine is
  *            this machine's
- *   local    whether the row runs on this machine (its machine is `here`, or `terms.thisMachine`)
+ *   local    whether the row runs on this machine: its deployment is the local one, or it names no other machine
+ *            (no machine-tagged deployment, no server); its `machine` is then `here`, or `terms.thisMachine`
  *   detail   `soul` for this machine's row, `soul · machine` for another machine's; the machine alone when no soul
  *            is known
  *

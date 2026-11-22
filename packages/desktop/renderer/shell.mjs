@@ -1388,7 +1388,7 @@ function renderContextRoster(instances) {
           // #1247: a retiring home has no hint (nothing to do but wait).
           if (held.hint) { const hint = document.createElement("span"); hint.className = "ctx-meta ctx-held-hint"; hint.textContent = held.hint; heldLines.push(hint); }
         }
-        // Spec E: a spawn the operator was not taken to says New (text and a dot, never colour alone)
+        // Spec E: a spawn the operator was not taken to says New (the word, never colour alone)
         // until its row is opened, or its tab is (the first paint where it is the active row).
         if (isActive) spawnJobs.seen?.(ws, i);
         if (attn) { meta.className = "ctx-meta ctx-attn-line"; meta.replaceChildren(attn); }
@@ -1408,9 +1408,9 @@ function renderContextRoster(instances) {
           if (pinned) line.append(pinnedMark(document));
           if (told) line.append(told.spoken);
           if (isNew) {
+            // Slice 3d: the prototype's "new" pill, the word alone (no dot).
             const mark = document.createElement("span"); mark.className = "ctx-new";
-            const markDot = document.createElement("span"); markDot.className = "ctx-new-dot"; markDot.setAttribute("aria-hidden", "true");
-            mark.append(markDot, "New"); line.append(mark);
+            mark.append("New"); line.append(mark);
           }
           copy.append(line, ...[spoken].filter(Boolean), meta, ...heldLines, ...[stateWords, relation].filter(Boolean));
         } else copy.append(name, ...[spoken].filter(Boolean), meta, ...heldLines, ...[stateWords, relation].filter(Boolean));
@@ -3149,11 +3149,11 @@ window.addEventListener('pagehide', () => mailSheet.dispose(), { once: true });
 function rosterEntry() {
   const list = contextRosterEl?.querySelector(".ctx-list");
   const spawn = document.getElementById("sidebar-spawn");
-  // A control the roster shows (Retry, in its notice or its failed block) before the foot's Spawn instance.
+  // A control the roster shows (Retry, in its notice or its failed block) before New agent at its end.
   // #1579: the Background heading is a stop of the roster's roving order, and the list's only one when every row is in its closed section.
   return list?.querySelector('.ctx-inst[tabindex="0"], .ctx-background-toggle[tabindex="0"]') || list?.querySelector(".ctx-inst, .ctx-background-toggle")
     || contextRosterEl?.querySelector(':scope > :not(.ctx-head) button:not([disabled])')
-    // Spawn instance is in the foot, shown with the sidebar: it is the roster's way in only while the roster is.
+    // New agent ends the roster (slice 3d): it is the roster's way in while the roster is shown (it hides with it).
     || (contextRosterEl && !contextRosterEl.hidden && spawn && !spawn.disabled ? spawn : null)
     || document.querySelector('#ws-options [tabindex="0"]') || document.getElementById("ws-add-open");
 }
@@ -3628,8 +3628,11 @@ function statusKeys() {
   const region = focusRegions?.regionOfFocus?.() ?? null;
   const inTerminal = !!document.activeElement?.closest?.(".xterm");
   const page = workspacePageKeys(key);
+  // New agent sits at the roster's end (slice 3d) and is the roster's region, but not a row: the rows' keys do
+  // nothing there, so it shows the default set.
+  const onSpawn = document.activeElement?.id === "sidebar-spawn";
   const rows = page ? page
-    : region === "roster" ? [["Enter", "open"], [key("sidebar.key.stop"), "stop"], [key("app.palette"), "palette"]]
+    : region === "roster" && !onSpawn ? [["Enter", "open"], [key("sidebar.key.stop"), "stop"], [key("app.palette"), "palette"]]
     : region === "workspaces" ? [["Enter", "show"], ["↑↓", "move"], [key("app.palette"), "palette"]]
     : inTerminal ? [[key("app.leader"), "prefix"], [key("tabs.close"), "close tab"], [key("app.palette"), "palette"]]
     : [[key("app.palette"), "palette"], [key("app.leader"), "prefix"], [key("app.quickOpenSouls"), `new ${DESKTOP_NOUNS.instance}`]];

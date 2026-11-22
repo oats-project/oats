@@ -317,7 +317,7 @@ export { ROSTER_STALE_TITLE };
 /** The pending skeleton: five roster rows, the height of the real ones. */
 export const ROSTER_SKELETON_ROWS = 5;
 
-/** The sidebar foot's Spawn instance while it can take focus, else null. */
+/** New agent, at the roster's end (slice 3d), while it can take focus, else null. */
 function spawnAction(rosterEl) {
   const spawn = rosterEl.ownerDocument.getElementById("sidebar-spawn");
   return spawn && !spawn.disabled && !spawn.closest("[hidden]") ? spawn : null;

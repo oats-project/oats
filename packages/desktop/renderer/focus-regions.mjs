@@ -151,11 +151,10 @@ export function createFocusRegions({ doc, focusMainContent = () => false, tabLay
    * keeps its place: F6 from the foot with the roster hidden (no workspace) goes on to main. */
   function cycle(delta) {
     if (!REGIONS.some(visible)) return false;
-    // From the foot (below the roster): F6 goes on as from the roster, Shift+F6 back as from main; from an empty
-    // roster's stop there (Spawn instance), Shift+F6 goes back as from the roster.
+    // From the foot (below the roster): F6 goes on as from the roster, Shift+F6 back as from main. (New agent, an
+    // empty roster's stop, sits in the roster since slice 3d, so it is the roster's own region.)
     const foot = inFoot(doc.activeElement);
-    const rosterStop = foot && visible("roster") && currentItem("roster") === doc.activeElement;
-    const at = REGIONS.indexOf(foot ? (delta > 0 || rosterStop ? "roster" : "main") : regionOfFocus());
+    const at = REGIONS.indexOf(foot ? (delta > 0 ? "roster" : "main") : regionOfFocus());
     const n = REGIONS.length;
     for (let i = 1; i <= n; i++) {
       // Outside every region (body, a dialog): the first region F6 meets, or the last for Shift+F6.

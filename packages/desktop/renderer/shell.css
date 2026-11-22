@@ -43,7 +43,7 @@ body {
   display: flex; flex-direction: column;
 }
 /* The head (2026-10-26): the Workspace heading over its list, with no line between them, the first row close under it:
-   the heading sits where it sat in the 48px bar (its centre 24px down), and the head ends 8px under it. */
+   the kicker's centre 24px down, beside the 44px tab bar (slice 3d), and the head ends close over its list. */
 /* Slice 3d (the main screen, 1:1 with the prototype's frame A): the head is the prototype's kicker, "WORKSPACES" small
    and uppercase over the list, its + a quiet 26x24 control; the heading's left edge on the rows' dots' left edge (20px in). */
 .side-head {
@@ -352,7 +352,7 @@ body {
 /* An instance's name (slice 3d, the prototype's two-line row): 13px/17px in the body weight; line 2 is 11.5px/15px. */
 .ctx-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 400; line-height: 17px; }
 .ctx-meta { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Spec E: "New" on a just-spawned row the operator was not taken to: text and a dot, until it is first opened. */
+/* Spec E: "New" on a just-spawned row the operator was not taken to: the word (a pill since slice 3d), until it is first opened. */
 /* The one visually-hidden utility (#560): read by assistive technology, never painted. Anchored at its
    containing block (top/left 0), so it cannot stretch a scroller (renderer/README.md, workspace-sticky test);
    clip-path, with the legacy clip as a fallback. Used by the roster's "N below need input", the terminal's
@@ -364,7 +364,6 @@ body {
 /* Slice 3d: the prototype's "new" pill, its word lower-case in a 1px border's ring (no dot). */
 .ctx-new { flex: none; display: inline-flex; align-items: center; padding: 0 4px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--border);
            color: var(--muted); font-size: 11px; font-weight: 400; line-height: 14px; text-transform: lowercase; }
-.ctx-new-dot { display: none; }
 /* The disclosure (the product owner, 2026-11-19; roster-disclosure.mjs): a parent's chevron and the count of the rows
    under it, on the name line right after the name (the product owner, 2026-11-20), so every name starts on its
    level's column; a long name ellipsizes before it, and an instance row has no tools over its end (slice 1) to cover
@@ -490,7 +489,7 @@ body {
    tab strip with tabs open, else the stage's own header), shell-owned and in the Main region's tab
    order (first and last child of #main). Each top bar reserves their room as a leading/trailing inset
    while they are shown, so they never cover a view's content nor sit on a terminal, and the bar keeps
-   its 48px and its rule. */
+   its --bar-h (44px since slice 3d) and its rule. */
 #main:has(> #show-sidebar:not([hidden])) { --main-lead-inset: 40px; }
 #main:has(> #show-panel:not([hidden])) { --main-trail-inset: 40px; }
 .main-edge-control { position: absolute; top: calc((var(--bar-h) - 1px - 28px) / 2); z-index: 3;
@@ -512,8 +511,8 @@ body {
 /* The Desktop UI rework, slice 4: the hint's line is said on the status line (status-line.mjs): drawn over it, the
    window's bottom line, in its place and its type, for as long as it stays (the next key, click or focus change). */
 .leader-hint[data-mode="line"] { position: fixed; left: 0; right: 0; bottom: 0; z-index: 46; max-height: none; min-height: 28px;
-  padding: 5px 16px; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none;
-  background: var(--surface-2); font-size: 12px; line-height: 18px; }
+  display: flex; align-items: center; padding: 0 16px; border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none;
+  background: var(--bg); font-size: 12px; line-height: 18px; } /* the status line's own box, ground and type (slice 3d) */
 #show-sidebar { left: 6px; }
 #show-panel { right: 6px; }
 .main-edge-control:hover { color: var(--fg); background: var(--surface-2); }
@@ -654,7 +653,7 @@ body {
 .split-resizer:hover, .split-resizer:focus-visible { background: var(--accent); outline: none; }
 #tabhost.split-row > .group-cell + .group-cell { border-left: 1px solid var(--border); }
 #tabhost.split-col > .group-cell + .group-cell { border-top: 1px solid var(--border); }
-/* 48px including the bottom rule, like the tab strip: tabs fill the 47px
+/* --bar-h (44px) including the bottom rule, like the tab strip: tabs fill the 43px
    above it, so the rule stays visible under the active tab. */
 .group-tabbar { display: flex; flex: none; box-sizing: border-box; min-width: 0; overflow-x: auto; overflow-y: hidden;
                 height: var(--bar-h); background: var(--bg); border-bottom: 1px solid var(--border);
@@ -735,15 +734,16 @@ body {
 /* Slice 3d: each fact is one of the prototype's pinned strips: a 28px row on the raised surface, the pin, the label and its
    value, the time at the right, then the fact's own controls; the fold and its notes follow, quiet, on the ground. */
 .agent-fact-list { display: flex; flex-direction: column; gap: 2px; list-style: none; margin: 0; padding: 0; }
-.agent-fact { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 28px; padding: 0 4px 0 10px; border-radius: 6px;
+.agent-fact { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 28px; padding: 3px 4px 3px 10px; border-radius: 6px;
   background: var(--surface); white-space: nowrap; }
 .agent-fact > .agent-fact-pin { flex: none; width: 12px; height: 12px; color: var(--muted); }
-.agent-fact-focus { display: flex; flex: 1 1 auto; align-items: center; gap: 4px; min-width: 0; padding: 1px 4px; border-radius: 5px; outline: none; overflow: hidden; }
+/* A long value wraps inside its strip (the board allows 80 characters): the strip grows, the value is never cut. */
+.agent-fact-focus { display: flex; flex-wrap: wrap; flex: 1 1 auto; align-items: baseline; gap: 0 4px; min-width: 0; padding: 1px 4px; border-radius: 5px; outline: none; white-space: normal; }
 .agent-fact-focus > .agent-fact-updated { margin-left: auto; padding-left: 10px; }
 .agent-facts > :is(.agent-facts-fold, .agent-facts-unhide, .agent-facts-note) { align-self: flex-start; }
 .agent-fact-focus:focus-visible { background: var(--sel); }
 .agent-fact-label, .agent-fact-unit, .agent-fact-updated, .agent-fact-sparknote, .agent-fact-says { color: var(--muted); }
-.agent-fact-value { color: var(--fg); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.agent-fact-value { min-width: 0; color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
 .agent-fact-updated, .agent-fact-sparknote { font-size: 11px; }
 .agent-fact-spark { width: 48px; height: 14px; color: var(--accent); flex: none; }
 .agent-fact-link { min-width: 0; max-width: 100%; padding: 1px 6px; border: 1px solid var(--border); border-radius: 5px; text-align: start;

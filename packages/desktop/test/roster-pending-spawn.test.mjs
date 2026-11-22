@@ -193,7 +193,7 @@ test("Spec E: a just-spawned row says New (text and a dot) until its row is open
   u.render(roster);
   const mark = u.row("solo").querySelector(".ctx-new");
   assert.ok(mark, "the mark"); assert.equal(mark.textContent, "New", "text, not colour alone");
-  assert.equal(mark.querySelector(".ctx-new-dot").getAttribute("aria-hidden"), "true");
+  assert.equal(mark.children.length, 0, "the word alone: slice 3d's pill has no dot");
   assert.match(spokenText(u.row("solo")), /^soloNew/, "the row's name says it to assistive tech too");
   assert.equal(u.row("root").querySelector(".ctx-new"), null, "only the new one");
   assert.equal(u.row("solo").querySelector(".ctx-name").dataset.name, "solo");
@@ -214,15 +214,14 @@ function luminance(hex) {
   return c[0] * .2126 + c[1] * .7152 + c[2] * .0722;
 }
 for (const theme of ["light", "solarized", "dark"]) test(`Spec E, ${theme}: “New” is muted text that meets AA on every row fill, with no opacity`, async t => {
-  const dom = new JSDOM(`<!doctype html><html data-theme="${theme}"><head></head><body><span class="ctx-new"><span class="ctx-new-dot"></span>New</span></body></html>`);
+  const dom = new JSDOM(`<!doctype html><html data-theme="${theme}"><head></head><body><span class="ctx-new">New</span></body></html>`);
   t.after(() => dom.window.close());
   const doc = dom.window.document;
   for (const source of [read("theme.css"), css]) { const style = doc.createElement("style"); style.textContent = source; doc.head.append(style); }
   const view = dom.window, root = view.getComputedStyle(doc.documentElement), mark = doc.querySelector(".ctx-new");
   assert.equal(view.getComputedStyle(mark).color, "var(--muted)");
   assert.equal(view.getComputedStyle(mark).opacity, "1");
-  // Slice 3d: the prototype's "new" pill: the word in a 1px ring of the border's line, lower-case, its dot not drawn.
-  assert.equal(view.getComputedStyle(doc.querySelector(".ctx-new-dot")).display, "none");
+  // Slice 3d: the prototype's "new" pill: the word in a 1px ring of the border's line, lower-case, no dot.
   assert.deepEqual([view.getComputedStyle(mark).boxShadow, view.getComputedStyle(mark).textTransform], ["inset 0 0 0 1px var(--border)", "lowercase"]);
   const fg = luminance(root.getPropertyValue("--muted").trim());
   for (const fill of ["surface", "surface-2", "sel"]) {
