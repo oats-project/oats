@@ -20,10 +20,10 @@ const markup = `<div id="app"><aside id="sidebar">
   <nav id="nav"><button class="nav-item active"><span class="icon">${icon}</span><span class="label">Workspace overview</span></button><button class="nav-item"><span class="icon">${icon}</span><span class="label">Automations</span><span class="nav-failed"><span class="nav-failed-count" aria-hidden="true">1 failed</span><span class="sr-only">, a run failed</span></span></button></nav>
   <section id="instance-roster"><div class="ctx-head roster-head"><span>Instances</span><span class="ctx-count">● 1 running</span></div>
     <div class="ctx-list"><div class="ctx-deployment" role="heading" aria-level="3"><span class="ctx-deployment-label">devbox</span><span class="deployment-mark" role="img" aria-label="remembered">${icon}</span></div><div class="ctx-tree-row"><button class="ctx-inst active"><span class="ctx-dot on"></span>
-      <span class="ctx-copy"><span class="ctx-name">Fixture instance</span><span class="ctx-meta ctx-row-detail">dev · This Mac</span></span>
-    </button></div></div></section>
+      <span class="ctx-copy"><span class="ctx-name">Fixture instance</span><span class="ctx-meta ctx-row-detail">dev</span></span>
+    </button></div></div>
+    <button id="sidebar-spawn" type="button">${icon}<span>New agent</span></button></section>
   <div id="nav-foot"><div id="sidebar-bar" role="group" aria-label="Sidebar tools"><button id="sidebar-need-you" type="button" aria-label="1 agent needs you. Go to the first">${shellIcon("attention").replace('class="shell-icon"', 'class="shell-icon attn-mark"')}<span>1 need you</span></button>
-      <button id="sidebar-spawn" type="button">${icon}<span>New agent</span></button>
       <button id="sidebar-help" class="side-icon-button icon-button" type="button" aria-label="Keyboard shortcuts"><span aria-hidden="true">?</span></button></div>
   </div></aside>
   <main id="main"><button id="show-sidebar" class="main-edge-control" hidden>${icon}</button><div id="tabstrip"><div id="tabbar-row"><div id="tabbar">
@@ -205,15 +205,15 @@ test("nav/footer rhythm: pinned rows in the prototype's style, 34px, beside the 
   assert.equal(u.rule("#nav-foot").gap, "", "one child: no gap");
   assert.equal(u.rule("#nav-foot").borderTop, "1px solid var(--border)", "the foot keeps its one rule above it");
   assert.deepEqual([...u.get("#nav-foot").children].map(el => el.id), ["sidebar-bar"]);
-  // New agent: a + and its words, 24px tall, 12.5px at 400 (the prototype's quiet row), no border and no fill at rest
-  // (hover gives it one), its auto left margin pushing it and ? to the bar's right end, the bar's 4px gap before ?. The foot is budgeted for the
-  // 240px minimum in both font choices (measured in Chromium in the developer's hand-back: jsdom has no layout): the
-  // count alone may give way, its words ending in "…", never pushing ? out.
+  // New agent (slice 3d): at the roster's end, as the prototype's quiet ".row.add": a 34px row, its + (a 14px icon) on
+  // the dots' column, its words with the names, 13px at 400, no border and no fill at rest (hover gives it one).
   const spawn = u.style("#sidebar-spawn");
-  assert.deepEqual([spawn.height, spawn.minHeight, spawn.fontSize, spawn.fontWeight, spawn.whiteSpace, spawn.flexShrink], ["24px", "24px", "12.5px", "400", "nowrap", "0"]);
-  assert.deepEqual([spawn.marginTop, spawn.marginRight, spawn.marginBottom, spawn.marginLeft], ["0px", "0px", "0px", "auto"]);
-  assert.deepEqual([spawn.display, spawn.alignItems, spawn.gap, spawn.padding, spawn.background, spawn.color], ["flex", "center", "4px", "0px 5px", "rgba(0, 0, 0, 0)", "var(--muted)"]);
+  assert.equal(u.get("#sidebar-spawn").parentElement, u.get("#instance-roster"), "in the roster, after the list");
+  assert.equal(u.get("#sidebar-spawn").previousElementSibling, u.get(".ctx-list"));
+  assert.deepEqual([spawn.height, spawn.minHeight, spawn.fontSize, spawn.fontWeight, spawn.whiteSpace, spawn.flexShrink], ["34px", "34px", "13px", "400", "nowrap", "0"]);
+  assert.deepEqual([spawn.display, spawn.alignItems, spawn.gap, spawn.padding, spawn.margin, spawn.background, spawn.color], ["flex", "center", "9px", "0px 10px 0px 9px", "0px 8px 8px", "rgba(0, 0, 0, 0)", "var(--muted)"]);
   assert.equal(u.rule("#sidebar-need-you, #sidebar-spawn").border, "0px", "no border");
+  assert.equal(u.style(".ctx-list").flexGrow, "0", "the list takes its rows' height, so New agent follows the last row");
   // N need you: the same 24px button in --fg, the prototype's 13px at 400, its needs-input mark at 10px, 10px before the words.
   const need = u.style("#sidebar-need-you");
   assert.deepEqual([need.height, need.fontSize, need.fontWeight, need.color, need.background, need.gap], ["24px", "13px", "400", "var(--fg)", "rgba(0, 0, 0, 0)", "10px"]);
@@ -223,7 +223,7 @@ test("nav/footer rhythm: pinned rows in the prototype's style, 34px, beside the 
   assert.equal(u.doc.defaultView.getComputedStyle(u.get("#sidebar-need-you > .attn-mark")).width, "10px");
   const bar = u.style("#sidebar-bar");
   assert.deepEqual([bar.display, bar.alignItems, bar.gap, bar.padding], ["flex", "center", "4px", "0px"]);
-  assert.deepEqual([...u.get("#sidebar-bar").children].map(el => el.id), ["sidebar-need-you", "sidebar-spawn", "sidebar-help"]);
+  assert.deepEqual([...u.get("#sidebar-bar").children].map(el => el.id), ["sidebar-need-you", "sidebar-help"]);
   const help = u.style("#sidebar-help");
   assert.deepEqual([help.width, help.height, help.display, help.position, help.borderRadius], ["22px", "22px", "grid", "relative", "50%"], "the prototype's round ?");
   assert.equal(u.rule("#sidebar-help").boxShadow, "inset 0 0 0 1px var(--border)", "its ring in the border's line");
@@ -295,26 +295,26 @@ test("the refreshing Instances heading shows the indicator's words after the cou
 // The bar (slice 1 of the Desktop UI rework): [N need you] … [New agent][?], the foot's one row. The count's mark
 // centres on the rows' circles (18px in from the left), ? in the right-hand column (25px in from the right), New
 // instance 6px before ?, all computed from the rules.
-test("the bar: the count's mark on the rows' circles (24px in), ? in the right-hand column (25px from the right), New agent 4px before ?", t => {
+test("the bar: the count's mark on the rows' circles (24px in), ? in the right-hand column (25px from the right); New agent's + on the dots' column", t => {
   const u = fixture(t), px = value => { assert.match(value, /^-?\d+(\.\d+)?px$|^0$/, value); return parseFloat(value); };
   const foot = u.style("#nav-foot"), bar = u.style("#sidebar-bar"), help = u.style("#sidebar-help");
-  assert.deepEqual([...u.get("#sidebar-bar").children].map(el => el.id), ["sidebar-need-you", "sidebar-spawn", "sidebar-help"]);
-  assert.equal(u.style("#sidebar-spawn").marginLeft, "auto", "New agent's auto left margin keeps it and ? at the right end");
-  assert.equal(u.doc.defaultView.getComputedStyle(u.get("#sidebar-spawn .shell-icon")).width, "12px", "New agent's +: a 12px icon");
+  assert.deepEqual([...u.get("#sidebar-bar").children].map(el => el.id), ["sidebar-need-you", "sidebar-help"]);
+  assert.equal(u.style("#sidebar-help").marginLeft, "auto", "? at the bar's right end");
+  assert.equal(u.doc.defaultView.getComputedStyle(u.get("#sidebar-spawn .shell-icon")).width, "14px", "New agent's +: a 14px icon");
   // From the left: the foot's 14px, the bar's 0, the count's 5px and half its 10px mark. From the right: the foot's
-  // 14px, the bar's 0 and half ?'s 22px. New agent ends the bar's 4px gap before ?.
+  // 14px, the bar's 0 and half ?'s 22px.
   const markCentre = px(foot.paddingLeft) + px(bar.paddingLeft) + px(u.cascaded("#sidebar-need-you", "padding-left")) + 10 / 2;
   const helpCentre = px(foot.paddingRight) + px(bar.paddingRight) + px(help.width) / 2;
-  const spawnRight = px(foot.paddingRight) + px(bar.paddingRight) + px(help.width) + px(bar.gap) + px(u.style("#sidebar-spawn").marginRight);
   // A workspace row's circle: the list's 8px margin, the row's 12px, half the 8px circle; an agent row's: the roster
-  // list's 8px, the row's 12px (--dot-inset), half the circle.
+  // list's 8px, the row's 12px (--dot-inset), half the circle; New agent's +: its 8px margin, its 9px, half the 14px icon.
   const row = u.style(".ws-option"), circle = u.style(".ws-option .ctx-dot");
   const rowCircle = px(u.style(".ws-list").marginLeft) + px(row.paddingLeft) + px(circle.width) / 2;
   const agentCircle = px(u.style(".ctx-list").paddingLeft) + px(u.cascaded(".ctx-tree-row", "--dot-inset")) + 8 / 2;
-  assert.deepEqual({ markCentre, rowCircle, agentCircle }, { markCentre: 24, rowCircle: 24, agentCircle: 24 }, "14 + 0 + 5 + 5, on 8 + 12 + 4");
+  const spawn = u.style("#sidebar-spawn"), plus = px(spawn.marginLeft) + px(spawn.paddingLeft) + 14 / 2;
+  assert.deepEqual({ markCentre, rowCircle, agentCircle, plus }, { markCentre: 24, rowCircle: 24, agentCircle: 24, plus: 24 }, "14 + 0 + 5 + 5, on 8 + 12 + 4, on 8 + 9 + 7");
+  // The words: after the + and its 9px gap, 40px in, on the agents' names (8 + 12 + 8 + 12).
+  assert.equal(px(spawn.marginLeft) + px(spawn.paddingLeft) + 14 + px(spawn.gap), 40);
   assert.equal(helpCentre, 25, "14 + 0 + 11");
-  assert.equal(spawnRight, 40, "14 + 0 + 22 + 4 + 0: New agent 4px before ?");
-  assert.equal(px(bar.gap), 4);
 });
 
 for (const palette of ["light", "solarized", "dark"]) test(`${palette}: primary, danger, disabled and focus states keep their own semantic pairs`, t => {

@@ -54,7 +54,9 @@ export const DETAIL_NOTES = Object.freeze({
 export const BOARD_MALFORMED = "This agent's board could not be read.";
 export const boardDropped = n => `${n} ${n === 1 ? 'entry' : 'entries'} of this agent's board could not be shown.`;
 /** The zone's key hint: the shown question's own number keys. */
-export const zoneHint = count => `1–${count} put the answer on the input line · Enter there sends it · c the context · Esc back to the terminal`;
+/** Slice 3d: the prototype's short form, at the right of the card's head: a number puts the answer on the terminal's
+ * input line, Enter there sends it, c the context, Esc back to the terminal. */
+export const zoneHint = count => `1–${count} choose · Enter sends · c context · Esc terminal`;
 const HIDDEN_STORE = 'oats.desktop.board.hidden';
 
 /** The person's hidden facts on this computer, by agent home: `{ [home]: { [key]: value } }` in `storage`
@@ -191,8 +193,10 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   const contextSummary = node(doc, 'summary', null, 'Context');
   const contextBody = node(doc, 'div', 'agent-q-context-body');
   context.append(contextSummary, contextBody);
-  const hint = node(doc, 'p', 'agent-q-hint');
-  zone.append(head, text, options, typedNote, note, context, hint);
+  // The keys sit at the head's right (slice 3d, the prototype's "1–2 choose · type · Enter sends").
+  const hint = node(doc, 'span', 'agent-q-hint');
+  head.append(hint);
+  zone.append(head, text, options, typedNote, note, context);
   zone.setAttribute('aria-describedby', text.id);
   prev.addEventListener('click', () => turn(-1));
   next.addEventListener('click', () => turn(1));
@@ -491,7 +495,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   }
   /** The budget: the terminal keeps at least TERMINAL_MIN_PX (or TERMINAL_MIN_SHARE) of the pane. Where the board would
    * take more, it gives way in steps: the facts show one (the rest behind "N more", which the person may still open),
-   * then the zone drops its key hint, then an open context gives up the rest, down to three lines (it scrolls in its
+   * then the zone drops its key hint (on the head's line since slice 3d: it gives the line's room back to the head),
+   * then an open context gives up the rest, down to three lines (it scrolls in its
    * fold). On a repaint, a resize and the context's toggle. Where even that is too tall (a pane too short for the
    * board), a number refuses to type until the terminal is on screen again (TERMINAL_TYPE_MIN_PX). */
   function fit() {

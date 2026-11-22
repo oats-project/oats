@@ -42,6 +42,9 @@ export const TEXT_PAIRS = Object.freeze([
   // Slice 3d: the Automations row's "1 failed" (shell.css .nav-failed), in --danger on the row's fills: plain and hovered
   // are pairs above; selected, while the Automations page is open, is this one.
   ["danger", "sel"],
+  // Slice 3d: the sidebar's own ground (--sidebar; Dark's sunken tone, --surface elsewhere): every ink its rows, heads,
+  // pinned rows and foot paint at rest.
+  ...["fg", "muted", "faint", "accent", "nav-fg", "warn", "danger"].map((fg) => [fg, "sidebar"]),
   ...["fg", "muted", "accent", "violet", "ok", "warn"].map((fg) => [fg, "md-code-bg"]),
   ...ANSI_TOKENS.map((fg) => [fg, "term-bg"]),
   // Workspace v4: amber attention chips/nodes, and reason/tag chips.
@@ -57,10 +60,10 @@ export const GRAPHIC_PAIRS = Object.freeze([
   ...["bg", "surface", "surface-2"].map(bg => Object.freeze(["graph-edge", bg])),
   // The sidebar's dotted sibling link (shell.css .ctx-guide.link-*), the sibling cue alone on its column (issue 1312),
   // on every row fill: plain, hovered and selected.
-  ...["surface", "surface-2", "sel"].map(bg => Object.freeze(["tree-link", bg])),
+  ...["sidebar", "surface", "surface-2", "sel"].map(bg => Object.freeze(["tree-link", bg])),
   // The roster's solid lines (shell.css .ctx-guide line, elbow, down): drawn for related work only, so the line is the
   // sign of it (the related-work lines), on every row fill it crosses: plain, hovered and selected.
-  ...["surface", "surface-2", "sel"].map(bg => Object.freeze(["tree-stroke", bg])),
+  ...["sidebar", "surface", "surface-2", "sel"].map(bg => Object.freeze(["tree-stroke", bg])),
   // A native select's chevron (theme.css select.field): --muted, on the field and on a disabled field.
   ...["surface", "surface-2"].map(bg => Object.freeze(["muted", bg])),
   Object.freeze(["term-sel", "term-bg"]),
@@ -74,7 +77,7 @@ export const GRAPHIC_PAIRS = Object.freeze([
   // roster's rows (plain, hovered, selected), the tab strip and its active and focused tab, the palette's rows, the
   // hierarchy's cards, the colour dialog's swatches and mark. The colour never says the state alone (the shape does).
   // --instance-<tone> is the soul's -fg in the built-in themes; "This computer" moves it until it holds (host-theme.mjs).
-  ...SOUL_TONES.flatMap(tone => ["bg", "surface", "surface-2", "sel"].map(bg => Object.freeze([`instance-${tone}`, bg]))),
+  ...SOUL_TONES.flatMap(tone => ["bg", "sidebar", "surface", "surface-2", "sel"].map(bg => Object.freeze([`instance-${tone}`, bg]))),
 ]);
 
 /** Translucent surfaces and the token painted behind each: contrast is measured

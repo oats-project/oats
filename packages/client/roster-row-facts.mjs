@@ -1,5 +1,6 @@
 /** The two text facts of an instance row in a sidebar roster (the Desktop UI rework, slice 1), shared so the
- * Terminal UI can draw the same row: line 1 the display name, line 2 `<soul> · <machine>`.
+ * Terminal UI can draw the same row: line 1 the display name, line 2 `<soul>`, and ` · <machine>` only for a row of
+ * another machine (slice 3d, the prototype's "oats-maintainer · polaris": on this computer's rows it was noise).
  *
  *   rosterRowFacts(row, terms, { deployments, here }) -> { name, detail, soul, machine }
  *
@@ -12,7 +13,9 @@
  *            machine's too, whatever label the deployment carries. A view's row may carry `server` and a repository
  *            in `repoName`, so its deployment's machine comes first. Always a label: a row that names no machine is
  *            this machine's
- *   detail   `soul · machine`, or the machine alone when no soul is known
+ *   local    whether the row runs on this machine (its machine is `here`, or `terms.thisMachine`)
+ *   detail   `soul` for this machine's row, `soul · machine` for another machine's; the machine alone when no soul
+ *            is known
  *
  * The facts only: no state, no reason, no repository, no harness. A row whose machine didn't answer keeps both
  * lines; its state is the dot's and its reason the row's description. Display only, never an identity: the real
@@ -29,14 +32,20 @@ const shown = (value) => {
 };
 
 /** The machine label of `row`, in `terms` (see the module's comment). */
-export function rowMachine(row, terms, { deployments = [], here = null } = {}) {
+export function rowMachine(row, terms, options = {}) {
+  return rowPlace(row, terms, options).machine;
+}
+
+/** Where `row` runs: `{ machine, local }`, its label and whether it is this machine (see the module's comment). */
+function rowPlace(row, terms, { deployments = [], here = null } = {}) {
   requireTerms(terms, 'rowMachine');
   const id = typeof row?.deployment?.id === 'string' ? row.deployment.id : null;
   const deployment = id && Array.isArray(deployments) ? deployments.find((d) => d?.id === id) : null;
   const server = typeof row?.server === 'string' && row.server ? shown(serverLabel(row)) ?? shown(row.server) : null;
   const thisMachine = shown(here) ?? terms.thisMachine;
-  if (deployment?.local === true) return thisMachine;
-  return shown(deployment?.machine) ?? server ?? thisMachine;
+  if (deployment?.local === true) return { machine: thisMachine, local: true };
+  const other = shown(deployment?.machine) ?? server;
+  return other ? { machine: other, local: false } : { machine: thisMachine, local: true };
 }
 
 /** The row's two lines and their parts. */
@@ -45,6 +54,6 @@ export function rosterRowFacts(row, terms, { deployments = [], here = null } = {
   const instance = typeof row?.instance === 'string' ? row.instance : '';
   const name = instanceDisplayName(instance) || instance;
   const soul = shown(row?.agent);
-  const machine = rowMachine(row, terms, { deployments, here });
-  return { name, detail: [soul, machine].filter(Boolean).join(' · '), soul, machine };
+  const { machine, local } = rowPlace(row, terms, { deployments, here });
+  return { name, detail: soul && local ? soul : [soul, machine].filter(Boolean).join(' · '), soul, machine, local };
 }

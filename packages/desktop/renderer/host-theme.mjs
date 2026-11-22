@@ -88,7 +88,7 @@ export function deriveHostTokens(colors, mode, base = () => undefined) {
   // Surfaces define the theme: the host's own, unadjusted.
   const raised = mixHex(background, foreground, 0.06);
   const tokens = {
-    "term-bg": background, surface: background, bg: canvas,
+    "term-bg": background, surface: background, sidebar: background, bg: canvas,
     "surface-2": raised, "chip-bg": raised, "tag-bg": raised,
     border: mixHex(background, foreground, 0.14),
     "tree-line": mixHex(background, foreground, 0.2),

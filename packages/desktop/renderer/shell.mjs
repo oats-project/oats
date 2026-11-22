@@ -174,7 +174,7 @@ const automationsFailure = createAutomationsFailure({
     for (const listener of automationsFailedListeners) { try { listener(failed); } catch (e) { console.error(e); } }
   },
   onCount: (count) => paintAutomationsFailed(count),
-  onHost: (name) => { if (name !== thisHostName) { thisHostName = name; if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } },
+  onHost: (name) => { statusLine.setMachine(name); if (name !== thisHostName) { thisHostName = name; if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } },
 });
 // A workspace switch (or the chooser) revokes the mark and any read in flight at once, before the new workspace's
 // roster answers: a late answer for the workspace left never marks the one shown (the roster's read asks again).
@@ -2749,10 +2749,11 @@ function paintAutomationsFailed(count) {
   mark.append(shown, said); row.append(mark);
 }
 
-// The foot's controls use exactly the same registry as keyboard actions (the nav's buttons run theirs above): New
-// instance (Quick Open, app.quickOpenSouls, the spawn flow) and ? (Keyboard shortcuts, app.shortcuts). Hide sidebar
+// The foot's controls use exactly the same registry as keyboard actions (the nav's buttons run theirs above): ?
+// (Keyboard shortcuts, app.shortcuts), and New instance at the roster's end (slice 3d; Quick Open, app.quickOpenSouls,
+// the spawn flow). Hide sidebar
 // is Ctrl+Shift+B and the palette's; Theme…, Font… and Keyboard shortcuts… are the palette's (slice 1).
-for (const button of document.querySelectorAll("#nav-foot [data-action]")) {
+for (const button of document.querySelectorAll("#nav-foot [data-action], #sidebar-spawn")) {
   button.addEventListener("click", () => runAction(button.dataset.action));
 }
 

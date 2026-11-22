@@ -85,17 +85,17 @@ function fixture(t, { context: extra = {}, nouns = DESKTOP_NOUNS } = {}) {
   return { dom, doc, context, render, list, row, lines, menu, need: doc.getElementById("sidebar-need-you") };
 }
 
-test("slice1 row shows name and soul · machine only", t => {
+test("slice1 row shows name and soul, and the machine only for another machine's (slice 3d)", t => {
   const u = fixture(t);
   u.render([local("desktop-mockups"), remote("release-0-68"), local("forgotten-one", { agent: undefined, running: false })]);
-  assert.deepEqual(u.lines("desktop-mockups"), ["Desktop mockups", "oats-desktop-developer · This Mac"], "a running local row: this machine in DESKTOP_TERMS' words");
+  assert.deepEqual(u.lines("desktop-mockups"), ["Desktop mockups", "oats-desktop-developer"], "a running local row: its soul alone (slice 3d, superseding slice 1's this-machine name)");
   assert.deepEqual(u.lines("release-0-68"), ["Release 0 68", "oats-maintainer · polaris"], "a remote row: its server's label");
   assert.deepEqual(u.lines("forgotten-one"), ["Forgotten one", "This Mac"], "a row with no soul known: the machine only");
-  // Joan's call: a local row names this machine as a remote row names its own, by the host name the kernel reports
-  // (oats-local.yaml host.name, read from the schedule list); with none known, today's term.
+  // Slice 3d (Joan's 1:1 ask, superseding slice 1's call that a local row names this machine): a local row says no
+  // machine, whatever host name the kernel reports (oats-local.yaml host.name, read from the schedule list).
   u.context.thisHostName = "falcon";
   u.render([local("desktop-mockups"), remote("release-0-68")]);
-  assert.deepEqual(u.lines("desktop-mockups"), ["Desktop mockups", "oats-desktop-developer · falcon"]);
+  assert.deepEqual(u.lines("desktop-mockups"), ["Desktop mockups", "oats-desktop-developer"]);
   assert.deepEqual(u.lines("release-0-68"), ["Release 0 68", "oats-maintainer · polaris"], "a remote row keeps its own");
   u.context.thisHostName = null;
   u.render([local("desktop-mockups"), remote("release-0-68"), local("forgotten-one", { agent: undefined, running: false })]);
@@ -131,11 +131,11 @@ test("slice1 row shows name and soul · machine only", t => {
   assert.equal(u.row("desktop-mockups").hasAttribute("aria-description"), false);
   assert.equal(u.doc.querySelector(".ctx-tip, [role=tooltip]"), null);
   // A row with no terminal has no instance panel: its runtime error, with its speaker, is its title and description
-  // (the hover card said it), and line 2 stays soul · machine.
+  // (the hover card said it), and line 2 stays its soul (a local row's: no machine).
   u.render([local("broken", { running: false, runtimeError: "the last start failed", runtimeErrorOrigin: "kernel" })]);
   assert.equal(u.row("broken").title, "OATS says: the last start failed\nRepository: desktop-repo · Branch: b/broken · Claude", "its error, then its facts");
   assert.equal(u.row("broken").getAttribute("aria-description"), "OATS says: the last start failed");
-  assert.deepEqual(u.lines("broken"), ["Broken", "oats-desktop-developer · This Mac"]);
+  assert.deepEqual(u.lines("broken"), ["Broken", "oats-desktop-developer"]);
   u.render([remote("far", { running: null, serverUnreached: true, runtimeError: "ssh failed" })]);
   // The two facts are the shared function's (packages/client roster-row-facts.mjs), never the row's own composition.
   assert.equal(u.lines("far")[1], rosterRowFacts(remote("far"), DESKTOP_TERMS).detail);
@@ -336,7 +336,7 @@ test("slice1 automations failure mark", async t => {
   hostName = null; await named.refresh("A"); assert.deepEqual(hosts, ["falcon", null], "a machine with no name recorded: null");
   hostName = "falcon"; await named.refresh("A"); fail = true; await named.refresh("A");
   assert.deepEqual(hosts, ["falcon", null, "falcon"], "a failed read hands on nothing");
-  assert.match(shell, /onHost: \(name\) => \{ if \(name !== thisHostName\) \{ thisHostName = name;/);
+  assert.match(shell, /onHost: \(name\) => \{ statusLine\.setMachine\(name\); if \(name !== thisHostName\) \{ thisHostName = name;/, "and the key bar's right shows it (slice 3d)");
   assert.match(shell, /rosterRowFacts\(i, DESKTOP_TERMS, \{ deployments: contextDeployments, here: thisHostName \}\)/);
   // The shell's wiring: a workspace switch (or the chooser) revokes the mark and the read in flight at once, before
   // the new workspace's roster answers, so a late answer for the workspace left marks nothing.

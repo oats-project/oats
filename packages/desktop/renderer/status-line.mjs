@@ -26,6 +26,8 @@ export const statusLineCSS = `
 .status-key kbd { font:inherit; font-weight:500; color:var(--fg); }
 .status-message { min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--fg); }
 .status-message[data-tone=error] { color:var(--danger); }
+.status-machine { flex:none; margin-left:auto; color:var(--muted); }
+.status-machine:empty { display:none; }
 `;
 
 /**
@@ -45,7 +47,9 @@ export function createStatusLine({ doc, host, before = null, keysFor = () => [],
   const keys = doc.createElement("div"); keys.className = "status-keys";
   // The live region: a message is announced as it is put here.
   const live = doc.createElement("div"); live.className = "status-live"; live.setAttribute("role", "status");
-  el.append(keys, live);
+  // This machine's name at the line's right (slice 3d, the prototype's "falcon"): what the kernel reports, else nothing.
+  const machine = doc.createElement("span"); machine.className = "status-machine";
+  el.append(keys, live, machine);
   host.insertBefore(el, before && before.parentNode === host ? before : null);
   let message = null, timer = null, armed = false, alive = true;
 
@@ -100,6 +104,8 @@ export function createStatusLine({ doc, host, before = null, keysFor = () => [],
     say,
     /** Repaint the keys (the focus or the keymap changed). */
     refresh: paintKeys,
+    /** Show this machine's name at the right (null or empty: nothing). */
+    setMachine(name) { machine.textContent = typeof name === "string" ? name : ""; },
     /** What the line says now: the message, or null. */
     text: () => message?.text ?? null,
     hideMessage: clearMessage,

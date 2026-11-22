@@ -111,8 +111,9 @@ test("the shared inventory holds token names only, covers the 16 ANSI colours, a
   assert.equal(new Set(pairs.map(pair => pair.join(" on "))).size, pairs.length, "no pair twice");
   assert.equal(ansi.length, 16);
   for (const token of ansi) assert.ok(pairs.some(([fg, bg]) => fg === token && bg === "term-bg"), `--${token} is held on --term-bg`);
-  assert.deepEqual(GRAPHIC_PAIRS, [["graph-edge", "bg"], ["graph-edge", "surface"], ["graph-edge", "surface-2"], ["tree-link", "surface"], ["tree-link", "surface-2"], ["tree-link", "sel"], ["tree-stroke", "surface"], ["tree-stroke", "surface-2"], ["tree-stroke", "sel"], ["muted", "surface"], ["muted", "surface-2"], ["term-sel", "term-bg"], ["accent", "surface"], ["danger", "sel"],
-    ...soulTones.flatMap(tone => ["bg", "surface", "surface-2", "sel"].map(bg => [`instance-${tone}`, bg]))]);
+  // Slice 3d: the sidebar's own ground (--sidebar) under the lines and the instance dots.
+  assert.deepEqual(GRAPHIC_PAIRS, [["graph-edge", "bg"], ["graph-edge", "surface"], ["graph-edge", "surface-2"], ["tree-link", "sidebar"], ["tree-link", "surface"], ["tree-link", "surface-2"], ["tree-link", "sel"], ["tree-stroke", "sidebar"], ["tree-stroke", "surface"], ["tree-stroke", "surface-2"], ["tree-stroke", "sel"], ["muted", "surface"], ["muted", "surface-2"], ["term-sel", "term-bg"], ["accent", "surface"], ["danger", "sel"],
+    ...soulTones.flatMap(tone => ["bg", "sidebar", "surface", "surface-2", "sel"].map(bg => [`instance-${tone}`, bg]))]);
   assert.deepEqual(PAINTED_OVER, [["md-code-bg", "bg"]]);
   assert.deepEqual(HOST_UNADJUSTED_PAIRS, ansi.map(token => [token, "term-bg"]), "the host theme's one exception: its terminal colours, unadjusted");
   assert.equal(TEXT_CONTRAST, 4.5); assert.equal(GRAPHIC_CONTRAST, 3);
@@ -393,12 +394,13 @@ test("dark color palette is the prototype's Tokyo Night; primary is an existing 
     fg: "#c0caf5", muted: "#9aa2c8", faint: "#9098bf", accent: "#7aa2f7", "accent-fg": "#16161e",
     violet: "#bb9af7", ok: "#9ece6a", warn: "#e0af68", danger: "#f7768e",
     "chip-bg": "#292e42", "chip-fg": "#a9b1d6", sel: "#262c45",
-    "term-bg": "#0a0d12", "term-fg": "#e6edf3", "term-sel": "#2f6496", "term-sel-fg": "#f5f9ff",
+    sidebar: "#16161e", // slice 3d: the prototype's sunken sidebar
+    "term-bg": "#1a1b26", "term-fg": "#e6edf3", "term-sel": "#3570a8", "term-sel-fg": "#f5f9ff", // slice 3d: the terminal on the app's --bg
     "md-code-bg": "#ffffff10", "md-rule": "#ffffff2e", "graph-edge": "#6f77a0", "graph-edge-coord": "#7aa2f7",
   };
   for (const [key, value] of Object.entries(expected)) assert.equal(dark.get(key), value, key);
   assert.deepEqual(ansi.map(key => dark.get(key)), [
-    "#768390", "#ff7b72", "#4ac26b", "#d9a032", "#6cb2ff", "#c297ff", "#4ed1db", "#c3ccd6",
+    "#7b8794", "#ff7b72", "#4ac26b", "#d9a032", "#6cb2ff", "#c297ff", "#4ed1db", "#c3ccd6",
     "#8b949e", "#ffa198", "#63e084", "#edbb4a", "#8cc5ff", "#d5b3ff", "#70e0e8", "#f5f9ff",
   ]);
   assert.equal(dark.get("primary-bg"), dark.get("fg"));
@@ -805,7 +807,7 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
   };
   const rule = selector => [...doc.styleSheets].flatMap(sheet => [...sheet.cssRules]).find(r => r.selectorText === selector)?.style;
   const sidebarBg = token(win.getComputedStyle(doc.getElementById("sidebar")).background);
-  assert.equal(sidebarBg, "surface");
+  assert.equal(sidebarBg, "sidebar", "the sidebar's own ground (slice 3d)");
   assert.equal(doc.getElementById("sidebar-tools"), null, "the tools row is gone");
   for (const id of ["nav-foot", "sidebar-bar", "nav"]) {
     const bg = win.getComputedStyle(doc.getElementById(id)).background;
@@ -865,7 +867,7 @@ for (const [name] of palettes) test(`${name}: Add local workspace…, ?, New age
   };
   const rule = selector => [...doc.styleSheets].flatMap(sheet => [...sheet.cssRules]).find(r => r.selectorText === selector)?.style;
   const noOpacity = (el, what) => { for (let node = el; node; node = node.parentElement) assert.equal(win.getComputedStyle(node).opacity, "1", `${what}: no opacity over it`); };
-  assert.equal(token(win.getComputedStyle(doc.getElementById("sidebar")).background), "surface");
+  assert.equal(token(win.getComputedStyle(doc.getElementById("sidebar")).background), "sidebar", "the sidebar's own ground (slice 3d)");
   // One control style: each is a .side-icon-button, with no colour rule of its own.
   const buttons = ["ws-add-open", "sidebar-help"].map(id => doc.getElementById(id));
   for (const button of buttons) {
@@ -1136,7 +1138,7 @@ for (const [name] of palettes) test(`${name}: Show sidebar / Show instance panel
     const wrap = doc.createElement('div'); wrap.className = `ctx-tree-row${active ? ' active' : ''}`;
     const button = doc.createElement('button'); button.className = 'ctx-inst';
     const copy = doc.createElement('span'); copy.className = 'ctx-copy';
-    const detail = doc.createElement('span'); detail.className = 'ctx-meta ctx-row-detail'; detail.textContent = 'dev · This Mac';
+    const detail = doc.createElement('span'); detail.className = 'ctx-meta ctx-row-detail'; detail.textContent = 'dev';
     copy.append(detail); button.append(copy); wrap.append(button); list.append(wrap);
   }
   // The foot as the shell paints it (sidebar-foot.mjs): New agent's words, and its count while two rows need you.
@@ -1163,25 +1165,25 @@ for (const [name] of palettes) test(`${name}: Show sidebar / Show instance panel
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
     // Spec B: the reopen controls at rest sit on the main area's top bar: the tab strip (--bg) or a stage
-    // header (--surface, the sidebar's paint here). Hovered or focused they are --fg on --surface-2 / --sel.
+    // header (--surface, the instance panel's paint here). Hovered or focused they are --fg on --surface-2 / --sel.
     ['#show-sidebar', '#tabstrip', 'muted', 'bg'], ['#show-panel', '#tabstrip', 'muted', 'bg'],
-    ['#show-panel', '#sidebar', 'muted', 'surface'],
+    ['#show-panel', '#context-panel', 'muted', 'surface'],
     ['.context-panel-tab-count', '#context-panel', 'muted', 'surface'], // W6: the Developer tab's thread count
     ['.ctx-instance-menu small', '.ctx-instance-menu button:disabled', 'muted', 'surface-2'],
     // The workspace list sits on the sidebar's --surface: a row is its circle and its name, the current one included (a
     // row paints no fill of its own; the current one's circle is filled), and the head's Add local workspace… icon.
-    ['.ws-option[aria-current="true"] .ws-option-name', '#sidebar', 'fg', 'surface'],
-    ['.ws-option:not([aria-current]) .ws-option-name', '#sidebar', 'fg', 'surface'],
-    ['#ws-add-open', '#sidebar', 'muted', 'surface'],
+    ['.ws-option[aria-current="true"] .ws-option-name', '#sidebar', 'fg', 'sidebar'],
+    ['.ws-option:not([aria-current]) .ws-option-name', '#sidebar', 'fg', 'sidebar'],
+    ['#ws-add-open', '#sidebar', 'muted', 'sidebar'],
     // The bar's buttons (slice 1), on the same tokens: ? (.side-icon-button) and New agent, no fill at rest; the
     // count of rows that need you in --fg.
-    ['#sidebar-help', '#sidebar', 'muted', 'surface'], ['#sidebar-spawn', '#sidebar', 'muted', 'surface'],
-    ['#sidebar-need-you', '#sidebar', 'fg', 'surface'],
+    ['#sidebar-help', '#sidebar', 'muted', 'sidebar'], ['#sidebar-spawn', '#sidebar', 'muted', 'sidebar'],
+    ['#sidebar-need-you', '#sidebar', 'fg', 'sidebar'],
     // A row's second line: --muted, on the sidebar and on the selection.
-    ['.ctx-tree-row:not(.active) .ctx-row-detail', '#sidebar', 'muted', 'surface'],
+    ['.ctx-tree-row:not(.active) .ctx-row-detail', '#sidebar', 'muted', 'sidebar'],
     ['.ctx-tree-row.active .ctx-row-detail', '.ctx-tree-row.active', 'muted', 'sel'],
     // The headings (slice 3d): the WORKSPACES and AGENTS kickers in --muted, on the sidebar.
-    ['.ws-heading', '#sidebar', 'muted', 'surface'], ['#instance-roster > .ctx-head', '#sidebar', 'muted', 'surface'],
+    ['.ws-heading', '#sidebar', 'muted', 'sidebar'], ['#instance-roster > .ctx-head', '#sidebar', 'muted', 'sidebar'],
     ['.app-toast-open', '.app-toast-open', 'primary-fg', 'primary-bg'],
     ['.ctx-tree-row:not(.active) .ctx-attn.rollup', '.ctx-tree-row:not(.active) .ctx-attn.rollup', 'warn', 'attn-bg'],
     ['.ctx-tree-row.active .ctx-attn.rollup', '.ctx-tree-row.active .ctx-attn.rollup', 'warn', 'attn-bg'],
@@ -1197,9 +1199,10 @@ for (const [name] of palettes) test(`${name}: Show sidebar / Show instance panel
   // Each row's circle is the instance roster's (.ctx-dot): the current workspace's filled in --accent like a running
   // instance's, the others a --faint ring like a stopped one's, in the row's own fill; hidden from assistive tech.
   // JSDOM drops a var() border, so the rings are pinned on the rule's text (the 3:1 test below); the fills are read here.
-  for (const [selector, fill] of [['.ws-option[aria-current="true"] .ctx-dot', 'accent'], ['.ws-option:not([aria-current]) .ctx-dot', 'surface']]) {
+  // A ring's inside is the row's own fill (--row-solid: --sidebar at rest since slice 3d, as its ring), never a fixed surface.
+  for (const [selector, fill] of [['.ws-option[aria-current="true"] .ctx-dot', 'var(--accent)'], ['.ws-option:not([aria-current]) .ctx-dot', 'var(--row-solid, var(--surface))']]) {
     const mark = doc.querySelector(selector); assert.ok(mark, selector);
-    assert.equal(dom.window.getComputedStyle(mark).background, `var(--${fill})`, selector);
+    assert.equal(dom.window.getComputedStyle(mark).background, fill, selector);
     assert.equal(mark.getAttribute('aria-hidden'), 'true');
     for (let parent = mark; parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1');
   }
@@ -1233,16 +1236,16 @@ for (const [name, palette] of palettes) test(`${name}: the needs-input mark and 
   assert.match(shellCss, /^\.attn-mark \.attn-disc \{ fill: var\(--warn\); \}/m);
   assert.match(shellCss, /^\.attn-mark \.attn-glyph \{ fill: var\(--surface\); \}/m);
   assert.match(shellCss, /^\.attn-mark \{[^}]*stroke: none;/m, 'no inherited stroke blurs the "!"');
-  for (const bg of ['surface', 'surface-2', 'sel', 'attn-bg']) {
+  for (const bg of ['sidebar', 'surface', 'surface-2', 'sel', 'attn-bg']) {
     const ratio = contrast(opaqueChannels(palette.get('warn')), backgroundChannels(bg, palette));
     assert.ok(ratio >= GRAPHIC_CONTRAST, `${name} the disc on --${bg}: ${ratio.toFixed(2)}:1 < 3:1`);
   }
   const glyph = contrast(opaqueChannels(palette.get('surface')), opaqueChannels(palette.get('warn')));
   assert.ok(glyph >= GRAPHIC_CONTRAST, `${name} the "!" on the disc: ${glyph.toFixed(2)}:1 < 3:1`);
-  // A row's fills: none at rest or current (the sidebar's --surface shows), --surface-2 hovered, --sel focused.
+  // A row's fills: none at rest or current (the sidebar's --sidebar shows, slice 3d), --surface-2 hovered, --sel focused.
   assert.match(shellCss, /\.ws-option \{[^}]*background: transparent;/);
   // The circle's 2px ring of the row's own fill follows it (--row-solid, as on the roster's rows).
-  assert.match(shellCss, /\.ws-option \{ --row-solid: var\(--surface\);/);
+  assert.match(shellCss, /\.ws-option \{ --row-solid: var\(--sidebar\);/);
   assert.match(shellCss, /\.ws-option:hover \{ --row-solid: var\(--surface-2\); background: var\(--surface-2\); \}/);
   assert.match(shellCss, /\.ws-option:focus-visible \{ --row-solid: var\(--sel\); background: var\(--sel\); \}/);
   assert.doesNotMatch(shellCss, /\.ws-option\[aria-current="true"\] \{/, "no accent edge (2026-10-23)");
@@ -1250,7 +1253,7 @@ for (const [name, palette] of palettes) test(`${name}: the needs-input mark and 
   assert.match(shellCss, /^\.ctx-dot \{[^}]*border: 1\.5px solid var\(--faint\);/m);
   assert.match(shellCss, /^\.ctx-dot\.on \{ border-color: var\(--accent\); background: var\(--accent\); \}/m);
   // The current workspace's filled circle and the others' ring.
-  for (const mark of ['accent', 'faint']) for (const bg of ['surface', 'surface-2', 'sel']) {
+  for (const mark of ['accent', 'faint']) for (const bg of ['sidebar', 'surface', 'surface-2', 'sel']) {
     const ratio = contrast(opaqueChannels(palette.get(mark)), backgroundChannels(bg, palette));
     assert.ok(ratio >= GRAPHIC_CONTRAST, `${name} --${mark} on --${bg}: ${ratio.toFixed(2)}:1 < 3:1`);
   }
@@ -1338,7 +1341,7 @@ for (const [name] of palettes) test(`${name}: a waiting roster row's dot paints 
     for (let parent = dot.querySelector('.attn-disc'); parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1', selector);
   }
   // The fills behind it: --row-solid follows the row's own (JSDOM keeps no :hover, so the rules are pinned as text).
-  assert.match(shellCss, /^\.ctx-tree-row \{[^}]*--row-solid: var\(--surface\);/m);
+  assert.match(shellCss, /^\.ctx-tree-row \{[^}]*--row-solid: var\(--sidebar\);/m, "the sidebar's own ground (slice 3d)");
   assert.match(shellCss, /^\.ctx-tree-row:hover \{ --row-solid: var\(--surface-2\); background-color: var\(--surface-2\); \}/m);
   assert.match(shellCss, /^\.ctx-tree-row\.active \{ --row-solid: var\(--sel\); background-color: var\(--sel\); \}/m);
   assert.match(shellCss, /^\.ctx-dot \{[^}]*box-shadow: 0 0 0 2px var\(--row-solid, var\(--surface\)\);/m, 'its ring is the row fill');

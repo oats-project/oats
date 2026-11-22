@@ -171,7 +171,7 @@ test("roster typography (non-layout): valid control family and supplied sidebar 
     const first = row.querySelector(".ctx-disclosure") ? name.parentElement : name;
     assert.equal(first.nextElementSibling, meta, "both lines remain in the same vertical stack");
     assert.equal(meta.className, "ctx-meta ctx-row-detail");
-    assert.equal(meta.textContent, "dev · This Mac", "soul · machine, whatever the row's state");
+    assert.equal(meta.textContent, "dev", "its soul (a local row says no machine, slice 3d), whatever the row's state");
     for (const label of [name, meta]) {
       assert.equal(u.computed(label).textOverflow, "ellipsis");
       assert.equal(u.computed(label).whiteSpace, "nowrap");
@@ -316,7 +316,7 @@ test("sidebar metadata uses the reported soul and the machine, no repository, br
   const u = fixture(t);
   u.render([{ ...roster[0], agent: "soul-<literal>", branch: "feature/<branch>", harness: "pi" }]);
   const row = u.doc.querySelector(".ctx-inst");
-  assert.equal(row.querySelector(".ctx-meta").textContent, "soul-<literal> · This Mac");
+  assert.equal(row.querySelector(".ctx-meta").textContent, "soul-<literal>");
   assert.equal(row.querySelector(".ctx-meta").children.length, 0);
   assert.doesNotMatch(row.textContent, /feature|desktop-repo/, "neither the branch nor the repository is on the row");
   assert.equal(row.querySelector(".ctx-runtime, .runtime-badge"), null, "no harness badge on the row");
@@ -406,7 +406,7 @@ test('a row that cannot open keeps soul · machine on its second line and says w
   for (const [row, , sentence] of rows) {
     const button = [...u.doc.querySelectorAll('.ctx-inst')].find(b => b.querySelector('.ctx-name').dataset.name === row.instance);
     assert.ok(button, row.instance);
-    assert.equal(button.querySelector('.ctx-meta').textContent, `dev · ${row.server ? row.repoName : 'This Mac'}`, `${row.instance}: soul · machine`);
+    assert.equal(button.querySelector('.ctx-meta').textContent, row.server ? `dev · ${row.repoName}` : 'dev', `${row.instance}: soul, and another machine's name (slice 3d)`);
     assert.equal(button.getAttribute('aria-disabled'), 'true');
     assert.equal(button.title.split('\n')[0], sentence); assert.equal(button.getAttribute('aria-description'), sentence);
     assert.equal(button.closest('.ctx-tree-row').querySelector('.ctx-instance-actions'), null, `${row.instance}: no ⋯ trigger (#1559)`);

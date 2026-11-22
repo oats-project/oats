@@ -145,7 +145,7 @@ test("roster, two deployments: a heading per deployment, by machine, in order, i
   const meta = far.querySelector(".ctx-meta.ctx-row-detail");
   assert.equal(meta.textContent, "soul · devbox", "the identity line: soul · machine");
   const near = [...list.querySelectorAll(".ctx-tree-row")].find((r) => r.querySelector(".ctx-name").dataset.name === "near");
-  assert.equal(near.querySelector(".ctx-meta").textContent, "soul · This Mac", "this computer's deployment: its machine label");
+  assert.equal(near.querySelector(".ctx-meta").textContent, "soul", "this computer's deployment: no machine (slice 3d)");
 });
 
 test("roster headings: one machine holding two deployments adds the path tail; not reached is marked in words", (t) => {

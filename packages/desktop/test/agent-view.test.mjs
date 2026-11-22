@@ -529,7 +529,7 @@ test('r1: with several questions, the keyboard reaches the Context fold (c), and
   assert.equal(f.view.question, 'q1');
   assert.equal(fold.querySelector('.agent-q-context-text').textContent, 'Why: three commits.');
   assert.equal(fold.querySelector('.agent-q-context-text').tabIndex, 0, 'its text takes the focus, to scroll a long one');
-  assert.match(f.zone().querySelector('.agent-q-hint').textContent, /c the context/);
+  assert.match(f.zone().querySelector('.agent-q-hint').textContent, /c context/);
 });
 
 test('r1: an id cleared and asked again between two polls is a new question', t => {
@@ -802,10 +802,11 @@ test('agent view questions: the key hint names 1–N for the shown question\'s N
   const f = fixture(t);
   f.view.update(boardData(board()));
   const hint = () => f.zone().querySelector('.agent-q-hint').textContent;
-  assert.match(hint(), /^1–2 put the answer on the input line/, 'q1 has two options');
+  assert.equal(hint(), '1–2 choose · Enter sends · c context · Esc terminal', 'q1 has two options');
+  assert.equal(f.zone().querySelector('.agent-q-hint').parentElement, f.zone().querySelector('.agent-q-head'), "at the head's right (slice 3d)");
   f.zone().querySelector('.agent-q-turn[aria-label="Next question"]').click();
   assert.equal(f.view.question, 'q2');
-  assert.match(hint(), /^1–3 put the answer on the input line/, 'q2 has three');
+  assert.match(hint(), /^1–3 choose/, 'q2 has three');
 });
 
 // The Opus whole read (2026-11-20): main refuses an answer while the terminal is in its scrollback (tmux copy mode,

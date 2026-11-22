@@ -266,7 +266,8 @@ test('slice3c tokens not page-local', () => {
     assert.ok(body, rule); assert.match(body, /font-size:var\(--text-[a-z-]+\)/, `${rule}: a type token`);
   }
   // Terminal cell geometry is untouched (a design-direction decision): its size and the terminal's colours are as before.
-  assert.equal(dark.get('term-font-size'), '15px'); assert.equal(dark.get('term-bg'), '#0a0d12');
+  // Slice 3d moved Dark's terminal ground to the app's own --bg, colour only (its geometry is still untouched).
+  assert.equal(dark.get('term-font-size'), '15px'); assert.equal(dark.get('term-bg'), '#1a1b26');
 });
 
 /* ── contrast ─────────────────────────────────────────────────────────────────────────────────────────────── */
