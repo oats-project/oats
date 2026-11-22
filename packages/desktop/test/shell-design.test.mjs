@@ -260,7 +260,7 @@ test("static SVG inventory stays 16px, hidden to AT and rejects arbitrary markup
   }
 });
 
-test("the foot is one bar: N need you, New agent (Quick Open) and ? (Keyboard shortcuts); no mark, no toggle, no cog; all dispatch the real registry", async t => {
+test("the foot is one bar: N need you and ? (Keyboard shortcuts), New agent (Quick Open) at the roster's end; no mark, no toggle, no cog; all dispatch the real registry", async t => {
   const s = shell(t), q = id => s.document.getElementById(id);
   // The tools row is gone again (the product owner, 2026-10-26): no theme, shortcuts, leader or palette button
   // anywhere. Slice 1 of the Desktop UI rework: the brand mark, Hide sidebar and the settings cog leave the foot too
@@ -273,7 +273,7 @@ test("the foot is one bar: N need you, New agent (Quick Open) and ? (Keyboard sh
   assert.equal(foot, q("sidebar").lastElementChild, "the sidebar's bottom row");
   const bar = q("sidebar-bar");
   assert.equal(bar.getAttribute("role"), "group"); assert.equal(bar.getAttribute("aria-label"), "Sidebar tools");
-  assert.deepEqual([...bar.children].map(el => el.id), ["sidebar-need-you", "sidebar-spawn", "sidebar-help"]);
+  assert.deepEqual([...bar.children].map(el => el.id), ["sidebar-need-you", "sidebar-help"]);
   // N need you: hidden while nothing needs you (the shell paints it with the roster; sidebar-slice1.test.mjs).
   const need = q("sidebar-need-you");
   assert.equal(need.type, "button"); assert.equal(need.hidden, true); assert.equal(need.textContent, "");
@@ -288,8 +288,10 @@ test("the foot is one bar: N need you, New agent (Quick Open) and ? (Keyboard sh
   assert.equal(help.getAttribute("aria-label"), "Keyboard shortcuts"); assert.equal(help.textContent.trim(), "?");
   assert.equal(help.title, "Keyboard shortcuts (Ctrl+,)", "the title is the label, then the bound chord");
   help.click(); assert.deepEqual(s.events, [["shortcuts"]], "it runs its action, once");
-  // New agent: the spawn flow (app.quickOpenSouls, Quick Open), its noun DESKTOP_NOUNS's, the chord appended to its title.
+  // New agent: the spawn flow (app.quickOpenSouls, Quick Open), its noun DESKTOP_NOUNS's, the chord appended to its title;
+  // at the roster's end since slice 3d (the prototype's), after the list.
   const spawn = q("sidebar-spawn");
+  assert.equal(spawn.parentElement, q("instance-roster")); assert.equal(spawn.previousElementSibling, s.document.querySelector("#instance-roster > .ctx-list"));
   assert.equal(spawn.type, "button"); assert.equal(spawn.hidden, false); assert.equal(spawn.disabled, false); assert.ok(spawn.tabIndex >= 0);
   assert.equal(spawn.classList.contains("primary"), false, "its words, no primary fill");
   assert.equal(spawn.dataset.action, "app.quickOpenSouls");
@@ -299,7 +301,7 @@ test("the foot is one bar: N need you, New agent (Quick Open) and ? (Keyboard sh
   assert.equal(spawn.querySelector("svg")?.getAttribute("aria-hidden"), "true", "its + is decoration");
   assert.equal(spawn.querySelector(".shortcut-hint, [data-shortcut], kbd"), null, "no hint element: the chord is in the tooltip");
   assert.match(html, /<button id="sidebar-spawn" type="button" data-action="app\.quickOpenSouls"><\/button>/, "its words are the shell's, from desktop-terms.mjs");
-  // The roster's heading (Agents: DESKTOP_NOUNS, slice 2): its title and the count only (no + : New agent is the foot's).
+  // The roster's heading (Agents: DESKTOP_NOUNS, slice 2): its title and the count only (no + : New agent ends the list).
   const head = s.document.querySelector("#instance-roster > .ctx-head");
   assert.deepEqual([...head.children].map(el => el.id || el.className || el.textContent), ["Agents", "ctx-count"]);
   assert.match(source, /const rosterTitle = DESKTOP_NOUNS\.instances\[0\]\.toUpperCase\(\) \+ DESKTOP_NOUNS\.instances\.slice\(1\);\n  contextRosterEl\.setAttribute\("aria-label", rosterTitle\);/, "the shell names it from DESKTOP_NOUNS");

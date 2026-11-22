@@ -618,17 +618,15 @@ body {
 /* The branch grows from zero into what the name leaves, so it ellipsizes and then
    disappears first. Its gap is its own padding, cancelled by a negative margin:
    a hidden branch takes no space from the name. */
-.tab-detail { min-width: 0; flex: 1 1 0px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.tab-detail { order: 2; min-width: 0; flex: 1 1 0px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
               margin-left: -8px; padding-left: 8px;
               font-weight: 400; font-size: 11px; line-height: normal; font-family: inherit; color: var(--faint); }
 /* The go-to-tab number, last: quiet text like the branch (--faint holds 4.5:1 on --bg, --surface and --sel). */
-.tab-num { flex: none; white-space: nowrap; font-weight: 400; font-size: 11px; line-height: normal; font-family: inherit; color: var(--faint); }
+.tab-num { order: -1; flex: none; white-space: nowrap; font-weight: 400; font-size: 11px; line-height: normal; font-family: inherit; color: var(--faint); }
 .tab-num[hidden] { display: none; }
 /* Slice 3d, the prototype's tab: "1 name ●". The number leads, the status dot (or the Needs input glyph) follows the
    name, then the branch; the DOM keeps its order (the trigger's name is its aria-label), the line reads the order. */
-.tab-num { order: -1; }
-.tab-dot, .tab-attn { order: 1; }
-.tab-detail { order: 2; }
+.tab-dot, .tab-attn { order: 1; } /* .tab-num leads (order -1), .tab-detail comes last (order 2): their own rules */
 /* The close shows on the active tab, a hovered one and one holding the focus, so a keyboard reaches it (Tab from the
    trigger) and Delete and the close chord work on every tab; elsewhere it keeps its room, unseen, so nothing moves. */
 .tab:not(.active):not(:hover):not(:focus-within) > .close { visibility: hidden; }

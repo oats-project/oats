@@ -306,7 +306,7 @@ test("This computer: a pushed host theme updates both shell terminals' colours a
   push(hostState("rose-pine"));
   for (const [site, term] of terms) {
     assert.equal(term.options.fontWeight, 400, site);
-    assert.equal(term.options.theme.background, "#0a0d12", `${site}: Dark's own terminal background`);
+    assert.equal(term.options.theme.background, "#1a1b26", `${site}: Dark's own terminal background (slice 3d: the app's --bg)`);
   }
 });
 

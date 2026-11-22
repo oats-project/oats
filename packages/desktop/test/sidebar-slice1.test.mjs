@@ -419,7 +419,8 @@ test("slice1 foot and palette", t => {
   const dom = new JSDOM(html);
   t.after(() => dom.window.close());
   const doc = dom.window.document;
-  assert.deepEqual([...doc.getElementById("sidebar-bar").children].map(el => el.id), ["sidebar-need-you", "sidebar-spawn", "sidebar-help"]);
+  assert.deepEqual([...doc.getElementById("sidebar-bar").children].map(el => el.id), ["sidebar-need-you", "sidebar-help"]);
+  assert.equal(doc.getElementById("sidebar-spawn").parentElement, doc.getElementById("instance-roster"), "New agent at the roster's end (slice 3d)");
   assert.equal(doc.querySelector("#sidebar .sidebar-brand, #sidebar img, #sidebar-settings, #sidebar-toggle"), null, "no brand mark, no cog, no Hide sidebar in the foot");
   assert.equal(doc.getElementById("sidebar-help").dataset.action, "app.shortcuts", "? opens the keyboard shortcuts sheet that exists today");
   assert.equal(doc.getElementById("sidebar-spawn").dataset.action, "app.quickOpenSouls", "New opens the existing spawn flow");

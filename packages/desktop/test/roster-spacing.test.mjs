@@ -112,7 +112,7 @@ test("roster spacing (non-layout): 44px rows with a 4px gap, padded controls, th
   // No filter field since the product owner removed it (the command palette finds an instance by name).
   const roster = u.doc.getElementById("instance-roster");
   assert.equal(roster.querySelector(".ctx-filter, .ctx-filter-field, input"), null, "the roster has no filter");
-  assert.deepEqual([...roster.children].map(el => el.className), ["ctx-head", "ctx-list"]);
+  assert.deepEqual([...roster.children].map(el => el.className || el.id), ["ctx-head", "ctx-list", "sidebar-spawn"], "then New agent, at the roster's end (slice 3d)");
   const head = roster.querySelector(".ctx-head");
   assert.equal(head.nextElementSibling.className, "ctx-list");
   assert.equal(u.computed(head.nextElementSibling).overflowY, "auto", "longer rosters still scroll");
@@ -357,7 +357,7 @@ test("running dot stays solid --accent on selected and hovered rows; its ring is
   assert.equal(u.rule(".ctx-tree-row.active").getPropertyValue("--row-solid"), "var(--sel)", "the ring on a selected row is the tint");
   assert.equal(u.rule(".ctx-tree-row:hover").getPropertyValue("--row-solid"), "var(--surface-2)", "and on hover the hover surface");
   assert.equal(u.computed(active).getPropertyValue("--row-solid").trim(), "var(--sel)", "the selected row resolves its own solid colour");
-  assert.equal(u.rule(".ctx-dot").background, "var(--surface)", "only a stopped dot is hollow");
+  assert.equal(u.rule(".ctx-dot").background, "var(--row-solid, var(--surface))", "only a stopped dot is hollow: the row's own fill inside its ring (slice 3d)");
   assert.equal(u.rule(".ctx-dot.on").background, "var(--accent)");
 });
 

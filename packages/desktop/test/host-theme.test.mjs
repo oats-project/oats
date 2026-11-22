@@ -18,7 +18,7 @@ const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url
 const themeSource = read("theme.mjs"), html = read("index.html"), css = read("theme.css");
 const KEY = "oatsweb.theme", STORE = "oats.desktop.hostTheme";
 const flush = () => new Promise(resolve => setImmediate(resolve));
-const DARK_TERM = "#0a0d12", WHITE_TERM = "#ffffff"; // --term-bg of the built-in Dark and White
+const DARK_TERM = "#1a1b26", WHITE_TERM = "#ffffff"; // --term-bg of the built-in Dark (slice 3d: the app's --bg) and White
 
 function fakeStorage(initial = {}, { broken = false } = {}) {
   const values = new Map(Object.entries(initial));

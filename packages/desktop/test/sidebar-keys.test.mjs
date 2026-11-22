@@ -72,14 +72,14 @@ function rig(t) {
     return matchEvent(e, { isMac: false });
   };
   return { win, doc, row, nav, item, textarea, pressAt, ran, sidebarKeysLive, wsRow,
-    field, controls: [...doc.querySelectorAll("#sidebar > .side-head > button, #sidebar .ctx-head button, #sidebar-bar > button")], main: doc.getElementById("show-panel") };
+    field, controls: [...doc.querySelectorAll("#sidebar > .side-head > button, #sidebar .ctx-head button, #instance-roster > #sidebar-spawn, #sidebar-bar > button")], main: doc.getElementById("show-panel") };
 }
 
 test("each sidebar key fires on a workspace list row, a roster row, a nav button, the head's control and the foot's buttons, by its real (shifted) keydown", t => {
   const r = rig(t);
   // The sidebar top to bottom (the product owner, 2026-10-26; slice 1): the head (Add local workspace…), the list,
-  // the pinned rows under it, the instances (their heading holds no control), then the foot (its bar: N need you,
-  // New agent and ?).
+  // the pinned rows under it, the instances (their heading holds no control) and New agent after them (slice 3d), then
+  // the foot (its bar: N need you and ?).
   const sidebar = r.doc.getElementById("sidebar");
   assert.equal(r.doc.getElementById("ws-current"), null, "no current-workspace section any more");
   assert.equal(r.doc.getElementById("nav").parentElement, sidebar, "the nav is the sidebar's own");

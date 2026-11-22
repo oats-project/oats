@@ -127,7 +127,7 @@ test("showStage routes a NAV_TABS name to openWorkspaceSouls(tab); showStageFocu
 test("a nav button runs its stage action once; New agent and ? run their own once; the nav is under the list", () => {
   const src = shellSource();
   const block = src.slice(src.indexOf('const navEl = document.getElementById("nav");'), src.indexOf("// This is a chooser entry"));
-  assert.match(block, /for \(const button of document\.querySelectorAll\("#nav-foot \[data-action\]"\)\) \{\n  button\.addEventListener\("click", \(\) => runAction\(button\.dataset\.action\)\);\n\}/);
+  assert.match(block, /for \(const button of document\.querySelectorAll\("#nav-foot \[data-action\], #sidebar-spawn"\)\) \{\n  button\.addEventListener\("click", \(\) => runAction\(button\.dataset\.action\)\);\n\}/);
   assert.doesNotMatch(src, /createSettingsMenu|sidebar-settings/, "the settings cog is gone (slice 1)");
   assert.ok(!src.includes("#sidebar-tools"), "the tools row is gone");
   const dom = new JSDOM(readFileSync(join(PKG, "renderer", "index.html"), "utf8"));
@@ -146,8 +146,8 @@ test("a nav button runs its stage action once; New agent and ? run their own onc
     ran.length = 0; b.click();
     assert.deepEqual(ran, [b.dataset.action], `${b.dataset.view}: one run per click`);
   }
-  // The foot's actions, in the bar's order (slice 1): New agent (Quick Open), then ? (Keyboard shortcuts).
-  const foot = [...document.querySelectorAll("#nav-foot [data-action]")];
+  // The foot's action, ? (Keyboard shortcuts), and New agent (Quick Open) at the roster's end (slice 3d).
+  const foot = [...document.querySelectorAll("#nav-foot [data-action], #sidebar-spawn")];
   assert.deepEqual(foot.map((b) => [b.id, b.dataset.action]), [["sidebar-spawn", "app.quickOpenSouls"], ["sidebar-help", "app.shortcuts"]]);
   for (const b of foot) {
     for (let click = 1; click <= 2; click++) {

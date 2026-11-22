@@ -364,8 +364,9 @@ for (const name of ["light", "solarized", "dark"]) test(`${name}: roster heading
   const root = win.getComputedStyle(doc.documentElement);
   const active = '.ws-option[aria-current="true"]', inactive = `.ws-option[data-workspace-id="${marked[2].id}"]`;
   const checks = [
-    [".ctx-deployment-label", "muted", "surface"], [".ctx-deployment .deployment-mark", "warn", "surface"],
-    [`${active} .ws-option-name`, "fg", "surface"], [`${inactive} .ws-option-name`, "fg", "surface"], [".soul-inspector > .deployment-scope", "muted", "surface"],
+    // The sidebar's own ground since slice 3d: --sidebar (Dark's sunken tone, --surface elsewhere).
+    [".ctx-deployment-label", "muted", "sidebar"], [".ctx-deployment .deployment-mark", "warn", "sidebar"],
+    [`${active} .ws-option-name`, "fg", "sidebar"], [`${inactive} .ws-option-name`, "fg", "sidebar"], [".soul-inspector > .deployment-scope", "muted", "surface"],
   ];
   for (const [selector, fg, surface] of checks) {
     const el = doc.querySelector(selector); assert.ok(el, selector);
