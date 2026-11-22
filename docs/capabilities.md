@@ -2291,7 +2291,31 @@ fails or is not one result per home, and an entry that is neither a result
 nor a refusal, fall back to that home's own `inspect`, never to "stopped".
 Without `inspectMany`, status calls `inspect` per home.
 
-**The kernel never calls inspect for a home OATS stopped** (below).
+**A home OATS stopped is read by its record, and you are still asked what
+is there.** `oats status` includes a stopped home in your `inspectMany`
+call, with the endpoint of its last session (beside the running homes of
+its group, or in one call where none of your homes runs; never in an
+`inspect` of its own): answer it as any other, by what is there. A session your product
+started again without OATS (`present: true`, `running: true`):
+
+- in a home an operator stopped, is reported on the home's row as running
+  outside OATS. The row stays stopped, and the kernel acts on nothing else
+  of that answer;
+- in a home stopped with the host, which OATS means to run, reads running,
+  and its resume adopts it
+  ([below](#what-the-kernel-does-around-the-verbs)).
+
+`oats instance upgrade` asks `inspect` once for a stopped home, to refuse an
+upgrade under a harness that runs, and the resume of a home stopped with the
+host asks it once before its notice. `oats session inspect` never asks you
+about a stopped home.
+
+**Answer `running` for a stopped home's session as exactly as you can:**
+`true` only when its harness runs, `false` when you know it does not, and
+`null` when you cannot tell. The kernel acts on `true` alone: with `null` a
+home stays as OATS recorded it (no report, no adoption, and an upgrade goes
+on), so a provider that answers `null` for every idle session never shows a
+harness that was restarted and sits idle.
 
 ### input
 
@@ -2310,7 +2334,7 @@ leaves such a mail unread; a scheduled wake records it not delivered.
 
 ### stop
 
-In: `{ "home", "endpoint", "graceSeconds", "launchSent"? }`. Out: `{ "stopped": true }`.
+In: `{ "home", "endpoint", "graceSeconds", "launchSent"?, "reason"? }`. Out: `{ "stopped": true }`.
 `endpoint` is `null` when the kernel has no endpoint for a session you may
 have started: a launch whose answer was lost, and a launch it sent whose
 spawn or start ended before recording your answer (it was killed while you
@@ -2321,6 +2345,25 @@ when it has one: what the launch started was created at or after it, so you
 can leave alone what was in the home's place before (a person's own session
 there). **The kernel relies on this stop**: it is the only way a session
 started by a killed spawn is ever stopped.
+
+`"reason": "host"` is on every stop of a recorded session after which the
+home stays stopped with the host: the stop that `oats host run`'s shutdown
+gives, the stop the kernel asks again when the resume notice of such a home
+failed without your refusal, the one it asks again when an input crossed a
+stop with the host, and the recorded session's stop when the host's
+shutdown settles a home that was stopped with the host already. A stop with `endpoint: null` never carries
+it, at the host's shutdown either: it stops what a launch that was never
+recorded started, which no resume brings back. No other stop carries a `reason` (an operator's, a restart's, a
+start's, a retire's). An ordinary start of a home stopped with the host is
+its person's own act: the kernel first records that stop as an operator's,
+so the stop it then asks carries no `reason`, and a launch that fails
+leaves the home stopped by OATS, with no resume owed through that session.
+The kernel resumes that home later through `input` to this same endpoint, so
+**leave a session stopped with `reason: "host"` able to take that input**: a
+provider that archives or deletes what it stops does not do so for this one.
+The key is optional and only read: never refuse a stop that lacks it (a
+kernel before it sends none), and the result is `{ "stopped": true }` either
+way. The wire version is unchanged.
 
 ### check (optional)
 
@@ -2651,7 +2694,10 @@ the feature.
   restart's stop, a retire, `oats host run`'s shutdown) the kernel records
   `stoppedAt` in the home's receipt **before** it calls `stop`, and a start
   clears it. While it is set, inspect answers stopped (`present: false`,
-  `running: false`) without calling the provider, and every input (a
+  `running: false`) without calling the provider, the status row of a home an
+  operator stopped is stopped whatever the provider answers (a live harness
+  there is reported beside it, as `outsideOats`, and changes nothing), and
+  every input (a
   person's `oats session input`, a scheduled wake, a client, the messaging
   broker) is refused `E_SESSION_NOT_RUNNING` before any call. A provider
   whose product restarts a session on its next input can rely on this.
@@ -2670,9 +2716,15 @@ the feature.
   that is killed while you launch leaves it there: the home then reads as
   unknown, and the next stop, start or retire first calls `stop` with
   `endpoint: null`.
-- **Which stop it was** is on the home's stop receipt, never a field of
-  yours: `oats host run`'s shutdown is a loss that the sweep resumes, an
-  operator's stop is the intent that keeps the home down.
+- **Which stop it was** is on the home's stop receipt: `oats host run`'s
+  shutdown is a loss that the sweep resumes, an operator's stop is the
+  intent that keeps the home down. The kernel tells you the first with
+  `reason: "host"` on its stop ([stop](#stop)); it never reads that from you.
+- **A home stopped with the host whose session runs again** (you answer it
+  there, with `running: true`: a person's message reached it, or it came
+  back) is one OATS means to run. Status reads it running from your
+  answer, and the resume adopts it: the stop is cleared and **no resume
+  notice is sent into a session that already runs**.
 - **A lost session is resumed through `input`.** A home whose session you
   answer as gone, and that OATS did not stop, is resumed by the sweep with
   one notice, and any other input to it is a resume too. The kernel counts
@@ -2680,8 +2732,9 @@ the feature.
   within one boot), refuses at the cap with `E_SESSION_NOT_RUNNING` without
   calling you, and first waits (a resume) or refuses (an input) while a
   process still works in the home. So an `inspect` precedes every `input` to
-  a home OATS did not stop (the resume of a home stopped with the host sends
-  its notice without one).
+  a home OATS did not stop, and one precedes the resume notice of a home
+  stopped with the host, which is sent when you answer the session gone or
+  cannot say.
   An input you refuse (`ok: false`: nothing was sent) is not counted. One
   whose call fails or answers outside the rules stays counted: you may have
   restarted the session on it.

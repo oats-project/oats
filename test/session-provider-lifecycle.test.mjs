@@ -87,6 +87,9 @@ const VERBS = {
   start: async (fx, home) => { await fx.inEnv(() => startInstanceSession(home, {})); return "launched"; },
   restart: async (fx, home) => { await fx.inEnv(() => restartInstanceSession(home, {})); return "launched"; },
   resume: async (fx, home) => { const r = await fx.inEnv(() => startInstanceSession(home, { resume: true })); return r.reused === "session" ? "resumed" : "launched"; },
+  // A resume of a home stopped with the host whose harness runs again: the stop is cleared and no
+  // notice is sent, which the resume answers as E_SESSION_RUNNING (it runs).
+  adopt: async (fx, home) => { try { await fx.inEnv(() => startInstanceSession(home, { resume: true })); } catch (e) { if (e?.code === "E_SESSION_RUNNING") return "adopted"; throw e; } return "not-adopted"; },
   retire: async (fx, home) => { const r = fx.cli(["retire", home.split("/").pop(), "--json"]); const j = JSON.parse(r.stdout); if (j.ok === false) throw Object.assign(new Error(j.error.message), { code: j.error.code }); return "retired"; },
 };
 const answerOf = async (fx, verb, home) => { try { return await VERBS[verb](fx, home); } catch (e) { if (typeof e?.code !== "string") throw e; return e.code; } };
@@ -103,7 +106,9 @@ const CELLS = {
   status: {
     planned: ["stopped", [], "planned"], sent: ["unknown", [], "sent"],
     running: ["running", ["inspect"], "running"], lost: ["lost", ["inspect"], "running"],
-    "stopped (operator)": ["stopped", [], "stopped"], "stopped (host)": ["lost", [], "stopped"],
+    // (A stopped home's one call: status reads whether a harness runs there all the same, in the
+    // provider's batch, for `outsideOats` alone (feature provider-outside-oats). The row is the kernel's record.)
+    "stopped (operator)": ["stopped", ["inspect"], "stopped"], "stopped (host)": ["lost", ["inspect"], "stopped"],
     "resent (stopped)": ["unknown", [], "resent"], "resent (not stopped)": ["unknown", [], "resent"],
   },
   input: {
@@ -133,7 +138,8 @@ const CELLS = {
   resume: {
     planned: ["E_RESUME_NOT_LOST", [], "planned"], sent: ["E_SESSION_UNKNOWN", [], "sent"],
     running: ["E_SESSION_RUNNING", ["inspect"], "running"], lost: ["resumed", ["inspect", "input"], "running"],
-    "stopped (operator)": ["E_RESUME_NOT_LOST", [], "stopped"], "stopped (host)": ["resumed", ["input"], "running"],
+    // (Of a home stopped with the host the resume first reads whether its harness came back: it is then adopted, with no notice.)
+    "stopped (operator)": ["E_RESUME_NOT_LOST", [], "stopped"], "stopped (host)": ["resumed", ["inspect", "input"], "running"],
     "resent (stopped)": ["E_SESSION_UNKNOWN", [], "resent"], "resent (not stopped)": ["E_SESSION_UNKNOWN", [], "resent"],
   },
   retire: {
@@ -163,7 +169,7 @@ for (const [verb, row] of Object.entries(CELLS)) {
   });
 }
 
-test("settling leaves a planned home planned and a launched one stopped, the record rewritten to agree and the stop an operator's unless the host's was recorded", async (t) => {
+test("settling leaves a planned home planned and a launched one stopped, the record rewritten to agree and the stop an operator's, also where the host's was recorded and a start settles it", async (t) => {
   const fx = providerDeployment(t);
   fx.controls = {};
   // sent → planned.
@@ -174,12 +180,15 @@ test("settling leaves a planned home planned and a launched one stopped, the rec
   const resent = await STATES["resent (not stopped)"](fx, "s2");
   await fx.inEnv(() => stopInstanceSession(resent, {}));
   assert.deepEqual([Number.isFinite(Date.parse(runtimeOf(resent).stoppedAt)), Object.hasOwn(runtimeOf(resent), "launchSent"), stopReceiptOf(resent).resume ?? false], [true, false, false]);
-  // resent on a home the host had stopped, settled by a start that then fails to launch: stopped, and still the host's stop.
+  // resent on a home the host had stopped, settled by a start that then fails to launch: stopped,
+  // and the stop an operator's now. A start is its person's own act on the home: it ends the
+  // host stop's claim to be resumed before it asks the provider to stop anything, so no resume is
+  // owed through a session those stops (which carry no reason) ended.
   const hosted = await STATES["stopped (host)"](fx, "s3");
   writeRuntime(hosted, { ...runtimeOf(hosted), launchSent: SENT_AT });
   fx.control({ s3: { launch: { error: { code: "E_BACKEND_NOT_READY", message: "down" } } } });
   assert.equal(await answerOf(fx, "start", hosted), "E_BACKEND_NOT_READY");
-  assert.deepEqual([stateOf(hosted), stopReceiptOf(hosted).reason], ["stopped", "host-stop"]);
+  assert.deepEqual([stateOf(hosted), stopReceiptOf(hosted).reason, stopReceiptOf(hosted).resume], ["stopped", undefined, undefined]);
   // A settle the provider does not confirm changes nothing, and the next verb asks again.
   const stuck = await STATES.sent(fx, "s4");
   fx.control({ s4: { stop: { exit: 1 } } });
@@ -359,7 +368,9 @@ const DEATHS = [
   ["stop:stoppedAt-written", "running", "retire", [], "stopped", "retire", ["stop:E"], "gone"],
   ["stop:receipt-written", "lost", "retire", [], "stopped", "stop", ["stop:E"], "stopped"],
   // The resume of a home stopped with the host: the notice, stoppedAt cleared, the stop receipt removed.
-  ["resume:notice-sent", "stopped (host)", "resume", ["input"], "stopped", "resume", ["input"], "running"],
+  // (The notice restarted the session, and the stop was not cleared: the next resume finds the
+  // harness running and adopts it, with no second notice.)
+  ["resume:notice-sent", "stopped (host)", "resume", ["input"], "stopped", "adopt", ["inspect"], "running"],
   ["resume:stop-cleared", "stopped (host)", "resume", ["input"], "running", "stop", ["stop:E"], "stopped"],
 ];
 /** The verb as its own process, which dies at `point` → the signal that ended it. */
@@ -414,10 +425,11 @@ test("a stop killed while the provider stops leaves the home stopped, with the s
   child.kill("SIGKILL");
   await done;
   assert.deepEqual([stateOf(home), stopReceiptOf(home).reason], ["stopped", "host-stop"], "stoppedAt and the stop receipt were written before the provider was asked");
-  fx.control({});
+  // (The session went down with the host: the resume reads it gone, then sends its notice.)
+  fx.control({ k: { inspect: { result: LOST } } });
   fx.clearCalls();
   assert.equal(await answerOf(fx, "resume", home), "resumed");
-  assert.deepEqual([callsOf(fx, home), stateOf(home), stopReceiptOf(home)], [["input"], "running", null]);
+  assert.deepEqual([callsOf(fx, home), stateOf(home), stopReceiptOf(home)], [["inspect", "input"], "running", null]);
 });
 
 test("a resume that died after it cleared the host's stop left that stop's receipt: a later loss of the same start is counted as a loss, in the sweep's plan too", async (t) => {
@@ -473,6 +485,39 @@ test("a spawn dying between two of its writes leaves a state of the page", async
   }
 });
 
+test("the host's stop of a home whose launch was sent and never recorded: the recorded session's stop says reason: host, and the stop of what that launch started (endpoint null) never does", async (t) => {
+  const fx = providerDeployment(t);
+  fx.controls = {};
+  const home = await STATES["resent (not stopped)"](fx, "rs");
+  fx.clearCalls();
+  const r = spawnSync(process.execPath, [HOST_STOP_CHILD, home, "20000"], { cwd: fx.dep, env: fx.env, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(fx.verbs("stop").map((c) => [c.request.input.endpoint === null ? "null" : "E", c.request.input.reason ?? null]), [["E", "host"], ["null", null]]);
+  assert.equal(stopReceiptOf(home).reason, "host-stop");
+});
+
+// A home stopped with the host whose launch mark is still there: the host's stop of a resent home
+// that the provider did not confirm leaves it so, and the sweep skips it (unknown) until a verb settles it.
+test("a home stopped with the host and unsettled: the next host shutdown's settle stops its recorded session with reason: host; a start makes the stop an operator's before its settle, so a launch that fails leaves it stopped by OATS", async (t) => {
+  const fx = providerDeployment(t);
+  fx.controls = {};
+  const build = async (name) => { const home = await STATES["stopped (host)"](fx, name); writeRuntime(home, { ...runtimeOf(home), launchSent: SENT_AT }); return home; };
+  const stops = () => fx.verbs("stop").map((c) => [c.request.input.endpoint === null ? "null" : "E", c.request.input.reason ?? null]);
+  // (A) The host shuts down again: the home stays stopped with the host, still to resume through E.
+  const again = await build("ua");
+  fx.clearCalls();
+  const r = spawnSync(process.execPath, [HOST_STOP_CHILD, again, "20000"], { cwd: fx.dep, env: fx.env, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual([stops(), stopReceiptOf(again).resume, stateOf(again)], [[["E", "host"], ["null", null]], true, "stopped"]);
+  // (B) A person starts it, and the launch is refused: both stops without a reason, and no resume is owed.
+  const started = await build("ub");
+  fx.controls = { ub: { launch: { error: { code: "E_BACKEND_NOT_READY", message: "down" } } } };
+  fx.control(fx.controls);
+  fx.clearCalls();
+  assert.equal(await answerOf(fx, "start", started), "E_BACKEND_NOT_READY");
+  assert.deepEqual([stops(), stopReceiptOf(started).resume, stateOf(started)], [[["E", null], ["null", null]], undefined, "stopped"]);
+});
+
 test("a resume's notice that fails without a refusal leaves a home stopped with the host stopped, still to resume, and has the provider asked to stop that session again", async (t) => {
   const fx = providerDeployment(t);
   fx.controls = {};
@@ -481,7 +526,9 @@ test("a resume's notice that fails without a refusal leaves a home stopped with 
   fx.control({ n: { input: { exit: 1 } } });
   fx.clearCalls();
   assert.equal(await answerOf(fx, "resume", home), "E_SESSION_INPUT_FAILED");
-  assert.deepEqual([callsOf(fx, home), runtimeOf(home).stoppedAt, stopReceiptOf(home)?.resume], [["input", "stop:E"], stoppedAt, true]);
+  assert.deepEqual([callsOf(fx, home), runtimeOf(home).stoppedAt, stopReceiptOf(home)?.resume], [["inspect", "input", "stop:E"], stoppedAt, true]);
+  // That stop restores the host's: the provider is told so, and keeps the session for the next resume.
+  assert.deepEqual(fx.verbs("stop").map((c) => c.request.input.reason), ["host"]);
   fx.control({});
   assert.equal(await answerOf(fx, "resume", home), "resumed");
 });
@@ -733,24 +780,28 @@ test("a launch whose kernel died before its command's group recorded itself is m
   assert.deepEqual([fx.verbs("launch").length, existsSync(join(fx.fake, "threads")), existsSync(calls)], [0, false, false]);
 });
 
-test("a stop whose kernel was killed while the provider stopped is ended before a resume sends its notice: it does not stop the resumed session", async (t) => {
-  const fx = providerDeployment(t);
-  const { home } = await fx.launch("hs");
-  const late = join(fx.fake, "late-stop");
-  fx.control({ hs: { stop: { sleepMs: 3000, late } } });
-  fx.clearCalls();
-  const child = spawn(process.execPath, [HOST_STOP_CHILD, home, "20000"], { cwd: fx.dep, env: fx.env, stdio: "ignore" });
-  const done = new Promise((resolve) => child.on("close", resolve));
-  for (let i = 0; i < 200 && !fx.verbs("stop").length; i++) await new Promise((r) => setTimeout(r, 50));
-  assert.equal(fx.verbs("stop").length, 1, "the provider's stop is in flight");
-  child.kill("SIGKILL");
-  await done;
-  fx.clearCalls();
-  assert.equal(await answerOf(fx, "resume", home), "resumed");
-  assert.deepEqual([callsOf(fx, home), stateOf(home)], [["input"], "running"]);
-  await new Promise((r) => setTimeout(r, 3500));
-  assert.equal(existsSync(late), false, "the stop's command was ended: it did nothing after the resume");
-});
+// The session is gone (the resume sends its notice), or its harness still runs (the resume adopts
+// it, with no notice): either way the late stop is ended first.
+for (const [name, observed, answer, calls] of [["hs", LOST, "resumed", ["inspect", "input"]], ["ha", null, "E_SESSION_RUNNING", ["inspect"]]]) {
+  test(`a stop whose kernel was killed while the provider stopped is ended before a resume ${observed ? "sends its notice" : "adopts a session that still runs"}: it does not stop the resumed session`, async (t) => {
+    const fx = providerDeployment(t);
+    const { home } = await fx.launch(name);
+    const late = join(fx.fake, "late-stop");
+    fx.control({ [name]: { stop: { sleepMs: 3000, late }, ...(observed ? { inspect: { result: observed } } : {}) } });
+    fx.clearCalls();
+    const child = spawn(process.execPath, [HOST_STOP_CHILD, home, "20000"], { cwd: fx.dep, env: fx.env, stdio: "ignore" });
+    const done = new Promise((resolve) => child.on("close", resolve));
+    for (let i = 0; i < 200 && !fx.verbs("stop").length; i++) await new Promise((r) => setTimeout(r, 50));
+    assert.equal(fx.verbs("stop").length, 1, "the provider's stop is in flight");
+    child.kill("SIGKILL");
+    await done;
+    fx.clearCalls();
+    assert.equal(await answerOf(fx, "resume", home), answer);
+    assert.deepEqual([callsOf(fx, home), stateOf(home)], [calls, "running"]);
+    await new Promise((r) => setTimeout(r, 3500));
+    assert.equal(existsSync(late), false, "the stop's command was ended: it did nothing after the resume");
+  });
+}
 
 test("a spawn's rollback killed between its two writes leaves the launch marked: unsettled, and a retire takes the home", async (t) => {
   const fx = providerDeployment(t);

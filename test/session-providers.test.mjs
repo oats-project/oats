@@ -203,12 +203,17 @@ test("T3: waitingOnYou is the producers' claim, read while the session is there 
   assert.deepEqual(waiting({ present: true, state: "unknown", running: null }), ["Which branch?", "Which branch?"], "an idle session can be the one waiting");
   assert.deepEqual(waiting({ present: true, state: "shell", running: false }), [null, null]);
   assert.deepEqual(waiting({ present: false, state: "stopped", running: false }), [null, null], "a session that is gone, a lost one included");
-  // A home OATS stopped carries none, and its provider is not asked.
+  // A home OATS stopped carries none, and inspect does not ask its provider.
   fx.control({});
   await fx.inEnv(() => stopInstanceSession(home, {}));
   fx.clearCalls();
-  assert.deepEqual([fx.cli(["session", "inspect", "--home", home, "--json"]).json().result.waitingOnYou, rowOf(fx, "asker").waitingOnYou], [null, null]);
+  assert.equal(fx.cli(["session", "inspect", "--home", home, "--json"]).json().result.waitingOnYou, null);
   assert.deepEqual(fx.verbs(), []);
+  // Nor does its status row, also when its provider answers a harness that runs there all the same
+  // (feature provider-outside-oats: the row says so, and stays what OATS recorded).
+  fx.control({ inspect: { result: { present: true, state: "unknown", running: true } } });
+  const row = rowOf(fx, "asker");
+  assert.deepEqual([row.waitingOnYou, row.running, row.runtimeState, row.outsideOats.code], [null, false, "stopped", "running-outside-oats"]);
 });
 
 test("T4: after oats instance stop, inspect answers stopped and input is refused, both without calling the provider", async (t) => {
@@ -231,12 +236,16 @@ test("T4: after oats instance stop, inspect answers stopped and input is refused
   writeFileSync(text, "are you there?\n");
   const input = fx.cli(["session", "input", "--home", home, "--text-file", text, "--json"]).json();
   assert.deepEqual([input.ok, input.error.code], [false, "E_SESSION_NOT_RUNNING"]);
-  // The status row too, and it keeps the home's last endpoint.
-  const row = rowOf(fx, "halted");
-  assert.deepEqual([row.running, row.runtimeState, row.sessionEnd, row.session, row.open, row.tmux], [false, "stopped", "stopped", rowSessionOf("halted", 1), null, null]);
   // attach names no terminal either, without asking the provider for a link.
   assert.equal(await codeOf(() => fx.inEnv(() => attachInstanceSession(home))), "E_SESSION_NO_TERMINAL");
   assert.deepEqual(fx.verbs(), [], "the provider was not called for any of it");
+  // The status row too, and it keeps the home's last endpoint. Status asks the provider one thing
+  // of a home OATS stopped, in one batch: whether a harness runs there all the same (feature
+  // provider-outside-oats, test/provider-outside-oats.test.mjs). Here none does, and the row has no such key.
+  const row = rowOf(fx, "halted");
+  assert.deepEqual([row.running, row.runtimeState, row.sessionEnd, row.session, row.open, row.tmux, Object.hasOwn(row, "outsideOats")], [false, "stopped", "stopped", rowSessionOf("halted", 1), null, null, false]);
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspectMany"]);
+  fx.clearCalls();
 
   // A second stop is idle, and asks the provider once more (its stop is idempotent); the host's
   // shutdown changes nothing of a home that is stopped. A start clears the stop and launches anew.
@@ -333,13 +342,17 @@ test("T6: a stop with the host is resumed by the sweep; an operator's stop is no
   fx.clearCalls();
   const plan = sweep(fx, "--plan");
   assert.deepEqual(plan.result.rows.map((r) => [r.instance, r.outcome, r.backend]), [["hosted", "resumed", "fake"]]);
-  assert.deepEqual(fx.verbs(), [], "a plan calls no provider for a stopped home");
+  // A plan never asks about a home an operator stopped. Of one stopped with the host it asks, in one
+  // batch, whether its harness came back (it is then adopted, not resumed: test/provider-outside-oats.test.mjs).
+  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.request.input.homes.map((h) => h.instance)]), [["inspectMany", ["hosted"]]]);
+  fx.clearCalls();
   const swept = sweep(fx);
   assert.deepEqual(swept.result.rows.map((r) => [r.instance, r.outcome, r.backend]), [["hosted", "resumed", "fake"]], "the operator's stop has no row: it stays stopped");
   // Resumed: the stop is cleared, the endpoint kept, and one resume notice went through the provider's input.
   assert.deepEqual(runtimeOf(hosted.home), { launched: true, backend: "fake", provider: FAKE_CAPABILITY, endpoint: endpointOf("hosted", 1), stoppedAt: null });
   assert.equal(stopReceiptOf(hosted.home), null, "the stop is over: its receipt is gone");
-  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.instance, c.request.input.text ?? null]), [["input", "hosted", PROVIDER_RESUME_NOTICE]]);
+  // (The listing's batch and the resume's own read of the session, which is gone, come first.)
+  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.instance, c.request.input.text ?? null]), [["inspectMany", "hosted", null], ["inspect", "hosted", null], ["input", "hosted", PROVIDER_RESUME_NOTICE]]);
   assert.equal(PROVIDER_RESUME_NOTICE.includes("\n"), false, "one line");
   assert.equal(fx.hooks().length, 0, "nothing is launched: no launch hook runs");
   assert.deepEqual([runtimeOf(operated.home).stoppedAt !== null, rowOf(fx, "operated").sessionEnd], [true, "stopped"]);
@@ -378,7 +391,7 @@ test("T6: an operator's stop after the host's withdraws the resume; a notice tha
   setWaiting(other.home, { producer: "oats.core", waiting: true, reason: "permission", message: "Claude needs your permission to use Bash" });
   fx.clearCalls();
   await assert.rejects(fx.inEnv(() => startInstanceSession(other.home, { resume: true })), (e) => e.code === "E_SESSION_PROMPT_OPEN" && /has a permission claim open/.test(e.message));
-  assert.deepEqual(fx.verbs(), [], "nothing was sent");
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspect"], "the session was read (it is gone, so it is not adopted); nothing was sent");
   stillToResume();
   // The sweep reports the refusal, and tries again later.
   const refused = sweep(fx).result.rows.find((r) => r.instance === "retry");
@@ -557,8 +570,11 @@ test("T11: status with three homes of one fake provider calls inspectMany once",
   const calls = fx.verbs();
   assert.equal(calls.length, 1, calls.map((c) => c.verb).join(", "));
   assert.equal(calls[0].verb, "inspectMany");
-  // One request for the three, in the listing's order; the home OATS stopped is not asked about.
-  assert.deepEqual(calls[0].request.input, { homes: ["many-a", "many-b", "many-c"].map((name, i) => ({ home: join(fx.root, "dev", "instances", name), instance: name, endpoint: endpointOf(name, i + 1) })) });
+  // One request, the three that OATS did not stop first, in the listing's order. The home OATS
+  // stopped rides in the same call, after them, for one thing only: whether a harness runs there
+  // all the same (feature provider-outside-oats, test/provider-outside-oats.test.mjs). Its row is
+  // the kernel's own record whatever the provider says of it.
+  assert.deepEqual(calls[0].request.input, { homes: ["many-a", "many-b", "many-c", "many-stopped"].map((name, i) => ({ home: join(fx.root, "dev", "instances", name), instance: name, endpoint: endpointOf(name, i + 1) })) });
   const facts = (name) => { const r = rows.find((row) => row.instance === name); return [r.backend, r.running, r.runtimeState, r.runtimeError ?? null, r.open?.url ?? null, r.tmux]; };
   assert.deepEqual(facts("many-a"), ["fake", true, "unknown", null, `${FAKE_SERVER}/thread/thr_many-a_1`, null]);
   assert.deepEqual(facts("many-b"), ["fake", false, "shell", null, null, null]);
@@ -569,14 +585,15 @@ test("T11: status with three homes of one fake provider calls inspectMany once",
   assert.equal(stopped.home, join(fx.root, "dev", "instances", "many-stopped"));
 
   // A bad batch (a failed call, results that are not one per home) falls back to each home's own
-  // inspect, never to "stopped"; so does one entry that is no inspect answer.
+  // inspect, never to "stopped"; so does one entry that is no inspect answer. The home OATS stopped
+  // is never asked on its own.
   for (const bad of [{ result: { results: [] } }, { exit: 1 }, { raw: "not json" }]) {
     fx.control({ inspectMany: bad, "many-b": { inspect: { result: { present: true, state: "shell", running: false } } } });
     fx.clearCalls();
     assert.deepEqual(rowsOf(fx).filter((r) => r.instance !== "many-stopped").map((r) => [r.running, r.runtimeState]), [[true, "unknown"], [false, "shell"], [true, "unknown"]], JSON.stringify(bad));
     assert.deepEqual(fx.verbs().map((c) => [c.verb, c.instance]), [["inspectMany", "many-a"], ["inspect", "many-a"], ["inspect", "many-b"], ["inspect", "many-c"]]);
   }
-  fx.control({ inspectMany: { result: { results: [{ present: true, state: "unknown", running: true }, { present: "yes" }, { error: { code: "E_BACKEND_NOT_READY", message: "down" } }] } } });
+  fx.control({ inspectMany: { result: { results: [{ present: true, state: "unknown", running: true }, { present: "yes" }, { error: { code: "E_BACKEND_NOT_READY", message: "down" } }, LOST] } } });
   fx.clearCalls();
   assert.deepEqual(rowsOf(fx).filter((r) => r.instance !== "many-stopped").map((r) => [r.running, r.runtimeState]), [[true, "unknown"], [true, "unknown"], [null, "unreachable"]]);
   assert.deepEqual(fx.verbs().map((c) => [c.verb, c.instance]), [["inspectMany", "many-a"], ["inspect", "many-b"]], "the bad entry's home is asked on its own; a refusal stands");
@@ -638,6 +655,16 @@ test("T4: a stop that lands while an input runs still wins: the input is not del
   assert.match(undelivered.error.message, /was stopped by OATS while this input was being sent; its fake session was asked to stop again, and the input is not delivered/);
   assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspect", "input", "stop", "stop"], "a second stop follows the input that crossed the first");
   assert.equal(Number.isFinite(Date.parse(runtimeOf(late.home).stoppedAt)), true);
+  assert.deepEqual(fx.verbs("stop").map((c) => c.request.input.reason ?? null), [null, null], "an operator's stop, and the stop that restores it, carry no reason");
+  // 3. The stop that landed was the host's: the home stays stopped with the host, so the stop that
+  // restores it tells the provider so too, and the session stays one a resume can bring back.
+  const hosted = await fx.launch("hosted-late");
+  fx.control({ "hosted-late": { input: { sleepMs: 2500 } } });
+  fx.clearCalls();
+  const crossedHost = await inputWhile(hosted.home, async () => { assert.equal(hostStop(fx, hosted.home).stopped, true); });
+  assert.deepEqual([crossedHost.ok, crossedHost.error.code], [false, "E_SESSION_NOT_RUNNING"]);
+  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.request.input.reason ?? null]), [["inspect", null], ["input", null], ["stop", "host"], ["stop", "host"]]);
+  assert.deepEqual([stopReceiptOf(hosted.home).resume, rowOf(fx, "hosted-late").sessionEnd], [true, "lost"]);
   // Every other crossing (a restart, a reused locator, a refused input, a start that is launching) is a row of
   // the lifecycle table: test/session-provider-lifecycle.test.mjs.
 });

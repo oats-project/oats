@@ -1068,8 +1068,26 @@ relayed** by `oats server roster` or `--server`, whose rows and answers carry
 `backend` (an older kernel, an older routed host) is a tmux row. Status asks
 each provider once per group of homes where it can (`inspectMany`), falls
 back to one `inspect` per home when a batch is bad (never after one that
-timed out), gives all its providers 30 s together, and asks nothing about a
-home OATS stopped, which keeps its last endpoint until its next start.
+timed out), gives all its providers 30 s together. A home an operator
+stopped keeps its last endpoint until its next start, and its row is what
+OATS recorded: `running: false`, `runtimeState: "stopped"`. Status asks its
+provider one thing about it, in the same `inspectMany` call as the running
+homes of its group (one call for the provider's stopped homes where none of
+its homes runs, made after every running home was asked; never an `inspect`
+per home, and never while a lifecycle command holds the home): whether a harness runs there all the same, which a
+provider's own product can start without OATS. Such a row carries
+`outsideOats: {code: "running-outside-oats", backend, message}` (feature
+`provider-outside-oats`,
+[desktop-cli-api.md](desktop-cli-api.md#row-outside-oats)) and is otherwise
+unchanged: it stays stopped, its input stays refused and nothing is written.
+`oats instance stop <name>` stops that harness (the provider's stop is asked
+again), `oats retire` stops it before it removes the home, a start from OATS
+stops it and launches a new session, and `oats instance upgrade` refuses the
+home until it is stopped (`E_SESSION_RUNNING`). A provider that fails or
+does not answer leaves the row stopped, without the key. A home stopped
+with the host is asked about in the same call, and is another case: OATS
+means it to run, so when its harness runs again its row reads running, with
+no key ([below](#provider-homes-lost-sessions)).
 `waitingOnYou` is the producers' claim, as for tmux, read while the session
 is there and not in error.
 
@@ -1089,6 +1107,19 @@ host where the home lives. Two provider homes read `sessionEnd: "lost"`:
   cannot hold it up.
 - one whose session is **gone while OATS did not stop it**: the provider
   answers `present: false`. A provider reads a session in error this way.
+
+The provider is told which stop the host's shutdown is (`reason: "host"` on
+its stop), so that it keeps that session able to take the resume's input.
+**A home stopped with the host whose harness runs again before the sweep**
+(a person's message reached its session, or the harness came back) is no
+loss and no harness outside OATS: status reads it running from the
+provider's answer, and the sweep adopts it. The resume clears the stop and
+sends no notice into the running harness, nothing is counted, and the
+sweep's row is `already-running`. An ordinary `oats session start` (or
+restart) of a home stopped with the host is the person's own act and ends
+that stop's claim to be resumed: the stop is recorded as an operator's
+before the provider is asked to stop the old session, so a launch that
+fails leaves the home stopped, not lost.
 
 The sweep (`oats session resume`: the Desktop and the TUI when they open,
 `oats host run` at its start and each minute) resumes both with `oats session

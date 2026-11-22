@@ -14,7 +14,8 @@
 //   control.stateful: true: the fake has sessions (sessionsOf): launch creates one, stop stops it, an
 //   input restarts a stopped one, inspect answers what is there; each effect is a line of events.log.
 // Defaults: launch answers a new endpoint `{ server, threadId }`; inspect a running session with an
-// `open` link; input `{ submitted: true, verified: true }`; stop `{ stopped: true }`; inspectMany
+// `open` link, and LOST for a thread the default stop stopped (a stopped session is gone: stops.log,
+// until a launch answers that thread again or a default input restarts it, as a provider's does); input `{ submitted: true, verified: true }`; stop `{ stopped: true }`; inspectMany
 // each home's own inspect behaviour, in order; check (declared only by `fakeProvider({ check: true })`)
 // `{ status: "ready", problems: [], warnings: [] }`.
 // LOST is what a provider answers for a session that is gone (as bb's error reads): a lost session.
@@ -91,6 +92,11 @@ const statefulDefaults = {
   input: () => { emit({ ev: "input", thread: req.input.endpoint?.threadId }); return { submitted: true, verified: true }; },
   stop: () => { emit(req.input.endpoint === null ? { ev: "stopHome", home: instance, launchSent: req.input.launchSent ?? null } : { ev: "stop", thread: req.input.endpoint.threadId }); return { stopped: true }; },
 };
+// A thread the default stop stopped is gone for the default inspect (the last line that names it
+// decides), as a provider's stopped session is; a launch that answers that thread again runs it,
+// and so does a default input to it (a provider restarts a stopped session on its next input).
+const stops = join(dir, "stops.log");
+const threadStopped = (thread) => typeof thread === "string" && existsSync(stops) && readFileSync(stops, "utf8").split("\\n").filter((line) => line.slice(line.indexOf(" ") + 1) === thread).at(-1)?.startsWith("stop ") === true;
 const defaults = {
   launch: () => {
     const counter = join(dir, "threads");
@@ -98,9 +104,9 @@ const defaults = {
     writeFileSync(counter, String(n));
     return { endpoint: { server: "${FAKE_SERVER}", threadId: "thr_" + req.input.instance + "_" + n } };
   },
-  inspect: (input) => ({ present: true, state: "unknown", running: true, open: open(input.endpoint) }),
-  input: () => ({ submitted: true, verified: true }),
-  stop: () => ({ stopped: true }),
+  inspect: (input) => (threadStopped(input.endpoint?.threadId) ? ${JSON.stringify({ present: false, state: "stopped", running: false })} : { present: true, state: "unknown", running: true, open: open(input.endpoint) }),
+  input: () => { if (threadStopped(req.input.endpoint?.threadId)) appendFileSync(stops, "input " + req.input.endpoint.threadId + "\\n"); return { submitted: true, verified: true }; },
+  stop: () => { if (typeof req.input.endpoint?.threadId === "string") appendFileSync(stops, "stop " + req.input.endpoint.threadId + "\\n"); return { stopped: true }; },
   check: () => ({ status: "ready", problems: [], warnings: [] }),
 };
 const b = behaviourOf(instance, req.verb);
@@ -121,6 +127,7 @@ if (result === undefined && req.verb === "inspectMany") {
   }) };
 }
 if (result === undefined) result = (stateful && statefulDefaults[req.verb] ? statefulDefaults : defaults)[req.verb](req.input);
+if (req.verb === "launch" && typeof result?.endpoint?.threadId === "string" && threadStopped(result.endpoint.threadId)) appendFileSync(stops, "launch " + result.endpoint.threadId + "\\n");
 process.stdout.write(JSON.stringify({ ...echo, ...(b.echo ?? {}), ok: true, result }) + "\\n");
 `;
 

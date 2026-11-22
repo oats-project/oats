@@ -99,7 +99,10 @@ on it (stop, start, restart, retire), under that verb's claim:
    - from *sent* → **planned** (record `launched: false`, `endpoint: null`);
    - from *resent* → **stopped** (record `launched: true`, `endpoint: E`;
      receipt `stoppedAt` set if it was null, `launchSent` removed; the stop
-     receipt as an operator's, unless it already says the host's).
+     receipt as an operator's, unless it already says the host's and it is
+     the host's shutdown that settles the home: the recorded session's stop
+     then carries `reason: "host"`. A start and an operator's stop make a
+     host's stop an operator's before they ask the provider anything).
 
 *resent* settles to *stopped*, never to *running*. Step 1 does not reach the
 session at `E`: it is older than the launch (a start of a lost home stops it
@@ -149,13 +152,35 @@ reads the launch from its receipt and record, never from the marker.
 
 | Verb (claim) | planned | sent | running | stopped | resent |
 |---|---|---|---|---|---|
-| **inspect**, **status** (none) | not launched; — | unknown (`E_SESSION_UNAVAILABLE`; row `unreachable`); — | the provider's `inspect`; unknown when it fails; gone reads *lost* | stopped; — | unknown; — |
+| **inspect**, **status** (none) | not launched; — | unknown (`E_SESSION_UNAVAILABLE`; row `unreachable`); — | the provider's `inspect`; unknown when it fails; gone reads *lost* | stopped; — for inspect. Status reads the home's presence in the provider's `inspectMany` batch (below): an operator's stop is stopped whatever it answers, with `outsideOats` for a live harness; a host's stop reads running for a live harness | unknown; — |
 | **input** (none) | `E_SESSION_NOT_RUNNING`; — | `E_SESSION_NOT_RUNNING`; — | `inspect`, then `input` (below) | `E_SESSION_NOT_RUNNING`; — | `E_SESSION_NOT_RUNNING` when `stoppedAt` is set, else `E_SESSION_INPUT_FAILED`; — |
 | **stop** (`stop`) | nothing to stop | settle → planned; answers stopped | the stop rule → stopped | operator's: asks `stop {E}` again, and takes a host's stop as its own. Host's: nothing | as of *running* or of *stopped* by its `stoppedAt` (the stop rule, or `stop {E}` again), then settle → stopped; answers stopped |
-| **start** (`start`) | launch | settle, launch | `inspect`: there → `E_SESSION_RUNNING` or `E_SESSION_UNKNOWN`; gone → launch | launch | `stop {E}`, settle, launch |
+| **start** (`start`) | launch | settle, launch | `inspect`: there → `E_SESSION_RUNNING` or `E_SESSION_UNKNOWN`; gone → launch | launch (a host's stop is recorded as an operator's first, here and at a restart: a launch that fails leaves the home stopped, not lost) | `stop {E}`, settle, launch |
 | **restart** (`start`) | launch | settle, launch | `inspect` (unknown refuses): there → the stop rule, launch; gone → launch | launch | `stop {E}`, settle, launch |
-| **resume** (`resume`) | `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` | gone → count, then `input` (the notice); there → `E_SESSION_RUNNING` / `E_RESUME_NOT_LOST` | host's stop → `input` (the notice), then `stoppedAt` cleared, then the stop receipt removed → running; operator's → `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` |
+| **resume** (`resume`) | `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` | gone → count, then `input` (the notice); there → `E_SESSION_RUNNING` / `E_RESUME_NOT_LOST` | host's stop → `inspect`; gone, or unknown → `input` (the notice), then `stoppedAt` cleared, then the stop receipt removed → running; there with a live harness → adopted: `stoppedAt` cleared and the stop receipt removed, no notice (`E_SESSION_RUNNING`) → running; operator's → `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` |
 | **retire** (`retire`) | remove | settle, scan, remove | the stop rule, scan, remove | `stop {E}` again, scan, remove | the stop rule, settle, scan, remove |
+
+**A harness that runs in a stopped home** (feature `provider-outside-oats`).
+A provider's product can start a stopped session's harness again without
+OATS (a message a person types there). `oats status` asks the provider about
+its stopped homes in the `inspectMany` call it makes for the running ones
+of their group (one call for the provider, after the running homes' reads,
+where none of its homes runs; never an `inspect` per home, and never for a
+home a lifecycle command holds, whose stop may be in flight), and a
+home whose provider answers a live harness (there, and `running: true`;
+`null`, a provider that cannot tell, leaves the home as recorded) carries `outsideOats: {code: "running-outside-oats", backend,
+message}` on its row. Nothing else follows from that read: the row stays
+stopped, no record is written, cleared or moved, an input stays refused and
+the sweep does what the stop receipt says. A provider that fails, refuses or
+does not answer leaves the row stopped, without the key. `oats instance
+upgrade` asks the same of a stopped home with one `inspect`, and refuses a
+live harness with `E_SESSION_RUNNING`; `oats instance stop` and `oats
+retire` ask `stop {E}` again, as the table says, which is how such a harness
+is stopped. That is for a home an operator stopped. A home stopped with the
+host is one OATS means to run: the provider's stop was told `reason: "host"`,
+every listing that asks providers asks about it in the same batch, a live
+harness there reads running with no key, and the resume adopts it (the table's
+resume row).
 
 **The stop rule: fence, drain, stop.** Every stop the kernel asks of a
 provider, whatever the verb, is made by one function, in this order:
@@ -229,7 +254,7 @@ orders of "A launch" and of the stop rule:
 | during a spawn's rollback, between its record and its receipt | unsettled: the launch still marked, the record already planned (not compared) | settles |
 | during a spawn, before its record (while the provider's `check` is asked, or its hooks run) | not a home of the table yet: a receipt, where there is one, says planned, and the record is the one its files were composed with. A read answers that it is being spawned (`E_SESSION_UNAVAILABLE`), never that its records disagree | as for any spawn that ended before its record: the kernel has no verb for it yet (not this change's) |
 | during a spawn, between the planned record and its last receipt | planned (the receipt was written before the record) | acts on it |
-| during a resume of a home stopped with the host, after its notice | stopped with the host; its session may run again | the sweep sends the notice again; a stop or a start asks `stop {E}` |
+| during a resume of a home stopped with the host, after its notice | stopped with the host; its session may run again | the resume reads the session: running, it adopts the home with no second notice; gone, it sends the notice again. A stop or a start asks `stop {E}` |
 | during that resume, after `stoppedAt` was cleared | running, with the host's stop receipt left | acts on a running home; a later loss of that start is a loss like any other, counted (a stop receipt says the host's stop only beside a receipt that says stopped), and a later stop removes that receipt before it records its own |
 
 **An input in flight across a state change.** An input holds no claim and a
