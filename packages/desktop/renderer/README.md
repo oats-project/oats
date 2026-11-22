@@ -612,7 +612,7 @@ split into sections) is `packages/client/roster-sections.mjs`.
   this-machine name; `local` says which): its deployment's machine, else a server row's label, else this machine
   (`here`, the host name the kernel reports, else `DESKTOP_TERMS.thisMachine`; a row of this machine's own deployment
   is this machine's); the machine alone with no soul). This machine's name shows once, at the status line's right
-  (`statusLine.setMachine`, from the same `onHost`). `here` is the schedule list's `host.name` (oats-local.yaml), which the Automations
+  (`statusLine.setMachine`, from the same `onHost`, by the rows' rule: roster-row-facts.mjs `shownLine`). `here` is the schedule list's `host.name` (oats-local.yaml), which the Automations
   mark's reader hands on (`onHost`, shell.mjs `thisHostName`; the roster repaints when it first arrives). No repository, branch, pull request, reason label or harness badge on the row, no
   hover card and no tools overlay: the instance panel shows the facts (Work: repository and branch; Session:
   harness, model, the reporting-gap note and the runtime error; Needs input: the claim's words, its wait and its

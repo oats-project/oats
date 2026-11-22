@@ -14,6 +14,8 @@
    It never takes focus. Its surface is the window's --bg with --fg and --muted text, inventoried pairs (slice 3d: the
    prototype's key bar: 28px, the keys in the chrome's sans, a small --muted dot between two, no fill of its own). */
 
+import { shownLine } from "../../client/roster-row-facts.mjs";
+
 const MODIFIERS = new Set(["Shift", "Control", "Alt", "AltGraph", "Meta", "OS", "Super", "Hyper", "CapsLock", "NumLock", "ScrollLock", "Fn", "FnLock"]);
 
 export const statusLineCSS = `
@@ -104,8 +106,9 @@ export function createStatusLine({ doc, host, before = null, keysFor = () => [],
     say,
     /** Repaint the keys (the focus or the keymap changed). */
     refresh: paintKeys,
-    /** Show this machine's name at the right (null or empty: nothing). */
-    setMachine(name) { machine.textContent = typeof name === "string" ? name : ""; },
+    /** Show this machine's name at the right, by the roster's rule (roster-row-facts.mjs `shownLine`: one display
+     * line; null, empty, not text or withheld: nothing). */
+    setMachine(name) { machine.textContent = shownLine(name) ?? ""; },
     /** What the line says now: the message, or null. */
     text: () => message?.text ?? null,
     hideMessage: clearMessage,

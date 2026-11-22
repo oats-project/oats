@@ -39,8 +39,8 @@ const SINCE = "2026-10-03T09:00:00.000Z";
 const claim = (extra = {}) => ({ since: SINCE, producer: "claude-hooks", reason: "permission", message: null, ...extra });
 const local = (name, extra = {}) => ({ instance: name, agent: "oats-desktop-developer", home: `/synthetic/${name}`, agentsRoot: "/synthetic/agents",
   repoName: "desktop-repo", branch: `b/${name}`, harness: "claude", running: true, createdAt: "2026-10-01T00:00:00.000Z", ...extra });
-const remote = (name, extra = {}) => ({ instance: name, agent: "oats-maintainer", home: `/srv/agents/oats-maintainer/instances/${name}`, agentsRoot: "/srv/agents",
-  server: "polaris-id", repoName: "polaris", addressable: true, harness: "pi", running: true, createdAt: "2026-10-01T00:00:00.000Z", ...extra });
+const remote = (name, extra = {}) => ({ instance: name, agent: "reviewer", home: `/srv/agents/reviewer/instances/${name}`, agentsRoot: "/srv/agents",
+  server: "build-host-id", repoName: "build-host", addressable: true, harness: "pi", running: true, createdAt: "2026-10-01T00:00:00.000Z", ...extra });
 
 /** The shipped roster paint and foot over the shipped index.html, in workspace "A". */
 function fixture(t, { context: extra = {}, nouns = DESKTOP_NOUNS } = {}) {
@@ -89,14 +89,14 @@ test("slice1 row shows name and soul, and the machine only for another machine's
   const u = fixture(t);
   u.render([local("desktop-mockups"), remote("release-0-68"), local("forgotten-one", { agent: undefined, running: false })]);
   assert.deepEqual(u.lines("desktop-mockups"), ["Desktop mockups", "oats-desktop-developer"], "a running local row: its soul alone (slice 3d, superseding slice 1's this-machine name)");
-  assert.deepEqual(u.lines("release-0-68"), ["Release 0 68", "oats-maintainer · polaris"], "a remote row: its server's label");
+  assert.deepEqual(u.lines("release-0-68"), ["Release 0 68", "reviewer · build-host"], "a remote row: its server's label");
   assert.deepEqual(u.lines("forgotten-one"), ["Forgotten one", "This Mac"], "a row with no soul known: the machine only");
   // Slice 3d (Joan's 1:1 ask, superseding slice 1's call that a local row names this machine): a local row says no
   // machine, whatever host name the kernel reports (oats-local.yaml host.name, read from the schedule list).
   u.context.thisHostName = "falcon";
   u.render([local("desktop-mockups"), remote("release-0-68")]);
   assert.deepEqual(u.lines("desktop-mockups"), ["Desktop mockups", "oats-desktop-developer"]);
-  assert.deepEqual(u.lines("release-0-68"), ["Release 0 68", "oats-maintainer · polaris"], "a remote row keeps its own");
+  assert.deepEqual(u.lines("release-0-68"), ["Release 0 68", "reviewer · build-host"], "a remote row keeps its own");
   u.context.thisHostName = null;
   u.render([local("desktop-mockups"), remote("release-0-68"), local("forgotten-one", { agent: undefined, running: false })]);
   for (const name of ["desktop-mockups", "release-0-68", "forgotten-one"]) {
@@ -109,7 +109,7 @@ test("slice1 row shows name and soul, and the machine only for another machine's
   }
   // A remote row whose machine didn't answer (the unknown dot, dim): both lines still.
   u.render([remote("far", { running: null, serverUnreached: true, runtimeError: "ssh failed" })]);
-  assert.deepEqual(u.lines("far"), ["Far", "oats-maintainer · polaris"]);
+  assert.deepEqual(u.lines("far"), ["Far", "reviewer · build-host"]);
   assert.ok(u.row("far").querySelector(".ctx-dot.unknown"));
   // Its state in words, as the card said it (the dot says it by shape and colour alone): running or stopped is heard
   // before opening a terminal or starting an agent, visually hidden, after the two lines.
@@ -480,12 +480,12 @@ test("slice3d harness mark on line 2 for claude, codex and pi, none when unknown
   const u = fixture(t);
   u.render([local("by-claude"), local("by-codex", { harness: "codex", model: "gpt-5" }), remote("by-pi"),
     local("by-other", { harness: "aider" }), local("by-none", { harness: undefined })]);
-  for (const [name, harness] of [["by-claude", "Claude"], ["by-codex", "Codex"], ["by-pi", "Pi"]]) {
+  for (const [name, harness, soul] of [["by-claude", "Claude", "oats-desktop-developer"], ["by-codex", "Codex", "oats-desktop-developer"], ["by-pi", "Pi", "reviewer"]]) {
     const r = u.row(name), meta = r.querySelector(".ctx-meta.ctx-row-detail"), mark = meta.firstElementChild;
     assert.ok(mark && mark.getAttribute("class") === "runtime-mark ctx-harness", `${name}: the mark leads line 2`);
     assert.equal(mark.getAttribute("aria-hidden"), "true", `${name}: decorative`);
     assert.equal(meta.querySelectorAll(".ctx-harness").length, 1);
-    assert.match(meta.textContent, /^oats-/, `${name}: then the soul, the line's text unchanged`);
+    assert.ok(meta.textContent.startsWith(soul), `${name}: then the soul, the line's text unchanged`);
     assert.match(r.title, new RegExp(`${harness}`), `${name}: the title still names the harness`);
     assert.equal(r.querySelectorAll(".ctx-harness").length, 1, `${name}: line 2's alone: line 1 stays the dot and the name`);
     assert.equal(r.firstElementChild.classList.contains("ctx-dot"), true);

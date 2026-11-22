@@ -15,6 +15,7 @@ import { createAgentBoard, createHiddenFacts, defaultMeasure, outerHeight } from
 import { createTabChrome } from '../renderer/tab-a11y.mjs';
 import { numberTabStrips } from '../renderer/tab-numbers.mjs';
 import { boardData } from '../../client/instance-board.mjs';
+import { shownLine } from '../../client/roster-row-facts.mjs';
 import { NOW, board } from './helpers/board-fixture.mjs';
 
 const renderer = new URL('../renderer/', import.meta.url);
@@ -216,6 +217,23 @@ test('slice3d key bar layout', t => {
   const sep = decl('.status-key + .status-key::before', statusLineCSS);
   assert.deepEqual([sep.get('content'), sep.get('width'), sep.get('height'), sep.get('border-radius'), sep.get('background')], ['""', '3px', '3px', '50%', 'var(--muted)'],
     'a drawn dot, no character for a screen reader to say');
+});
+
+test('slice3d key bar machine name: the roster\'s rule (#2095)', t => {
+  // This machine's name at the key bar's right passes the same rule as the roster's machine names
+  // (roster-row-facts.mjs shownLine): one display line, and nothing for a withheld, absent or non-text value.
+  const u = page(t, '', [statusLineCSS]);
+  const line = createStatusLine({ doc: u.doc, host: u.doc.body });
+  t.after(() => line.dispose());
+  const shownAt = name => { line.setMachine(name); return u.doc.querySelector('.status-machine').textContent; };
+  assert.equal(shownAt('build-host'), 'build-host');
+  assert.equal(shownAt('build\nhost'), 'build host', 'a multi-line name: one line');
+  assert.equal(shownAt('build\x1bhost'), '', 'a control character: withheld, so nothing');
+  for (const name of [null, undefined, '', 42]) assert.equal(shownAt(name), '', `${String(name)}: nothing`);
+  for (const name of ['build-host', 'build\nhost', '  build-host  ', 'build\x1bhost', 'build\u202Ehost', null, ''])
+    assert.equal(shownAt(name), shownLine(name) ?? '', `${JSON.stringify(name)}: the roster's rule`);
+  assert.match(read('status-line.mjs'), /setMachine\(name\) \{ machine\.textContent = shownLine\(name\) \?\? ""; \}/,
+    'the rule itself, shared, never a copy of it');
 });
 
 /* ── tokens and contrast ─────────────────────────────────────────────────────────────────────────────────── */
