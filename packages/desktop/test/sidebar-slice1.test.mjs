@@ -297,8 +297,8 @@ test("slice1 automations failure mark", async t => {
   paintAutomationsFailed(1);
   assert.equal(name(), "Automations, a run failed", "its accessible name says so");
   // Slice 3d: the prototype's "1 failed" after the name, shown, the words beside it for assistive tech.
-  const shown = row.querySelector(".nav-failed-count");
-  assert.deepEqual([shown.textContent, shown.getAttribute("aria-hidden")], ["1 failed", "true"], "the count shown, decoration beside the words");
+  const count = row.querySelector(".nav-failed-count");
+  assert.deepEqual([count.textContent, count.getAttribute("aria-hidden")], ["1 failed", "true"], "the count shown, decoration beside the words");
   assert.equal(row.querySelectorAll(".nav-failed").length, 1);
   paintAutomationsFailed(2); assert.equal(row.querySelectorAll(".nav-failed").length, 1, "never doubled");
   assert.equal(row.querySelector(".nav-failed-count").textContent, "2 failed", "the count follows");

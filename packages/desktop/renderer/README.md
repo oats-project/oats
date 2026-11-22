@@ -157,9 +157,9 @@ changed only the chrome there). Before D2, Omarchy's font also set the chrome
   `--mono` are `"JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace,
   SFMono-Regular, Menlo, monospace` (no file is bundled), and the terminals keep
   Inconsolata. On every platform Omarchy's font also sets `--name-size: 12px`,
-  which an instance's name on its sidebar row (`.ctx-name`) and its tab (`.tab`)
-  read as `font-size: var(--name-size, 12.5px)`: the wider monospace face, a
-  little smaller (the product owner, 2026-10-26). System font sets nothing.
+  which nothing reads since slice 3d: an instance's name on its sidebar row
+  (`.ctx-name`, 13px) and its tab (`.tab`, 12.5px) are fixed sizes, the chrome
+  being the system sans in every choice (D2). System font sets nothing.
 - **Every UI font rule follows it** by reading `font-family: var(--ui-font,
   <its own stack>)`, a longhand beside its size, weight and line-height (never
   inside a `font` shorthand: jsdom drops a shorthand that holds `var()`, so a
@@ -552,22 +552,24 @@ not read the panel. What they say (a deployment's state in words, the primary, t
 split into sections) is `packages/client/roster-sections.mjs`.
 
 - **The sidebar, top to bottom** (the product owner, 2026-10-26; slice 1 of the Desktop UI rework, its head,
-  pinned rows, rows and foot): the head (`.side-head`, 40px, its 8px top padding keeping the heading's centre 24px
-  down, as in the 48px bar, so the first row sits close under it; no line under it): the heading `#ws-heading`
-  "Workspace" (13.5px 700 `--fg`; it labels the list), then **Add local workspace…** (`#ws-add-open`), a 28px
-  `.side-icon-button` box; the list (`#ws-list`, a 1.5px `--border` line under it, a little bolder than the 1px one
-  before the instances; rows `.ws-option`, 4px 8px 4px 10px, at least 24px tall); the pinned rows (`#nav`, PINNED:
-  Home, Automations; 8px above the first and below the last, 4px on the left as the roster's list; a
-  column of 32px `.nav-item`s in the roster rows' style: the icon on the roster's dot column, 18px in, the name in
-  the roster's name type, 12.5px 600 `--fg`, the current one 650 on `--sel`; Automations carries `.nav-failed`, an
-  8px `--danger` dot in the right-hand column, 25px from the right, and the sr-only ", a run failed", while
-  `automations-failure.mjs` says a run failed: `paintAutomationsFailed` adds it and removes it); the roster
-  (`#instance-roster`, its top border the line before the instances) under its heading, a `.ctx-head` (13px 500
-  `--nav-fg`) holding "Instances" and the count, with "Refreshing…" after the count when loading.mjs adds it; then
-  the foot (`#nav-foot`, pushed to the bottom, under a `--border` line, 4px 10px 4px 6px), one bar (`#sidebar-bar`,
+  pinned rows, rows and foot; slice 3d, the prototype's frame A, their type and spacing): the head (`.side-head`,
+  34px, 4px down, its 6px top padding keeping the kicker's centre 24px down, so the first row sits close under it;
+  no line under it): the heading `#ws-heading` "Workspaces", the prototype's kicker (10px 650 capitals tracked
+  .075em, `--muted`; it labels the list), then **Add local workspace…** (`#ws-add-open`), a quiet 26x24
+  `.side-icon-button`; the list (`#ws-list`, 8px in from both edges, a 1.5px `--border` line under it; rows
+  `.ws-option`, 0 8px 0 12px, 28px tall, 13px); the pinned rows (`#nav`, PINNED: Home, Workspace, Automations;
+  8px above the first, 4px below the last, 8px in as the roster's list; a column of 34px `.nav-item`s: the 16px
+  icon centred on the dots' column, 24px in, the name 40px in, 13px 500 `--fg`, the current one on `--sel`;
+  Automations carries `.nav-failed`, "N failed" right after its name in `--danger` (aria-hidden) and the sr-only
+  ", a run failed", while `automations-failure.mjs` counts a failed run (`onCount`): `paintAutomationsFailed(count)`
+  adds it and removes it); the roster (`#instance-roster`, no line before it) under its heading, a `.ctx-head`
+  (the WORKSPACES kicker's type) holding "Agents" and the count (11px), with "Refreshing…" after the count when
+  loading.mjs adds it; its rows two compact lines (`.ctx-name` 13px/17px 400, `.ctx-row-detail` 11.5px/15px
+  `--muted`), the dot 12px in (`--dot-inset`, which the guides read), "new" a 1px-ringed lower-case pill; then
+  the foot (`#nav-foot`, pushed to the bottom, under a `--border` line, 8px 14px 10px), one bar (`#sidebar-bar`,
   `role="group"` "Sidebar tools"), `[need you] … [New agent][?]`, built by `sidebar-foot.mjs`: **N need you**
-  (`#sidebar-need-you`, hidden at 0; the needs-input mark and "2 need you" in `--fg` 600, its name "2 agents need
-  you. Go to the first"; its mark on the rows' dots, 18px in: the foot's 6px, the bar's 2px, its own 5px, half the
+  (`#sidebar-need-you`, hidden at 0; the needs-input mark and "2 need you" in `--fg` 13px 400, its name "2 agents need
+  you. Go to the first"; its mark on the rows' dots, 24px in: the foot's 14px, its own 5px, half the
   10px mark; it runs `focusFirstNeedingYou`, which focuses the first row in the roster's order with a claim, itself: chosen
   from the model in the painted order (sidebarSections, main then Background) with the count's gate, so a row a
   held parent hides is found though it draws no roll-up; its section opened, its collapsed ancestors expanded,
@@ -1920,7 +1922,8 @@ section is the module map.
   (`surface-return.mjs`). No second spawn form exists.
 - **status-line.mjs** — the status line (slice 4): one line at the bottom of the window with
   the three keys for where the focus is (`statusKeys` in the shell) and one-line messages
-  (`say`). It asks nothing: its y/n questions for Stop, Start and Restart were taken out of the
+  (`say`). Slice 3d drew it as the prototype's key bar: 28px on `--bg`, the keys in the chrome's sans (500 `--fg`),
+  their words `--muted`, a 3px `--muted` dot between two keys (a CSS shape, no character to read aloud). It asks nothing: its y/n questions for Stop, Start and Restart were taken out of the
   slice after five review rounds, and those keep their dialogs.
 - **sheet.mjs** — centred sheets over the scrim with a 150 ms ease (none with reduced
   motion), focus trapped and returned: `openSheet` (Appearance), and the `sheet` /

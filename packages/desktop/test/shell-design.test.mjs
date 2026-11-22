@@ -123,7 +123,7 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
 
 // The sidebar (the product owner, 2026-10-26; slice 1 of the Desktop UI rework), the list of workspaces on top: the head
 // (the Workspace heading and Add local workspace…), the list, the pinned views, a line, the instances, then the foot.
-test("the head is the Workspace heading and Add local workspace…; the list's semantics and ids survive", t => {
+test("the head is the WORKSPACES heading and Add local workspace…; the list's semantics and ids survive", t => {
   const { document } = shell(t);
   const sidebar = document.getElementById("sidebar");
   const head = document.querySelector("#sidebar > .side-head");
@@ -156,7 +156,7 @@ test("the head is the Workspace heading and Add local workspace…; the list's s
   assert.equal(list.getAttribute("role"), null, "not a listbox: the sidebar's plain keys stay live on it");
   assert.ok(list.querySelector(":scope > #ws-options"));
   // The rules (the product owner, 2026-10-26): none under the head (the heading sits over its list), one under the
-  // list, the line before the instances (the roster's top), none under the Instances heading, none of the views' own. JSDOM does not expand a border shorthand that uses var(), so read the
+  // list, none before the agents (slice 3d: the prototype has none), none under the AGENTS heading, none of the views' own. JSDOM does not expand a border shorthand that uses var(), so read the
   // declarations of every shipped rule matching each element.
   const drawn = (el, side) => [...document.styleSheets].flatMap(sheet => [...sheet.cssRules])
     .filter(rule => rule.selectorText && (() => { try { return el.matches(rule.selectorText); } catch { return false; } })())
@@ -165,7 +165,7 @@ test("the head is the Workspace heading and Add local workspace…; the list's s
   assert.deepEqual(drawn(head, "top"), []);
   assert.deepEqual(drawn(head, "bottom"), [], "no line between the heading and its list");
   assert.deepEqual(drawn(list, "bottom"), [".ws-list { border-bottom: 1.5px solid var(--border) }"], "one rule under the list, a little bolder");
-  assert.deepEqual(drawn(document.getElementById("instance-roster"), "top"), ["#instance-roster { border-top: 1px solid var(--border) }"], "the line before the instances");
+  assert.deepEqual(drawn(document.getElementById("instance-roster"), "top"), [], "no line before the agents");
   for (const side of ["top", "bottom"]) assert.deepEqual(drawn(document.getElementById("nav"), side), [], `no rule of the views' own (${side})`);
   const rosterHead = document.querySelector("#instance-roster > .ctx-head");
   assert.deepEqual(drawn(rosterHead, "bottom"), [], "no line under the Instances heading");

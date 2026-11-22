@@ -268,13 +268,14 @@ workspace on a server: `name — server`).
 
 ## Workspaces
 
-The sidebar, top to bottom: the **Workspace** heading, with **Add local
-workspace…** (the **+**) at its end, over the list of workspaces; a thin line;
-three pinned rows, **Home**, **Workspace** and **Automations**, drawn like the
-instance rows (Automations shows a red dot, and says "a run failed", while a
+The sidebar, top to bottom: the **WORKSPACES** heading, small and in
+capitals, with **Add local workspace…** (the **+**) at its end, over the list
+of workspaces; a thin line; three pinned rows, **Home**, **Workspace** and
+**Automations** (Automations says "1 failed" after its name, in red, while a
 schedule's last run failed: see [Scheduling agents](#scheduling-agents-and-wake-messages));
-another line; **Agents**, a heading with the running count over the list of
-agents; and, over a line, the foot, one bar: at its left **N need you**, the
+**AGENTS**, the same small heading with the running count, over the list of
+agents, two compact lines each (the name, then the soul and machine, smaller
+and muted); and, over a line, the foot, one bar: at its left **N need you**, the
 number of this workspace's agents that need input (hidden when none does;
 it takes you to the first of them, in the roster's order, expanding a collapsed
 parent or opening the Background section to show it), and at its right
@@ -302,7 +303,7 @@ have. It is one centred column. Top to bottom:
   doesn't guess it.
 - **The workspace, as one row of tiles**, each a button with its count:
   **Agents**, **Souls**, **Capabilities**, **Teams**, **Machines** and
-  **Automations** (with the sidebar row's red dot while a run failed). A count
+  **Automations** (with the sidebar row's "1 failed" while a run failed). A count
   still being read says "Counting…", and one that couldn't be read says so;
   nothing is guessed. Enter opens that part of the Workspace page on its tab
   (Machines on its List), and Esc there comes back to Home; Automations opens
@@ -339,7 +340,9 @@ agents (the sidebar's tree, the one you used last on top), the sections
 and one **New agent: <soul>** row per soul. Type to narrow it; `>` keeps only
 the commands and `+` only the souls.
 
-**The status line** runs along the bottom of the window. It shows the three
+**The status line** runs along the bottom of the window, one quiet 28px line:
+each key in the window's own type, what it does muted after it, a small dot
+between two. It shows the three
 keys most useful where you are (in the roster: Enter, Stop and the palette;
 in a terminal: the leader, close tab and the palette); on the Workspace pages,
 their own keys: **↑↓ move · Enter open · v table · Esc Home** on Souls (**v
@@ -918,8 +921,9 @@ it is marked **Refused at each run** or **Needs YOLO** in the list. A wake to
 an agent on a session provider is sent as its session's input and never
 starts a stopped one: it is delivered once the agent runs again. Launching an agent is reported separately from
 the end of its run; neither means its task succeeded. While a schedule's last
-run is **launch failed** or **invalid**, the sidebar's **Automations** shows a
-red dot, and a screen reader hears "Automations, a run failed"; it clears once
+run is **launch failed** or **invalid**, the sidebar's **Automations** says how
+many after its name in red ("1 failed"), and a screen reader hears "Automations,
+a run failed"; it clears once
 no last run has failed. The sidebar reads both lists when the workspace opens
 and then at most once a minute. A trigger's last run carries no outcome, so a
 trigger never marks it.
@@ -1127,8 +1131,8 @@ agent writes it with `oats instance board set` and `oats instance board ask`,
 [docs/desktop-cli-api.md](desktop-cli-api.md)), an agent's terminal tab is its
 **agent view**. Top to bottom:
 
-1. **Facts**: what the agent keeps in your view, one compact row each,
-   `label · value unit`, with "updated 4 min ago". At most three show; **N
+1. **Facts**: what the agent keeps in your view, one raised strip each, a
+   pin, then `label · value unit`, with "updated 4 min ago" at its right. At most three show; **N
    more** unfolds the rest. While the view is open the Desktop reads each
    fact's history once, and a number that changed draws a small sparkline.
    A link shows as the agent's, with its host (`dev-a says: github.com…`). A
@@ -1148,8 +1152,9 @@ agent writes it with `oats instance board set` and `oats instance board ask`,
    keeps its terminal smaller, and a number types only while at least two of
    its lines show. It gives up exactly the rows the
    facts and the questions take.
-3. **Questions**: one at a time, under the terminal, so they sit right by the
-   agent's input line at the bottom of its screen. "question 2 of 3", ‹ › and
+3. **Questions**: one at a time, on a card under the terminal, so they sit right by the
+   agent's input line at the bottom of its screen: "needs you" and when it was
+   asked, the question, then its options as boxed rows, each with its number. "question 2 of 3", ‹ › and
    the dots turn them, and so do Tab / Shift+Tab and ← / → while the questions
    have the focus. A question with context has a **Context** fold, attributed
    to the agent, as plain text: **c** opens or closes it and moves the focus
