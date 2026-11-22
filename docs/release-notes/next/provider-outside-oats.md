@@ -37,6 +37,11 @@
   input is still refused, and the row is no longer `lost`, so a client that
   starts a sweep when it sees a lost home does not start one for it: `oats
   host run`'s sweep, each minute, adopts it.
+- **An ordinary `oats session start` or restart of a provider home stopped
+  with the host records that stop as an operator's first.** Its stop of the
+  old session carries no `reason`, and a launch that fails leaves the home
+  `stopped`, not `lost`: no sweep resumes it through a session that stop
+  ended.
 - **`oats instance upgrade` refuses a provider home recorded stopped whose
   harness runs** (`E_SESSION_RUNNING`, naming `oats instance stop <name>`),
   at the plan and at the apply: it asks the provider once, and never upgrades

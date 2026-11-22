@@ -1115,7 +1115,11 @@ its stop), so that it keeps that session able to take the resume's input.
 loss and no harness outside OATS: status reads it running from the
 provider's answer, and the sweep adopts it. The resume clears the stop and
 sends no notice into the running harness, nothing is counted, and the
-sweep's row is `already-running`.
+sweep's row is `already-running`. An ordinary `oats session start` (or
+restart) of a home stopped with the host is the person's own act and ends
+that stop's claim to be resumed: the stop is recorded as an operator's
+before the provider is asked to stop the old session, so a launch that
+fails leaves the home stopped, not lost.
 
 The sweep (`oats session resume`: the Desktop and the TUI when they open,
 `oats host run` at its start and each minute) resumes both with `oats session

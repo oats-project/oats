@@ -2350,7 +2350,10 @@ started by a killed spawn is ever stopped.
 the host: the stop that `oats host run`'s shutdown gives, and the stop the
 kernel asks again when the resume notice of such a home failed without your
 refusal. No other stop carries a `reason` (an operator's, a restart's, a
-start's, a retire's).
+start's, a retire's). An ordinary start of a home stopped with the host is
+its person's own act: the kernel first records that stop as an operator's,
+so the stop it then asks carries no `reason`, and a launch that fails
+leaves the home stopped by OATS, with no resume owed through that session.
 The kernel resumes that home later through `input` to this same endpoint, so
 **leave a session stopped with `reason: "host"` able to take that input**: a
 provider that archives or deletes what it stops does not do so for this one.

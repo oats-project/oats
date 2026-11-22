@@ -7764,7 +7764,9 @@ session start --resume --home <abs>` of such a home does the same and
 answers `E_SESSION_RUNNING`, saying so. A `--plan` says `already-running`
 only where the listing read the harness running; a home it did not read,
 as one whose provider declares no `inspectMany`, is planned `resumed` and
-adopted by its start), `refused` with `keeps-getting-lost`
+adopted by its start. A home the listing read running is adopted also
+while the delay after an earlier refused resume of it runs: an adoption
+sends nothing), `refused` with `keeps-getting-lost`
 (the home's resume cap; `code: "E_SESSION_NOT_RUNNING"`, with
 `nextAttemptAt`; a `--plan` reads the same count and answers the same) or `start-refused`
 (the notice was not sent: a prompt or a claim is open, or it was queued),

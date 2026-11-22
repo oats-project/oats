@@ -420,6 +420,46 @@ test("a home stopped with the host that the listing's batch does not read is ado
   assert.deepEqual([fx.verbs().map((c) => c.verb), runtimeOf(home).stoppedAt, existsSync(join(home, ".oats-stop.json"))], [["inspect"], null, false]);
 });
 
+test("an ordinary start of a home stopped with the host is its person's own act: the stop becomes an operator's before the provider is asked, so its stop carries no reason and a launch that is refused leaves the home stopped by OATS", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("mine");
+  hostStop(fx, home);
+  assert.deepEqual([JSON.parse(readFileSync(join(home, ".oats-stop.json"), "utf8")).resume, rowOf(fx, "mine").sessionEnd], [true, "lost"]);
+  fx.control({ mine: { launch: { error: { code: "E_BACKEND_NOT_READY", message: "the fake is down" } } } });
+  fx.clearCalls();
+  const started = fx.cli(["session", "start", "--home", home, "--json"]).json();
+  assert.deepEqual([started.ok, started.error.code], [false, "E_BACKEND_NOT_READY"]);
+  // The provider was asked to stop the old session with no reason (one that archives, archives it), then to launch.
+  assert.deepEqual(fx.verbs().filter((c) => c.verb === "stop" || c.verb === "launch").map((c) => [c.verb, c.request.input.reason ?? null]), [["stop", null], ["launch", null]]);
+  // The home is stopped by OATS now: nothing claims a resume through the session that stop ended.
+  assert.deepEqual([Number.isFinite(Date.parse(runtimeOf(home).stoppedAt)), JSON.parse(readFileSync(join(home, ".oats-stop.json"), "utf8")).resume, rowOf(fx, "mine").sessionEnd], [true, undefined, "stopped"]);
+  fx.clearCalls();
+  const swept = fx.cli(["session", "resume", "--deployment", fx.dep, "--json"]).json();
+  assert.deepEqual([swept.result.rows, fx.verbs("input")], [[], []], "no sweep resumes it");
+  // A start that launches is a new session, as ever.
+  fx.control({});
+  assert.equal(fx.cli(["session", "start", "--home", home, "--json"]).json().ok, true);
+  assert.deepEqual([runtimeOf(home).stoppedAt, rowOf(fx, "mine").running], [null, true]);
+});
+
+test("a home stopped with the host whose harness runs is adopted also while an earlier refused resume's delay runs: an adoption sends nothing", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("late");
+  hostStop(fx, home);
+  const sweep = (...flags) => fx.cli(["session", "resume", "--deployment", fx.dep, ...flags, "--json"]).json();
+  // The first resume's notice fails: the sweep notes the refusal, and when it tries again.
+  fx.control({ late: { inspect: { result: LOST }, input: { error: { code: "E_BACKEND_NOT_READY", message: "the fake is down" } } } });
+  const refused = sweep().result.rows[0];
+  assert.deepEqual([refused.instance, refused.outcome, refused.reason, Number.isFinite(Date.parse(refused.nextAttemptAt))], ["late", "refused", "start-refused", true]);
+  assert.deepEqual(sweep("--plan").result.rows.map((r) => [r.instance, r.outcome, r.reason]), [["late", "refused", "start-refused-retrying"]], "a home that is still lost waits out the delay");
+  // Its harness comes back meanwhile: the plan and the sweep adopt it now.
+  fx.control({ late: { inspect: { result: LIVE }, input: { error: { code: "E_BACKEND_NOT_READY", message: "the fake is down" } } } });
+  assert.deepEqual(sweep("--plan").result.rows.map((r) => [r.instance, r.outcome, r.reason ?? null]), [["late", "already-running", null]]);
+  fx.clearCalls();
+  assert.deepEqual(sweep().result.rows.map((r) => [r.instance, r.outcome, r.reason ?? null]), [["late", "already-running", null]]);
+  assert.deepEqual([fx.verbs("input"), runtimeOf(home).stoppedAt, existsSync(join(home, ".oats-stop.json"))], [[], null, false]);
+});
+
 test("a resume by hand of a home stopped with the host whose harness runs adopts it too: E_SESSION_RUNNING, the stop cleared, nothing sent", async (t) => {
   const fx = providerDeployment(t);
   fx.control({ stateful: true });
