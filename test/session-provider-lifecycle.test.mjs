@@ -103,7 +103,9 @@ const CELLS = {
   status: {
     planned: ["stopped", [], "planned"], sent: ["unknown", [], "sent"],
     running: ["running", ["inspect"], "running"], lost: ["lost", ["inspect"], "running"],
-    "stopped (operator)": ["stopped", [], "stopped"], "stopped (host)": ["lost", [], "stopped"],
+    // (A stopped home's one call: status reads whether a harness runs there all the same, in the
+    // provider's batch, for `outsideOats` alone (feature provider-outside-oats). The row is the kernel's record.)
+    "stopped (operator)": ["stopped", ["inspect"], "stopped"], "stopped (host)": ["lost", ["inspect"], "stopped"],
     "resent (stopped)": ["unknown", [], "resent"], "resent (not stopped)": ["unknown", [], "resent"],
   },
   input: {

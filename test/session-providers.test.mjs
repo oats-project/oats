@@ -203,12 +203,17 @@ test("T3: waitingOnYou is the producers' claim, read while the session is there 
   assert.deepEqual(waiting({ present: true, state: "unknown", running: null }), ["Which branch?", "Which branch?"], "an idle session can be the one waiting");
   assert.deepEqual(waiting({ present: true, state: "shell", running: false }), [null, null]);
   assert.deepEqual(waiting({ present: false, state: "stopped", running: false }), [null, null], "a session that is gone, a lost one included");
-  // A home OATS stopped carries none, and its provider is not asked.
+  // A home OATS stopped carries none, and inspect does not ask its provider.
   fx.control({});
   await fx.inEnv(() => stopInstanceSession(home, {}));
   fx.clearCalls();
-  assert.deepEqual([fx.cli(["session", "inspect", "--home", home, "--json"]).json().result.waitingOnYou, rowOf(fx, "asker").waitingOnYou], [null, null]);
+  assert.equal(fx.cli(["session", "inspect", "--home", home, "--json"]).json().result.waitingOnYou, null);
   assert.deepEqual(fx.verbs(), []);
+  // Nor does its status row, also when its provider answers a harness that runs there all the same
+  // (feature provider-outside-oats: the row says so, and stays what OATS recorded).
+  fx.control({ inspect: { result: { present: true, state: "unknown", running: true } } });
+  const row = rowOf(fx, "asker");
+  assert.deepEqual([row.waitingOnYou, row.running, row.runtimeState, row.outsideOats.code], [null, false, "stopped", "running-outside-oats"]);
 });
 
 test("T4: after oats instance stop, inspect answers stopped and input is refused, both without calling the provider", async (t) => {
@@ -231,12 +236,16 @@ test("T4: after oats instance stop, inspect answers stopped and input is refused
   writeFileSync(text, "are you there?\n");
   const input = fx.cli(["session", "input", "--home", home, "--text-file", text, "--json"]).json();
   assert.deepEqual([input.ok, input.error.code], [false, "E_SESSION_NOT_RUNNING"]);
-  // The status row too, and it keeps the home's last endpoint.
-  const row = rowOf(fx, "halted");
-  assert.deepEqual([row.running, row.runtimeState, row.sessionEnd, row.session, row.open, row.tmux], [false, "stopped", "stopped", rowSessionOf("halted", 1), null, null]);
   // attach names no terminal either, without asking the provider for a link.
   assert.equal(await codeOf(() => fx.inEnv(() => attachInstanceSession(home))), "E_SESSION_NO_TERMINAL");
   assert.deepEqual(fx.verbs(), [], "the provider was not called for any of it");
+  // The status row too, and it keeps the home's last endpoint. Status asks the provider one thing
+  // of a home OATS stopped, in one batch: whether a harness runs there all the same (feature
+  // provider-outside-oats, test/provider-outside-oats.test.mjs). Here none does, and the row has no such key.
+  const row = rowOf(fx, "halted");
+  assert.deepEqual([row.running, row.runtimeState, row.sessionEnd, row.session, row.open, row.tmux, Object.hasOwn(row, "outsideOats")], [false, "stopped", "stopped", rowSessionOf("halted", 1), null, null, false]);
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspectMany"]);
+  fx.clearCalls();
 
   // A second stop is idle, and asks the provider once more (its stop is idempotent); the host's
   // shutdown changes nothing of a home that is stopped. A start clears the stop and launches anew.
@@ -557,8 +566,11 @@ test("T11: status with three homes of one fake provider calls inspectMany once",
   const calls = fx.verbs();
   assert.equal(calls.length, 1, calls.map((c) => c.verb).join(", "));
   assert.equal(calls[0].verb, "inspectMany");
-  // One request for the three, in the listing's order; the home OATS stopped is not asked about.
-  assert.deepEqual(calls[0].request.input, { homes: ["many-a", "many-b", "many-c"].map((name, i) => ({ home: join(fx.root, "dev", "instances", name), instance: name, endpoint: endpointOf(name, i + 1) })) });
+  // One request, the three that OATS did not stop first, in the listing's order. The home OATS
+  // stopped rides in the same call, after them, for one thing only: whether a harness runs there
+  // all the same (feature provider-outside-oats, test/provider-outside-oats.test.mjs). Its row is
+  // the kernel's own record whatever the provider says of it.
+  assert.deepEqual(calls[0].request.input, { homes: ["many-a", "many-b", "many-c", "many-stopped"].map((name, i) => ({ home: join(fx.root, "dev", "instances", name), instance: name, endpoint: endpointOf(name, i + 1) })) });
   const facts = (name) => { const r = rows.find((row) => row.instance === name); return [r.backend, r.running, r.runtimeState, r.runtimeError ?? null, r.open?.url ?? null, r.tmux]; };
   assert.deepEqual(facts("many-a"), ["fake", true, "unknown", null, `${FAKE_SERVER}/thread/thr_many-a_1`, null]);
   assert.deepEqual(facts("many-b"), ["fake", false, "shell", null, null, null]);
@@ -569,14 +581,15 @@ test("T11: status with three homes of one fake provider calls inspectMany once",
   assert.equal(stopped.home, join(fx.root, "dev", "instances", "many-stopped"));
 
   // A bad batch (a failed call, results that are not one per home) falls back to each home's own
-  // inspect, never to "stopped"; so does one entry that is no inspect answer.
+  // inspect, never to "stopped"; so does one entry that is no inspect answer. The home OATS stopped
+  // is never asked on its own.
   for (const bad of [{ result: { results: [] } }, { exit: 1 }, { raw: "not json" }]) {
     fx.control({ inspectMany: bad, "many-b": { inspect: { result: { present: true, state: "shell", running: false } } } });
     fx.clearCalls();
     assert.deepEqual(rowsOf(fx).filter((r) => r.instance !== "many-stopped").map((r) => [r.running, r.runtimeState]), [[true, "unknown"], [false, "shell"], [true, "unknown"]], JSON.stringify(bad));
     assert.deepEqual(fx.verbs().map((c) => [c.verb, c.instance]), [["inspectMany", "many-a"], ["inspect", "many-a"], ["inspect", "many-b"], ["inspect", "many-c"]]);
   }
-  fx.control({ inspectMany: { result: { results: [{ present: true, state: "unknown", running: true }, { present: "yes" }, { error: { code: "E_BACKEND_NOT_READY", message: "down" } }] } } });
+  fx.control({ inspectMany: { result: { results: [{ present: true, state: "unknown", running: true }, { present: "yes" }, { error: { code: "E_BACKEND_NOT_READY", message: "down" } }, LOST] } } });
   fx.clearCalls();
   assert.deepEqual(rowsOf(fx).filter((r) => r.instance !== "many-stopped").map((r) => [r.running, r.runtimeState]), [[true, "unknown"], [true, "unknown"], [null, "unreachable"]]);
   assert.deepEqual(fx.verbs().map((c) => [c.verb, c.instance]), [["inspectMany", "many-a"], ["inspect", "many-b"]], "the bad entry's home is asked on its own; a refusal stands");

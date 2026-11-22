@@ -297,6 +297,42 @@ test("an upgrade of a provider home exchanges the kernel's copy of each moved mo
   assert.equal(fx.cli(["session", "inspect", "--home", home, "--json"]).json().result.running, true);
 });
 
+// Feature provider-outside-oats (test/provider-outside-oats.test.mjs): a home OATS recorded stopped
+// reads stopped without its provider being asked, and its provider can still run a harness there.
+test("an upgrade refuses a home recorded stopped whose harness runs, at the plan and at the apply, naming the stop; nothing is upgraded under a running harness", async (t) => {
+  const { fx, home, plan, apply } = await upgradable(t, "astray");
+  const live = { astray: { inspect: { result: { present: true, state: "unknown", running: true } } } };
+  const refused = (e) => e.code === "E_SESSION_RUNNING" && /a harness runs in it on fake, outside OATS; no modules were upgraded/.test(e.message) && e.message.includes("oats instance stop astray");
+  const receipt = () => readFileSync(receiptOf(home), "utf8");
+  const before = receipt();
+  fx.control(live);
+  fx.clearCalls();
+  await assert.rejects(plan(), refused);
+  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.instance]), [["inspect", "astray"]], "the provider was asked once, about this home");
+  assert.equal(readJson(receiptOf(home)).runtime.stoppedAt !== null, true, "the home stays recorded stopped");
+  // A harness that starts between the plan and the apply refuses the apply too.
+  fx.control({});
+  const planned = await plan();
+  fx.control(live);
+  await assert.rejects(apply({ planRevision: planned.planRevision, idempotencyKey: "astray-1" }), refused);
+  assert.equal(receipt(), before, "no module moved, and the receipt is the bytes it was");
+  // A session the provider reads idle, which it cannot tell from a live one, refuses as well; one
+  // that is gone, or left at its shell, does not.
+  fx.control({ astray: { inspect: { result: { present: true, state: "unknown", running: null } } } });
+  await assert.rejects(plan(), refused);
+  for (const quiet of [{ present: false, state: "stopped", running: false }, { present: true, state: "shell", running: false }]) {
+    fx.control({ astray: { inspect: { result: quiet } } });
+    assert.equal((await plan()).planRevision, planned.planRevision, JSON.stringify(quiet));
+  }
+  // A provider that does not answer leaves the home as OATS recorded it: the upgrade goes on.
+  fx.control({ astray: { inspect: { exit: 1 } } });
+  assert.equal((await plan()).planRevision, planned.planRevision);
+  // Once stopped again from OATS (the provider's stop is asked again), the upgrade applies.
+  fx.control({});
+  await fx.inEnv(() => stopInstanceSession(home, {}));
+  assert.equal((await apply({ planRevision: planned.planRevision, idempotencyKey: "astray-2" })).status, "complete");
+});
+
 test("an undo of a provider home's upgrade names the kernel's previous copies and rows again, in one write, and runs the previous module's hook from the kernel's copy; a second undo has nothing to go back to", async (t) => {
   const { fx, home, plan, apply, ran } = await upgradable(t, "undone-move");
   const storesOf = () => readdirSync(dirname(dirname(kernelModuleDir(home, PACKAGED)))).sort();

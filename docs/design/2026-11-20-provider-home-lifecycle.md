@@ -149,13 +149,29 @@ reads the launch from its receipt and record, never from the marker.
 
 | Verb (claim) | planned | sent | running | stopped | resent |
 |---|---|---|---|---|---|
-| **inspect**, **status** (none) | not launched; — | unknown (`E_SESSION_UNAVAILABLE`; row `unreachable`); — | the provider's `inspect`; unknown when it fails; gone reads *lost* | stopped; — | unknown; — |
+| **inspect**, **status** (none) | not launched; — | unknown (`E_SESSION_UNAVAILABLE`; row `unreachable`); — | the provider's `inspect`; unknown when it fails; gone reads *lost* | stopped; — for inspect. Status reads the home's presence in the provider's `inspectMany` batch, for `outsideOats` alone (below): the row is stopped whatever it answers | unknown; — |
 | **input** (none) | `E_SESSION_NOT_RUNNING`; — | `E_SESSION_NOT_RUNNING`; — | `inspect`, then `input` (below) | `E_SESSION_NOT_RUNNING`; — | `E_SESSION_NOT_RUNNING` when `stoppedAt` is set, else `E_SESSION_INPUT_FAILED`; — |
 | **stop** (`stop`) | nothing to stop | settle → planned; answers stopped | the stop rule → stopped | operator's: asks `stop {E}` again, and takes a host's stop as its own. Host's: nothing | as of *running* or of *stopped* by its `stoppedAt` (the stop rule, or `stop {E}` again), then settle → stopped; answers stopped |
 | **start** (`start`) | launch | settle, launch | `inspect`: there → `E_SESSION_RUNNING` or `E_SESSION_UNKNOWN`; gone → launch | launch | `stop {E}`, settle, launch |
 | **restart** (`start`) | launch | settle, launch | `inspect` (unknown refuses): there → the stop rule, launch; gone → launch | launch | `stop {E}`, settle, launch |
 | **resume** (`resume`) | `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` | gone → count, then `input` (the notice); there → `E_SESSION_RUNNING` / `E_RESUME_NOT_LOST` | host's stop → `input` (the notice), then `stoppedAt` cleared, then the stop receipt removed → running; operator's → `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` |
 | **retire** (`retire`) | remove | settle, scan, remove | the stop rule, scan, remove | `stop {E}` again, scan, remove | the stop rule, settle, scan, remove |
+
+**A harness that runs in a stopped home** (feature `provider-outside-oats`).
+A provider's product can start a stopped session's harness again without
+OATS (a message a person types there). `oats status` asks the provider about
+its stopped homes in the `inspectMany` call it makes for its running ones
+(one call of their own where none runs; never an `inspect` per home), and a
+home whose provider answers a live harness (there, and `running` not
+`false`) carries `outsideOats: {code: "running-outside-oats", backend,
+message}` on its row. Nothing else follows from that read: the row stays
+stopped, no record is written, cleared or moved, an input stays refused and
+the sweep does what the stop receipt says. A provider that fails, refuses or
+does not answer leaves the row stopped, without the key. `oats instance
+upgrade` asks the same of a stopped home with one `inspect`, and refuses a
+live harness with `E_SESSION_RUNNING`; `oats instance stop` and `oats
+retire` ask `stop {E}` again, as the table says, which is how such a harness
+is stopped.
 
 **The stop rule: fence, drain, stop.** Every stop the kernel asks of a
 provider, whatever the verb, is made by one function, in this order:

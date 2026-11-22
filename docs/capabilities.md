@@ -2291,7 +2291,15 @@ fails or is not one result per home, and an entry that is neither a result
 nor a refusal, fall back to that home's own `inspect`, never to "stopped".
 Without `inspectMany`, status calls `inspect` per home.
 
-**The kernel never calls inspect for a home OATS stopped** (below).
+**The kernel never calls `inspect` for a home OATS stopped, and never reads
+such a home as running** (below). `oats status` does include a stopped home
+in your `inspectMany` call, with the endpoint of its last session: answer it
+as any other, by what is there. A session your product started again
+without OATS (`present: true`, `running` `true` or `null`) is reported on
+the home's row as running outside OATS; the row stays stopped, and the
+kernel acts on nothing else of that answer. `oats instance upgrade` asks
+`inspect` once for a stopped home, to refuse an upgrade under a harness that
+runs.
 
 ### input
 
@@ -2651,7 +2659,9 @@ the feature.
   restart's stop, a retire, `oats host run`'s shutdown) the kernel records
   `stoppedAt` in the home's receipt **before** it calls `stop`, and a start
   clears it. While it is set, inspect answers stopped (`present: false`,
-  `running: false`) without calling the provider, and every input (a
+  `running: false`) without calling the provider, the status row is stopped
+  whatever the provider answers (a live harness there is reported beside
+  it, as `outsideOats`, and changes nothing), and every input (a
   person's `oats session input`, a scheduled wake, a client, the messaging
   broker) is refused `E_SESSION_NOT_RUNNING` before any call. A provider
   whose product restarts a session on its next input can rely on this.

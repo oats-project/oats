@@ -1068,8 +1068,22 @@ relayed** by `oats server roster` or `--server`, whose rows and answers carry
 `backend` (an older kernel, an older routed host) is a tmux row. Status asks
 each provider once per group of homes where it can (`inspectMany`), falls
 back to one `inspect` per home when a batch is bad (never after one that
-timed out), gives all its providers 30 s together, and asks nothing about a
-home OATS stopped, which keeps its last endpoint until its next start.
+timed out), gives all its providers 30 s together. A home OATS stopped
+keeps its last endpoint until its next start, and its row is what OATS
+recorded: `running: false`, `runtimeState: "stopped"`. Status asks its
+provider one thing about it, in the same `inspectMany` call as that
+provider's running homes (one call of their own where none runs, never an
+`inspect` per home): whether a harness runs there all the same, which a
+provider's own product can start without OATS. Such a row carries
+`outsideOats: {code: "running-outside-oats", backend, message}` (feature
+`provider-outside-oats`,
+[desktop-cli-api.md](desktop-cli-api.md#row-outside-oats)) and is otherwise
+unchanged: it stays stopped, its input stays refused and nothing is written.
+`oats instance stop <name>` stops that harness (the provider's stop is asked
+again), `oats retire` stops it before it removes the home, a start from OATS
+stops it and launches a new session, and `oats instance upgrade` refuses the
+home until it is stopped (`E_SESSION_RUNNING`). A provider that fails or
+does not answer leaves the row stopped, without the key.
 `waitingOnYou` is the producers' claim, as for tmux, read while the session
 is there and not in error.
 
