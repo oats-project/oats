@@ -26,8 +26,8 @@ import { serverLabel } from './remote-address.mjs';
 import { displayLine, DETAIL_WITHHELD } from './display-text.mjs';
 import { requireTerms } from './client-terms.mjs';
 
-/** One display line, or null for nothing to show (absent, not text, withheld): the rule for every machine or soul
- * name the Desktop shows, here and on the status line (status-line.mjs `setMachine`). */
+/** One display line, or null for nothing to show (absent, not text, withheld): the rule for the roster rows' machine
+ * and soul names, and for the status line's host name (status-line.mjs `setMachine`). */
 export const shownLine = (value) => {
   const line = typeof value === 'string' ? displayLine(value) : null;
   return line && line !== DETAIL_WITHHELD ? line : null;

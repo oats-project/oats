@@ -232,6 +232,8 @@ test('slice3d key bar machine name: the roster\'s rule (#2095)', t => {
   for (const name of [null, undefined, '', 42]) assert.equal(shownAt(name), '', `${String(name)}: nothing`);
   for (const name of ['build-host', 'build\nhost', '  build-host  ', 'build\x1bhost', 'build\u202Ehost', null, ''])
     assert.equal(shownAt(name), shownLine(name) ?? '', `${JSON.stringify(name)}: the roster's rule`);
+  assert.match(read('status-line.mjs'), /setMachine\(name\) \{ machine\.textContent = shownLine\(name\) \?\? ""; \}/,
+    'the rule itself, shared, never a copy of it');
 });
 
 /* ── tokens and contrast ─────────────────────────────────────────────────────────────────────────────────── */
