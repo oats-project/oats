@@ -1356,8 +1356,9 @@ command palette (which still finds the instance by its name), its terminal tab,
 a screen reader and the `oats` CLI all use the instance's real name. The TUI's
 sidebar shows the same words. A long name is cut at its end with "…".
 
-A row's second line starts with its harness's mark (Claude's, Codex's or Pi's, in
-the line's own grey; none when the harness isn't one of those) and says its soul,
+A row's second line starts with its harness's mark (Claude's, Codex's or Pi's,
+small, in a grey lighter than the line's text; none when the harness isn't one of
+those) and says its soul,
 "oats-expert", and, for an agent on another machine, that machine too,
 "oats-maintainer · polaris"; the machine alone when
 its soul isn't known (this computer's rows then name it by the host name OATS

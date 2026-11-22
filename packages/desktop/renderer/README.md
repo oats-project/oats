@@ -604,9 +604,10 @@ split into sections) is `packages/client/roster-sections.mjs`.
 - **A roster row** (slice 1): a 44px `.ctx-tree-row` box (the button 40px inside 2px transparent borders, the dot
   centred on it) of two lines, `.ctx-name` and `.ctx-meta.ctx-row-detail`, the shared row facts
   (`packages/client/roster-row-facts.mjs` `rosterRowFacts`, for the TUI too): the display name, then
-  the harness's mark (identity-marks.mjs `createHarnessMark`: Claude's, Codex's or Pi's own shape, monochrome in the
-  line's --muted, aria-hidden, none for another harness; slice 3d, on Juan's request relayed 2026-11-22, superseding
-  slice 1's removal; the row's title keeps "harness · model"), then `<soul>`, and ` · <machine>` only for another
+  the harness's mark (identity-marks.mjs `createHarnessMark`: Claude's, Codex's or Pi's own shape, 10px,
+  monochrome in --tree-link, the faintest ink held at 3:1 on the row's fills and lighter than the line's --muted,
+  aria-hidden, none for another harness; slice 3d, Joan's decision 2026-11-22 ("yes but monochrome a bit more
+  discrete"), on Juan's request, superseding slice 1's removal; the row's title keeps "harness · model"), then `<soul>`, and ` · <machine>` only for another
   machine's row (slice 3d, the prototype's, superseding slice 1's
   this-machine name; `local` says which): its deployment's machine, else a server row's label, else this machine
   (`here`, the host name the kernel reports, else `DESKTOP_TERMS.thisMachine`; a row of this machine's own deployment

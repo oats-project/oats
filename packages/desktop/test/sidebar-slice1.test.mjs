@@ -492,8 +492,9 @@ test("slice3d harness mark on line 2 for claude, codex and pi, none when unknown
   }
   assert.equal(u.row("by-codex").title.includes("Codex · gpt-5"), true, "harness · model in the title");
   for (const name of ["by-other", "by-none"]) assert.equal(u.row(name).querySelector(".ctx-harness, .runtime-mark"), null, `${name}: no mark for an unknown harness`);
-  // Its look: the line's size and ink (currentColor in --muted), no fill or colour of its own.
+  // Its look (Joan, 2026-11-22: "monochrome a bit more discrete"): 10px, in the faint --tree-link (held at 3:1 on the
+  // row's fills, and lighter than line 2's --muted: slice3d-main-screen.test.mjs), no fill or harness colour of its own.
   const rule = css.match(/^\.ctx-row-detail > \.ctx-harness \{([^}]*)\}/m)?.[1] ?? "";
-  assert.match(rule, /width: 11px; height: 11px;/); assert.match(rule, /color: inherit;/);
-  assert.doesNotMatch(rule, /background|var\(--runtime|var\(--(?!muted)/, "no colour of its own");
+  assert.match(rule, /width: 10px; height: 10px;/); assert.match(rule, /color: var\(--tree-link\);/);
+  assert.doesNotMatch(rule, /background|var\(--runtime/, "no harness colour of its own");
 });

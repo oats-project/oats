@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { TEXT_PAIRS, TEXT_CONTRAST } from '../renderer/contrast-inventory.mjs';
+import { TEXT_PAIRS, TEXT_CONTRAST, GRAPHIC_PAIRS } from '../renderer/contrast-inventory.mjs';
 import { statusLineCSS, createStatusLine } from '../renderer/status-line.mjs';
 import { sheetCSS } from '../renderer/sheet.mjs';
 import { mailSheetCSS } from '../renderer/mail-sheet.mjs';
@@ -258,6 +258,21 @@ const CHANGED_PAIRS = [
   ['the key bar', ['fg', 'muted'], ['bg']],
   ['the sheets: titles, section heads, rows', ['fg', 'muted', 'accent'], ['surface', 'surface-2', 'sel']],
 ];
+
+// The harness mark on line 2 (Joan's decision, 2026-11-22: "yes but monochrome a bit more discrete"): a decorative graphic
+// in --tree-link, held at 3:1 on every fill the row paints and visibly lighter than line 2's --muted text, in every theme.
+test('slice3d the harness mark is quieter than line 2, and holds 3:1 on the row\'s fills', () => {
+  assert.equal(decl('.ctx-row-detail > .ctx-harness').get('color'), 'var(--tree-link)');
+  assert.deepEqual([decl('.ctx-row-detail > .ctx-harness').get('width'), decl('.ctx-row-detail > .ctx-harness').get('height')], ['10px', '10px']);
+  for (const bg of ['sidebar', 'surface-2', 'sel']) {
+    assert.ok(GRAPHIC_PAIRS.some(([f, b]) => f === 'tree-link' && b === bg), `--tree-link on --${bg} is in the contrast inventory`);
+    for (const [theme, palette] of palettes) {
+      const mark = contrast(palette.get('tree-link'), palette.get(bg)), text = contrast(palette.get('muted'), palette.get(bg));
+      assert.ok(mark >= 3, `${theme}: the mark on --${bg} is ${mark.toFixed(2)}:1`);
+      assert.ok(mark < text - 0.5, `${theme}: the mark (${mark.toFixed(2)}:1) is visibly lighter than line 2's text (${text.toFixed(2)}:1) on --${bg}`);
+    }
+  }
+});
 
 test('slice3d contrast AA in every theme for the changed pairs', () => {
   for (const [what, fgs, bgs] of CHANGED_PAIRS) for (const fg of fgs) for (const bg of bgs) {
