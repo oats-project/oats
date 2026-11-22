@@ -43,18 +43,22 @@ test("a ready check with a warning passes, and the warning is relayed verbatim",
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
-test("a claude home on a session provider has no pane: its harness-trust item is not-applicable, not unknown", async () => {
+test("a claude or codex home on a session provider has no pane: its harness-trust item is not-applicable, not unknown", async () => {
   const base = mkdtempSync(join(tmpdir(), "oats-provider-check-"));
   try {
     const { t } = target(base, envelope({ status: "ready", problems: [] }));
     const trustItem = async (meta) => (await readinessDocument({ ...t, meta: { ...t.meta, ...meta } })).checks.configured.items.find((i) => i.code === "harness-trust");
-    const onProvider = await trustItem({ harness: "claude", backend: "fx", session: { provider: "fx.provider" } });
-    assert.equal(onProvider.status, "not-applicable");
-    assert.equal(onProvider.required, false);
-    assert.equal(onProvider.file, null);
-    assert.match(onProvider.reason, /session provider runs this launch \(backend fx\), with no OATS pane/);
-    const onTmux = await trustItem({ harness: "claude" });
-    assert.notEqual(onTmux.status, "not-applicable", "a tmux home still reads its pane's file");
+    for (const harness of ["claude", "codex"]) {
+      const onProvider = await trustItem({ harness, backend: "fx", session: { provider: "fx.provider" } });
+      assert.equal(onProvider.status, "not-applicable", harness);
+      assert.equal(onProvider.required, false);
+      assert.equal(onProvider.file, null);
+      assert.equal(onProvider.harness, harness);
+      assert.match(onProvider.reason, /session provider runs this launch \(backend fx\), with no OATS pane/);
+      const onTmux = await trustItem({ harness });
+      assert.notEqual(onTmux.status, "not-applicable", `a tmux ${harness} home still reads its pane's file`);
+      assert.match(onTmux.reason ?? `${onTmux.file}`, /folder trust|\//, "and says what it read");
+    }
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 

@@ -7,5 +7,5 @@
   launch, which has no pane", status `unknown`, on every such home. The
   provider runs the harness with no OATS pane, so no file is read for it: the
   item is now `not-applicable`, with `file` null, and the provider's own
-  readiness item answers for its launch
+  readiness item, where it declares a check, answers for its launch
   ([Launch-time checks and readiness](../harness-trust.md#launch-time-checks-and-readiness)).
