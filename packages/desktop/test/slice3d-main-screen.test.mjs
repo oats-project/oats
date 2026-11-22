@@ -158,6 +158,10 @@ test('slice3d question card head, hint, boxed options with number badges', t => 
   // The hovered or focused option: the accent border on the selection's fill, its number in the accent.
   const lit = decl('.agent-q-option:hover, .agent-q-option:focus-visible');
   assert.deepEqual([lit.get('border-color'), lit.get('background')], ['var(--accent)', 'var(--sel)']);
+  // .opt.on .num — the highlighted option's badge filled with the accent, in its own ink (an inventoried pair).
+  const litNum = decl('.agent-q-option:hover .agent-q-num, .agent-q-option:focus-visible .agent-q-num');
+  assert.deepEqual([litNum.get('background'), litNum.get('color')], ['var(--accent)', 'var(--accent-fg)']);
+  assert.ok(TEXT_PAIRS.some(([f, b]) => f === 'accent' && b === 'accent-fg'), 'the accent and its ink are a pair of the contrast inventory (held by "This computer" too)');
   // The facts: .pin — each its own 28px strip on the raised fill, radius 6, the pin and the time at the right.
   const fact = decl('.agent-fact');
   assert.deepEqual([fact.get('min-height'), fact.get('border-radius'), fact.get('background')], ['28px', '6px', 'var(--surface)']);
@@ -221,6 +225,11 @@ test('slice3d tokens not page-local', () => {
     assert.deepEqual([d.get('font-size'), d.get('text-transform'), d.get('letter-spacing')], ['11px', 'uppercase', '.06em'], selector);
   }
   assert.deepEqual([decl('.kb-title').get('font-size'), decl('.kb-title').get('font-weight')], ['15px', '600']);
+  // Appearance: frame A's page sheet (.sheet.pgsheet 760px) and its option columns (.spage .opt: 16px 160px 1fr): the
+  // name in a 160px column, what it does beside it, wrapping under it only where the window is too narrow.
+  assert.equal(declarations(appearanceCSS, '.appearance-sheet').get('width'), 'min(760px,calc(100vw - 32px))');
+  assert.equal(declarations(appearanceCSS, '.theme-picker-label').get('flex'), '0 0 160px');
+  assert.equal(declarations(appearanceCSS, '.theme-picker-text').get('flex-wrap'), 'wrap');
   // The terminal's cell geometry is untouched: its size and its face are as before.
   assert.equal(dark.get('term-font-size'), '15px');
   assert.match(dark.get('term-font-family'), /^"inconsolata"/);
@@ -236,6 +245,7 @@ const CHANGED_PAIRS = [
   ['the facts: label, value, time', ['fg', 'muted', 'accent'], ['surface']],
   ['the card: needs you, its age, the question, the hint, the context', ['warn', 'muted', 'fg'], ['surface']],
   ['an option, hovered or focused, and its number', ['fg', 'muted', 'accent'], ['bg', 'sel', 'surface-2']],
+  ['a highlighted option\'s filled number (the pair, accent first, as the inventory holds it)', ['accent'], ['accent-fg']],
   ['the key bar', ['fg', 'muted'], ['bg']],
   ['the sheets: titles, section heads, rows', ['fg', 'muted', 'accent'], ['surface', 'surface-2', 'sel']],
 ];

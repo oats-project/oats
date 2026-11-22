@@ -19,7 +19,9 @@ import { isShown } from './focus-regions.mjs';
 import { openSheet } from './sheet.mjs';
 
 export const appearanceCSS = `
-.appearance-sheet { width:min(420px,calc(100vw - 32px)); }
+/* Slice 3d: frame A's page sheet (.sheet.pgsheet), 760px wide, its option rows in columns: the mark, a 160px name,
+   then what it does (16px 160px 1fr); narrower windows wrap the explanation under the name. */
+.appearance-sheet { width:min(760px,calc(100vw - 32px)); }
 .appearance-section { display:grid; gap:6px; margin:0; padding:0; border:0; min-width:0; }
 .appearance-section h3 { margin:6px 0 0; font-size:11px; line-height:16px; font-weight:500; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
 .appearance-note { margin:0; color:var(--muted); font-size:12px; line-height:1.45; }
@@ -30,8 +32,8 @@ export const appearanceCSS = `
 .theme-picker-row.appearance-more { color:var(--accent); }
 /* Slice 3d: the prototype's option rows: the name, then what it does on the same line, muted. */
 .theme-picker-text { flex:1; min-width:0; display:flex; flex-wrap:wrap; align-items:baseline; column-gap:12px; row-gap:0; }
-.theme-picker-label { flex:0 0 132px; min-width:0; }
-.theme-picker-text > .theme-picker-note { flex:1 1 120px; min-width:0; }
+.theme-picker-label { flex:0 0 160px; min-width:0; }
+.theme-picker-text > .theme-picker-note { flex:1 1 240px; min-width:0; }
 .theme-picker-note { color:var(--muted); font-size:12px; }
 .theme-picker-current { flex:none; display:flex; align-items:center; gap:4px; color:var(--accent); font-size:12px; font-weight:600; }
 .appearance-sheet .forge-card { padding:0; border:0; background:none; }

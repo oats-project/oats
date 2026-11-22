@@ -305,7 +305,7 @@ have. It is one centred column. Top to bottom:
   doesn't guess it.
 - **The workspace, as one row of tiles**, each a button with its count:
   **Agents**, **Souls**, **Capabilities**, **Teams**, **Machines** and
-  **Automations** (with the sidebar row's "1 failed" while a run failed). A count
+  **Automations** (with a red dot while a run failed; the sidebar's row says "1 failed"). A count
   still being read says "Counting…", and one that couldn't be read says so;
   nothing is guessed. Enter opens that part of the Workspace page on its tab
   (Machines on its List), and Esc there comes back to Home; Automations opens

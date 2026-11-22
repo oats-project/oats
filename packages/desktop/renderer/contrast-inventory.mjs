@@ -45,6 +45,11 @@ export const TEXT_PAIRS = Object.freeze([
   // Slice 3d: the sidebar's own ground (--sidebar; Dark's sunken tone, --surface elsewhere): every ink its rows, heads,
   // pinned rows and foot paint at rest.
   ...["fg", "muted", "faint", "accent", "nav-fg", "warn", "danger"].map((fg) => [fg, "sidebar"]),
+  // Slice 3d: a highlighted option's number badge, the prototype's filled accent with --accent-fg ink (shell.css
+  // .agent-q-num). Both ways round: --accent-fg is the text on --accent, and the accent-first pair has "This computer"
+  // hold it, moving the host's accent until it meets the calibrated --accent-fg too (host-theme.mjs holds each pair's
+  // first token; the ratio is the same either way).
+  ["accent-fg", "accent"], ["accent", "accent-fg"],
   ...["fg", "muted", "accent", "violet", "ok", "warn"].map((fg) => [fg, "md-code-bg"]),
   ...ANSI_TOKENS.map((fg) => [fg, "term-bg"]),
   // Workspace v4: amber attention chips/nodes, and reason/tag chips.

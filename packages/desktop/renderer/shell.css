@@ -799,7 +799,7 @@ body {
 .agent-q-num { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 4px;
   background: var(--surface-2); color: var(--fg); font-weight: 600; font-size: 11.5px; }
 .agent-q-option:hover, .agent-q-option:focus-visible { border-color: var(--accent); background: var(--sel); outline: none; }
-.agent-q-option:hover .agent-q-num, .agent-q-option:focus-visible .agent-q-num { color: var(--accent); }
+.agent-q-option:hover .agent-q-num, .agent-q-option:focus-visible .agent-q-num { background: var(--accent); color: var(--accent-fg); }
 .agent-q-option:disabled { color: var(--muted); cursor: default; border-style: dashed; background: var(--bg); }
 .agent-q-option:disabled .agent-q-num { color: var(--muted); background: var(--surface-2); }
 .agent-q-note { margin: 2px 0 4px; color: var(--fg); font-weight: 600; }
