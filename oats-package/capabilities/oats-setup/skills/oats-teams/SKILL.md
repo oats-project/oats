@@ -13,7 +13,8 @@ description: >-
   `souls.default` in oats-local.yaml (upgrading from 0.36). Also when an old
   config still has messaging.byTeam, defaults.byTeam or a soul/membership
   `team:`, and when someone expects a team to restrict or grant access (it
-  never does). Part of the setup and config of an OATS workspace (oats.setup);
+  never does). Also when a person adopts a team's minting root. Part of the
+  setup and config of an OATS workspace (oats.setup);
   day-to-day operation inside an instance is oats.core.
 ---
 
@@ -258,6 +259,79 @@ of the act; “Next” is the single handoff after its success predicate passes.
 - **Error → remedy:** `E_WORKSPACE_SCHEMA` for a remaining shared reference
   → fix it in the workspace change. `E_TEAM_UNKNOWN` for a local default
   → repair that deployment's reference under its authorized local policy.
+
+### Adopt a team's minting root (optional)
+
+A person adopts one LOCAL minting root: the instances it mints from then on, and
+theirs, trace to that person. Only when the operator asks. Nothing else in OATS
+depends on it, and a deployment that skips it changes in nothing. Reference:
+`docs/integrations.md`, “Adopting a minting root”; the provider's rules: its
+README, “Human attribution”; the contract:
+`docs/design/2026-11-21-human-ids-contract.md`.
+
+- **Prerequisites/context** (stop and report the one that fails):
+  - the selected team `L` and its root `<root>`: the directory
+    `settings.oats.aweb.roots` (or `root`) names for it on this host. One root
+    at a time;
+  - `aw version` is 1.36.59 or later on every host that spawns from that root or
+    joins teams from it, and the installed oats.aweb's README has a “Human
+    attribution” section;
+  - every other host this deployment connects with `oats aweb connect` is
+    already connected: connect refuses a chained inviter
+    (`E_CONNECT_CHAINED_INVITER`);
+  - `aw --identity-home <root>/.aw who --json` reads `unknown` /
+    `legacy_no_chain`, or a chain parented directly by the namespace. A root
+    that reads `nearest_human`, or has an agent parent, can't be adopted;
+  - the person has a claimed human ID and is the root's recorded creator, a
+    team admin, or an owner or admin of the owning organisation.
+- **Files.** Make one new directory for this adoption on the root's host,
+  outside the root and outside every instance home (for example
+  `~/oats-adopt-<L>`). Both files live there, and neither holds a secret:
+  - `request.json`: you write it; the person uploads it;
+  - `response.json`: the person downloads it from the dashboard and puts it
+    there, or gives it to you to put there.
+  Never write a token, a key or an email into them, that directory or a message.
+- **Commands.** You run every command, from that directory, as the deployment's
+  user. The person does three things in the aweb dashboard, signed in, with the
+  root's team selected. Set needs-input (`oats instance attention --message …`)
+  each time you wait on them, and clear it when they answer.
+  1. Ask the person to choose **Adopt** in the root's Chat or Messages pane and
+     to give you the three values it shows: the invitation id (`I`), their ID
+     (`H`) and the domain (`D`). Copy them exactly; never derive them.
+  2. Write the request, and tell the person the fingerprint it prints over a
+     channel other than the file:
+     ```bash
+     aw --identity-home <root>/.aw id parent request --domain <D> --parent <H> --invitation-id <I> --out request.json
+     ```
+  3. Ask the person to upload `request.json`, choose **Approve and prepare
+     response**, download `response.json` and put it in the directory.
+  4. Install it:
+     ```bash
+     aw --identity-home <root>/.aw id parent import response.json --domain <D>
+     ```
+- **Effects:** the root carries an identity chain that ends at the person. From
+  then on, its mints and joins carry it. Existing instances keep their identity,
+  address, memberships and history, and read no human: never respawn them for
+  it unless the operator asks.
+- **Success:**
+  - `aw --identity-home <root>/.aw who --json` answers `outcome:
+    "nearest_human"` and the person's `human_id`;
+  - `oats aweb setup --check-only --json`: the root's entry in `roots` has that
+    attribution and no warnings;
+  - one throwaway instance spawned in `L` shows the person in `attributedHuman`
+    (`oats status --json`) or as **Owning human** in the Desktop. Retire it.
+- **Next:** tell the operator the limits below; return to `/oats-onboarding`'s
+  completion check.
+- **Limits:** one adoption per root key. No un-adopt: the way out is removing
+  the root's membership, which only the person does, from their own terminal,
+  with a fresh dashboard setup key for that team, once aweb's Cloud release with
+  it is live (`docs/integrations.md` gives the command). Never ask for that key,
+  hold it or run that command. A mint can stop waiting for a signature: the
+  spawn fails and its home is kept, as the provider's README says.
+- **Error → remedy:** a refusal from `id parent request` or `import` → report
+  aw's `error.code` as it gives it; don't retry with values of your own. A
+  failed registration at `import` keeps the signed response: run `import` again.
+  `who` not `nearest_human` after import → report it; don't adopt again.
 
 ## Refusals and configuration recovery
 

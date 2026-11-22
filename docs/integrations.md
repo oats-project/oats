@@ -138,6 +138,81 @@ operations in full.
 The pinned versions and each package's capabilities and souls are in the
 [official catalog](official-catalog.md#the-packages).
 
+### Adopting a minting root (oats.aweb, optional)
+
+A person can adopt one of a deployment's minting roots: from then on, every
+instance that root mints, and every instance those spawn, traces to that person.
+OATS reads that and shows it; nothing else changes. A deployment that adopts no
+root changes in nothing: there is no setting for it, and nothing in OATS depends
+on it. The provider's rules (what it records, joins, connect, and a mint waiting
+for a signature) are in its README's
+[Human attribution](https://github.com/awebai/oats-aweb/blob/main/README.md#human-attribution);
+the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md).
+
+- **What it is.** One root, of one team, in one deployment. It's prospective: the
+  instances that root mints after the adoption trace to the person, and instances
+  that already exist keep their identity, address, memberships and history, reading
+  no human. OATS doesn't respawn or re-sign them.
+- **What it needs.**
+  - aw 1.36.59 on every host that spawns from that root or joins teams from it. A
+    join from an adopted root on an older aw stops before it mints anything
+    (`E_ADOPTED_ROOT_AW_TOO_OLD`).
+  - The oats.aweb release with human attribution (its README's Human attribution
+    section).
+  - Any other host this deployment connects with `oats aweb connect`, connected
+    first: connect refuses an inviter that has an identity chain
+    (`E_CONNECT_CHAINED_INVITER`).
+  - A person who has claimed a human ID and is the root's recorded creator, a team
+    admin, or an owner or admin of the owning organisation.
+- **The steps.** One root at a time. The setup agent runs the commands, on the
+  root's host, as the deployment's user; the person does three things in the aweb
+  dashboard, signed in, with the root's team selected.
+  1. The person chooses **Adopt** from the root's Chat or Messages pane. The
+     dashboard shows an invitation id (I), the person's ID (H) and a domain (D).
+  2. The agent writes the request, with I, H and D copied from the dashboard:
+     ```bash
+     aw --identity-home <root>/.aw id parent request --domain <D> --parent <H> --invitation-id <I> --out request.json
+     ```
+  3. The person uploads `request.json`, chooses **Approve and prepare response**,
+     and downloads `response.json`.
+  4. The agent installs the response:
+     ```bash
+     aw --identity-home <root>/.aw id parent import response.json --domain <D>
+     ```
+  `request.json` and `response.json` hold no secret. `<root>` is the directory the
+  provider's `root` or `roots` setting names for that team.
+- **The check.**
+  - `aw --identity-home <root>/.aw who --json` answers `outcome: "nearest_human"`
+    with the person's `human_id`.
+  - `oats aweb setup --check-only --json` lists the root in `roots` with that
+    attribution and no warnings.
+  - Spawn one throwaway instance from that team and read its `attributedHuman` in
+    `oats status --json`, or **Owning human** in the Desktop
+    ([Attributed human](desktop-cli-api.md#attributed-human)); then retire it.
+- **Limits.**
+  - One adoption per root key. A host with several roots adopts each one.
+  - No un-adopt. The way out is removing the root's membership of its team: the
+    root can't mint there any more, the other members' memberships, mail and
+    history are unchanged, and the adoption and the identities' ancestry stay as
+    they are. A new root has a new key. The person removes it themselves, from
+    their own terminal, with a fresh dashboard setup key for that team (one team;
+    it expires 24 hours after it's made if unused, and 15 minutes after its first
+    use), passed with `--api-key` or `AWEB_API_KEY`:
+    ```bash
+    aw id team remove-member --namespace <team namespace> --team <team name> --member <team namespace>/<root alias> --json
+    ```
+    (or `--cert-id <certificate id>` in place of `--member`). No agent holds or uses
+    that key. This works once aweb's Cloud release with it is live; until then, the
+    dashboard has no way to remove a root's membership alone. The contract's
+    [§6](design/2026-11-21-human-ids-contract.md#6-revocation) gives the route,
+    and its follow-up records the OATS deployment owner's word.
+  - `oats aweb connect` refuses a chained inviter (`E_CONNECT_CHAINED_INVITER`);
+    the provider's README gives the manual route.
+  - A mint can stop waiting for a signature (`native_agent_signature_pending`):
+    the spawn fails and its home is kept, as the provider's README says.
+- **Attribution is information.** No OATS behaviour (gating, routing,
+  permission) depends on the human. OATS reads it and shows it.
+
 ## Building an integration
 
 Building an integration is implementing a contract. In the framework's own
