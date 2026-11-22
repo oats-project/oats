@@ -527,11 +527,11 @@ body {
   display: flex; flex: 1; min-width: 0;
   overflow-x: auto; height: calc(var(--bar-h) - 1px); /* the strip's rule is the bar's last pixel */
 }
-/* Slice 3d: the prototype's tab row: pills 28px tall, 4px apart, 12px in from the strip's ends, centred in the bar. */
-#tabbar, .group-tabbar { align-items: center; gap: 4px; padding-left: 12px; padding-right: 12px; }
+
 /* A tab strip scrolls (the wheel, revealInStrip) with no scrollbar, like the other tab bars:
    on Linux Chromium draws a classic one, arrows included, under the tabs. */
-#tabbar, .group-tabbar { scrollbar-width: none; }
+/* Slice 3d: the prototype's tab row: pills 28px tall, 4px apart, 12px in from the strip's ends, centred in the bar. */
+#tabbar, .group-tabbar { align-items: center; gap: 4px; padding-left: 12px; padding-right: 12px; scrollbar-width: none; }
 #tabbar::-webkit-scrollbar, .group-tabbar::-webkit-scrollbar { display: none; }
 /* tab-strip split controls (shown while the active tab is a terminal) */
 #tab-actions { display: flex; align-items: center; gap: 2px; padding: 0 8px; flex: none;
