@@ -30,9 +30,10 @@ const channels = hex => { assert.match(hex, /^#[0-9a-f]{6}$/, `opaque: ${hex}`);
 const luminance = rgb => { const c = rgb.map(v => v / 255).map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
 const contrast = (a, b) => { const x = luminance(channels(a)), y = luminance(channels(b)); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 
-/** The declarations of the one top-level rule whose selector is exactly `selector`, in `source` (comments stripped). */
+/** The declarations of the one top-level rule (outside @media and the like) whose selector is exactly `selector`, in `source` (comments stripped). */
 function declarations(source, selector) {
-  const rules = [...source.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, sel]) => sel.trim().replace(/\s+/g, ' ') === selector);
+  const topLevel = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@(?:media|supports|container)[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '');
+  const rules = [...topLevel.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, sel]) => sel.trim().replace(/\s+/g, ' ') === selector);
   assert.equal(rules.length, 1, `one rule: ${selector}`);
   return new Map(rules[0][2].split(';').map(d => d.trim()).filter(Boolean).map(d => { const at = d.indexOf(':'); return [d.slice(0, at).trim(), d.slice(at + 1).trim()]; }));
 }
