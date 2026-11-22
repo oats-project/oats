@@ -33,6 +33,10 @@
   sweep's row is `already-running`. `oats session start --resume` of such a
   home does the same and answers `E_SESSION_RUNNING`. The resume of a home
   stopped with the host now asks the provider's `inspect` before its notice.
+  Until a sweep has adopted such a home its row reads running while its
+  input is still refused, and the row is no longer `lost`, so a client that
+  starts a sweep when it sees a lost home does not start one for it: `oats
+  host run`'s sweep, each minute, adopts it.
 - **`oats instance upgrade` refuses a provider home recorded stopped whose
   harness runs** (`E_SESSION_RUNNING`, naming `oats instance stop <name>`),
   at the plan and at the apply: it asks the provider once, and never upgrades

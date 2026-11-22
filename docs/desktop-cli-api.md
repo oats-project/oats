@@ -7554,7 +7554,12 @@ A launch that fails otherwise is `E_SESSION_START_FAILED`.
   with no `sessionEnd` and no `outsideOats`. With `running: null` (the
   provider cannot tell) the row stays `lost`, and the sweep resumes it by
   its notice. The status read writes nothing; the next sweep adopts the
-  home ([the sweep](#provider-sweep)). It is read in the same call as
+  home ([the sweep](#provider-sweep)). **Until a sweep has adopted it the
+  home is still recorded stopped**: an input and a wake to it are refused
+  (`E_SESSION_NOT_RUNNING`), and its row, which no longer reads `lost`, is
+  not one a client's "a home was lost" check starts a sweep for. `oats host
+  run` sweeps each minute; without it, the next sweep is the next one a
+  client or a person runs. It is read in the same call as
   `outsideOats`, below, by every listing that asks providers.
 - <a id="row-outside-oats"></a>**`outsideOats`** (feature
   `provider-outside-oats`) is on the row of a home an operator stopped
@@ -7756,7 +7761,10 @@ manifest's key, exactly as declared) and, only when there is one,
 whose harness runs again, `running: true`, which the sweep adopts: its stop is cleared, no
 notice is sent into the running harness and nothing is counted. `oats
 session start --resume --home <abs>` of such a home does the same and
-answers `E_SESSION_RUNNING`, saying so), `refused` with `keeps-getting-lost`
+answers `E_SESSION_RUNNING`, saying so. A `--plan` says `already-running`
+only where the listing read the harness running; a home it did not read,
+as one whose provider declares no `inspectMany`, is planned `resumed` and
+adopted by its start), `refused` with `keeps-getting-lost`
 (the home's resume cap; `code: "E_SESSION_NOT_RUNNING"`, with
 `nextAttemptAt`; a `--plan` reads the same count and answers the same) or `start-refused`
 (the notice was not sent: a prompt or a claim is open, or it was queued),

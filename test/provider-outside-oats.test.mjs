@@ -404,6 +404,22 @@ test("a home stopped with the host whose provider cannot tell whether its sessio
   assert.deepEqual([fx.verbs("input"), runtimeOf(odd.home).stoppedAt], [[], null]);
 });
 
+test("a home stopped with the host that the listing's batch does not read is adopted by its start all the same: a provider without inspectMany", async (t) => {
+  const fx = providerDeployment(t, { manifest: fakeManifest({ fake: fakeProvider({ inspectMany: false }) }) });
+  const { home } = await fx.launch("solo");
+  hostStop(fx, home);
+  fx.control({ solo: { inspect: { result: LIVE } } });
+  // No batch, so the listing reads it as recorded, and a plan predicts the resume it cannot rule out.
+  const row = rowOf(fx, "solo");
+  assert.deepEqual([row.running, row.runtimeState, row.sessionEnd], [false, "stopped", "lost"]);
+  const sweep = (...flags) => fx.cli(["session", "resume", "--deployment", fx.dep, ...flags, "--json"]).json();
+  assert.deepEqual(sweep("--plan").result.rows.map((r) => [r.instance, r.outcome]), [["solo", "resumed"]]);
+  // The start reads the session before its notice: the harness runs, so the home is adopted.
+  fx.clearCalls();
+  assert.deepEqual(sweep().result.rows.map((r) => [r.instance, r.outcome, r.reason ?? null, r.backend]), [["solo", "already-running", null, "fake"]]);
+  assert.deepEqual([fx.verbs().map((c) => c.verb), runtimeOf(home).stoppedAt, existsSync(join(home, ".oats-stop.json"))], [["inspect"], null, false]);
+});
+
 test("a resume by hand of a home stopped with the host whose harness runs adopts it too: E_SESSION_RUNNING, the stop cleared, nothing sent", async (t) => {
   const fx = providerDeployment(t);
   fx.control({ stateful: true });
