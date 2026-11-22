@@ -655,6 +655,16 @@ test("T4: a stop that lands while an input runs still wins: the input is not del
   assert.match(undelivered.error.message, /was stopped by OATS while this input was being sent; its fake session was asked to stop again, and the input is not delivered/);
   assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspect", "input", "stop", "stop"], "a second stop follows the input that crossed the first");
   assert.equal(Number.isFinite(Date.parse(runtimeOf(late.home).stoppedAt)), true);
+  assert.deepEqual(fx.verbs("stop").map((c) => c.request.input.reason ?? null), [null, null], "an operator's stop, and the stop that restores it, carry no reason");
+  // 3. The stop that landed was the host's: the home stays stopped with the host, so the stop that
+  // restores it tells the provider so too, and the session stays one a resume can bring back.
+  const hosted = await fx.launch("hosted-late");
+  fx.control({ "hosted-late": { input: { sleepMs: 2500 } } });
+  fx.clearCalls();
+  const crossedHost = await inputWhile(hosted.home, async () => { assert.equal(hostStop(fx, hosted.home).stopped, true); });
+  assert.deepEqual([crossedHost.ok, crossedHost.error.code], [false, "E_SESSION_NOT_RUNNING"]);
+  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.request.input.reason ?? null]), [["inspect", null], ["input", null], ["stop", "host"], ["stop", "host"]]);
+  assert.deepEqual([stopReceiptOf(hosted.home).resume, rowOf(fx, "hosted-late").sessionEnd], [true, "lost"]);
   // Every other crossing (a restart, a reused locator, a refused input, a start that is launching) is a row of
   // the lifecycle table: test/session-provider-lifecycle.test.mjs.
 });

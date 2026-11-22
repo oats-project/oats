@@ -18,8 +18,8 @@
   from OATS ([desktop-cli-api.md](../desktop-cli-api.md#row-outside-oats)).
 - **A session provider is told which stop the host's shutdown is.** The
   `stop` input of `oats host run`'s shutdown carries `reason: "host"`, as
-  does the stop that follows a failed resume notice of such a home, and no
-  other stop carries a `reason`, so a provider that archives what it stops
+  do the stops that follow a failed resume notice of such a home and an
+  input that crossed that stop, and no other stop carries a `reason`, so a provider that archives what it stops
   can keep that session for the resume's input. The key is optional and the
   wire version is unchanged ([capabilities.md](../capabilities.md#stop)).
 

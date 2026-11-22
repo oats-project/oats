@@ -482,6 +482,17 @@ test("a spawn dying between two of its writes leaves a state of the page", async
   }
 });
 
+test("the host's stop of a home whose launch was sent and never recorded: the recorded session's stop says reason: host, and the stop of what that launch started (endpoint null) never does", async (t) => {
+  const fx = providerDeployment(t);
+  fx.controls = {};
+  const home = await STATES["resent (not stopped)"](fx, "rs");
+  fx.clearCalls();
+  const r = spawnSync(process.execPath, [HOST_STOP_CHILD, home, "20000"], { cwd: fx.dep, env: fx.env, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(fx.verbs("stop").map((c) => [c.request.input.endpoint === null ? "null" : "E", c.request.input.reason ?? null]), [["E", "host"], ["null", null]]);
+  assert.equal(stopReceiptOf(home).reason, "host-stop");
+});
+
 test("a resume's notice that fails without a refusal leaves a home stopped with the host stopped, still to resume, and has the provider asked to stop that session again", async (t) => {
   const fx = providerDeployment(t);
   fx.controls = {};

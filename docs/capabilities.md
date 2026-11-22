@@ -2346,10 +2346,13 @@ can leave alone what was in the home's place before (a person's own session
 there). **The kernel relies on this stop**: it is the only way a session
 started by a killed spawn is ever stopped.
 
-`"reason": "host"` is on every stop after which the home stays stopped with
-the host: the stop that `oats host run`'s shutdown gives, and the stop the
-kernel asks again when the resume notice of such a home failed without your
-refusal. No other stop carries a `reason` (an operator's, a restart's, a
+`"reason": "host"` is on every stop of a recorded session after which the
+home stays stopped with the host: the stop that `oats host run`'s shutdown
+gives, the stop the kernel asks again when the resume notice of such a home
+failed without your refusal, and the one it asks again when an input
+crossed a stop with the host. A stop with `endpoint: null` never carries
+it, at the host's shutdown either: it stops what a launch that was never
+recorded started, which no resume brings back. No other stop carries a `reason` (an operator's, a restart's, a
 start's, a retire's). An ordinary start of a home stopped with the host is
 its person's own act: the kernel first records that stop as an operator's,
 so the stop it then asks carries no `reason`, and a launch that fails
@@ -2728,8 +2731,9 @@ the feature.
   within one boot), refuses at the cap with `E_SESSION_NOT_RUNNING` without
   calling you, and first waits (a resume) or refuses (an input) while a
   process still works in the home. So an `inspect` precedes every `input` to
-  a home OATS did not stop, and the resume of a home stopped with the host
-  (which sends its notice when you answer the session gone, or cannot say).
+  a home OATS did not stop, and one precedes the resume notice of a home
+  stopped with the host, which is sent when you answer the session gone or
+  cannot say.
   An input you refuse (`ok: false`: nothing was sent) is not counted. One
   whose call fails or answers outside the rules stays counted: you may have
   restarted the session on it.
