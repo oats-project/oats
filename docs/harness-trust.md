@@ -256,7 +256,7 @@ global HOME of the OATS tmux server (<socket>)`. Three more answers:
   `check`, answers for its launch.
 
 A missing root entry does not prove that the harness will prompt (a native
-gate can skip the question), so neither says the session will stop. A launch
+gate can skip the question), so no warning says the session will stop. A launch
 configuration whose reference is not set on this host is named instead of a
 file. OATS never answers a folder-trust prompt, and launch consent authorizes
 no trust write.
