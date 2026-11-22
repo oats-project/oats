@@ -2293,8 +2293,9 @@ Without `inspectMany`, status calls `inspect` per home.
 
 **A home OATS stopped is read by its record, and you are still asked what
 is there.** `oats status` includes a stopped home in your `inspectMany`
-call, with the endpoint of its last session (never in an `inspect` of its
-own): answer it as any other, by what is there. A session your product
+call, with the endpoint of its last session (beside the running homes of
+its group, or in one call where none of your homes runs; never in an
+`inspect` of its own): answer it as any other, by what is there. A session your product
 started again without OATS (`present: true`, `running` `true` or `null`):
 
 - in a home an operator stopped, is reported on the home's row as running

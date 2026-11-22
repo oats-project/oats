@@ -7579,12 +7579,20 @@ A launch that fails otherwise is `E_SESSION_START_FAILED`.
   session the provider answers as there with `running` `true` or `null`;
   one that is gone, or left at its shell, has no key.
 
-  How it is read: in the one `inspectMany` call status makes for that
-  provider's running homes (as far as the call has room: 200 homes), and
-  where none of its homes runs, in one call for its stopped homes, under
-  the same timeout and the same 30 s as every provider read. Status never
-  asks `inspect` per stopped home, so a provider that declares no
-  `inspectMany` has no such key. A provider that fails, refuses, answers
+  How it is read: a stopped home rides in the `inspectMany` call status
+  makes for the running homes of its group (the homes that share the
+  provider, its module copy and its settings), as far as the call has room:
+  200 homes. Where no home of the provider runs at all, status makes one
+  call for the provider's stopped homes, for the group that holds the most
+  of them, after every running home was asked and under the same timeout
+  and the same 30 s as every provider read: a stopped home never costs a
+  running home its answer. No other call is made: status never asks
+  `inspect` per stopped home, so a provider that declares no `inspectMany`
+  has no such key, and neither has a stopped home with no running home in
+  its group while the provider runs one elsewhere, or one in a second
+  group of stopped homes. A home that a lifecycle command holds (a stop, a
+  start, a retire or an upgrade in progress) is not asked about: a stop
+  records the home stopped before the provider stops its session. A provider that fails, refuses, answers
   outside its contract or does not answer in time leaves the row plain
   `stopped`, without the key and never `unreachable`: **absence does not
   say that nothing runs there.** Only `oats status` reads it: `oats session

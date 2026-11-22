@@ -8,7 +8,7 @@
 // test/provider-home-integrity.test.mjs, beside the other upgrades of a provider home.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -17,6 +17,7 @@ import { listInstances } from "../lib/core.mjs";
 import { KERNEL_FEATURES } from "../lib/kernel-features.mjs";
 import { rosterGroups, writeServers } from "../lib/servers.mjs";
 import { SESSION_PROVIDER_WIRE, readOutsideOats } from "../lib/session-providers.mjs";
+import { CLI } from "./helpers/v2-deployment.mjs";
 import { FAKE_CAPABILITY, LOST, fakeManifest, fakeProvider, providerDeployment, sessionsOf } from "./helpers/session-provider-fixture.mjs";
 
 const FEATURE = "provider-outside-oats";
@@ -207,6 +208,55 @@ test("the read is the batch's alone: a provider without inspectMany is not asked
   batched.clearCalls();
   const plan = batched.cli(["session", "resume", "--deployment", batched.dep, "--plan", "--without-provider-inspect", "--json"]).json();
   assert.deepEqual([plan.ok, batched.verbs()], [true, []]);
+});
+
+test("a stopped home never costs a running home its answer: where a home of the provider runs, no call is made for stopped homes alone; where none runs, one call for the provider, after every running read", async (t) => {
+  const fx = providerDeployment(t);
+  // Three groups of the one provider: a call cannot span two sets of settings.
+  const other = (port) => ({ providers: { [FAKE_CAPABILITY]: { server: `http://127.0.0.1:${port}` } } });
+  for (const [name, opts] of [["a1", other(10)], ["a2", other(10)], ["b1", other(11)], ["c1", {}]]) { await fx.launch(name, opts); operatorStop(fx, name); }
+  const live = Object.fromEntries(["a1", "a2", "b1", "c1"].map((name) => [name, { inspect: { result: LIVE } }]));
+  fx.control(live);
+  const callsOf = () => fx.verbs().map((c) => [c.verb, c.verb === "inspectMany" ? c.request.input.homes.map((h) => h.instance) : c.instance]);
+  const keyed = (rows) => rows.filter((r) => Object.hasOwn(r, "outsideOats")).map((r) => r.instance);
+  // No home of the provider runs: ONE call, for the group that holds the most stopped homes.
+  fx.clearCalls();
+  assert.deepEqual(keyed(rowsOf(fx)), ["a1", "a2"]);
+  assert.deepEqual(callsOf(), [["inspectMany", ["a1", "a2"]]]);
+  // A home of the provider runs, in the default group: the stopped home of ITS group rides in its
+  // call, and no call is made for the other groups' stopped homes.
+  await fx.launch("c2");
+  fx.clearCalls();
+  assert.deepEqual(keyed(rowsOf(fx)), ["c1"]);
+  assert.deepEqual(callsOf(), [["inspectMany", ["c2", "c1"]]]);
+  // So a stopped-only group whose server hangs is never waited for, and the running home answers.
+  fx.control({ ...live, a1: { inspectMany: { sleepMs: 60_000 }, inspect: { result: LIVE } }, b1: { inspectMany: { sleepMs: 60_000 }, inspect: { result: LIVE } } });
+  fx.clearCalls();
+  const began = Date.now();
+  const rows = rowsOf(fx, { OATS_TEST_SESSION_PROVIDER_TIMEOUT_MS: "2000" });
+  assert.deepEqual([rows.find((r) => r.instance === "c2").running, keyed(rows)], [true, ["c1"]]);
+  assert.ok(Date.now() - began < 20_000);
+  assert.deepEqual(callsOf(), [["inspectMany", ["c2", "c1"]]]);
+});
+
+test("a home a lifecycle command holds is not asked about: a stop in flight, which records the home stopped before the provider stops it, is no harness outside OATS", async (t) => {
+  const fx = providerDeployment(t);
+  await fx.launch("slow");
+  const plan = fx.cli(["instance", "stop", "slow", "--plan", "--json"]).json();
+  fx.control({ slow: { stop: { sleepMs: 4000 } } });
+  fx.clearCalls();
+  const child = spawn(process.execPath, [CLI, "instance", "stop", "slow", "--apply", "--plan-revision", plan.result.planRevision, "--idempotency-key", "stop-slow", "--json"], { cwd: fx.dep, env: fx.env, stdio: "ignore" });
+  const done = new Promise((resolve) => child.on("close", resolve));
+  for (let i = 0; i < 200 && !fx.verbs("stop").length; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(fx.verbs("stop").length, 1, "the provider's stop is in flight");
+  // The home is recorded stopped already, and the fake still answers its session running.
+  fx.clearCalls();
+  const during = rowOf(fx, "slow");
+  assert.deepEqual([during.running, during.runtimeState, Object.hasOwn(during, "outsideOats"), fx.verbs("inspectMany").length], [false, "stopped", false, 0]);
+  assert.equal(await done, 0);
+  // Once the stop has ended the home is asked about like any stopped home.
+  fx.control({ slow: { inspect: { result: LIVE } } });
+  assert.deepEqual(rowOf(fx, "slow").outsideOats, outsideOf("slow"));
 });
 
 test("a remote roster relays outsideOats only in its exact shape, on a stopped provider row of its backend, from a host that lists the feature", async (t) => {

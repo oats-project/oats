@@ -4,8 +4,9 @@
   (feature `provider-outside-oats`). A session provider's own product can
   start a stopped session's harness again without OATS, for example when a
   person types a message there. `oats status` now asks the provider about
-  its stopped homes in the `inspectMany` call it already makes for its
-  running ones (one call of their own where none runs), and the row of a home
+  its stopped homes in the `inspectMany` call it already makes for the
+  running ones of their group (one call for the provider where none of its
+  homes runs, after every running home was asked), and the row of a home
   whose provider answers a live harness carries `outsideOats: {code:
   "running-outside-oats", backend, message}` in `--json`, and the message on
   a line under the row in text; `oats server roster` relays it in that exact

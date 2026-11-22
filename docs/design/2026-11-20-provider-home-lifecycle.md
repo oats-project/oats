@@ -160,8 +160,10 @@ reads the launch from its receipt and record, never from the marker.
 **A harness that runs in a stopped home** (feature `provider-outside-oats`).
 A provider's product can start a stopped session's harness again without
 OATS (a message a person types there). `oats status` asks the provider about
-its stopped homes in the `inspectMany` call it makes for its running ones
-(one call of their own where none runs; never an `inspect` per home), and a
+its stopped homes in the `inspectMany` call it makes for the running ones
+of their group (one call for the provider, after the running homes' reads,
+where none of its homes runs; never an `inspect` per home, and never for a
+home a lifecycle command holds, whose stop may be in flight), and a
 home whose provider answers a live harness (there, and `running` not
 `false`) carries `outsideOats: {code: "running-outside-oats", backend,
 message}` on its row. Nothing else follows from that read: the row stays

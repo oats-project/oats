@@ -1071,9 +1071,10 @@ back to one `inspect` per home when a batch is bad (never after one that
 timed out), gives all its providers 30 s together. A home an operator
 stopped keeps its last endpoint until its next start, and its row is what
 OATS recorded: `running: false`, `runtimeState: "stopped"`. Status asks its
-provider one thing about it, in the same `inspectMany` call as that
-provider's running homes (one call of their own where none runs, never an
-`inspect` per home): whether a harness runs there all the same, which a
+provider one thing about it, in the same `inspectMany` call as the running
+homes of its group (one call for the provider's stopped homes where none of
+its homes runs, made after every running home was asked; never an `inspect`
+per home, and never while a lifecycle command holds the home): whether a harness runs there all the same, which a
 provider's own product can start without OATS. Such a row carries
 `outsideOats: {code: "running-outside-oats", backend, message}` (feature
 `provider-outside-oats`,
