@@ -221,7 +221,9 @@ for (const theme of ["light", "solarized", "dark"]) test(`Spec E, ${theme}: “N
   const view = dom.window, root = view.getComputedStyle(doc.documentElement), mark = doc.querySelector(".ctx-new");
   assert.equal(view.getComputedStyle(mark).color, "var(--muted)");
   assert.equal(view.getComputedStyle(mark).opacity, "1");
-  assert.equal(view.getComputedStyle(doc.querySelector(".ctx-new-dot")).background, "var(--accent)");
+  // Slice 3d: the prototype's "new" pill: the word in a 1px ring of the border's line, lower-case, its dot not drawn.
+  assert.equal(view.getComputedStyle(doc.querySelector(".ctx-new-dot")).display, "none");
+  assert.deepEqual([view.getComputedStyle(mark).boxShadow, view.getComputedStyle(mark).textTransform], ["inset 0 0 0 1px var(--border)", "lowercase"]);
   const fg = luminance(root.getPropertyValue("--muted").trim());
   for (const fill of ["surface", "surface-2", "sel"]) {
     const bg = luminance(root.getPropertyValue(`--${fill}`).trim());

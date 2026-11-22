@@ -549,17 +549,17 @@ body {
    never exceeds the design's 280px long-label cap. Under pressure they shrink
    evenly down to --tab-min; below that the strip scrolls. The full name stays in
    the trigger's title and accessible name.
-   --tab-min = 168px, measured live at 12.5px in the active tab's bold (System font; Omarchy's font names
-   are 12px, --name-size, so the same px budget holds more of a name): less
-   --tab-chrome (44px since slice 3d's pills) the trigger keeps 124px, the 7px status dot and its 8px
-   gap, then 109px of name: the start and an ellipsis ("oats-…", 44px) and the
+   --tab-min = 160px (168px before slice 3d's pills), measured live at 12.5px in bold in the System font, a budget
+   the regular weight of slice 3d's tabs never exceeds: less
+   --tab-chrome (44px since slice 3d's pills) the trigger keeps 116px, the 7px status dot and its 8px
+   gap, then 101px of name: the start and an ellipsis ("oats-…", 44px) and the
    protected 8-character tail (the widest real one, "awn-flow", is 57px), so a
    shrunk tab reads "oats-…palette" (middle truncation, below).
    The close stays on every tab, the active one included. */
 .tab {
-  --tab-min: 168px; --tab-max: 280px;
+  --tab-min: 160px; --tab-max: 280px;
   --tab-chrome: 44px; /* padding 12 + 4, gap 8, close 20: what the trigger cannot use */
-  --tab-name-min: 109px; /* the name the floor budgets: --tab-min less --tab-chrome less the dot and its gap (7 + 8) */
+  --tab-name-min: 101px; /* the name the floor budgets: --tab-min less --tab-chrome less the dot and its gap (7 + 8) */
   display: flex; flex: 1 1 0px; align-items: center; gap: 8px; min-width: var(--tab-min); max-width: fit-content;
   height: 28px; white-space: nowrap; padding: 0 4px 0 12px; background: transparent; border-radius: 8px;
   color: var(--muted); font-size: 12.5px;
@@ -767,8 +767,8 @@ body {
   border-radius: 8px; background-color: var(--surface); color: var(--fg); font-size: 13px; line-height: 18px; outline: none; }
 .agent-questions:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .agent-q-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; line-height: 18px; white-space: nowrap; overflow: hidden; }
-.agent-q-tag { display: inline-flex; align-items: center; gap: 8px; color: var(--warn); font-weight: 400; }
-.agent-q-tag::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--attn-dot); }
+.agent-q-mark { width: 10px; height: 10px; }
+.agent-q-tag { color: var(--warn); font-weight: 400; }
 .agent-q-age, .agent-q-hint, .agent-q-typed, .agent-q-says, .agent-q-context-none { color: var(--muted); }
 .agent-q-nav { display: inline-flex; align-items: center; gap: 4px; }
 .agent-q-nav[hidden] { display: none; }
@@ -777,7 +777,7 @@ body {
 .agent-q-turn:hover, .agent-q-turn:focus-visible { background: var(--sel); outline: none; }
 .agent-q-dots { display: inline-flex; gap: 5px; padding: 0 3px; }
 .agent-q-dot { width: 7px; height: 7px; padding: 0; border: 1px solid var(--muted); border-radius: 50%; background: transparent; cursor: pointer; }
-.agent-q-dot.on { background: var(--attn-dot); border-color: var(--attn-dot); }
+.agent-q-dot.on { background: var(--fg); border-color: var(--fg); }
 .agent-q-dot:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 .agent-q-text { margin: 0 0 8px; color: var(--fg); font-size: 14px; line-height: 20px; font-weight: 500; overflow-wrap: anywhere; }
 .agent-q-options { display: flex; flex-direction: column; gap: 3px; margin: 0 0 6px; padding: 0; list-style: none; }

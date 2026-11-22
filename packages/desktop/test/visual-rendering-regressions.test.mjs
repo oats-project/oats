@@ -167,9 +167,9 @@ test("flat and grouped strips share their width: tabs shrink evenly to a floor, 
       assert.deepEqual([style.flexGrow, style.flexShrink, style.flexBasis], ["1", "1", "0px"], "equal shares from one zero basis");
       assert.equal(style.maxWidth, "fit-content", "never wider than its natural width");
       assert.equal(style.minWidth, "var(--tab-min)", "the floor holds in group strips too");
-      assert.equal(style.getPropertyValue("--tab-min"), "168px", "the dot, \"oats-…\" and an 8-character tail stay visible");
+      assert.equal(style.getPropertyValue("--tab-min"), "160px", "the dot, \"oats-…\" and an 8-character tail stay visible");
       assert.equal(style.getPropertyValue("--tab-max"), "280px", "the Redesign v3 long-label cap");
-      assert.equal(style.getPropertyValue("--tab-chrome"), "51px", "padding 14 + 8, gap 8, the 20px close and the 1px border");
+      assert.equal(style.getPropertyValue("--tab-chrome"), "44px", "padding 12 + 4, gap 8 and the 20px close (slice 3d's pills: no border)");
       assert.equal(style.whiteSpace, "nowrap");
       assert.equal(window.getComputedStyle(triggerEl).maxWidth, "calc(var(--tab-max) - var(--tab-chrome))", "the cap rides on the trigger");
       assert.equal(window.getComputedStyle(triggerEl.querySelector(".tab-label")).textOverflow, "ellipsis", "long labels ellipsize");

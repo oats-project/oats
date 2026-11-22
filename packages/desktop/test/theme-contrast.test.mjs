@@ -729,30 +729,32 @@ for (const [name] of palettes) test(`${name}: automation summaries, argv, run st
 });
 
 // The sidebar's type and its lines (the product owner, 2026-10-26: as before 2026-10-23, the list of workspaces on top).
-// The Workspace heading is --fg at 13.5px 700; the Instances heading reads like the nav items over it (--nav-fg, 13px
-// 500); the machine labels step under them (muted 11px 650 capitals). The headings are text: AA on the sidebar (the
-// computed test below reads them). The lines are decorative, like the sidebar's own right edge, and in that edge's
-// token: one under the list, one before the instances, the foot's; none under the head and none under the Instances
-// heading (the product owner, 2026-10-26). No minimum applies, and they show in every built-in theme at the edge's own ratio.
-for (const [name, palette] of palettes) test(`${name}: the Workspace heading, the Instances heading (the nav's ink) over the machine labels; the sidebar's --border lines, as visible as its edge`, () => {
+// Slice 3d (the prototype's frame A): the WORKSPACES and AGENTS headings are kickers, --muted 10px 650 capitals; the
+// machine labels step under them (muted 11px 650 capitals). The headings are text: AA on the sidebar (the computed test
+// below reads them). The lines are decorative, like the sidebar's own right edge, and in that edge's token: one under
+// the list and the foot's; none under the head, none before the agents (the prototype has none) and none under the
+// AGENTS heading. No minimum applies, and they show in every built-in theme at the edge's own ratio.
+for (const [name, palette] of palettes) test(`${name}: the WORKSPACES and AGENTS kickers over the machine labels; the sidebar's --border lines, as visible as its edge`, () => {
   const shellCss = readFileSync(new URL("shell.css", renderer), "utf8");
   const rule = selector => shellCss.match(new RegExp(`^${selector.replace(/[.#()>:]/g, m => `\\${m}`)} \\{([^}]*)\\}`, "m"))?.[1] ?? "";
   const heading = rule(".ws-heading"), head = rule(".ctx-head"), label = rule(".ctx-deployment");
-  assert.match(heading, /color: var\(--fg\);/); assert.match(heading, /font-size: 13\.5px;/); assert.match(heading, /font-weight: 700;/);
-  assert.match(head, /color: var\(--nav-fg\);/); assert.match(head, /font-size: 13px;/); assert.match(head, /font-weight: 500;/);
-  assert.match(head, /height: 36px;/, "the heading row keeps its height");
+  for (const kicker of [heading, head]) {
+    assert.match(kicker, /color: var\(--muted\);/); assert.match(kicker, /font-size: 10px;/); assert.match(kicker, /font-weight: 650;/);
+    assert.match(kicker, /text-transform: uppercase;/); assert.match(kicker, /letter-spacing: \.075em;/);
+  }
+  assert.match(head, /height: 32px;/, "the heading row's height");
   assert.match(label, /color: var\(--muted\);/); assert.match(label, /font-size: 11px;/); assert.match(label, /font-weight: 650;/);
   assert.match(label, /text-transform: uppercase;/);
   assert.equal(shellCss.match(/\.ws-current::before|\.ws-current\s*\{/), null, "no current workspace's section, no line of its own");
   assert.doesNotMatch(rule(".side-head"), /border(?:-bottom)?(?:-width|-style|-color)?\s*:/, "no line under the head: the heading sits over its list");
   assert.match(rule(".ws-list"), /border-bottom: 1\.5px solid var\(--border\);/, "under the list, before the views");
-  assert.match(rule("#instance-roster"), /border-top: 1px solid var\(--border\);/, "before the instances");
+  assert.doesNotMatch(rule("#instance-roster"), /border/, "no line before the agents");
   assert.equal(shellCss.match(/#instance-roster > \.ctx-head(?:::after|::before)?\s*\{/), null, "no line under the Instances heading");
   assert.match(rule("#nav-foot"), /border-top: 1px solid var\(--border\);/, "over the foot");
   assert.match(rule("#sidebar"), /border-right: 1px solid var\(--border\);/, "the sidebar's edge, the lines' token");
   const ratio = contrast(opaqueChannels(palette.get("border")), opaqueChannels(palette.get("surface")));
   assert.ok(ratio > 1.2, `${name}: the lines show on the sidebar (${ratio.toFixed(2)}:1)`);
-  for (const ink of ["fg", "nav-fg"]) assert.ok(contrast(opaqueChannels(palette.get(ink)), opaqueChannels(palette.get("surface"))) >= 4.5, `${name}: the headings' --${ink}`);
+  for (const ink of ["muted"]) assert.ok(contrast(opaqueChannels(palette.get(ink)), opaqueChannels(palette.get("surface"))) >= 4.5, `${name}: the headings' --${ink}`);
 });
 
 // The sidebar's one visible shortcut hint was the roster filter's ⌘F; it went with the filter. The sidebar paints
@@ -791,7 +793,7 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
     if (current) b.setAttribute("aria-current", "page");
     b.innerHTML = `<span class="icon"><svg class="shell-icon" aria-hidden="true"></svg></span><span class="label">${label}</span>`;
     // The failure mark, as paintAutomationsFailed draws it.
-    if (label === "Automations") b.insertAdjacentHTML("beforeend", `<span class="nav-failed"><span class="nav-failed-dot" aria-hidden="true"></span><span class="sr-only">, a run failed</span></span>`);
+    if (label === "Automations") b.insertAdjacentHTML("beforeend", `<span class="nav-failed"><span class="nav-failed-count" aria-hidden="true">1 failed</span><span class="sr-only">, a run failed</span></span>`);
     doc.getElementById("nav").append(b);
   }
   const root = win.getComputedStyle(doc.documentElement);
@@ -810,7 +812,7 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
     assert.ok(!bg || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(bg), `#${id} paints nothing of its own: the sidebar shows under it (${bg})`);
   }
   const controls = [...doc.querySelectorAll("#nav button")];
-  assert.deepEqual(controls.map(b => b.id || b.textContent), ["Workspace", "Automations, a run failed"]);
+  assert.deepEqual(controls.map(b => b.id || b.textContent), ["Workspace", "Automations1 failed, a run failed"]);
   assert.equal(doc.getElementById("nav-title"), null, "no title over the views");
   for (const control of controls) {
     const what = control.id || control.textContent, current = control.classList.contains("active");
@@ -831,11 +833,12 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
   const focus = rule(":is(button, a, summary):focus-visible");
   assert.equal(focus.background, "var(--sel)");
   for (const ink of ["nav-fg", "fg", "accent"]) held(ink, "sel", ink === "accent" ? GRAPHIC_CONTRAST : TEXT_CONTRAST, `focused ${ink}`);
-  // The failure mark: a --danger dot (yellow means needs input only), 3:1 on the row at rest, hovered and focused.
-  const dot = doc.querySelector(".nav-failed-dot");
-  assert.equal(token(win.getComputedStyle(dot).background), "danger");
-  for (const bg of ["surface", token(hover.background), "sel"]) held("danger", bg, GRAPHIC_CONTRAST, `the failure mark on --${bg}`);
-  for (let node = dot; node; node = node.parentElement) assert.equal(win.getComputedStyle(node).opacity, "1", "the failure mark: no opacity");
+  // The failure (slice 3d, the prototype's): "1 failed" after the name in --danger text (yellow means needs input only),
+  // 4.5:1 on the row at rest, hovered, current and focused.
+  const failed = doc.querySelector(".nav-failed");
+  assert.equal(token(win.getComputedStyle(failed).color), "danger");
+  for (const bg of ["surface", token(hover.background), "sel"]) held("danger", bg, TEXT_CONTRAST, `"1 failed" on --${bg}`);
+  for (let node = failed; node; node = node.parentElement) assert.equal(win.getComputedStyle(node).opacity, "1", "the failure: no opacity");
   // The labels are always shown (a column, as before 2026-10-23): no container rule hides or fades them.
   assert.doesNotMatch(shellCss, /@container/);
   for (const label of doc.querySelectorAll("#nav .label")) assert.notEqual(win.getComputedStyle(label).position, "absolute", label.textContent);
@@ -1177,8 +1180,8 @@ for (const [name] of palettes) test(`${name}: Show sidebar / Show instance panel
     // A row's second line: --muted, on the sidebar and on the selection.
     ['.ctx-tree-row:not(.active) .ctx-row-detail', '#sidebar', 'muted', 'surface'],
     ['.ctx-tree-row.active .ctx-row-detail', '.ctx-tree-row.active', 'muted', 'sel'],
-    // The headings: the Workspace heading in --fg, the Instances heading in the nav's ink, on the sidebar.
-    ['.ws-heading', '#sidebar', 'fg', 'surface'], ['#instance-roster > .ctx-head', '#sidebar', 'nav-fg', 'surface'],
+    // The headings (slice 3d): the WORKSPACES and AGENTS kickers in --muted, on the sidebar.
+    ['.ws-heading', '#sidebar', 'muted', 'surface'], ['#instance-roster > .ctx-head', '#sidebar', 'muted', 'surface'],
     ['.app-toast-open', '.app-toast-open', 'primary-fg', 'primary-bg'],
     ['.ctx-tree-row:not(.active) .ctx-attn.rollup', '.ctx-tree-row:not(.active) .ctx-attn.rollup', 'warn', 'attn-bg'],
     ['.ctx-tree-row.active .ctx-attn.rollup', '.ctx-tree-row.active .ctx-attn.rollup', 'warn', 'attn-bg'],
@@ -1296,7 +1299,7 @@ test("yellow means needs input only: no shipped rule paints a dot, disc or fill 
     assert.doesNotMatch(rule(selector), /dashed/, `${selector}: not a dashed ring (stopped's, in slice 2)`);
   }
   // The problem dots.
-  for (const selector of ["#sidebar-help.has-clash::after", ".nav-failed-dot", ".workspace-attn", ".auto-dot.warn"])
+  for (const selector of ["#sidebar-help.has-clash::after", ".workspace-attn", ".auto-dot.warn"])
     assert.match(rule(selector), /background:\s*var\(--danger\);/, selector);
 });
 
@@ -2196,7 +2199,8 @@ for (const [name] of palettes) test(`${name}: Add a machine and the Machines lis
 
 // #558: the terminal tab's Needs input glyph is a non-text graphic (the trigger's name says it): --warn
 // must hold 3:1 against every background a tab paints — the strip at rest (--bg, also a split group's
-// strip), the active tab (--surface) and a keyboard-focused trigger (--sel) — in every palette.
+// strip), a hovered pill (--surface), the active pill (--surface-2, slice 3d) and a keyboard-focused trigger
+// (--sel) — in every palette.
 for (const [name] of palettes) test(`${name}: the terminal tab's Needs input glyph meets 3:1 on every tab background`, async t => {
   const dom = new JSDOM(readFileSync(new URL('index.html', renderer), 'utf8'), { pretendToBeVisual: true }), doc = dom.window.document;
   t.after(() => dom.window.close());
@@ -2213,10 +2217,11 @@ for (const [name] of palettes) test(`${name}: the terminal tab's Needs input gly
   const fill = el => { const s = view.getComputedStyle(el); return s.background || s.backgroundColor; };
   for (const glyph of doc.querySelectorAll('.tab-attn')) assert.equal(view.getComputedStyle(glyph).color, 'var(--warn)');
   assert.equal(fill(doc.querySelector('#tabstrip')), 'var(--bg)', 'a tab at rest shows the strip');
-  assert.equal(fill(doc.querySelector('.tab.active')), 'var(--surface)');
+  assert.equal(fill(doc.querySelector('.tab.active')), 'var(--surface-2)');
+  assert.match(shellCss, /^\.tab:hover \{ background: var\(--surface\); \}/m);
   assert.match(shellCss, /\.tab-trigger:focus-visible \{ background: var\(--sel\); \}/);
   assert.match(shellCss, /\.group-tabbar \{[^}]*background: var\(--bg\)/, 'a split group strip paints --bg too');
-  for (const bg of ['bg', 'surface', 'sel']) {
+  for (const bg of ['bg', 'surface', 'surface-2', 'sel']) {
     const ratio = contrast(opaqueChannels(root.getPropertyValue('--warn').trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim()));
     assert.ok(ratio >= 3, `--warn on --${bg}: ${ratio.toFixed(2)}`);
   }
@@ -2224,8 +2229,9 @@ for (const [name] of palettes) test(`${name}: the terminal tab's Needs input gly
 });
 
 // A tab's go-to-tab number (tab-numbers.mjs) is text, if decorative: its colour token must hold 4.5:1 on every
-// background a tab paints, the strip at rest (--bg, a split group's strip too), the active tab (--surface) and a
-// keyboard-focused trigger (--sel), in every palette, with nothing composited over it.
+// background a tab paints, the strip at rest (--bg, a split group's strip too), a hovered pill (--surface) and a
+// keyboard-focused trigger (--sel), in every palette, with nothing composited over it; the active pill's number is the
+// prototype's --accent (slice 3d), held on the active pill's --surface-2 and, focused, on --sel.
 import { createTabChrome as tabChrome } from '../renderer/tab-a11y.mjs';
 import { numberTabStrips } from '../renderer/tab-numbers.mjs';
 for (const [name, palette] of palettes) test(`${name}: a tab's number meets 4.5:1 on every tab background`, t => {
@@ -2245,16 +2251,16 @@ for (const [name, palette] of palettes) test(`${name}: a tab's number meets 4.5:
   assert.deepEqual(nums.map(num => [num.textContent, num.hidden]), [['1', false], ['2', false]]);
   const token = view.getComputedStyle(nums[0]).color.match(/^var\(--([\w-]+)\)$/)?.[1];
   assert.equal(token, 'faint', 'the number is quiet text: --faint');
-  for (const num of nums) assert.equal(view.getComputedStyle(num).color, `var(--${token})`);
+  assert.equal(view.getComputedStyle(nums[1]).color, 'var(--accent)', "the active pill's number: the accent");
   const fill = el => { const s = view.getComputedStyle(el); return s.background || s.backgroundColor; };
   assert.equal(fill(doc.querySelector('#tabstrip')), 'var(--bg)', 'a tab at rest shows the strip');
-  assert.equal(fill(doc.querySelector('.tab.active')), 'var(--surface)');
+  assert.equal(fill(doc.querySelector('.tab.active')), 'var(--surface-2)');
   assert.match(shellCss, /\.tab-trigger:focus-visible \{ background: var\(--sel\); \}/);
   assert.match(shellCss, /\.group-tabbar \{[^}]*background: var\(--bg\)/, 'a split group strip paints --bg too');
-  for (const bg of ['bg', 'surface', 'sel']) {
-    assert.ok(pairs.some(([f, b]) => f === token && b === bg), `--${token} on --${bg} is in the inventory`);
-    const ratio = contrast(opaqueChannels(palette.get(token)), backgroundChannels(bg, palette));
-    assert.ok(ratio >= TEXT_CONTRAST, `${name} --${token} on --${bg}: ${ratio.toFixed(2)}:1 < 4.5:1`);
+  for (const [ink, bg] of [[token, 'bg'], [token, 'surface'], [token, 'sel'], ['accent', 'surface-2'], ['accent', 'sel']]) {
+    assert.ok(pairs.some(([f, b]) => f === ink && b === bg), `--${ink} on --${bg} is in the inventory`);
+    const ratio = contrast(opaqueChannels(palette.get(ink)), backgroundChannels(bg, palette));
+    assert.ok(ratio >= TEXT_CONTRAST, `${name} --${ink} on --${bg}: ${ratio.toFixed(2)}:1 < 4.5:1`);
   }
   for (const num of nums) for (let parent = num; parent; parent = parent.parentElement) assert.equal(view.getComputedStyle(parent).opacity, '1');
 });

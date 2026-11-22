@@ -132,14 +132,14 @@ test("the head is the Workspace heading and Add local workspace…; the list's s
   // trigger, no popup menu, no cog.
   assert.deepEqual([...head.children].map(el => el.id), ["ws-heading", "ws-add-open"]);
   assert.equal(document.getElementById("ws-current-only"), null, "no Show only the current workspace");
-  assert.match(html, /<div class="side-head">\s*<span id="ws-heading" class="ws-heading">Workspace<\/span>\s*<button id="ws-add-open" class="ws-add-open side-icon-button icon-button"/, "the markup says the same");
+  assert.match(html, /<div class="side-head">\s*<span id="ws-heading" class="ws-heading">Workspaces<\/span>\s*<button id="ws-add-open" class="ws-add-open side-icon-button icon-button"/, "the markup says the same");
   assert.equal(document.querySelector(".ws-head, .ctx-head.ws-head, .ws-brand-mark, .ws-brand-image, .ws-brand-icon, [data-shell-icon=\"oats\"]"), null, "no plain heading of 2026-10-23, no mark in the head");
   assert.equal(head.querySelector("img"), null, "the heading shows no artwork");
   assert.deepEqual([...sidebar.querySelectorAll("img")], [], "no artwork in the sidebar (slice 1: the mark left the foot)");
   assert.equal(document.getElementById("ws-trigger"), null, "the dropdown's trigger is gone");
   assert.equal(document.getElementById("ws-menu"), null, "the dropdown's menu is gone");
   assert.equal(document.getElementById("ws-menu-search"), null, "the menu's search is gone");
-  assert.equal(document.getElementById("ws-heading").textContent, "Workspace");
+  assert.equal(document.getElementById("ws-heading").textContent, "Workspaces");
   const addOpen = document.getElementById("ws-add-open");
   assert.equal(addOpen.tagName, "BUTTON"); assert.equal(addOpen.type, "button");
   assert.equal(addOpen.getAttribute("aria-label"), "Add local workspace…");

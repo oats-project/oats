@@ -291,30 +291,36 @@ test("slice1 automations failure mark", async t => {
   const block = shell.slice(shell.indexOf('const navEl = document.getElementById("nav");'), shell.indexOf("// The foot's controls use exactly the same registry"));
   const { paintAutomationsFailed } = runInNewContext(`${block}\n({ paintAutomationsFailed })`, { document: doc, NAV, PINNED, shellIcon, runAction() {}, FAILED_RUN_TEXT });
   const row = doc.querySelector('#nav .nav-item[data-view="automations"]');
-  const name = () => row.textContent.replace(/\s+/g, " ").trim();
+  // Its accessible name: the text that is not aria-hidden.
+  const name = () => [...row.querySelectorAll("*")].filter(el => !el.children.length && !el.closest("[aria-hidden=true]")).map(el => el.textContent).join("").replace(/\s+/g, " ").trim();
   assert.equal(name(), "Automations"); assert.equal(row.querySelector(".nav-failed"), null);
-  paintAutomationsFailed(true);
+  paintAutomationsFailed(1);
   assert.equal(name(), "Automations, a run failed", "its accessible name says so");
-  assert.equal(row.querySelector(".nav-failed-dot").getAttribute("aria-hidden"), "true", "the dot is decoration beside the words");
+  // Slice 3d: the prototype's "1 failed" after the name, shown, the words beside it for assistive tech.
+  const shown = row.querySelector(".nav-failed-count");
+  assert.deepEqual([shown.textContent, shown.getAttribute("aria-hidden")], ["1 failed", "true"], "the count shown, decoration beside the words");
   assert.equal(row.querySelectorAll(".nav-failed").length, 1);
-  paintAutomationsFailed(true); assert.equal(row.querySelectorAll(".nav-failed").length, 1, "never doubled");
-  paintAutomationsFailed(false);
+  paintAutomationsFailed(2); assert.equal(row.querySelectorAll(".nav-failed").length, 1, "never doubled");
+  assert.equal(row.querySelector(".nav-failed-count").textContent, "2 failed", "the count follows");
+  paintAutomationsFailed(0);
   assert.equal(name(), "Automations"); assert.equal(row.querySelector(".nav-failed"), null, "cleared when no last run is failed");
   // The reader: a latest-intent token per read; a new workspace clears the mark at once; a late answer for another
   // workspace, or a failure, changes nothing; re-read after the TTL.
-  let clock = 0; const verdicts = [], gates = [];
-  const reader = createAutomationsFailure({ now: () => clock, onChange: v => verdicts.push(v),
+  let clock = 0; const verdicts = [], counts = [], gates = [];
+  const reader = createAutomationsFailure({ now: () => clock, onChange: v => verdicts.push(v), onCount: n => counts.push(n),
     read: (ws, kind) => new Promise((resolve, reject) => gates.push({ ws, kind, resolve, reject })) });
   const failing = { schedules: [{ qualifiedId: "s", kind: "spawn", lastRun: { outcome: "launch-failed" } }] }, fine = { schedules: [], triggers: [] };
   let pending = reader.refresh("A");
   assert.deepEqual(gates.map(g => [g.ws, g.kind]), [["A", "schedule"], ["A", "trigger"]]);
   gates[0].resolve(failing); gates[1].resolve({ triggers: [] }); await pending;
   assert.deepEqual(verdicts, [true]); assert.equal(reader.failed, true);
+  assert.deepEqual(counts, [1], "the count, told as it changes (slice 3d: the row's \"1 failed\")"); assert.equal(reader.count, 1);
   await reader.refresh("A"); assert.equal(gates.length, 2, "within the TTL: no read");
   clock = AUTOMATIONS_FAILURE_TTL;
   pending = reader.refresh("A"); const late = gates.slice(2);
   const switched = reader.refresh("B");
   assert.deepEqual(verdicts, [true, false], "a switch clears the mark at once");
+  assert.deepEqual(counts, [1, 0], "and its count");
   late[0].resolve(failing); late[1].resolve({ triggers: [] }); await pending;
   assert.equal(reader.failed, false, "A's late answer changes nothing for B");
   const forB = gates.slice(4); forB[0].reject(new Error("down")); forB[1].resolve(fine); await switched;

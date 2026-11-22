@@ -63,7 +63,7 @@ test("UI spec: no deployments block in the sidebar; the workspace list sits unde
   assert.deepEqual([...doc.getElementById("sidebar").children].map((el) => el.id || el.className), ["side-head", "ws-list", "nav", "instance-roster", "nav-foot"]);
   assert.equal(doc.getElementById("ws-current"), null, "no section around the current workspace's views and Instances");
   assert.equal(doc.getElementById("ws-list").previousElementSibling, doc.querySelector(".side-head"), "the list sits under its heading");
-  assert.equal(doc.querySelector(".side-head #ws-heading").textContent, "Workspace");
+  assert.equal(doc.querySelector(".side-head #ws-heading").textContent, "Workspaces");
   assert.equal(doc.getElementById("nav").previousElementSibling, doc.getElementById("ws-list"), "the main views are under the list of workspaces");
   assert.equal(doc.getElementById("instance-roster").previousElementSibling, doc.getElementById("nav"), "then the Instances");
   assert.equal(vd.renderDeploymentList, undefined, "the list renderer is gone");

@@ -180,7 +180,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   const next = node(doc, 'button', 'agent-q-turn', '›'); next.type = 'button'; next.setAttribute('aria-label', 'Next question'); next.title = 'Next question (Tab, →)';
   nav.append(prev, dots, next);
   const age = node(doc, 'span', 'agent-q-age');
-  head.append(tag, nav, age);
+  // The card's head leads with the needs-input mark (slice 3d: the prototype's "● needs you"; yellow is that mark only).
+  head.append(iconElement(doc, 'attention', { size: 10, className: 'attn-mark agent-q-mark' }), tag, nav, age);
   const text = node(doc, 'p', 'agent-q-text'); text.dir = 'auto'; text.id = `agent-q-${Math.random().toString(36).slice(2, 10)}`;
   const options = node(doc, 'ol', 'agent-q-options');
   const note = node(doc, 'p', 'agent-q-note'); note.setAttribute('role', 'status');
