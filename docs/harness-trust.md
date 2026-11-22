@@ -249,6 +249,10 @@ global HOME of the OATS tmux server (<socket>)`. Two more answers:
   CODEX_HOME (not set), this process's HOME`). The readiness item is then
   `unknown` whether or not that file establishes trust; a spawn with
   `--no-launch` warns only when it does not.
+- **A home on a session provider** (`--backend <provider>`, for example
+  bb): the provider runs the harness, with no OATS pane, so no file is read.
+  The readiness item is `not-applicable`, with `file` null; the provider's
+  own readiness item (`checks.providers`) answers for its launch.
 
 A missing root entry does not prove that the harness will prompt (a native
 gate can skip the question), so neither says the session will stop. A launch
