@@ -398,7 +398,10 @@ body {
    discrete"): its own shape, 10px, in --tree-link, the faintest ink held at 3:1 (a graphic) on every fill the row
    paints (--sidebar, --surface-2 hovered, --sel selected; contrast-inventory.mjs) in every theme and "This computer",
    and lighter than the line's --muted text; no fill of its own; the dot carries the state. */
-.ctx-row-detail > .ctx-harness { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; color: var(--tree-link); }
+.ctx-row-detail > .ctx-harness { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+/* A graphic, so it is painted as one (fill or stroke, as identity-marks.mjs draws each mark), never as text colour. */
+.ctx-row-detail > .ctx-harness[fill="currentColor"] { fill: var(--tree-link); }
+.ctx-row-detail > .ctx-harness[stroke="currentColor"] { stroke: var(--tree-link); }
 .ctx-empty { padding: 20px 10px; color: var(--muted); text-align: center; font-size: 12px; }
 /* The pinned destinations (the Desktop UI rework, slice 1): rows in the roster rows' style, one line: the icon in the
    column of the roster's dots (the nav's 4px and the row's 6px, centred 18px in), the name in the roster's name type. */

@@ -262,7 +262,9 @@ const CHANGED_PAIRS = [
 // The harness mark on line 2 (Joan's decision, 2026-11-22: "yes but monochrome a bit more discrete"): a decorative graphic
 // in --tree-link, held at 3:1 on every fill the row paints and visibly lighter than line 2's --muted text, in every theme.
 test('slice3d the harness mark is quieter than line 2, and holds 3:1 on the row\'s fills', () => {
-  assert.equal(decl('.ctx-row-detail > .ctx-harness').get('color'), 'var(--tree-link)');
+  assert.equal(decl('.ctx-row-detail > .ctx-harness[fill="currentColor"]').get('fill'), 'var(--tree-link)');
+  assert.equal(decl('.ctx-row-detail > .ctx-harness[stroke="currentColor"]').get('stroke'), 'var(--tree-link)');
+  assert.equal(decl('.ctx-row-detail > .ctx-harness').get('color'), undefined, 'a graphic: no text colour');
   assert.deepEqual([decl('.ctx-row-detail > .ctx-harness').get('width'), decl('.ctx-row-detail > .ctx-harness').get('height')], ['10px', '10px']);
   for (const bg of ['sidebar', 'surface-2', 'sel']) {
     assert.ok(GRAPHIC_PAIRS.some(([f, b]) => f === 'tree-link' && b === bg), `--tree-link on --${bg} is in the contrast inventory`);

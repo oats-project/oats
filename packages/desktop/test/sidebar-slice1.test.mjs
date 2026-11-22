@@ -495,6 +495,11 @@ test("slice3d harness mark on line 2 for claude, codex and pi, none when unknown
   // Its look (Joan, 2026-11-22: "monochrome a bit more discrete"): 10px, in the faint --tree-link (held at 3:1 on the
   // row's fills, and lighter than line 2's --muted: slice3d-main-screen.test.mjs), no fill or harness colour of its own.
   const rule = css.match(/^\.ctx-row-detail > \.ctx-harness \{([^}]*)\}/m)?.[1] ?? "";
-  assert.match(rule, /width: 10px; height: 10px;/); assert.match(rule, /color: var\(--tree-link\);/);
-  assert.doesNotMatch(rule, /background|var\(--runtime/, "no harness colour of its own");
+  assert.match(rule, /width: 10px; height: 10px;/);
+  assert.doesNotMatch(rule, /background|color|var\(--runtime/, "no harness colour of its own, and no text colour: it is a graphic");
+  // Painted as a graphic, fill or stroke as each mark is drawn (Claude's and Pi's filled, Codex's stroked).
+  assert.match(css, /^\.ctx-row-detail > \.ctx-harness\[fill="currentColor"\] \{ fill: var\(--tree-link\); \}$/m);
+  assert.match(css, /^\.ctx-row-detail > \.ctx-harness\[stroke="currentColor"\] \{ stroke: var\(--tree-link\); \}$/m);
+  for (const [name, paint] of [["by-claude", "fill"], ["by-pi", "fill"], ["by-codex", "stroke"]])
+    assert.equal(u.row(name).querySelector(".ctx-harness").getAttribute(paint), "currentColor", `${name}: its ${paint} takes the rule`);
 });
