@@ -307,6 +307,8 @@ README, “Human attribution”; the contract:
      ```bash
      aw --identity-home <root>/.aw id parent request --domain <domain> --parent <H> --invitation-id <I> --out request.json
      ```
+     aweb's dashboard can't show that fingerprint yet, so don't ask the person to
+     compare it, or the `did:key` its upload dialog shows, with anything.
   3. Ask the person to upload `request.json`, choose **Approve and prepare
      response**, download `response.json` and put it in the directory.
   4. Install it:

@@ -174,6 +174,12 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
      ```bash
      aw --identity-home <root>/.aw id parent request --domain <D> --parent <H> --invitation-id <I> --out request.json
      ```
+     The agent gives the person the fingerprint aw prints, over a channel other
+     than the file. aweb's dashboard can't show the request's fingerprint yet, so
+     there is nothing to compare it with there; the agent's ID and `did:key` the
+     upload dialog shows come from aweb's own record, not from the file. When
+     aweb's planned change (aweb-adql) shows the fingerprint before **Approve**,
+     this step becomes a compare.
   3. The person uploads `request.json`, chooses **Approve and prepare response**,
      and downloads `response.json`.
   4. The agent installs the response:
