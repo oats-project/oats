@@ -276,20 +276,24 @@ README, “Human attribution”; the contract:
   - `aw version` is 1.36.59 or later on every host that spawns from that root or
     joins teams from it, and the installed oats.aweb's README has a “Human
     attribution” section;
-  - every other host this deployment connects with `oats aweb connect` is
-    already connected: connect refuses a chained inviter
-    (`E_CONNECT_CHAINED_INVITER`), a fresh hosted root (`no_human`) included;
+  - for a legacy chainless root only: every other host this deployment
+    connects with `oats aweb connect` is already connected, since connect
+    refuses a chained inviter (`E_CONNECT_CHAINED_INVITER`). A `no_human`
+    root's connect is refused already, and adoption doesn't change that;
   - the contract's §5 (`docs/design/2026-11-21-human-ids-contract.md`)
     records gate G2 as passed, and G3 too for a `no_human` root. If not, stop
     and tell the operator: OATS's adoption of hosted roots hasn't opened;
   - `aw --identity-home <root>/.aw who --json` reads `unknown` /
     `legacy_no_chain` (a legacy chainless root, whose adoption Cloud 0.8.80
     accepts) or `no_human` (a fresh hosted root from aw 1.36.53, parented
-    directly by the namespace; Cloud 0.8.80 refuses it as `already_certified`
-    until G3's release). A root that reads `nearest_human`, or has an agent
+    directly by the namespace; aweb Cloud 0.8.80 and earlier refuse it as
+    `already_certified`, until G3's release). A root that reads `nearest_human`, or has an agent
     parent, can't be adopted;
-  - the person has a claimed human ID and is the root's recorded creator, a
-    team admin, or an owner or admin of the owning organisation.
+  - the person has a claimed human ID, is a member of the root's team, and is
+    either the root's recorded creator (who, with an active account and
+    current team membership, is the only one who can adopt it), or a team
+    admin or an owner or admin of the owning organisation when there is no
+    current creator (on aweb Cloud 0.8.80 and earlier: none recorded at all).
 - **Files.** Make one new directory for this adoption on the root's host,
   outside the root and outside every instance home (for example
   `~/oats-adopt-<L>`). Both files live there, and neither holds a secret:
@@ -341,8 +345,10 @@ README, “Human attribution”; the contract:
 - **Limits:** one adoption per root key. No un-adopt: the way out is removing
   the root's membership, which only the person does, from their own terminal,
   with a fresh dashboard setup key for that team, once aweb's Cloud release with
-  it is live (`docs/integrations.md` gives the command). Never ask for that key,
-  hold it or run that command. A mint can stop waiting for a signature: the
+  it is live (`docs/integrations.md` gives the command, and how you find the
+  root's certificate id for them). Never ask for that key, hold it or run that
+  command. Exit 0 doesn't prove removal: a surviving member's fresh
+  `aw id team members` no longer listing that certificate does. A mint can stop waiting for a signature: the
   spawn fails and its home is kept, as the provider's README says.
 - **Error → remedy:** a refusal from `id parent request` or `import` → report
   aw's `error.code` as it gives it; don't retry with values of your own. A

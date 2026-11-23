@@ -156,8 +156,8 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
   kind a root is:
   - **A fresh hosted root reads `no_human`.** From aw 1.36.53, a root made from a
     plain setup key carries its namespace's chain, with no person in it: a fresh,
-    unadopted hosted deployment's normal state. Production aweb Cloud (0.8.80)
-    refuses to adopt a root that already has a creation chain
+    unadopted hosted deployment's normal state. aweb Cloud 0.8.80 and earlier
+    refuse to adopt a root that already has a creation chain
     (`already_certified`), so such a root also waits for G3: the Cloud release
     aweb pairs with aw 1.36.59, which aweb names.
   - **A legacy chainless root reads `unknown`, `legacy_no_chain`.** That is a root
@@ -174,11 +174,18 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
     (`E_ADOPTED_ROOT_AW_TOO_OLD`).
   - The oats.aweb release with human attribution (its README's Human attribution
     section).
-  - Any other host this deployment connects with `oats aweb connect`, connected
-    first: connect refuses an inviter that has an identity chain
-    (`E_CONNECT_CHAINED_INVITER`).
-  - A person who has claimed a human ID and is the root's recorded creator, a team
-    admin, or an owner or admin of the owning organisation.
+  - For a legacy chainless root, any other host this deployment connects with
+    `oats aweb connect`, connected first: connect refuses an inviter that has an
+    identity chain (`E_CONNECT_CHAINED_INVITER`). A `no_human` root's connect is
+    refused already, and adoption doesn't change that.
+  - A person who has claimed a human ID and is a member of the root's team, with
+    the authority aweb Cloud gives:
+    - **The root's recorded creator,** while that creator has an active account
+      and is a current member of the team. That creator is then the only person
+      who can adopt it.
+    - **A team admin, or an owner or admin of the owning organisation,** only when
+      the root has no current creator. On aweb Cloud 0.8.80 and earlier, only when
+      it has no recorded creator at all.
 - **The steps.** One root at a time. The setup agent runs the commands, on the
   root's host, as the deployment's user, the two `aw id parent` commands from the
   directory that holds the two files; the person does three things in the aweb
@@ -220,14 +227,24 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
     they are. A new root has a new key. The person removes it themselves, from
     their own terminal, with a fresh dashboard setup key for that team (one team;
     it expires 24 hours after it's made if unused, and 15 minutes after its first
-    use), in `AWEB_API_KEY`, read without echo, never on the command line:
+    use), in `AWEB_API_KEY`, read without echo, never on the command line. It
+    names the root's own team certificate:
     ```bash
     stty -echo; printf 'Setup key: '; read -r AWEB_API_KEY; stty echo; export AWEB_API_KEY
-    aw id team remove-member --namespace <team namespace> --team <team name> --member <team namespace>/<root alias> --json
+    aw id team remove-member --namespace <team namespace> --team <team name> --cert-id <certificate id> --json
     unset AWEB_API_KEY
     ```
-    (or `--cert-id <certificate id>` in place of `--member`). No agent holds or uses
-    that key. This works once aweb's Cloud release with it is live; until then, the
+    The setup agent gives the person `<certificate id>`, which is no secret. At the
+    root, `aw --identity-home <root>/.aw whoami --json` gives the root's key
+    (`did`), and `aw --identity-home <root>/.aw id team members --team-id <team
+    id> --json` lists the team's certificates: the root's is the entry whose
+    `member_did_key` is that key, and its `certificate_id` is the id. No agent
+    holds or uses the setup key.
+    Exit 0 doesn't prove the removal: aw doesn't read the answer as a statement
+    about certificates. The check is a surviving member's fresh read of the
+    registry. On another member of the team, `aw --identity-home <its .aw> id team
+    members --team-id <team id> --json` no longer lists the root's certificate
+    (the contract's G2, step 7). This works once aweb's Cloud release with it is live; until then, the
     dashboard has no way to remove a root's membership alone. The contract's
     [§6](design/2026-11-21-human-ids-contract.md#6-revocation) gives the route,
     and its follow-up records the OATS deployment owner's word.

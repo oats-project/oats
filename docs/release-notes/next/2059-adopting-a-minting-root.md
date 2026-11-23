@@ -11,7 +11,7 @@
   release with it is live), and attribution is information only. OATS's adoption
   of hosted roots waits for the contract's gate G2, and for a fresh hosted root
   (it reads `no_human` on aw 1.36.53 or later) also for G3, the Cloud release
-  aweb names. Production aweb Cloud (0.8.80) accepts only legacy chainless
-  roots. oats.setup's `/oats-teams` has it as an act card,
+  aweb names: aweb Cloud 0.8.80 and earlier refuse to adopt a root that already
+  has a creation chain. oats.setup's `/oats-teams` has it as an act card,
   and `/oats-onboarding` routes to it. A deployment that adopts nothing works as
   before.
