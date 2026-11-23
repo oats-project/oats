@@ -163,9 +163,10 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
     unadopted hosted deployment's normal state. aweb Cloud 0.8.81 adopts a root
     whose one certificate is parented by its namespace; 0.8.80 and earlier
     refused it (`already_certified`).
-  - **A legacy chainless root reads `unknown`, `legacy_no_chain`.** That is a root
-    made with aw 1.36.51 or earlier, or a member whose ancestry the registry
-    couldn't verify.
+  - **A legacy chainless root reads `unknown`, `legacy_no_chain`.** That is a local
+    root made with aw 1.36.51 or earlier, which presents no chain. A chain with
+    missing or stale evidence reads `unavailable`, and a rejected one `unknown`
+    with its own reason: neither is this kind.
   - A root that reads `nearest_human`, or has an agent parent, can't be adopted.
     `who` is aw's local answer; aweb Cloud decides on its own records, which for
     an older root can differ.
