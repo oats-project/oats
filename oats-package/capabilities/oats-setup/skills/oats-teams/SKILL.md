@@ -287,8 +287,8 @@ README, “Human attribution”; the contract:
     `legacy_no_chain` (a legacy chainless root, whose adoption Cloud 0.8.80
     accepts) or `no_human` (a fresh hosted root from aw 1.36.53, parented
     directly by the namespace; aweb Cloud 0.8.80 and earlier refuse it as
-    `already_certified`, until G3's release). A root that reads `nearest_human`, or has an agent
-    parent, can't be adopted;
+    `already_certified`, until G3's release). A root that reads
+    `nearest_human`, or has an agent parent, can't be adopted;
   - the person has a claimed human ID, is a member of the root's team, and is
     either the root's recorded creator (who, with an active account and
     current team membership, is the only one who can adopt it), or a team
@@ -347,9 +347,13 @@ README, “Human attribution”; the contract:
   with a fresh dashboard setup key for that team, once aweb's Cloud release with
   it is live (`docs/integrations.md` gives the command, and how you find the
   root's certificate id for them). Never ask for that key, hold it or run that
-  command. Exit 0 doesn't prove removal: a surviving member's fresh
-  `aw id team members` no longer listing that certificate does. A mint can stop waiting for a signature: the
-  spawn fails and its home is kept, as the provider's README says.
+  command. Exit 0 doesn't prove removal. The check is a fresh
+  `aw id team members --json` run on a surviving member that holds its own
+  team certificate, never a grant seat (a grant home lists no certificate
+  ids). It counts only when it exits 0, lists that member's own
+  `certificate_id`, and doesn't list the root's; anything else is no answer.
+  A mint can stop waiting for a signature: the spawn fails and its home is
+  kept, as the provider's README says.
 - **Error → remedy:** a refusal from `id parent request` or `import` → report
   aw's `error.code` as it gives it; don't retry with values of your own. A
   failed registration at `import` keeps the signed response: run `import` again.

@@ -241,10 +241,17 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
     `member_did_key` is that key, and its `certificate_id` is the id. No agent
     holds or uses the setup key.
     Exit 0 doesn't prove the removal: aw doesn't read the answer as a statement
-    about certificates. The check is a surviving member's fresh read of the
-    registry. On another member of the team, `aw --identity-home <its .aw> id team
-    members --team-id <team id> --json` no longer lists the root's certificate
-    (the contract's G2, step 7). This works once aweb's Cloud release with it is live; until then, the
+    about certificates. The check is the contract's G2 step 7: a fresh registry
+    read by a surviving member that holds its own team certificate, never a
+    grant seat (a grant home reads the service's roster, with no certificate
+    ids). On that member, run `aw --identity-home <its .aw> id team members
+    --team-id <team id> --json`. It counts only when all three hold: it exits 0;
+    its `members` list that member's own `certificate_id` (the entry whose
+    `member_did_key` is its `whoami --json` `did`), so the read can see
+    certificates; and they don't list the root's. An error, or a list without
+    certificate ids, is no answer. `--include-revoked` also shows the root's
+    entry, with `revoked_at` set.
+    This works once aweb's Cloud release with it is live; until then, the
     dashboard has no way to remove a root's membership alone. The contract's
     [§6](design/2026-11-21-human-ids-contract.md#6-revocation) gives the route,
     and its follow-up records the OATS deployment owner's word.
