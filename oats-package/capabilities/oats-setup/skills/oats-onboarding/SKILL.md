@@ -208,7 +208,7 @@ missing provider procedure.
 | Retire an OATS seat | `/oats-operate`, retirement plan/apply under intake authority; provider owns grant/membership outcome |
 | Owner certificate removal or resident cleanup | `/oats-aweb` §8 “Invitations and certificate ownership”; external-home certificate removal is blocked pending supported owner context. Hosted archival with active certificates and generic GLOBAL cleanup remain owner-path pending; customer-specific cleanup is not a generic recipe |
 | Delivery and checkpointed restart/recovery | `/oats-aweb` §4 “Receive verification and recovery”; `/oats-operate` owns session lifecycle |
-| Adopt a LOCAL minting root by a person (optional) | `/oats-teams` “Adopt a team's minting root”; its rules are the provider's README, “Human attribution” |
+| Adopt a LOCAL minting root by a person (optional; not open until the contract's G1 and G2 are met) | `/oats-teams` “Adopt a team's minting root”; its rules are the provider's README, “Human attribution” |
 
 Provider/native support boundaries (retain the named owner on a blocker):
 

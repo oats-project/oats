@@ -142,28 +142,33 @@ The pinned versions and each package's capabilities and souls are in the
 
 A person can adopt one of a deployment's minting roots: from then on, every
 instance that root mints, and every instance those spawn, traces to that person.
-OATS reads that and shows it; nothing else changes. A deployment that adopts no
-root works as before: there is no setting for it, and nothing in OATS depends on
-it. The provider's rules (what it records, joins, connect, and a mint waiting
-for a signature) are in its README's
+OATS reads that and shows it. A deployment that adopts no root works as before:
+there is no setting for it. The provider's rules (what it records, joins,
+connect, and a mint waiting for a signature) are in its README's
 [Human attribution](https://github.com/awebai/oats-aweb/blob/main/README.md#human-attribution);
 the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md).
 
-- **When, and which roots.** OATS's adoption of hosted roots, every kind, waits
-  for the contract's gate G2 (aweb's Cloud journey run,
-  [§5](design/2026-11-21-human-ids-contract.md#5-gates)). Until §5 records G2 as
-  passed, don't start one. `aw --identity-home <root>/.aw who --json` says which
-  kind a root is:
+- **Not open yet.** OATS's adoption of hosted roots, every kind, stays closed
+  until the contract's gates are met
+  ([§5](design/2026-11-21-human-ids-contract.md#5-gates)): G2, aweb's Cloud
+  journey run, and G1's adopted evidence, the provider's real-binary tests
+  against an adopted root. aweb Cloud 0.8.81 already offers the dashboard
+  steps; don't start one until §5 records both as met. What follows is the
+  procedure for when it opens.
+- **Which roots.** `aw --identity-home <root>/.aw who --json` (with
+  `--registry <origin>` when the deployment sets `settings.oats.aweb.registry`)
+  says which kind a root is:
   - **A fresh hosted root reads `no_human`.** From aw 1.36.53, a root made from a
     plain setup key carries its namespace's chain, with no person in it: a fresh,
-    unadopted hosted deployment's normal state. aweb Cloud 0.8.80 and earlier
-    refuse to adopt a root that already has a creation chain
-    (`already_certified`), so such a root also waits for G3: the Cloud release
-    aweb pairs with aw 1.36.59, which aweb names.
+    unadopted hosted deployment's normal state. aweb Cloud 0.8.81 adopts a root
+    whose one certificate is parented by its namespace; 0.8.80 and earlier
+    refused it (`already_certified`).
   - **A legacy chainless root reads `unknown`, `legacy_no_chain`.** That is a root
     made with aw 1.36.51 or earlier, or a member whose ancestry the registry
-    couldn't verify. Cloud 0.8.80 accepts its adoption; OATS's adoption of it
-    still waits for G2.
+    couldn't verify.
+  - A root that reads `nearest_human`, or has an agent parent, can't be adopted.
+    `who` is aw's local answer; aweb Cloud decides on its own records, which for
+    an older root can differ.
 - **What it is.** One root, of one team, in one deployment. It's prospective: the
   instances that root mints after the adoption trace to the person, and instances
   that already exist keep their identity, address, memberships and history, reading
@@ -178,20 +183,26 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
     `oats aweb connect`, connected first: connect refuses an inviter that has an
     identity chain (`E_CONNECT_CHAINED_INVITER`). A `no_human` root's connect is
     refused already, and adoption doesn't change that.
-  - A person who has claimed a human ID and is a member of the root's team, with
-    the authority aweb Cloud gives:
+  - In aweb Cloud: the root's team has a live owning organisation (without one,
+    nobody can adopt: 403 `agent_control_organization_unavailable`); Cloud has
+    workspace metadata for the root and exactly one live workspace, and the root
+    isn't itself a verified human (otherwise 404).
+  - A person who has claimed a human ID, with an active account and current
+    membership of the root's team, and the authority aweb Cloud gives:
     - **The root's recorded creator,** while that creator has an active account
       and is a current member of the team. That creator is then the only person
       who can adopt it.
-    - **A team admin, or an owner or admin of the owning organisation,** only when
-      the root has no current creator. On aweb Cloud 0.8.80 and earlier, only when
-      it has no recorded creator at all.
+    - **Otherwise** (no creator recorded, or they are gone), **a team admin, or an
+      owner or admin of the owning organisation.** An editor isn't enough.
+  - Time: the dashboard's invitation expires after 24 hours by default (7 days at
+    most), so steps 1 to 4 below finish inside it.
 - **The steps.** One root at a time. The setup agent runs the commands, on the
   root's host, as the deployment's user, the two `aw id parent` commands from the
-  directory that holds the two files; the person does three things in the aweb
+  directory that holds the two files; the person does their part in the aweb
   dashboard, signed in, with the root's team selected.
-  1. The person chooses **Adopt** from the root's Chat or Messages pane. The
-     dashboard shows an invitation id (I), the person's ID (H) and a domain (D).
+  1. The person chooses **Adopt** in the root's Chat or Messages pane, then
+     **Adopt agent** in the dialog it opens. That creates the invitation and
+     shows its id (I), the person's ID (H) and a domain (D).
   2. The agent writes the request, with I, H and D copied from the dashboard:
      ```bash
      aw --identity-home <root>/.aw id parent request --domain <D> --parent <H> --invitation-id <I> --out request.json
@@ -211,8 +222,9 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
   `request.json` and `response.json` hold no secret. `<root>` is the directory the
   provider's `root` or `roots` setting names for that team.
 - **The check.**
-  - `aw --identity-home <root>/.aw who --json` answers `outcome: "nearest_human"`
-    with the person's `human_id`.
+  - `aw --identity-home <root>/.aw who --json` (with `--registry <origin>` when
+    the deployment sets `settings.oats.aweb.registry`) answers
+    `outcome: "nearest_human"` with the person's `human_id`.
   - `oats aweb setup --soul <soul> --check-only --json`, run as the provider runs
     its setup commands (in the deployment directory, outside an instance session),
     lists the root in `roots` with that attribution and no warnings.
@@ -220,41 +232,46 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
     `oats status --dir <deployment> --json`, or **Owning human** in the Desktop
     ([Attributed human](desktop-cli-api.md#attributed-human)); then retire it.
 - **Limits.**
-  - One adoption per root key. A host with several roots adopts each one.
+  - One adoption per root: it covers one subject, and a local root's subject is
+    its key. A host with several roots adopts each one.
   - No un-adopt. The way out is removing the root's membership of its team: the
     root can't mint there any more, the other members' memberships, mail and
     history are unchanged, and the adoption and the identities' ancestry stay as
-    they are. A new root has a new key. The person removes it themselves, from
-    their own terminal, with a fresh dashboard setup key for that team (one team;
-    it expires 24 hours after it's made if unused, and 15 minutes after its first
-    use), in `AWEB_API_KEY`, read without echo, never on the command line. It
-    names the root's own team certificate:
-    ```bash
-    stty -echo; printf 'Setup key: '; read -r AWEB_API_KEY; stty echo; export AWEB_API_KEY
-    aw id team remove-member --namespace <team namespace> --team <team name> --cert-id <certificate id> --json
-    unset AWEB_API_KEY
-    ```
-    The setup agent gives the person `<certificate id>`, which is no secret. At the
-    root, `aw --identity-home <root>/.aw whoami --json` gives the root's key
-    (`did`), and `aw --identity-home <root>/.aw id team members --team-id <team
-    id> --json` lists the team's certificates: the root's is the entry whose
-    `member_did_key` is that key, and its `certificate_id` is the id. No agent
-    holds or uses the setup key.
-    Exit 0 doesn't prove the removal: aw doesn't read the answer as a statement
-    about certificates. The check is the contract's G2 step 7: a fresh registry
-    read by a surviving member that holds its own team certificate, never a
-    grant seat (a grant home reads the service's roster, with no certificate
-    ids). On that member, run `aw --identity-home <its .aw> id team members
-    --team-id <team id> --json`. It counts only when all three hold: it exits 0;
-    its `members` list that member's own `certificate_id` (the entry whose
-    `member_did_key` is its `whoami --json` `did`), so the read can see
-    certificates; and they don't list the root's. An error, or a list without
-    certificate ids, is no answer. `--include-revoked` also shows the root's
-    entry, with `revoked_at` set.
-    This works once aweb's Cloud release with it is live; until then, the
-    dashboard has no way to remove a root's membership alone. The contract's
-    [§6](design/2026-11-21-human-ids-contract.md#6-revocation) gives the route,
-    and its follow-up records the OATS deployment owner's word.
+    they are. A new root has a new key. The dashboard has no membership-only
+    removal for such a root; a person removes it from their own terminal (the
+    contract's [§6](design/2026-11-21-human-ids-contract.md#6-revocation)):
+    - **Who:** a current team admin, or an owner or admin of the owning
+      organisation who is in the team. An editor can make the setup key, but the
+      removal refuses it.
+    - **The key:** a fresh dashboard setup key, bound to that team and that
+      person. It expires 24 hours after it's made if unused, and 15 minutes after
+      its first successful `aw init`; a new one for the same person and team
+      revokes it. It goes in `AWEB_API_KEY`, read without echo, never on the
+      command line. No agent holds or uses it.
+    - **The command** names the root's own team certificate, with `--cert-id`
+      (a local root has no stored address for `--member`). From a terminal with
+      no aw workspace, add `--aweb-url <the team's aweb API URL>`:
+      ```bash
+      stty -echo; printf 'Setup key: '; read -r AWEB_API_KEY; stty echo; export AWEB_API_KEY
+      aw id team remove-member --namespace <team namespace> --team <team name> --cert-id <certificate id> --json
+      unset AWEB_API_KEY
+      ```
+    - **The certificate id,** which is no secret, comes from the setup agent. At
+      the root, `aw --identity-home <root>/.aw whoami --json` gives the root's key
+      (`did`), and `aw --identity-home <root>/.aw id team members --team-id <team
+      id> --json` lists the team's certificates: the root's is the entry whose
+      `member_did_key` is that key, and its `certificate_id` is the id.
+    - **The check.** Exit 0 doesn't prove the removal: aw doesn't read the answer
+      as a statement about certificates. The check is the contract's G2 step 7: a
+      fresh registry read by a surviving member that holds its own team
+      certificate, never a grant seat (a grant home reads the service's roster,
+      with no certificate ids). On that member, run `aw --identity-home <its .aw>
+      id team members --team-id <team id> --json`. It counts only when all three
+      hold: it exits 0; its `members` list that member's own `certificate_id`
+      (the entry whose `member_did_key` is its `whoami --json` `did`), so the
+      read can see certificates; and they don't list the root's. An error, or a
+      list without certificate ids, is no answer. `--include-revoked` also shows
+      the root's entry, with `revoked_at` set.
   - `oats aweb connect` refuses a chained inviter (`E_CONNECT_CHAINED_INVITER`),
     before any invite is minted; the provider's README gives the manual route. A
     fresh hosted root reads `no_human`, so for a fresh unadopted hosted
@@ -262,8 +279,11 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
     used to fail at the other host's accept after the mint.
   - A mint can stop waiting for a signature (`native_agent_signature_pending`):
     the spawn fails and its home is kept, as the provider's README says.
-- **Attribution is information.** No OATS behaviour (gating, routing,
-  permission) depends on the human. OATS reads it and shows it.
+- **Attribution grants no access.** No OATS permission or access decision
+  depends on the human. OATS reads it and shows it, and it informs three things
+  in the provider: the route of a join from the root (P4's `--parent`), connect's
+  refusal of a chained inviter, and whether a stopped mint is kept as waiting for
+  a signature.
 
 ## Building an integration
 
