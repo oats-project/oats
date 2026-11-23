@@ -178,7 +178,8 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
   - aw 1.36.59 on every host that spawns from that root or joins teams from it. A
     join from an adopted root on an older aw stops before it mints anything
     (`E_ADOPTED_ROOT_AW_TOO_OLD`).
-  - The oats.aweb release with human attribution (its README's Human attribution
+  - oats.aweb [1.49.0](https://github.com/awebai/oats-aweb/tree/v1.49.0) or
+    later, the release with human attribution (its README's Human attribution
     section).
   - For a legacy chainless root, any other host this deployment connects with
     `oats aweb connect`, connected first: connect refuses an inviter that has an

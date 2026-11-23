@@ -281,8 +281,8 @@ README, “Human attribution”; the contract:
     `settings.oats.aweb.roots` (or `root`) names for it on this host. One root
     at a time;
   - `aw version` is 1.36.59 or later on every host that spawns from that root or
-    joins teams from it, and the installed oats.aweb's README has a “Human
-    attribution” section;
+    joins teams from it, and the installed oats.aweb is 1.49.0 or later (its
+    README has a “Human attribution” section);
   - for a legacy chainless root only: every other host this deployment
     connects with `oats aweb connect` is already connected, since connect
     refuses a chained inviter (`E_CONNECT_CHAINED_INVITER`). A `no_human`
