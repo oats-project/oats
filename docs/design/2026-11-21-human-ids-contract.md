@@ -250,10 +250,8 @@ re-runs that command, reading only whether the journal is there.
 **Registry.** An administrator's explicit registry setting in `oats-local.yaml` decides. OATS
 takes a private-address registry only from it, never from aw's files (aw's
 `registry_operator_origin` included), and passes it to aw by name. Every P5 call passes it
-explicitly, as `--registry <origin>`; with no setting, the argv has no flag. Forwarding the
-environment pin isn't enough for P5: without the flag, a private deployment's identity
-metadata can be disclosed to a registry it didn't choose. oats-aweb passes it from `5849637f`
-(oats-aweb#326). aweb's own fix is `aweb-adtn`, with no release named.
+explicitly, as `--registry <origin>`; with no setting, the argv has no flag. oats-aweb passes
+it from `5849637f` (oats-aweb#326).
 - A private deployment names its registry in DNS or in the setting.
 
 **Reading aw's refusals** (aweb's `docs/cli-integration-contract.md` at `e6e9f099c5`).
