@@ -51,8 +51,9 @@ Every behaviour below is pinned at **the 1.36.59 cut SHA**: aweb `b9c015732416`,
      Ones with older namespace ancestry can read `no_human`, or refuse superseded evidence.
    - Leaving them alone is the deployment owner's choice. OATS doesn't respawn or re-sign
      them.
-4. **Attribution is information.** No OATS behaviour (gating, routing, permission) depends on
-   the human. OATS only reads it and shows it.
+4. **Attribution grants no access.** No OATS permission or access decision depends on the
+   human. The verdict is read and shown, and it selects two mechanical things: P4's
+   `--parent` route and connect's refusal of a chained inviter (§4).
 5. **aw's answer is the truth.** OATS copies aw's verdicts and refusals as aw gives them. It
    reads them only from aw's `--json` fields (§5), never from prose.
 
@@ -64,7 +65,7 @@ Every behaviour below is pinned at **the 1.36.59 cut SHA**: aweb `b9c015732416`,
 | P2 | `aw --identity-home <root>/.aw id parent import response.json --domain D` | An agent, in the root's home | Documented step (PR b). Verifies and installs the exact signed response. If these steps become machine-consumed, they add `--json` and follow §4's refusal rules. |
 | P3 | `aw init --join-from=<root> --join-team=<T> --name=<alias> --json --do-not-touch-agents-md` (oats-aweb `bin/oats-aweb.mjs:2541`), `<root>` being the root's workspace directory | The provider's spawn hook, on the root's host, as the deployment's user | Primary identity of every spawned instance (unchanged). After adoption, aw signs the child under the root through the mint's same-machine hosted issuer link. |
 | P4 | `aw team invite --team-id <T> --json` with the root as the selected identity, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local [--parent <root>/.aw] --json`, the same token on stdin | The provider, joining an instance to an extra team; `<home>/.aweb-identity-<label>` is fresh, or the same retained target on retry | Joined-team identities. aweb confirms `--parent` as the supported, unattended route (native agent-to-agent exchange through a token-scoped creator link, same user and HOME). The child proves the invite's human before membership is submitted. `nearest_human` selects the explicit `--parent` path. That is decided by one bounded P5 read of `<root>/.aw` at join time, falling back to C3's record when the read is `unavailable`. Otherwise `--parent` is omitted: a genuinely chainless root's join is unchanged, and a chained `no_human` root's same-machine join completes through the retained mint link without it. An adopted root on an aw below 1.36.59 stops before minting any invite. That stop is an oats-aweb diagnostic with an OATS-owned code, and a README line names the fix. |
-| P5 | `aw --identity-home <home>/.aw who --json` | The provider | C1 and C2 (§4). |
+| P5 | `aw --identity-home <home>/.aw who --json`, plus `--registry <origin>` when the deployment sets a registry (§4 "Registry") | The provider | C1 and C2 (§4). |
 | P6 | `aw id team remove-member --namespace D --team NAME --cert-id C [--aweb-url URL] --json` (or `--member`), with a team-scoped owner/admin API key from `--api-key` or `AWEB_API_KEY`, calling `/api/v1/teams/{team_id}/agents/remove-member` | The person, from a terminal (§6) | Membership removal (§6). The documented person-run CLI uses the setup key. The server also accepts signed-in person authority for the same route. A person's signing key is a separate credential. |
 
 Person's steps in Cloud (dashboard, signed in, the root's team selected, from the root's
@@ -129,7 +130,7 @@ OATS doesn't use, and doesn't build on, these aw primitives:
     certificate is parented by the namespace and verifies with no person.
   - A local `did:key` root adopts only through the browser-file flow above. An
     agent-submitted request is refused with `global_agent_required`.
-  - One adoption covers one key. A host with several roots needs one adoption per root.
+  - One adoption covers one subject; a local subject is its key. A host with several roots needs one adoption per root.
 - **After adoption:**
   - The root's ordinary hosted member invites default to its verified nearest human
     (`for_human`). There is no opt-out: `--for-human` can only name another valid person.
@@ -216,18 +217,19 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   runs the hook again. Once aw settles the mint either way, the hook answers what is true and
   a plain retry clears the home. `--force` is not the route.
 - Nothing remints into that home or compensates it away while it is pending.
-- On an aw without the code (1.36.58, or a cut SHA that lacks it), a signature-pending stop
-  can only come from a chained issuer. So PR a keeps a home whose mint failed after aw wrote
-  a key only when the mint's issuing root isn't genuinely chainless, by P5's read or by C3's
-  record. It never parses prose. A mint from a chainless root keeps today's behaviour, where
-  retire settles the recorded mint, so a deployment that doesn't adopt changes in nothing.
+- On an aw below 1.36.59, which lacks the code, a signature-pending stop can only come from a
+  chained issuer. PR a classifies a failed mint as one only when aw exited 1 with
+  `error.code` `error`, the key was written, and the issuing root is chained by P5's read or
+  by C3's record. It never parses prose. This rule only classifies: an unknown or unreadable
+  outcome can still keep the home (`mint-outcome-unknown`, below). A mint from a chainless
+  root settles as before.
 - OATS never retries or remints automatically. An explicit operator recovery keeps the exact
   original home, key, token and selection.
 - Any other mint OATS can't prove settled keeps the home too, with
   `meta: {retired: false, reason: "mint-outcome-unknown"}` and exit 1: another key,
   selection or request, or aw files or a record that can't be read. No retire answer lets
   the kernel remove a home while aw's pending files are in it, except the settle of a mint
-  from a genuinely chainless root.
+  from a genuinely chainless root, and the older-provider proof below.
 - A home from an older provider, whose mint record names no issuing key, is settled only when
   aw's own record of the accept proves no signature can be pending, and kept otherwise.
 - aw 1.36.59 has `aw id status --json`, whose `pending_hosted_accept` and `mint_complete` report
@@ -236,7 +238,7 @@ OATS doesn't use, and doesn't build on, these aw primitives:
 - Setup refuses to create, accept or mint into a root inside an instance home of its own
   deployment (`E_ROOT_INSIDE_INSTANCE_HOME`).
 
-**What a retire leaves** (oats-aweb main `cf628b7d`). An exit 0 removes the home's credential entries.
+**What a retire leaves** (oats-aweb `cf628b7d`). An exit 0 removes the home's credential entries.
 A nonzero exit, or one that skipped its cleanup, holds them out of aw's reach for the next
 retire. Entries a setting names and homes holding a pending mint stay in place. The exact
 rules are oats-aweb's README, "What retire does with the key material".
@@ -247,9 +249,12 @@ re-runs that command, reading only whether the journal is there.
 
 **Registry.** An administrator's explicit registry setting in `oats-local.yaml` decides. OATS
 takes a private-address registry only from it, never from aw's files (aw's
-`registry_operator_origin` included), and passes it to aw by name. P5 must get it too: at
-`cf628b7d` it doesn't (`lib/registry-setting.mjs`, `registryCommand` omits `who`). That is an
-oats-aweb defect, to be fixed before it is relied on.
+`registry_operator_origin` included), and passes it to aw by name. Every P5 call passes it
+explicitly, as `--registry <origin>`; with no setting, the argv has no flag. Forwarding the
+environment pin isn't enough for P5: without the flag, a private deployment's identity
+metadata can be disclosed to a registry it didn't choose. oats-aweb passes it from `5849637f`
+(oats-aweb#326). aweb's own fix is `aweb-adtn`, with no release named.
+- A private deployment names its registry in DNS or in the setting.
 
 **Reading aw's refusals** (aweb's `docs/cli-integration-contract.md` at `e6e9f099c5`).
 - PR a branches only on the exit status and the structured fields: `error.code`,
@@ -263,7 +268,7 @@ oats-aweb defect, to be fixed before it is relied on.
 
 **The aw floor.**
 - `min` stays 1.36.33, so a deployment that doesn't adopt needs no new aw.
-- `tested` is the 1.36.59 final (oats-aweb main `cf628b7d`).
+- `tested` is the 1.36.59 final (oats-aweb `5849637f`).
 - A deployment that adopts a root needs aw 1.36.59 on that root's host (C2's note; PR b says
   to upgrade before adopting).
 
@@ -309,6 +314,8 @@ oats-aweb defect, to be fixed before it is relied on.
     published 1.36.59 at its pinned integrity (run 45152178535, `d28f2df7`). It parses P4's
     `--parent` argv on the real binary, against an unadopted parent. The adopted assertions
     above (the child's leaf, its parent and its person, for P3 and P4) run only on a fake aw.
+    aw's own coverage at the cut (an in-process native child exchange, and a BYOT join from a
+    root under a person) isn't a published-binary proof for a hosted adopted root either.
     So PR a was merged before G1 was met; both OATS sides approved it in error.
   - **What r3 changes:** the adopted assertions on the real binary, against an adopted root,
     must be green before hosted adoption is opened, along with G2. PR a's merge stands. An
@@ -343,8 +350,8 @@ oats-aweb defect, to be fixed before it is relied on.
          same-team setup key of a person P6 accepts (§6).
     8. Clean-up: scratch memberships removed, scratch identities revoked, receipts checked.
   - The record names the aw version per root and step, and which kind of root (§3) each step
-    proves. Until a fresh `no_human` root is adopted in a recorded run, only chainless is
-    proved.
+    covers. The case covers chainless roots; their proof is due with its run, and a fresh
+    `no_human` root's with `aweb-adjb.1`.
   - **Not met.** Step 7's browser proof isn't in Cloud 0.8.81 (a version with P6's
     setup key is at Cloud `f9294da41`, not run there); aweb plans it for a later release and
     sends the landed SHA. The fresh-root receipt is aweb's `aweb-adjb.1`.
