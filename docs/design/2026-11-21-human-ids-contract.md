@@ -15,9 +15,9 @@ OATS calls them, what each side owns, and the gates before anything ships. When 
 one of these primitives, or OATS changes how it uses one, this record changes first.
 
 **Sources.**
-- aweb: main `d8d0bfa1e7` (`docs/id-certificates.md`, `docs/identity.md`,
-  `docs/cli-integration-contract.md`, `docs/cli-command-reference.md`) and aweb's primitive
-  list at that SHA.
+- aweb: `b9c015732416`, the cut SHA (`docs/id-certificates.md`, `docs/identity.md`,
+  `docs/cli-integration-contract.md`, `docs/cli-command-reference.md`). r2 read them, and
+  aweb's primitive list, at `d8d0bfa1e7`; all four docs have changed since.
 - Cloud: the person's dashboard steps first read at `15591632` (0.8.80) and main `234882b7`.
   r3 reads adoption and removal at **0.8.81, `4b5b7820`**, live since 2026-11-23.
 - OATS: the integration plan v1.7 (`0d8b9e1159c6`), read with oats-aweb main `717d0fd`.
@@ -82,7 +82,11 @@ Preconditions:
     Anyone else, a team admin or organisation owner included, is refused;
   - otherwise (none recorded, or they are gone), a team admin or an owning-organisation
     owner/admin. An editor isn't enough;
-- Cloud has workspace metadata for the root. Without it, adoption answers 404.
+- Cloud has workspace metadata for the root, exactly one live workspace, and the root isn't
+  itself a verified human. Otherwise adoption answers 404.
+- The adopting person's namespace verifies. A global root already enrolled in the registry's ID
+  tree is under the person's own home domain (else 409 `registered_adoption_domain_mismatch`).
+- The invitation hasn't expired: 24 hours by default, 7 days at most.
 
 OATS doesn't use, and doesn't build on, these aw primitives:
 - `id create --human-parent`;
@@ -102,7 +106,7 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   - `unavailable` (`evidence_unavailable`, `status_expired`) is a value, not a command
     failure.
   - A `did:key` home with no chain reads `unknown` / `legacy_no_chain`.
-  - The same fields exist in aw 1.36.58.
+  - aw 1.36.58 has the same fields except `evidence`.
 - **Two kinds of unadopted hosted root:**
   - **Fresh:** from aw 1.36.53 (aweb `3a88ea92d0`), a root made from a plain setup key
     carries its namespace's chain with no person, and reads `no_human`. This is the normal
@@ -117,8 +121,8 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   - one-time replacement of a chain parented directly by the namespace, under the first
     person.
   - Cloud's browser authority and eligibility checks gate either case. Cloud 0.8.80 took
-    only chainless local roots; 0.8.81 also takes a root whose one certificate is parented
-    by the namespace and verifies with no person.
+    only roots without a certificate, local or global; 0.8.81 also takes a root whose one
+    certificate is parented by the namespace and verifies with no person.
   - A local `did:key` root adopts only through the browser-file flow above. An
     agent-submitted request is refused with `global_agent_required`.
   - One adoption covers one key. A host with several roots needs one adoption per root.
@@ -321,7 +325,7 @@ takes a private-address registry only from it, never from aw's files (aw's
          `invite_not_created`, `http_status` 401 and `reason` `certificate_revoked`.
        - The surviving members' certificates, mail and chat history are unchanged.
        - The paired runtime evidence includes P6 run with a fresh dashboard-issued,
-         same-team owner or admin setup key (§6).
+         same-team setup key of a person P6 accepts (§6).
     8. Clean-up: scratch memberships removed, scratch identities revoked, receipts checked.
   - The record names the aw version per root and step, and which kind of root (§3) each step
     proves. Until a fresh `no_human` root is adopted in a recorded run, only chainless is
@@ -338,9 +342,11 @@ takes a private-address registry only from it, never from aw's files (aw's
 
 ## 6. Revocation
 
-- There is no per-root undo of an adoption.
-- The control is removing the root's team membership. The way on is a new root with a new
-  key.
+- There is no per-root undo of an adoption: it stays once per root key.
+- For a local `did:key` root, which is what §3's browser-file flow adopts, the control is removing the root's
+  team membership. The way on is a new root with a new key.
+- An adopted global (`did:aw`) root also has a certificate revoke in Cloud (0.8.80 and
+  0.8.81). It is a control, not an undo. OATS doesn't use it.
 - Removing the membership leaves the other members' memberships, mail and history
   unchanged.
 - The person can revoke their whole ID, which ends everything under them. OATS neither does
@@ -349,15 +355,16 @@ takes a private-address registry only from it, never from aw's files (aw's
 **How the membership is removed on a hosted team** (decided by aweb's product owner,
 2026-11-21, relayed by aweb's maintainers in their mail `c05ca697`):
 - The paired Cloud release keeps the existing hosted CLI route, P6. The person who runs it
-  is the team's current owner or team admin, using their team's unexpired dashboard setup
-  key, with the existing team and person checks.
+  is a current team admin, or an owning-organisation owner/admin who is in the team, using
+  their team's unexpired dashboard setup key, with the existing team and person checks.
 - The setup key's authority on that route is restored at Cloud `939528ba9` (merged
-  `aa8f344a`), and is in 0.8.81. The key is bound to one team and a current person with
-  authority there. It lasts 24 hours unused and 15 minutes after its first `aw init`, and a
+  `aa8f344a`), and is in 0.8.81. The key is bound to one team and one person. Minting it
+  needs only editor; authority is checked when P6 runs, so an editor can hold a key that P6
+  refuses. It lasts 24 hours unused and 15 minutes after its first successful `aw init`, and a
   new one for the same person and team revokes it (aweb's report at `aa8f344a`). The
   user-path evidence is G2 step 7, not yet recorded.
-- There is no dashboard membership-only Remove for a team-only root. Archive and Replace
-  remain for permanent agents.
+- There is no dashboard membership-only Remove for a team-only root. Archive and Replace are
+  API routes for permanent agents; the 0.8.81 dashboard calls neither (aweb's search).
 - The principle: no user path is harder than production, and extra human-assurance security
   is opt-in.
 - Removing the membership affects that team and the root's ability to mint there. The
@@ -367,7 +374,7 @@ takes a private-address registry only from it, never from aw's files (aw's
 admin key (principle 2). The ruling above restores a credential's server authority; it
 grants no exception to principle 2.
 - The OATS deployment owner agreed to the person-run P6 step on 2026-11-21 (relayed by their
-  side in mail `c0a90d92`).
+  side in mail `c0a90d92`; their direct word to it is mail `348d4f53`).
 - Use `--cert-id`, with the exact certificate of the root's membership in that team.
 
 **OPEN R: whether to allow delegation later.** An agent running P6 with an owner key the
