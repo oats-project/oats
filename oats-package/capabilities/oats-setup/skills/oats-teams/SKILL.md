@@ -264,7 +264,7 @@ of the act; “Next” is the single handoff after its success predicate passes.
 
 A person adopts one LOCAL minting root: the instances it mints from then on, and
 theirs, trace to that person. Only when the operator asks. Nothing else in OATS
-depends on it, and a deployment that skips it changes in nothing. Reference:
+depends on it, and a deployment that skips it works as before. Reference:
 `docs/integrations.md`, “Adopting a minting root”; the provider's rules: its
 README, “Human attribution”; the contract:
 `docs/design/2026-11-21-human-ids-contract.md`.
@@ -278,9 +278,13 @@ README, “Human attribution”; the contract:
     attribution” section;
   - every other host this deployment connects with `oats aweb connect` is
     already connected: connect refuses a chained inviter
-    (`E_CONNECT_CHAINED_INVITER`);
+    (`E_CONNECT_CHAINED_INVITER`), a fresh hosted root (`no_human`) included;
   - `aw --identity-home <root>/.aw who --json` reads `unknown` /
-    `legacy_no_chain`, or a chain parented directly by the namespace. A root
+    `legacy_no_chain`: a legacy chainless root, which production aweb Cloud
+    (0.8.80) adopts today. A fresh hosted root reads `no_human` (a chain
+    parented directly by the namespace) from aw 1.36.53; Cloud 0.8.80 refuses
+    it (`already_certified`), and adopting it waits for the contract's gates G2
+    and G3 (the Cloud release aweb names): stop and tell the operator. A root
     that reads `nearest_human`, or has an agent parent, can't be adopted;
   - the person has a claimed human ID and is the root's recorded creator, a
     team admin, or an owner or admin of the owning organisation.

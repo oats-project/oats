@@ -143,12 +143,24 @@ The pinned versions and each package's capabilities and souls are in the
 A person can adopt one of a deployment's minting roots: from then on, every
 instance that root mints, and every instance those spawn, traces to that person.
 OATS reads that and shows it; nothing else changes. A deployment that adopts no
-root changes in nothing: there is no setting for it, and nothing in OATS depends
-on it. The provider's rules (what it records, joins, connect, and a mint waiting
+root works as before: there is no setting for it, and nothing in OATS depends on
+it. The provider's rules (what it records, joins, connect, and a mint waiting
 for a signature) are in its README's
 [Human attribution](https://github.com/awebai/oats-aweb/blob/main/README.md#human-attribution);
 the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md).
 
+- **Which roots, today.** `aw --identity-home <root>/.aw who --json` says which
+  kind a root is.
+  - **A fresh hosted root reads `no_human`.** From aw 1.36.53, a root made from a
+    plain setup key carries its namespace's chain, with no person in it: a fresh,
+    unadopted hosted deployment's normal state. Production aweb Cloud (0.8.80)
+    refuses to adopt a root that already has a creation chain
+    (`already_certified`). Adopting hosted roots waits for the contract's gates G2
+    (aweb's Cloud journey run) and G3 (the Cloud release aweb pairs with aw
+    1.36.59, which aweb names).
+  - **A legacy chainless root reads `unknown`, `legacy_no_chain`.** That is a root
+    made with aw 1.36.51 or earlier, or a member whose ancestry the registry
+    couldn't verify. The aweb Cloud adopts one today.
 - **What it is.** One root, of one team, in one deployment. It's prospective: the
   instances that root mints after the adoption trace to the person, and instances
   that already exist keep their identity, address, memberships and history, reading
@@ -216,8 +228,11 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
     dashboard has no way to remove a root's membership alone. The contract's
     [§6](design/2026-11-21-human-ids-contract.md#6-revocation) gives the route,
     and its follow-up records the OATS deployment owner's word.
-  - `oats aweb connect` refuses a chained inviter (`E_CONNECT_CHAINED_INVITER`);
-    the provider's README gives the manual route.
+  - `oats aweb connect` refuses a chained inviter (`E_CONNECT_CHAINED_INVITER`),
+    before any invite is minted; the provider's README gives the manual route. A
+    fresh hosted root reads `no_human`, so for a fresh unadopted hosted
+    deployment that refusal is the normal case: its connect ends there, where it
+    used to fail at the other host's accept after the mint.
   - A mint can stop waiting for a signature (`native_agent_signature_pending`):
     the spawn fails and its home is kept, as the provider's README says.
 - **Attribution is information.** No OATS behaviour (gating, routing,

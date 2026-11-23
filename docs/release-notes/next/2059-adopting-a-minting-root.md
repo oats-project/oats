@@ -8,6 +8,9 @@
   gives what it needs, the agent's two `aw id parent` commands and the person's
   three dashboard acts, the check, and its limits: one adoption per root key, no
   un-adopt (the person removes the root's membership themselves, once aweb's Cloud
-  release with it is live), and attribution is information only. oats.setup's
-  `/oats-teams` has it as an act card, and `/oats-onboarding` routes to it. A
-  deployment that adopts nothing changes in nothing.
+  release with it is live), and attribution is information only. Production aweb
+  Cloud (0.8.80) adopts only legacy chainless roots: a fresh hosted root on aw
+  1.36.53 or later reads `no_human`, and adopting hosted roots waits for the
+  contract's gates G2 and G3. oats.setup's `/oats-teams` has it as an act card,
+  and `/oats-onboarding` routes to it. A deployment that adopts nothing works as
+  before.
