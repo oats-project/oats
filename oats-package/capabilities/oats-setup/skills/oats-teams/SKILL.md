@@ -279,13 +279,15 @@ README, “Human attribution”; the contract:
   - every other host this deployment connects with `oats aweb connect` is
     already connected: connect refuses a chained inviter
     (`E_CONNECT_CHAINED_INVITER`), a fresh hosted root (`no_human`) included;
+  - the contract's §5 (`docs/design/2026-11-21-human-ids-contract.md`)
+    records gate G2 as passed, and G3 too for a `no_human` root. If not, stop
+    and tell the operator: OATS's adoption of hosted roots hasn't opened;
   - `aw --identity-home <root>/.aw who --json` reads `unknown` /
-    `legacy_no_chain`: a legacy chainless root, which production aweb Cloud
-    (0.8.80) adopts today. A fresh hosted root reads `no_human` (a chain
-    parented directly by the namespace) from aw 1.36.53; Cloud 0.8.80 refuses
-    it (`already_certified`), and adopting it waits for the contract's gates G2
-    and G3 (the Cloud release aweb names): stop and tell the operator. A root
-    that reads `nearest_human`, or has an agent parent, can't be adopted;
+    `legacy_no_chain` (a legacy chainless root, whose adoption Cloud 0.8.80
+    accepts) or `no_human` (a fresh hosted root from aw 1.36.53, parented
+    directly by the namespace; Cloud 0.8.80 refuses it as `already_certified`
+    until G3's release). A root that reads `nearest_human`, or has an agent
+    parent, can't be adopted;
   - the person has a claimed human ID and is the root's recorded creator, a
     team admin, or an owner or admin of the owning organisation.
 - **Files.** Make one new directory for this adoption on the root's host,

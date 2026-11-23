@@ -149,18 +149,21 @@ for a signature) are in its README's
 [Human attribution](https://github.com/awebai/oats-aweb/blob/main/README.md#human-attribution);
 the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md).
 
-- **Which roots, today.** `aw --identity-home <root>/.aw who --json` says which
-  kind a root is.
+- **When, and which roots.** OATS's adoption of hosted roots, every kind, waits
+  for the contract's gate G2 (aweb's Cloud journey run,
+  [§5](design/2026-11-21-human-ids-contract.md#5-gates)). Until §5 records G2 as
+  passed, don't start one. `aw --identity-home <root>/.aw who --json` says which
+  kind a root is:
   - **A fresh hosted root reads `no_human`.** From aw 1.36.53, a root made from a
     plain setup key carries its namespace's chain, with no person in it: a fresh,
     unadopted hosted deployment's normal state. Production aweb Cloud (0.8.80)
     refuses to adopt a root that already has a creation chain
-    (`already_certified`). Adopting hosted roots waits for the contract's gates G2
-    (aweb's Cloud journey run) and G3 (the Cloud release aweb pairs with aw
-    1.36.59, which aweb names).
+    (`already_certified`), so such a root also waits for G3: the Cloud release
+    aweb pairs with aw 1.36.59, which aweb names.
   - **A legacy chainless root reads `unknown`, `legacy_no_chain`.** That is a root
     made with aw 1.36.51 or earlier, or a member whose ancestry the registry
-    couldn't verify. The aweb Cloud adopts one today.
+    couldn't verify. Cloud 0.8.80 accepts its adoption; OATS's adoption of it
+    still waits for G2.
 - **What it is.** One root, of one team, in one deployment. It's prospective: the
   instances that root mints after the adoption trace to the person, and instances
   that already exist keep their identity, address, memberships and history, reading
