@@ -39,6 +39,8 @@ successor, with a link to its full text.
   longer follows a team (r5).
 - [Human IDs contract](2026-11-21-human-ids-contract.md): the aweb human-ID
   primitives OATS relies on, how it calls them, who owns what, and the gates.
+- [Team model 4](2026-11-23-team-model-4.md) (shape agreed, not built): each team
+  names the souls that may join it, and a soul's entry holds only its default.
 
 The Desktop's design brief for designers is in
 [packages/desktop/docs](../../packages/desktop/docs/design-brief.md).
