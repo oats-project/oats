@@ -158,12 +158,13 @@ test("numberTabStrips writes only what changed, so a strip observer sees nothing
 // order (dot, name, branch, number; the trigger's name is its aria-label); CSS `order` lays the line out. jsdom has no
 // layout, so the geometry is proven live: the renderer's shell.css and theme.css in the Desktop's own Chromium (dark
 // palette, the shipped system UI face, 12.5px, the active tab, 2026-11-22). The number is 6.1px wide at 11px in the
-// chrome's sans, before the trigger's 8px gap.
-//   - At the floor (176px tab, 132px trigger), "oats-desktop-developer-spawn-flow" keeps its name at 102.9px, the
+// chrome's sans, before the trigger's 8px gap. The status slot is 12px since 2026-11-23 (the 7px dot centred in it, or
+// the 12px Needs input glyph), which added 5px to the floor and to a tab's natural width (Chromium, shell.css).
+//   - At the floor (181px tab, 137px trigger), "oats-desktop-developer-spawn-flow" keeps its name at 102.9px, the
 //     number and the dot on the first line (8px and 11px into the 28px trigger); with a branch, the branch wraps away.
 //   - At the floor, "A-reviewer" (59.8px) shows whole beside its number and its dot.
-//   - With room, "oats-desktop-developer-ui" (144.5px) shows whole: the tab is 217.7px = 44 chrome + 6.1 + 8 + 144.5 +
-//     8 + 7, the number and the dot adding to its natural width. Tabs and triggers are 28px pills, centred in the bar.
+//   - With room, "oats-desktop-developer-ui" (144.5px) shows whole: the tab is 222.7px = 44 chrome + 6.1 + 8 + 144.5 +
+//     8 + 12, the number and the status slot adding to its natural width. Tabs and triggers are 28px pills, centred in the bar.
 // This pins the rules that make that happen.
 test("the number leads, the dot follows the name, and the floor keeps both: the name gives way (slice 3d)", t => {
   const { doc, window } = fixture(t);
@@ -188,7 +189,7 @@ test("the number leads, the dot follows the name, and the floor keeps both: the 
   assert.deepEqual([label.flexGrow, label.flexShrink, label.maxWidth, label.minWidth], ["1000", "1", "max-content", "0px"],
     "it grows from there to its whole width, no further, ahead of the branch");
   const px = prop => Number.parseFloat(style(tabEl).getPropertyValue(prop));
-  const DOT_AND_GAP = 7 + 8, NUMBER_AND_GAP = 7 + 8, WIDEST_LEAD = NUMBER_AND_GAP + 14 + 8; // the dot (or the Needs input glyph) and its gap; the number and its; an artifact's icon and its gap after the number
+  const DOT_AND_GAP = 12 + 8, NUMBER_AND_GAP = 7 + 8, WIDEST_LEAD = NUMBER_AND_GAP + 14 + 8; // the status slot (the dot or the Needs input glyph) and its gap; the number and its; an artifact's icon and its gap after the number
   assert.equal(px("--tab-name-min"), px("--tab-min") - px("--tab-chrome") - NUMBER_AND_GAP - DOT_AND_GAP,
     "the name's minimum is what the floor budgets it (visual-rendering-regressions.test.mjs), so at the floor the number and the dot stay");
   assert.equal(Number(/100% - (\d+)px/.exec(label.flexBasis)[1]), WIDEST_LEAD,
