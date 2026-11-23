@@ -167,7 +167,8 @@ test("flat and grouped strips share their width: tabs shrink evenly to a floor, 
       assert.deepEqual([style.flexGrow, style.flexShrink, style.flexBasis], ["1", "1", "0px"], "equal shares from one zero basis");
       assert.equal(style.maxWidth, "fit-content", "never wider than its natural width");
       assert.equal(style.minWidth, "var(--tab-min)", "the floor holds in group strips too");
-      assert.equal(style.getPropertyValue("--tab-min"), "181px", "the number, the dot, \"oats-…\" and an 8-character tail stay visible");
+      assert.equal(style.getPropertyValue("--tab-min"), tabEl.querySelector(".tab-dot") ? "181px" : "176px",
+        "the number, the status slot (a terminal tab's), \"oats-…\" and an 8-character tail stay visible");
       assert.equal(style.getPropertyValue("--tab-max"), "280px", "the Redesign v3 long-label cap");
       assert.equal(style.getPropertyValue("--tab-chrome"), "44px", "padding 12 + 4, gap 8 and the 20px close (slice 3d's pills: no border)");
       assert.equal(style.whiteSpace, "nowrap");

@@ -190,6 +190,11 @@ test("CSS: the glyph fills the dot's 12px slot (never clipped, the name never mo
   // stays on the first line, the one the trigger shows, at every width down to the floor.
   const reserve = Number(rule(".tab-label").match(/100% - (\d+)px/)?.[1]);
   assert.ok(7 + 8 + 8 + px(attn, "width") <= reserve, `number, gap and slot fit the label's ${reserve}px reserve`);
+  // The slot's 5px goes on the floor of a tab that has one, in either state, and on no other tab: a file, brain or
+  // view tab (its icon leads, no slot) keeps its floor, so its strip fits as many tabs as before.
+  assert.match(css, /\n\.tab \{\n  --tab-min: 176px;/, "the floor of a tab with no status slot");
+  assert.match(css, /\n\.tab:has\(> \.tab-trigger > :is\(\.tab-dot, \.tab-attn\)\) \{ --tab-min: 181px; \}/,
+    "the floor of a tab with one, the same with the dot or the glyph");
   assert.match(attn, /flex: none/); assert.match(attn, /color: var\(--warn\)/);
   assert.doesNotMatch(attn, /animation|transition|opacity/);
   assert.match(css, /\.tab-attn > \.shell-icon \{ width: 12px; height: 12px; \}/);

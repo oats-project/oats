@@ -559,21 +559,24 @@ body {
    never exceeds the design's 280px long-label cap. Under pressure they shrink
    evenly down to --tab-min; below that the strip scrolls. The full name stays in
    the trigger's title and accessible name.
-   --tab-min = 181px (168px before slice 3d, 176px before the 12px status slot), measured live at 12.5px in bold in
-   the System font, a budget the regular weight of slice 3d's tabs never exceeds: less --tab-chrome (44px since slice
-   3d's pills) the trigger keeps 137px; the number leads (slice 3d, the prototype's "1 name ●": about 7px and its 8px
+   --tab-min = 181px on a tab with a status slot (a terminal tab; 168px before slice 3d, 176px before the 12px slot),
+   measured live at 12.5px in bold in the System font, a budget the regular weight of slice 3d's tabs never exceeds:
+   less --tab-chrome (44px since slice 3d's pills) the trigger keeps 137px; the number leads (slice 3d, the prototype's "1 name ●": about 7px and its 8px
    gap), the 12px status slot (the dot or the Needs input glyph, below) and its 8px gap follow the name, then 102px
    of name: the start and an ellipsis ("oats-…", 44px) and the protected 8-character tail (the widest real one,
-   "awn-flow", is 57px), so a shrunk tab reads "oats-…palette" (middle truncation, below).
+   "awn-flow", is 57px), so a shrunk tab reads "oats-…palette" (middle truncation, below). A tab with no slot (a file,
+   brain or view tab: its icon leads instead) keeps 176px, so its strip fits as many as it did.
    The close keeps its room on every tab; it shows on the active, a hovered and a focused one (below). */
 .tab {
-  --tab-min: 181px; --tab-max: 280px;
+  --tab-min: 176px; --tab-max: 280px;
   --tab-chrome: 44px; /* padding 12 + 4, gap 8, close 20: what the trigger cannot use */
   --tab-name-min: 102px; /* the name the floor budgets: --tab-min less --tab-chrome, the number and its gap (7 + 8), the status slot and its gap (12 + 8) */
   display: flex; flex: 1 1 0px; align-items: center; gap: 8px; min-width: var(--tab-min); max-width: fit-content;
   height: 28px; white-space: nowrap; padding: 0 4px 0 12px; background: transparent; border-radius: 8px;
   color: var(--muted); font-size: 12.5px;
 }
+/* The status slot's floor: in either state, so the floor never changes when an agent starts or stops waiting. */
+.tab:has(> .tab-trigger > :is(.tab-dot, .tab-attn)) { --tab-min: 181px; }
 .tab[hidden] { display: none; }
 .tab:hover { background: var(--surface); }
 /* The active tab is the prototype's: the raised fill and the bright ink, its number in the accent; no edge, no bold. */
