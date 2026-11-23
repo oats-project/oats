@@ -374,7 +374,7 @@ takes a private-address registry only from it, never from aw's files (aw's
 admin key (principle 2). The ruling above restores a credential's server authority; it
 grants no exception to principle 2.
 - The OATS deployment owner agreed to the person-run P6 step on 2026-11-21 (relayed by their
-  side in mail `c0a90d92`; their direct word to it is mail `348d4f53`).
+  side in mails `c0a90d92` and `348d4f53`; the owner gave it directly in that side's session).
 - Use `--cert-id`, with the exact certificate of the root's membership in that team.
 
 **OPEN R: whether to allow delegation later.** An agent running P6 with an owner key the
