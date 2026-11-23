@@ -52,8 +52,8 @@ Every behaviour below is pinned at **the 1.36.59 cut SHA**: aweb `b9c015732416`,
    - Leaving them alone is the deployment owner's choice. OATS doesn't respawn or re-sign
      them.
 4. **Attribution grants no access.** No OATS permission or access decision depends on the
-   human. The verdict is read and shown, and it selects two mechanical things: P4's
-   `--parent` route and connect's refusal of a chained inviter (§4).
+   human. The verdict is read and shown, and informs the P4 parent route, connect's
+   chained-inviter refusal, and pending-mint classification and retention (§4).
 5. **aw's answer is the truth.** OATS copies aw's verdicts and refusals as aw gives them. It
    reads them only from aw's `--json` fields (§5), never from prose.
 
@@ -63,14 +63,15 @@ Every behaviour below is pinned at **the 1.36.59 cut SHA**: aweb `b9c015732416`,
 |---|---|---|---|
 | P1 | `aw --identity-home <root>/.aw id parent request --domain D --parent H --invitation-id I --out request.json` | An agent, in the root's home, during adoption, with the root's own key | Documented step (PR b). D, H and I are copied from the dashboard's invitation, never derived. Writes and retains the request. Only a genuinely chainless root, or one parented directly by its namespace, can be adopted. A root with person ancestry or an agent parent can't. |
 | P2 | `aw --identity-home <root>/.aw id parent import response.json --domain D` | An agent, in the root's home | Documented step (PR b). Verifies and installs the exact signed response. If these steps become machine-consumed, they add `--json` and follow §4's refusal rules. |
-| P3 | `aw init --join-from=<root> --join-team=<T> --name=<alias> --json --do-not-touch-agents-md` (oats-aweb `bin/oats-aweb.mjs:2541`), `<root>` being the root's workspace directory | The provider's spawn hook, on the root's host, as the deployment's user | Primary identity of every spawned instance (unchanged). After adoption, aw signs the child under the root through the mint's same-machine hosted issuer link. |
-| P4 | `aw team invite --team-id <T> --json` with the root as the selected identity, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local [--parent <root>/.aw] --json`, the same token on stdin | The provider, joining an instance to an extra team; `<home>/.aweb-identity-<label>` is fresh, or the same retained target on retry | Joined-team identities. aweb confirms `--parent` as the supported, unattended route (native agent-to-agent exchange through a token-scoped creator link, same user and HOME). The child proves the invite's human before membership is submitted. `nearest_human` selects the explicit `--parent` path. That is decided by one bounded P5 read of `<root>/.aw` at join time, falling back to C3's record when the read is `unavailable`. Otherwise `--parent` is omitted: a genuinely chainless root's join is unchanged, and a chained `no_human` root's same-machine join completes through the retained mint link without it. An adopted root on an aw below 1.36.59 stops before minting any invite. That stop is an oats-aweb diagnostic with an OATS-owned code, and a README line names the fix. |
+| P3 | `aw init --join-from=<root> --join-team=<T> --name=<alias> --json --do-not-touch-agents-md` (oats-aweb `5849637f`, `bin/oats-aweb.mjs:3031`), `<root>` being the root's workspace directory | The provider's spawn hook, on the root's host, as the deployment's user | Primary identity mint for newly minted LOCAL instances (unchanged). After adoption, aw signs the child under the root through the mint's same-machine hosted issuer link. |
+| P4 | `aw team invite --team-id <T> --json` with the root as the selected identity, then `aw --identity-home <home>/.aweb-identity-<label> id team accept-invite --token-stdin --name <alias> --local [--parent <root>/.aw] --json`, the same token on stdin | The provider, joining an instance to an extra team; `<home>/.aweb-identity-<label>` is fresh, or the same retained target on retry | Joined-team identities. aweb confirms `--parent` as the supported, unattended route (native agent-to-agent exchange through a token-scoped creator link, same user and HOME). The child proves the invite's human before membership is submitted. `nearest_human` selects the explicit `--parent` path. That is decided by one bounded P5 read of `<root>/.aw` at join time, falling back to C3's record when the read is `unavailable` or fails. Otherwise `--parent` is omitted: a genuinely chainless root's join is unchanged, and a chained `no_human` root's same-machine join completes through the retained mint link without it. An adopted root on an aw below 1.36.59 stops before minting any invite. That stop is an oats-aweb diagnostic with an OATS-owned code, and a README line names the fix. |
 | P5 | `aw --identity-home <home>/.aw who --json`, plus `--registry <origin>` when the deployment sets a registry (§4 "Registry") | The provider | C1 and C2 (§4). |
 | P6 | `aw id team remove-member --namespace D --team NAME --cert-id C [--aweb-url URL] --json` (or `--member`), with a team-scoped owner/admin API key from `--api-key` or `AWEB_API_KEY`, calling `/api/v1/teams/{team_id}/agents/remove-member` | The person, from a terminal (§6) | Membership removal (§6). The documented person-run CLI uses the setup key. The server also accepts signed-in person authority for the same route. A person's signing key is a separate credential. |
 
 Person's steps in Cloud (dashboard, signed in, the root's team selected, from the root's
 Chat or Messages pane):
-1. **Adopt**, which creates invitation I and shows I, H and D.
+1. **Adopt** opens the dialog. **Adopt agent** creates invitation I and shows the request
+   command with I, H and D.
 2. **Upload request.json**, then **Approve and prepare response**.
 3. **Download response.json**.
 
@@ -78,6 +79,8 @@ Preconditions:
 - the person has claimed a human ID;
 - they have an active account and current membership of the root's team. Both are required
   in every case below;
+- the root's team has a live owning organisation. Without one nobody can adopt (403
+  `agent_control_organization_unavailable`, checked before membership and creator);
 - they hold the authority to adopt (Cloud `4b5b7820`, `services/adoption_authority.py`,
   `human_agent_adoptions.py`):
   - Cloud's recorded creator of the root (`cloud_workspace_metadata.owner_user_id`) is
@@ -107,7 +110,8 @@ OATS doesn't use, and doesn't build on, these aw primitives:
   - `human_id` is set only on `nearest_human`.
   - `chain[{id,kind}]` is present only when the chain is verified.
   - `unavailable` (`evidence_unavailable`, `status_expired`) is a value, not a command
-    failure.
+    failure. With `--registry`, a failed DNS lookup or a contradicting DNS record is a command
+    failure. OATS treats a failed read as no answer, like `unavailable`.
   - A `did:key` home that presents no chain reads `unknown` / `legacy_no_chain`. A chain
     with missing or stale evidence reads `unavailable`. A rejected chain reads `unknown` with
     its own reason.
@@ -252,9 +256,11 @@ takes a private-address registry only from it, never from aw's files (aw's
 `registry_operator_origin` included), and passes it to aw by name. Every P5 call passes it
 explicitly, as `--registry <origin>`; with no setting, the argv has no flag. oats-aweb passes
 it from `5849637f` (oats-aweb#326).
-- A private deployment names its registry in DNS or in the setting.
+- Publish the namespace authority in DNS. For a registry at a non-public address, set the
+  registry origin in `oats-local.yaml`. If DNS also names a non-default registry, the two must
+  agree.
 
-**Reading aw's refusals** (aweb's `docs/cli-integration-contract.md` at `e6e9f099c5`).
+**Reading aw's refusals** (aweb's `docs/cli-integration-contract.md` at `b9c015732`).
 - PR a branches only on the exit status and the structured fields: `error.code`,
   `error.http_status` and `error.reason`.
 - `error.message` is for display only. A direct ID-certificate refusal carries a bare reason
@@ -289,7 +295,7 @@ it from `5849637f` (oats-aweb#326).
     adopted separately.
   - **Connect** has the inviting root on this host. It reads that root with P5 before
     minting the invite, and refuses a chained inviter with `E_CONNECT_CHAINED_INVITER`. It
-    doesn't run the file exchange; an operator does that by hand. An `unavailable` read falls back to C3's record, or with none proceeds with a
+    doesn't run the file exchange; an operator does that by hand. An `unavailable` or failed read falls back to C3's record, or with none proceeds with a
     warning.
   - **`setup --join`** with only a token can't read the inviter. aw enforces the rule at
     accept, and OATS keeps the pending home (§4 "Signature pending").
