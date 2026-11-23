@@ -173,18 +173,23 @@ test("the title's start carries its date when the claim is not from today (#559)
   assert.match(tab.triggerEl.title, / since Oct \d{1,2}, \d\d:\d\d$/);
 });
 
-test("CSS: the glyph follows the name whole (never clipped, never wrapped), in --warn, never animated", () => {
+test("CSS: the glyph fills the dot's 12px slot (never clipped, the name never moves), in --warn, never animated", () => {
   const rule = name => css.match(new RegExp(`${name.replace(".", "\\.")} \\{([^}]*)\\}`))?.[1] || "";
-  const px = (body, prop) => Number(body.match(new RegExp(`(?:^|[;\\s])${prop}:\\s*(-?\\d+)px`))?.[1]);
-  const attn = rule(".tab-attn");
-  // The trigger clips its overflow: a negative margin would cut the glyph's end off when it ends the line.
+  const px = (body, prop) => Number(body.match(new RegExp(`(?:^|[;\\s])${prop}:\\s*(-?[\\d.]+)px`))?.[1]);
+  const attn = rule(".tab-attn"), dot = rule(".tab-dot");
+  // The trigger clips its overflow: a glyph overhanging its slot (the old -5px end margin) lost its end whenever it
+  // ended the line (no branch, or a branch squeezed to nothing).
   assert.match(rule(".tab-trigger"), /overflow: hidden/);
-  assert.doesNotMatch(attn, /margin/, "the glyph advances its whole width");
-  assert.match(css, /\.tab-dot, \.tab-attn \{ order: 1; \}/, "after the name, so the name never moves");
-  // The label's flex basis reserves room for the number and its gap (7 + 8), then the gap and the glyph: the glyph
+  assert.doesNotMatch(attn, /margin/, "the glyph advances its whole width, no overhang");
+  // The same advance in both states, so the name gets the same room whichever mark shows: a narrower dot let a
+  // constrained name grow into 5px the glyph then took back, and its visible tail jumped. The dot is centred in it.
+  const dotMargin = dot.match(/(?:^|[;\s])margin: 0 ([\d.]+)px;/)?.[1];
+  assert.equal(px(dot, "width") + 2 * Number(dotMargin), px(attn, "width"), "the 7px dot + 2.5px each side = the 12px glyph");
+  assert.match(css, /\.tab-dot, \.tab-attn \{ order: 1; \}/, "after the name");
+  // The label's flex basis reserves room for the number and its gap (7 + 8), then the gap and the slot: the glyph
   // stays on the first line, the one the trigger shows, at every width down to the floor.
   const reserve = Number(rule(".tab-label").match(/100% - (\d+)px/)?.[1]);
-  assert.ok(7 + 8 + 8 + px(attn, "width") <= reserve, `number, gap and glyph fit the label's ${reserve}px reserve`);
+  assert.ok(7 + 8 + 8 + px(attn, "width") <= reserve, `number, gap and slot fit the label's ${reserve}px reserve`);
   assert.match(attn, /flex: none/); assert.match(attn, /color: var\(--warn\)/);
   assert.doesNotMatch(attn, /animation|transition|opacity/);
   assert.match(css, /\.tab-attn > \.shell-icon \{ width: 12px; height: 12px; \}/);

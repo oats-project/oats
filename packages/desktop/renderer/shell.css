@@ -559,17 +559,17 @@ body {
    never exceeds the design's 280px long-label cap. Under pressure they shrink
    evenly down to --tab-min; below that the strip scrolls. The full name stays in
    the trigger's title and accessible name.
-   --tab-min = 176px (168px before slice 3d), measured live at 12.5px in bold in the System font, a budget the
-   regular weight of slice 3d's tabs never exceeds: less --tab-chrome (44px since slice 3d's pills) the trigger
-   keeps 132px; the number leads (slice 3d, the prototype's "1 name ●": about 7px and its 8px gap), the 7px status
-   dot and its 8px gap follow the name, then 102px of name: the start and an ellipsis ("oats-…", 44px) and the
-   protected 8-character tail (the widest real one, "awn-flow", is 57px), so a
-   shrunk tab reads "oats-…palette" (middle truncation, below).
+   --tab-min = 181px (168px before slice 3d, 176px before the 12px status slot), measured live at 12.5px in bold in
+   the System font, a budget the regular weight of slice 3d's tabs never exceeds: less --tab-chrome (44px since slice
+   3d's pills) the trigger keeps 137px; the number leads (slice 3d, the prototype's "1 name ●": about 7px and its 8px
+   gap), the 12px status slot (the dot or the Needs input glyph, below) and its 8px gap follow the name, then 102px
+   of name: the start and an ellipsis ("oats-…", 44px) and the protected 8-character tail (the widest real one,
+   "awn-flow", is 57px), so a shrunk tab reads "oats-…palette" (middle truncation, below).
    The close keeps its room on every tab; it shows on the active, a hovered and a focused one (below). */
 .tab {
-  --tab-min: 176px; --tab-max: 280px;
+  --tab-min: 181px; --tab-max: 280px;
   --tab-chrome: 44px; /* padding 12 + 4, gap 8, close 20: what the trigger cannot use */
-  --tab-name-min: 102px; /* the name the floor budgets: --tab-min less --tab-chrome, the number and its gap (7 + 8), the dot and its gap (7 + 8) */
+  --tab-name-min: 102px; /* the name the floor budgets: --tab-min less --tab-chrome, the number and its gap (7 + 8), the status slot and its gap (12 + 8) */
   display: flex; flex: 1 1 0px; align-items: center; gap: 8px; min-width: var(--tab-min); max-width: fit-content;
   height: 28px; white-space: nowrap; padding: 0 4px 0 12px; background: transparent; border-radius: 8px;
   color: var(--muted); font-size: 12.5px;
@@ -599,15 +599,15 @@ body {
                min-width: 0; flex: 1 1 auto;
                max-width: calc(var(--tab-max) - var(--tab-chrome)); overflow: hidden; padding: 0; text-align: left; }
 .tab-trigger::before { content: ""; flex: none; width: 0; height: 100%; margin-right: -8px; }
-.tab-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--accent); }
+.tab-dot { width: 7px; height: 7px; flex: none; margin: 0 2.5px; border-radius: 50%; background: var(--accent); }
 .tab-dot.off { box-sizing: border-box; background: transparent; border: 1.5px solid var(--faint); }
 .tab-dot.on[data-instance-color] { background: var(--instance-color); }
 .tab-dot.off[data-instance-color] { border-color: var(--instance-color); }
-/* Needs input (#558): the alert glyph takes the dot's slot, after the name; --warn as a graphic (≥ 3:1 on every tab
-   background). It advances its whole 12px, never less: the trigger clips its overflow, so a negative end margin cut
-   the glyph's end off whenever it ended the line (no branch, or a branch squeezed to nothing). The name before it
-   never moves; only the branch after it gives way. The label's reserve (100% - 37px, below) keeps the number, the gap
-   and the glyph (15 + 8 + 12) on the first line at the floor. */
+/* Needs input (#558): the alert glyph takes the dot's place, after the name; --warn as a graphic (≥ 3:1 on every tab
+   background). The status slot is 12px in both states: the 7px dot is centred in it (2.5px each side) and the 12px
+   glyph fills it, so the mark's centre stays put and the name gets the same room whichever shows (a narrower dot let
+   the name grow into 5px the glyph then took back). No negative margin: the trigger clips its overflow, so a glyph
+   overhanging its slot lost its end whenever it ended the line (no branch, or a branch squeezed to nothing). */
 .tab-attn { width: 12px; height: 12px; flex: none; display: grid; place-items: center; color: var(--warn); }
 .tab-attn > .shell-icon { width: 12px; height: 12px; }
 .tab-icon { flex: none; display: grid; place-items: center; color: var(--muted); }
