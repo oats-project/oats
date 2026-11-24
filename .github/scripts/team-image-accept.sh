@@ -60,6 +60,23 @@ docker network create --internal --ipv6=false \
 "${compose[@]}" up -d --wait --wait-timeout 120
 container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64
 
+# Admission must read the resolver as the runtime UID, not container root.
+# These are synthetic root-owned fixture files; no service credential is used.
+sudo chmod 600 "$RESOLV_CONF_FILE"
+if container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64 > "$fixture/unreadable-resolver.log" 2>&1; then
+  echo 'Acceptance admitted a root-only resolver' >&2
+  exit 1
+fi
+grep -F 'E_AGENT_RESOLVER: /etc/resolv.conf must be readable and non-empty by the runtime UID' "$fixture/unreadable-resolver.log"
+sudo chmod 644 "$RESOLV_CONF_FILE"
+sudo truncate -s 0 "$RESOLV_CONF_FILE"
+if container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64 > "$fixture/empty-resolver.log" 2>&1; then
+  echo 'Acceptance admitted an empty resolver' >&2
+  exit 1
+fi
+grep -F 'E_AGENT_RESOLVER: /etc/resolv.conf must be readable and non-empty by the runtime UID' "$fixture/empty-resolver.log"
+printf 'nameserver 127.0.0.1\n' | sudo tee "$RESOLV_CONF_FILE" > /dev/null
+
 # The source is operator-provisioned synthetic data, outside writable state.
 # Accept the base first: it must have no /inputs, then accept the fragment.
 export TEAM_INPUT_DIR="$fixture/inputs"

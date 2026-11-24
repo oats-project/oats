@@ -22,3 +22,12 @@
   with `-f container/agent/egress/Dockerfile`, using its Dockerfile-specific
   allowlist. Extract each image into its own directory and preserve the tree
   hierarchy; egress scripts and fragments live below `egress/`.
+- Optional acceptance inputs set to `""` mean unset; include optional mount
+  fragments only for non-empty sources. Every deployment creating its own
+  agents/services networks must run the extracted `egress/preflight-network.mjs`
+  immediately beforehand with all six network inputs and require exit 0 before
+  sourcing its output or creating networks; remote contexts refuse.
+- Consumers must refuse agent/egress pairs with different manifest source
+  commits or different shared-file hashes. Acceptance now checks resolver
+  readability and non-empty content as the runtime UID; failure is
+  `E_AGENT_RESOLVER: /etc/resolv.conf must be readable and non-empty by the runtime UID`.

@@ -55,7 +55,7 @@ owner authority and service credentials stay outside the container. A
 From a checkout at the reviewed commit:
 
 ```sh
-env -i PATH="$PATH" docker build --platform linux/amd64 \
+env -i PATH="$PATH" docker build --platform linux/arm64 \
   --build-arg "TEAM_IMAGE_SOURCE_SHA=$(git rev-parse HEAD)" \
   -t oats-agent:reviewed container/agent
 ```
@@ -135,7 +135,7 @@ public-key file modes. The resolver must be readable by the runtime user.
 | `TEAM_STATE_DIR` → `/state` | Runtime UID:GID; writable persistent state; `home`, `ssh`, `deploy` created 0700 |
 | `TEAM_LOGIN_DIR` → `/etc/agent-login` | Read-only; target/live evidence requires root:runtime-GID 0750; optional `claude-token` root:runtime-GID 0440 |
 | `AUTHORIZED_KEYS_FILE` → `/etc/agent-ssh/authorized_keys` | Read-only root-owned regular file, 0644 |
-| `RESOLV_CONF_FILE` → `/etc/resolv.conf` | Read-only operator-provided resolver |
+| `RESOLV_CONF_FILE` → `/etc/resolv.conf` | Read-only operator-provided resolver; readable and non-empty to the runtime UID |
 | `/tmp` | Writable tmpfs, mode 1777, `nosuid,nodev`, bounded by `AGENT_TMP_SIZE` |
 
 Optional fragments add `/work` (writable runtime-owned work), `/inputs`
@@ -201,6 +201,16 @@ unlisted DNS refusal and a local TLS listener. The supervisor stops the componen
 if either child fails. Health alone grants no network admission: the wrapper
 must pass the read-only engine-host network preflight before creating networks,
 then the boundary probe and applicable ingress probe before agents start.
+Every deployment that creates its own agents/services networks must perform
+this preflight, including wrappers other than `compose.minimal.yaml`. From the
+extracted egress run directory on the Linux engine host, supply all six inputs
+`AGENTS_SUBNET`, `AGENTS_GATEWAY`, `AGENT_IP`, `EGRESS_ADDRESS`, `SERVICES_SUBNET`,
+`SERVICES_GATEWAY`, then run `node egress/preflight-network.mjs` immediately
+before network creation. Require exit 0 before sourcing its six assignments or
+creating anything. Remote contexts and Docker connection overrides are refused.
+Self-owned networks must preserve the wrapper shape: agents internal, IPv4-only
+and isolated gateway mode, with only the proxy attached to both agents and
+services. The boundary probe verifies this shape before admission.
 ([Health](../container/agent/egress/health.mjs),
 [supervisor](../container/agent/egress/supervisor.mjs),
 [Compose](../container/agent/egress/compose.egress.yaml),
@@ -237,7 +247,11 @@ signature or another deployment pin.
 On the deployment host, extract without starting the image. Run once for each
 pinned digest, using separate run directories (`DEPLOY_KIND=egress` for egress).
 The Node 22 verifier below compares the complete directory with the manifest,
-including hashes; retain the source SHA and compare it across both manifests.
+including hashes. An agent/egress pair from different source commits is never
+valid: the consumer must refuse differing `source` values or differing hashes
+for any shared file (`accept.mjs`, `supervisor.mjs`, `compose.agent.yaml`), even
+when each image verifies independently. The pair check follows the individual
+file verification below.
 `docker cp` gives the host copy the invoking user's ownership; verification
 checks content, not that the extracted files retain the image's root ownership
 or modes.
@@ -275,6 +289,24 @@ console.log(image,manifest.source,manifest.installed);
 JS
 ```
 
+After extracting and verifying both sets, refuse a mixed pair before any
+network creation or admission. This also catches missing shared files.
+([CI pair verifier](../.github/scripts/team-image-deploy-check.mjs).)
+
+```sh
+node --input-type=module <<'JS'
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const agent=JSON.parse(readFileSync('run/agent/manifest.json'));
+const egress=JSON.parse(readFileSync('run/egress/manifest.json'));
+assert.equal(agent.source,egress.source,'agent and egress must come from the same source commit');
+for(const file of ['accept.mjs','supervisor.mjs','compose.agent.yaml']) {
+  assert.match(agent.files[file],/^sha256:[a-f0-9]{64}$/);
+  assert.equal(agent.files[file],egress.files[file],'shared deploy file: '+file);
+}
+JS
+```
+
 ### Versioned probe and live-lab inputs
 
 From the extracted egress directory, run
@@ -303,12 +335,23 @@ token or without `--claude`, inference reports `NOT RUN`.
 [acceptance implementation](../container/agent/accept.mjs).)
 
 Acceptance consumes these plain host environment inputs, matching the reviewed
-Compose configuration. It resolves their paths on the Docker engine host.
+Compose configuration. Every optional input set to `""` is treated as unset;
+empty UID/GID values select the 20001 defaults via both acceptance and Compose
+`${VAR:-default}`. Include an optional mount fragment only when its source input
+is non-empty; the fragment's `${VAR:?...}` refuses an absent or empty source.
+An outbox directory requires a non-empty outbox GID. Acceptance resolves host
+paths on the Docker engine host.
 `local` permits the builder architecture and its local credential modes;
 `target-amd64` and `live-lab` both require x64 and the target login ownership
 listed above. Mode labels do not broaden the evidence: platform bypass,
 admitted-seat spawn, viewer, sync, mail/chat and governance remain `NOT RUN`.
-([Input and evidence checks](../container/agent/accept.mjs).)
+It also reads `/etc/resolv.conf` inside the running container as the runtime
+UID and refuses an unreadable or empty file with
+`E_AGENT_RESOLVER: /etc/resolv.conf must be readable and non-empty by the runtime UID`.
+([Input and evidence checks](../container/agent/accept.mjs),
+[empty-input regression](../test/agent-container.test.mjs),
+[resolver regression](../test/team-image-deploy.test.mjs),
+[real root:0600/empty resolver fixture](../.github/scripts/team-image-accept.sh).)
 
 | Inputs | Contract |
 | --- | --- |

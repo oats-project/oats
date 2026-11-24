@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { copyFileSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import * as fs from "node:fs";
+import { appendFileSync, chmodSync, copyFileSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
@@ -12,6 +13,8 @@ import { verifyDeploy, checkExtractedScripts } from "../.github/scripts/team-ima
 import { checkRelease } from "../.github/scripts/check-team-image-release.mjs";
 import { checkPrImageLock, PR_KERNEL_SPEC } from "../.github/scripts/team-image-pr-context.mjs";
 import { probeComposeBoundary } from "../container/agent/egress/probe-compose-boundary.mjs";
+import * as acceptance from "../container/agent/accept.mjs";
+import * as deployCheck from "../.github/scripts/team-image-deploy-check.mjs";
 
 const source = fileURLToPath(new URL("../container/agent/", import.meta.url));
 const sha = "a".repeat(40);
@@ -145,4 +148,37 @@ test("committed image pins pass the unchanged release and packed baseline guards
     return [name, { name, ...value, dist: { tarball: value.resolved, integrity: value.integrity } }];
   }));
   checkPrImageLock({ sourceManifest: manifest, sourceLock: lock, manifest: candidate, lock: candidateLock, kernel, metadata });
+});
+
+test("every extracted egress CLI entrypoint is exercised", t => {
+  for (const script of ["preflight-network.mjs", "probe-runtime.mjs"]) {
+    const directory = stage(t, "egress");
+    appendFileSync(join(directory, "egress", script), '\nif (process.argv[2] === "--help" && import.meta.url === pathToFileURL(process.argv[1]).href) process.stderr.write("broken entrypoint\\n");\n');
+    assert.throws(() => checkExtractedScripts(directory, "egress"), /broken entrypoint/, `${script} must be executed`);
+  }
+});
+
+test("a deploy pair refuses mixed source commits and differing shared files", () => {
+  const files = Object.fromEntries(["accept.mjs", "compose.agent.yaml", "supervisor.mjs"].map(name => [name, "sha256:" + "b".repeat(64)]));
+  const agent = { image: "agent", source: sha, files }, egress = { image: "egress", source: sha, files: { ...files } };
+  assert.throws(() => deployCheck.verifyDeployPair(agent, { ...egress, source: "c".repeat(40) }), /same source commit/);
+  for (const name of Object.keys(files)) assert.throws(() => deployCheck.verifyDeployPair(agent, { ...egress, files: { ...files, [name]: "sha256:" + "d".repeat(64) } }), /shared deploy file/);
+  deployCheck.verifyDeployPair(agent, egress);
+});
+
+test("resolver admission requires a readable non-empty file", t => {
+  const directory = mkdtempSync(join(tmpdir(), "oats-resolver-test-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, "resolv.conf");
+  const refused = () => assert.throws(() => acceptance.resolverCheck(fs, path), error => {
+    assert.equal(error.code, "E_AGENT_RESOLVER");
+    assert.equal(error.message, "E_AGENT_RESOLVER: /etc/resolv.conf must be readable and non-empty by the runtime UID");
+    return true;
+  });
+  writeFileSync(path, "");
+  refused();
+  writeFileSync(path, "nameserver 127.0.0.1\n");
+  chmodSync(path, 0);
+  try { refused(); } finally { chmodSync(path, 0o644); }
+  assert.equal(acceptance.resolverCheck(fs, path), "resolver readable and non-empty by runtime UID");
 });

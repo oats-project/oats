@@ -40,7 +40,26 @@ export function checkExtractedScripts(directory, image) {
       assert.match(result.stderr, /E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1; found 2;/);
       assert.equal(result.stdout, "");
     } finally { rmSync(plan); }
+    for (const [name, diagnostic] of [
+      ["preflight-network.mjs", "egress preflight: run preflight without arguments on the Linux Docker engine host\n"],
+      ["probe-runtime.mjs", "egress boundary: cannot emit runtime probe (values withheld)\n"],
+    ]) {
+      const result = spawnSync(process.execPath, [join(directory, "egress", name), "--help"], { cwd: directory, env, encoding: "utf8", timeout: 10000 });
+      assert.equal(result.status, 1, result.stderr);
+      assert.equal(result.stderr, diagnostic);
+      assert.equal(result.stdout, "");
+    }
   }
+}
+
+export function verifyDeployPair(agent, egress) {
+  assert.equal(agent.image, "agent");
+  assert.equal(egress.image, "egress");
+  assert.match(agent.source, /^[a-f0-9]{40}$/);
+  assert.equal(agent.source, egress.source, "agent and egress must come from the same source commit");
+  const shared = Object.keys(agent.files).filter(name => Object.hasOwn(egress.files, name));
+  assert.deepEqual(shared.sort(), ["accept.mjs", "compose.agent.yaml", "supervisor.mjs"]);
+  for (const name of shared) assert.equal(agent.files[name], egress.files[name], `shared deploy file: ${name}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -81,9 +100,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       checkExtractedScripts(directory, image);
       console.log(`${image}: ${id}; manifest, ownership, installed versions and extracted scripts PASS\n${manifest}`);
     }
-    const shared = Object.keys(manifests.agent.files).filter(name => Object.hasOwn(manifests.egress.files, name));
-    assert.deepEqual(shared.sort(), ["accept.mjs", "compose.agent.yaml", "supervisor.mjs"]);
-    for (const name of shared) assert.equal(manifests.agent.files[name], manifests.egress.files[name], `shared deploy file: ${name}`);
+    verifyDeployPair(manifests.agent, manifests.egress);
     assert.deepEqual(readdirSync(root).sort(), ["agent", "egress"]);
   } finally { rmSync(root, { recursive: true, force: true }); }
 }

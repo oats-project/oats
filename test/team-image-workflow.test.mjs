@@ -72,6 +72,9 @@ test("the shared acceptance fixture runs the image owner's acceptance against Co
   assert.match(script, /container\/agent\/accept\.sh "oats-agent-\$TEAM" --evidence target-amd64/);
   assert.match(script, /trap cleanup EXIT/);
   assert.doesNotMatch(script, /claude-token|CLAUDE_CODE_OAUTH_TOKEN|docker\.sock/);
+  assert.match(script, /sudo chmod 600 "\$RESOLV_CONF_FILE"/);
+  assert.match(script, /sudo truncate -s 0 "\$RESOLV_CONF_FILE"/);
+  assert.equal((script.match(/grep -F 'E_AGENT_RESOLVER:/g) ?? []).length, 2, "both negative fixtures require the resolver refusal");
 });
 
 test("image publication follows the OATS release and stays disabled until the target is confirmed", () => {
@@ -328,9 +331,9 @@ test("PR verification uses the available Skopeo package and records its version"
 
 test("real image acceptance exercises optional inputs and refuses missing host sources", () => {
   const script = read(".github/scripts/team-image-accept.sh");
-  const base = script.indexOf('container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64');
+  const base = script.indexOf('container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64\n');
   const fragment = script.indexOf("compose.agent.inputs.yaml");
-  const input = script.indexOf('container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64', base + 1);
+  const input = script.indexOf('container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64\n', base + 1);
   assert.ok(base >= 0 && fragment > base && input > fragment, "base is accepted before the input fragment is added and accepted");
   assert.match(script, /unset TEAM_WORK_DIR TEAM_INPUT_DIR AGENT_CA_FILE AGENT_MIRRORS_DIR/);
   assert.match(script, /export TEAM_INPUT_DIR="\$fixture\/inputs"/);

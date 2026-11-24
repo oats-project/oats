@@ -233,7 +233,10 @@ IPv4-only and uses isolated gateway mode; the proxy alone connects it to
 eight addresses, distinct usable endpoints and disjoint agent/services ranges.
 Do not overlay an extra agent network or replace isolated mode.
 
-On the **Linux Docker engine host**, choose candidate values and run the
+Every deployment that creates its own agents/services networks runs this
+preflight, including wrappers other than the minimal example. From the extracted
+egress directory, use `node egress/preflight-network.mjs`. On the
+**Linux Docker engine host**, choose candidate values and run the
 read-only preflight immediately before network creation. These are fictional
 candidate ranges, not defaults or an allocation recommendation:
 
@@ -281,7 +284,9 @@ credentials**. There is no codeload, raw-file, release-asset or other source-fet
 exception to obtain them later. Retain one reviewed source commit for the
 policy compiler/proxy build, this wrapper and the probe, plus the resulting
 proxy and agent image digests and control reports. Do not mix a released proxy
-with an unreviewed wrapper/probe checkout.
+with an unreviewed wrapper/probe checkout. Agent and egress manifests must have
+the same source commit and identical hashes for every shared deploy file;
+a consumer refuses a mixed-source pair even when both images verify separately.
 
 Kubernetes uses the same image and derived policy. An enforcing CNI must restrict
 agent egress to proxy TCP/UDP 53 and TCP 443, and proxy egress to the pinned TLS
