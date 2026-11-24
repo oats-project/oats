@@ -3,13 +3,35 @@ import { parseProviderSettings } from './provider-settings.mjs';
 // imports or file edits: each mutation is followed by an authoritative read.
 import { execFileSync } from 'node:child_process';
 import { isAbsolute, resolve, join } from 'node:path';
-import { realpathSync, existsSync, statSync, mkdirSync } from 'node:fs';
-import { selectedDeployment } from './team-roots.mjs';
+import { realpathSync, existsSync, statSync, lstatSync, mkdirSync } from 'node:fs';
+import { rootInsideInstanceHomeError, selectedDeployment } from './team-roots.mjs';
 import { kernelQueryEnvironment } from './session-readiness.mjs';
 import { sameAwebTeamId, teamKeyIn } from "./aweb-team-id.mjs";
 import { usernameUnavailable, usernameUnavailableCause } from './aw-failure-cause.mjs';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/** Whether a root's `.aw` holds a signup aw started and has not finished, so that re-running
+ *  the same `aw init` resumes it: true, false, or undefined when the journal cannot be
+ *  inspected (a `.aw` this user cannot search). aw's contract (docs/cli-integration-contract.md:42,
+ *  aweb de09a6c3c9, the same code as 1.36.59-rc.5): a valid `.aw/signup-recovery.json` is the
+ *  resumption signal for an interrupted hosted signup, and the original command, retried in
+ *  the same directory with the same AWEB_URL and selections, resumes it, also when a signing
+ *  key and team certificate exist after a failed connect, with no second signup request.
+ *  In aw (de09a6c3c9) the journal is cmd/aw/hosted_signup_recovery.go:21; `aw init` resumes
+ *  it before any other outcome (init.go:707-717, init_signup_recovery.go:24-78) and refuses a
+ *  changed scope, registry, API key or outcome itself; a confirmed signup is not sent again
+ *  (hosted_signup_recovery.go:185-239); the journal is removed only once signer, membership
+ *  and credential are installed (:309-331). Its lock lives in aw's own state (:251-261), and
+ *  1.36.59-rc.4 kept it in `.aw`: never required here. Only the journal's presence is
+ *  read, never its content (it holds the signer). A `.aw` that is not a directory, or whose
+ *  journal is not a regular file, is not a resume. Setup never writes, moves or removes
+ *  anything in that `.aw`. */
+export function signupUnfinished(awDir) {
+  try { if (!lstatSync(awDir).isDirectory()) return false; } catch { return false; }
+  try { return lstatSync(join(awDir, 'signup-recovery.json')).isFile(); }
+  catch (error) { return error.code === 'ENOENT' ? false : undefined; }
+}
 export function setupFailure(code, message, details = {}) {
   return Object.assign(new Error(message), { code, details });
 }
@@ -189,13 +211,23 @@ export async function setupUsernameDefault(options, { normalize, validTeam, ensu
     const raw = rootsKey !== undefined ? settings.roots[rootsKey] : Object.hasOwn(settings, 'root') ? settings.root : deployment;
     if (typeof raw !== 'string' || !isAbsolute(raw)) throw setupFailure('E_SETUP_ROOT', 'selected account root must be absolute; invalid explicit root cannot fall back');
     root = resolve(raw);
+    // Admitted before any effect (aw install, signup): never inside one of this deployment's instance homes.
+    const refused = rootInsideInstanceHomeError({ root, setting: rootsKey !== undefined ? `settings.oats.aweb.roots[${JSON.stringify(rootsKey)}]` : Object.hasOwn(settings, 'root') ? 'settings.oats.aweb.root' : 'the deployment directory', label, deployment, beside: join(resolve(deployment), '.aweb-roots', label) });
+    if (refused) throw refused;
     if (existsSync(root) && !statSync(root).isDirectory()) throw setupFailure('E_SETUP_ROOT', 'selected account root is not a directory');
     kernel = selectedTeamKernel(deployment, env);
     const initial = observe();
     const configuration = teamConfigurationPlan(initial, label, predictedTeam, deployment);
     const aw = await ensureAw({ install: plan ? false : installAw, version: awVersion });
     const usableAw = aw.status === 'ok' || aw.status === 'done';
-    const hasIdentity = existsSync(join(root, '.aw'));
+    // A root holding a signup aw has not finished is not an identity yet: re-running the
+    // same signup resumes it (signupUnfinished). Any other `.aw` is an existing identity.
+    const journal = signupUnfinished(join(root, '.aw'));
+    // Neither a resume nor a membership read can be chosen safely: an aw that keeps no
+    // journal (up to 1.36.58) could sign up a second time into that root.
+    if (journal === undefined) throw setupFailure('E_SETUP_MEMBERSHIP', "selected root's identity directory cannot be searched, so whether aw left an unfinished signup in it is unknown; root retained, no repeated signup: let this user search it, then re-run");
+    const resume = journal === true;
+    const hasIdentity = !resume && existsSync(join(root, '.aw'));
     const readMembership = () => {
       try { if (!statSync(join(root, '.aw')).isDirectory()) throw new Error(); } catch {
         throw setupFailure('E_SETUP_MEMBERSHIP', 'selected root has no readable identity directory; root retained, no repeated signup');
@@ -214,7 +246,7 @@ export async function setupUsernameDefault(options, { normalize, validTeam, ensu
     if (plan) {
       if (hasIdentity && !usableAw) throw setupFailure('E_SETUP_AW', 'aw is required to verify a retained root; plan never installs');
       const team = hasIdentity ? readMembership() : null;
-      return { plan: true, label, predictedTeam, team, root, aw, bootstrap: hasIdentity ? 'reuse' : 'required', configuration };
+      return { plan: true, label, predictedTeam, team, root, aw, bootstrap: hasIdentity ? 'reuse' : resume ? 'resume' : 'required', configuration };
     }
     if (!usableAw) throw setupFailure('E_SETUP_AW', 'aw is missing, below the required floor, or installation failed; check the explicit --install-aw prerequisite');
     if (!hasIdentity) {
@@ -234,7 +266,11 @@ export async function setupUsernameDefault(options, { normalize, validTeam, ensu
           throw setupFailure('E_SETUP_USERNAME_UNAVAILABLE', `${usernameUnavailableCause(reason)}; nothing was created: re-run setup with another --username`);
         }
         steps.push({ step: 'bootstrap', status: 'unconfirmed' });
-        throw setupFailure('E_SETUP_NATIVE', `aw init failed${Number.isInteger(error.status) ? ` (exit ${error.status})` : ''}; output withheld because it handles credentials; root retained`);
+        const exit = `aw init failed${Number.isInteger(error.status) ? ` (exit ${error.status})` : ''}; output withheld because it handles credentials`;
+        // An unknown outcome (a 5xx): aw kept the signup it attempted, and the account may
+        // exist. Only the same command resumes it, with the same signer.
+        if (signupUnfinished(join(root, '.aw')) === true) throw setupFailure('E_SETUP_NATIVE', `${exit}; aw recorded this signup in the root: re-run the same setup command, with the same flags and AWEB_URL, and aw resumes it; root retained`);
+        throw setupFailure('E_SETUP_NATIVE', `${exit}; root retained`);
       }
       steps.push({ step: 'bootstrap', status: 'command-completed' });
     }
@@ -244,7 +280,7 @@ export async function setupUsernameDefault(options, { normalize, validTeam, ensu
     applyTeamConfiguration({ kernel, label, team, deployment, observe, steps });
     return { plan: false, label, team, root, steps, observed, membershipVerified: true };
   } catch (error) {
-    if (!error.code?.startsWith('E_SETUP_')) error = setupFailure('E_SETUP_FAILED', 'username setup failed; details withheld');
+    if (!error.code?.startsWith('E_SETUP_') && error.code !== 'E_ROOT_INSIDE_INSTANCE_HOME') error = setupFailure('E_SETUP_FAILED', 'username setup failed; details withheld');
     if (error.code === 'E_SETUP_POLICY' && !error.details.commands && label && predictedTeam && deployment) {
       error.details.commands = [['oats', 'teams', 'add', label, '--team', predictedTeam, '--dir', deployment], ['oats', 'teams', 'default', label, '--dir', deployment]];
     }

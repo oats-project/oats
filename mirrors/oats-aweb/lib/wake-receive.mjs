@@ -18,6 +18,7 @@ import {basename, dirname, isAbsolute, join, resolve} from 'node:path';
 import {approvedChannelPolicyWarning} from './claude-managed-policy.mjs';
 import { parseVersion, versionAtLeast } from './aw-floor.mjs';
 import { sameAwebTeamId } from "./aweb-team-id.mjs";
+import { retiredKeysMessage } from './retire-key-material.mjs';
 
 const JOINED_EVENT_CLASSES = ['mail', 'chat'];
 // Observation age is advisory; readiness does not certify recent observation.
@@ -300,8 +301,12 @@ function receiveRecord(home) {
  * Old producers lacked delivery/runtime and kept joins only in metadata.
  * `policy` ({root}) relocates the managed-settings read for tests only. */
 export function expectedReceive(home, {delivery = 'channel', policy} = {}) {
-  const captured = receiveRecord(home);
   const fail = message => ({problems: [problem('receive-record-unavailable', message)], warnings: []});
+  // A home whose keys a retire holds, or removed, has no identity to receive as
+  // (awebai/oats-aweb#318): said as such, before its locator reads as broken.
+  const retiring = retiredKeysMessage(home, basename(home));
+  if (retiring) return fail(retiring);
+  const captured = receiveRecord(home);
   if (captured.error) return fail(captured.error);
   if (!directory(home)) return fail('instance home is missing or unreadable; it is not a legacy record');
   const {meta, runtime, backend, identityHome: launchIdentity} = captured;

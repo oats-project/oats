@@ -21,7 +21,7 @@ test("mirrored aweb no-grant retire is complete under the kernel hook contract",
   // must produce its own answer without any identity/service interaction.
   const result = spawnSync(process.execPath, [hook, "retire"], {
     cwd: home, encoding: "utf8", timeout: 10000,
-    env: { PATH: bin, HOME: root, FIXTURE_AW_LOG: calls, OATS_EVENT: "retire", OATS_INSTANCE: "fixture", OATS_HOME: home,
+    env: { PATH: bin, HOME: root, FIXTURE_AW_LOG: calls, OATS_EVENT: "retire", OATS_INSTANCE: "fixture", OATS_HOME: home, OATS_INSTANCE_HOME: home,
       OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_SETTINGS: "{}",
       OATS_META: JSON.stringify({ identity: { mode: "global", resident: "fixture" } }) },
   });
