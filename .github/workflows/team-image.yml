@@ -106,7 +106,7 @@ jobs:
         env:
           ACCEPTED_IMAGE_ID: ${{ steps.accept.outputs.image-id }}
 
-  # Baseline guards now pass; automatic packed-kernel PR verification remains
+  # Baseline guards pass; automatic packed-kernel PR verification remains
   # a separate change. Keep this proof explicitly manual-only.
   packed:
     name: Team image / packed kernel (manual)

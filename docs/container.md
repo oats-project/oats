@@ -155,7 +155,8 @@ inputs/outbox and writable bind sources. Every bind source must be absolute.
 The agent joins only `AGENTS_NETWORK` at `AGENT_IP`, uses the mounted resolver
 and publishes no host ports. Port 2222 is exposed for SSH. Compose health opens
 TCP 127.0.0.1:2222 every 30 seconds (5-second timeout, three retries, 10-second
-start period); Docker does not restart solely because it becomes unhealthy.
+start period). Compose sets `restart: unless-stopped`: process exit restarts the
+container unless the operator stopped it; unhealthy alone does not.
 For a separate orchestrator's liveness, `node /usr/local/lib/agent-liveness.mjs`
 checks the supervisor. Readiness and liveness are distinct. The supervisor gates
 sshd and host-run startup on broker readiness. None of these startup checks
@@ -198,22 +199,40 @@ fragment publishes host ports. `/opt/egress` retains exactly `policy.mjs`,
 Compose health runs `node /opt/egress/health.mjs` every five seconds (3-second
 timeout, three retries, 5-second start period). It checks a declared DNS answer,
 unlisted DNS refusal and a local TLS listener. The supervisor stops the component
-if either child fails. Health alone grants no network admission: the wrapper
+if either child fails. Compose sets `restart: unless-stopped`: process exit,
+including the supervisor stopping after a child failure, restarts the container
+unless the operator stopped it; unhealthy alone does not.
+Health alone grants no network admission: the wrapper
 must pass the read-only engine-host network preflight before creating networks,
 then the boundary probe and applicable ingress probe before agents start.
-Every deployment that creates its own agents/services networks must perform
-this preflight, including wrappers other than `compose.minimal.yaml`. From the
-extracted egress run directory on the Linux engine host, supply all six inputs
-`AGENTS_SUBNET`, `AGENTS_GATEWAY`, `AGENT_IP`, `EGRESS_ADDRESS`, `SERVICES_SUBNET`,
-`SERVICES_GATEWAY`, then run `node egress/preflight-network.mjs` immediately
-before network creation. Require exit 0 before sourcing its six assignments or
-creating anything. Remote contexts and Docker connection overrides are refused.
-Self-owned networks must preserve the wrapper shape: agents internal, IPv4-only
-and isolated gateway mode, with only the proxy attached to both agents and
-services. The boundary probe verifies this shape before admission.
+Every deployment that creates its own agents/services networks, including
+wrappers other than `compose.minimal.yaml`, must distinguish creation from a
+rerun. Supply all six planned inputs: `AGENTS_SUBNET`, `AGENTS_GATEWAY`,
+`AGENT_IP`, `EGRESS_ADDRESS`, `SERVICES_SUBNET`, `SERVICES_GATEWAY`.
+
+- Neither network exists: from the extracted egress run directory on the Linux
+  engine host, run `node egress/preflight-network.mjs` immediately before
+  creation. Require exit 0 before sourcing its six assignments or creating
+  anything. Remote contexts and Docker connection overrides are refused.
+- Exactly one network exists: refuse; the operator must clean up the partial
+  pair before retrying.
+- Both networks exist: do not rerun the preflight, whose overlap veto would
+  refuse the project's own networks. The consumer wrapper must require both
+  networks' `com.docker.compose.project` labels to equal its project, and both
+  complete IPAM inventories to match the plan exactly: agents/services subnet
+  and gateway, without extra ranges. Require the agents network to be internal,
+  both networks IPv4-only, and the agents bridge's gateway mode `isolated`.
+  Refuse any difference.
+
+These existence, label and exact-plan checks belong to the consumer wrapper;
+the preflight script remains a creation-time overlap check. Routes or links
+added later are outside that check's promise. Self-owned networks must keep
+only the proxy attached to both agents and services. The boundary probe then
+proves the live shape before admission.
 ([Health](../container/agent/egress/health.mjs),
 [supervisor](../container/agent/egress/supervisor.mjs),
 [Compose](../container/agent/egress/compose.egress.yaml),
+[network plan](../container/agent/egress/compose.minimal.yaml),
 [network preflight](../container/agent/egress/preflight-network.mjs),
 [boundary probe](../container/agent/egress/probe-compose-boundary.mjs),
 [ingress probe](../container/agent/egress/probe-ingress.mjs).)
@@ -1206,10 +1225,10 @@ Manual verification offers two additional proofs:
   manual-only; enabling automatic packed-image PR verification is separate work.
   Ordinary PR verification keeps the committed context in the meantime.
   An incompatible baseline fails explicitly, with no registry-kernel fallback
-  and no wider lock allowance. The committed baseline needs final OATS
-  0.69.18+ and aw 1.36.59+ with the compatible exact runtime closure.
-  The committed baseline now pins OATS 0.70.7 and aw 1.36.59; the strict
-  baseline guards pass. Positive real packed-image acceptance remains
+  and no wider lock allowance. The committed baseline pins OATS 0.70.7 and
+  aw 1.36.59, meets the final OATS 0.69.18+/aw 1.36.59+ floor with its exact
+  runtime closure, and passes the strict baseline guards.
+  Positive real packed-image acceptance remains
   **NOT RUN** until the manual job runs successfully at this head.
 
 Packing disables lifecycle scripts and uses a private npm home/cache, empty
