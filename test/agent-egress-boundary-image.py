@@ -1,5 +1,5 @@
 """CI-only real Compose boundary proof. Own disposable resources, no logins.
-The full/default policy and two declared subsets use the same reviewed wrapper,
+The full/default policy and three declared subsets use the same reviewed wrapper,
 proxy image and probe. Never run against a deployment or a shared Mac daemon.
 """
 import json
@@ -12,8 +12,8 @@ import sys
 import tempfile
 import time
 
-if len(sys.argv) != 4 or sys.argv[3] not in ("full", "aweb,registry", "aweb,registry,secrets"):
-    raise SystemExit("usage: agent-egress-boundary-image.py PROXY_IMAGE AGENT_IMAGE full|aweb,registry|aweb,registry,secrets")
+if len(sys.argv) != 4 or sys.argv[3] not in ("full", "aweb,registry", "aweb,registry,secrets", "aweb,logs,registry,secrets"):
+    raise SystemExit("usage: agent-egress-boundary-image.py PROXY_IMAGE AGENT_IMAGE full|aweb,registry|aweb,registry,secrets|aweb,logs,registry,secrets")
 root = Path(__file__).resolve().parents[1]
 scratch = Path(tempfile.mkdtemp(prefix="egress-boundary-"))
 scratch.chmod(0o755)
@@ -52,7 +52,8 @@ try:
         roles = {role:roles[role] for role in sys.argv[3].split(",")}
     hosts = [name + ".example.invalid" for name in roles.values()]
     human = "approve.example.invalid"
-    certificate_hosts = hosts + ([human] if "signer" in roles else [])
+    secrets_anchor = sys.argv[3] == "aweb,logs,registry,secrets"
+    certificate_hosts = hosts + ([human] if "signer" in roles or secrets_anchor else [])
     config = write("openssl.cnf", "[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=" + hosts[0] + "\n[ext]\nsubjectAltName=" + ",".join("DNS:" + h for h in certificate_hosts) + "\nbasicConstraints=critical,CA:TRUE\n")
     subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-sha256", "-nodes", "-days", "1",
                     "-keyout", str(scratch / "key.pem"), "-out", str(scratch / "ca.pem"), "-config", config],
@@ -63,7 +64,9 @@ try:
               "targets":{role:{"origin":"https://" + name + ".example.invalid", "addresses":["172.27.91.10"]} for role, name in roles.items()}}
     if sys.argv[3] != "full":
         policy["roles"] = list(roles)
-    if "signer" in roles:
+    if secrets_anchor:
+        policy["humanRole"] = "secrets"
+    if "signer" in roles or secrets_anchor:
         policy["humanOrigin"] = "https://" + human
     if "registry" in roles:
         policy.update(authorityRecords=[{
@@ -160,6 +163,8 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
     if "registry" in roles:
         assert "egress boundary declared: registry: exact namespace authority TXT\n" in result.stderr
         print("PASS registry authority TXT:",sys.argv[3],flush=True)
+    if secrets_anchor:
+        assert "egress boundary declared: secrets: human DNS/TLS refusal; separate ingress admission required\n" in result.stderr
     print("PASS real Compose boundary:",sys.argv[3],flush=True)
     # An alternate network is refused on every declaration, even if all service
     # controls still answer. Restore only our endpoint before normal cleanup.
