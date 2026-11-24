@@ -209,7 +209,7 @@ export function checkKnowledgeTheoryPackage({ repoRoot = REPO_ROOT, packageRoot 
   assert.equal(pkg.package, DISTRIBUTION_PACKAGE_ID);
   assert.equal(cap.capability, "oats.knowledge-theory");
   assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
-  assert.equal(cap.version, "1.1.4");
+  assert.equal(cap.version, "1.1.5");
   assert.deepEqual(cap.compatibility, { oats: ">=0.22.19" });
   assert.deepEqual(pkg.compatibility, { oats: ">=0.24.0" });
   assert.deepEqual(pkg.capabilities, DISTRIBUTION_CAPABILITIES);
