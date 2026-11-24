@@ -50,7 +50,7 @@ test("team image verification builds the fixture child image from the accepted i
   assert.deepEqual(job.steps[build].env, { AGENT_CHILD_IMAGE: image });
   assert.deepEqual(child.env, { AGENT_IMAGE: image, AGENT_CHILD: "fixture", AGENT_CHILD_FRAGMENT: "test/fixtures/agent-child/compose.agent.child.yaml" });
   assert.equal(parseConfigData(read(child.env.AGENT_CHILD_FRAGMENT)).value.services.agent.environment.AGENT_CHILD, child.env.AGENT_CHILD, "the fragment sets the name acceptance is told");
-  assert.equal(job.steps.filter((s) => /docker build .* container\/agent$/.test(s.run ?? "")).length, 1, "the base image's context is container/agent alone");
+  assert.equal(job.steps.filter((s) => /docker build .* container\/agent$/.test(s.run ?? "") && !s.run.includes("--file")).length, 1, "the base image's context is container/agent alone");
   const script = read(".github/scripts/team-image-accept.sh");
   // The fragment is the derived image's, named by the caller: another repository's CI reuses this script unmodified.
   assert.match(script, /\nif \[ -n "\$\{AGENT_CHILD:-\}" \]; then\n  compose\+=\(-f "\$\{AGENT_CHILD_FRAGMENT:\?[^}"]+\}"\)\nfi\n/);
@@ -352,4 +352,21 @@ test("real image acceptance exercises the setgid outbox and refuses its missing 
   assert.match(script, /mkdirSync\("\/outbox\/private", \{mode: 0o700\}\)/);
   assert.match(script, /test ! -e "\$TEAM_OUTBOX_DIR"/);
   assert.match(script, /test ! -L "\$TEAM_OUTBOX_DIR"/);
+});
+
+test("every image build receives its source SHA and CI verifies both extracted deploy sets", () => {
+  const w = workflow("team-image.yml"), verify = w.jobs.verify;
+  assert.equal(verify.env.TEAM_IMAGE_SOURCE_SHA, "${{ github.event.pull_request.head.sha || github.sha }}");
+  const agent = verify.steps.findIndex(s => s.name === "Build the reviewed image");
+  const egress = verify.steps.findIndex(s => s.name === "Build the reviewed egress image");
+  const extraction = verify.steps.findIndex(s => s.run === "node .github/scripts/team-image-deploy-check.mjs");
+  assert.ok(agent >= 0 && egress > agent && extraction > egress);
+  assert.match(verify.steps[egress].run, /--file container\/agent\/egress\/Dockerfile .* container\/agent$/);
+  for (const step of [verify.steps[agent], verify.steps[egress], w.jobs.packed.steps.find(s => s.run?.startsWith("docker build "))]) {
+    assert.match(step.run, /--build-arg "TEAM_IMAGE_SOURCE_SHA=\$TEAM_IMAGE_SOURCE_SHA"/);
+  }
+  assert.equal(w.jobs.packed.env.TEAM_IMAGE_SOURCE_SHA, "${{ github.sha }}");
+  const release = workflow("release.yml").jobs["publish-team-image"].steps.find(s => s.run?.startsWith("docker build "));
+  assert.match(release.run, /--build-arg "TEAM_IMAGE_SOURCE_SHA=\$TEAM_IMAGE_SOURCE_SHA"/);
+  assert.equal(release.env.TEAM_IMAGE_SOURCE_SHA, "${{ github.sha }}");
 });

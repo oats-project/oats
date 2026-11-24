@@ -130,7 +130,7 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
         (env["TEAM_STATE_DIR"],"/state",True),(env["TEAM_LOGIN_DIR"],"/etc/agent-login",False),
         (keys_file,"/etc/agent-ssh/authorized_keys",False),(resolver_file,"/etc/resolv.conf",False),
         (str(scratch / "ca.pem"),"/input/ca.pem",False)]]
-    plan = {"policy":policy,"allowedPaths":paths,"probeContainer":"oats-agent-" + project,"proxyContainer":proxy,
+    plan = {"schema":1,"policy":policy,"allowedPaths":paths,"probeContainer":"oats-agent-" + project,"proxyContainer":proxy,
             "agentsNetwork":env["AGENTS_NETWORK"],"servicesNetwork":env["SERVICES_NETWORK"],
             "probeImage":agent_image,"proxyImage":proxy_image,"uid":20001,"gid":20001,
             "approvedProbeMounts":approved,"protectedSources":[str(scratch / "key.pem")],"caFile":"/input/ca.pem",

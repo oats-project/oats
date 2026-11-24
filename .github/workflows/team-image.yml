@@ -28,6 +28,7 @@ jobs:
     env:
       AGENT_IMAGE: oats-team-agent:${{ github.event.pull_request.head.sha || github.sha }}
       EGRESS_IMAGE: oats-team-egress:${{ github.event.pull_request.head.sha || github.sha }}
+      TEAM_IMAGE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       # The PR's image inputs and acceptance script must come from its head,
       # rather than GitHub's synthetic merge commit or the default branch.
@@ -47,7 +48,7 @@ jobs:
           node --test test/team-image-packed-kernel.test.mjs test/team-image-release-context.test.mjs test/team-image-workflow.test.mjs test/workflow-no-cache.test.mjs
 
       - name: Build the reviewed image
-        run: docker build --platform linux/amd64 --tag "$AGENT_IMAGE" container/agent
+        run: docker build --platform linux/amd64 --build-arg "TEAM_IMAGE_SOURCE_SHA=$TEAM_IMAGE_SOURCE_SHA" --tag "$AGENT_IMAGE" container/agent
 
       - name: Accept the real container
         id: accept
@@ -71,7 +72,10 @@ jobs:
       # Wrapper, policy/proxy and probes all come from the reviewed checkout.
       # Local image content IDs bind the disposable proof to these exact builds.
       - name: Build the reviewed egress image
-        run: docker build --platform linux/amd64 --tag "$EGRESS_IMAGE" container/agent/egress
+        run: docker build --platform linux/amd64 --build-arg "TEAM_IMAGE_SOURCE_SHA=$TEAM_IMAGE_SOURCE_SHA" --file container/agent/egress/Dockerfile --tag "$EGRESS_IMAGE" container/agent
+
+      - name: Verify both deploy manifests and run the extracted scripts
+        run: node .github/scripts/team-image-deploy-check.mjs
 
       - name: Prove legacy egress image and ingress controls
         run: |
@@ -102,8 +106,8 @@ jobs:
         env:
           ACCEPTED_IMAGE_ID: ${{ steps.accept.outputs.image-id }}
 
-  # The strict baseline guard currently refuses the old committed closure.
-  # Keep this manual-only until the image owner's compatible baseline lands.
+  # Baseline guards now pass; automatic packed-kernel PR verification remains
+  # a separate change. Keep this proof explicitly manual-only.
   packed:
     name: Team image / packed kernel (manual)
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.packed_kernel }}
@@ -111,6 +115,7 @@ jobs:
     timeout-minutes: 30
     env:
       AGENT_IMAGE: oats-team-agent-packed:${{ github.sha }}
+      TEAM_IMAGE_SOURCE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -141,7 +146,7 @@ jobs:
           if-no-files-found: error
 
       - name: Build the HEAD kernel image
-        run: docker build --platform linux/amd64 --tag "$AGENT_IMAGE" "$TEAM_IMAGE_BUILD_CONTEXT"
+        run: docker build --platform linux/amd64 --build-arg "TEAM_IMAGE_SOURCE_SHA=$TEAM_IMAGE_SOURCE_SHA" --tag "$AGENT_IMAGE" "$TEAM_IMAGE_BUILD_CONTEXT"
         env:
           TEAM_IMAGE_BUILD_CONTEXT: ${{ steps.context.outputs.context }}
 

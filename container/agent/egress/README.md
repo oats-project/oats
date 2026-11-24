@@ -427,7 +427,11 @@ adds its public certificates to Node's normal public roots.
 
 ## Build and prove
 
-Build from this directory with `docker build -t <local-name> .`. The image runs as
+Build from the repository root with
+`docker build --build-arg "TEAM_IMAGE_SOURCE_SHA=$(git rev-parse HEAD)" -f container/agent/egress/Dockerfile -t <local-name> container/agent`.
+The Dockerfile-specific allowlist admits only runtime and deploy inputs;
+`/opt/oats/deploy` preserves the agent/egress hierarchy for extraction without a
+checkout (see [Run contract](../../../docs/container.md#run-contract)). The image runs as
 10001:10001 with read-only root, dropped capabilities, no new privileges and only
 `/tmp` writable. The namespaced unprivileged-port sysctl enables ports 53 and 443
 without adding capabilities. Loss of either DNS or TLS child fails the image and
@@ -498,6 +502,7 @@ The runtime JSON is derived by the deployment wrapper. Its fields are:
 
 | Field | Runtime value |
 | --- | --- |
+| `schema` | Required integer `1`. Missing or unknown schemas refuse before engine access with `E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1; found none; regenerate the plan with schema: 1` (an unknown numeric schema replaces `none` with its value; other types report `invalid <type>`). Update plan writers to emit `"schema": 1`. |
 | `probeContainer`, `proxyContainer` | Existing running container name or ID. The deployment wrapper owns the probe's creation/removal. |
 | `agentsNetwork`, `servicesNetwork` | Existing bundle network names. No replacement agents network is created. |
 | `probeImage`, `proxyImage` | Reviewed repository digest references; a local content ID is also accepted for a disposable image test. |
@@ -585,8 +590,11 @@ refusal leaves stdout empty. The exported `probeComposeBoundary(plan)` returns
 The helper `tcpFromNetwork` returns `{reachable,receipt}`; callers must check
 `.reachable`. `withGatewayCanary` and `checkDockerGateway` return the canary and
 two TCP control receipts, and failures carry partial receipts too.
-These host-side helpers are outside the closed egress image build context;
-the egress image inputs do not change.
+These host-side helpers ship under `/opt/oats/deploy/egress/` with their
+complete local import closure; `/opt/egress` retains only the runtime files.
+Extract the deploy directory before invoking the probe on the engine host.
+The manifest binds every deploy file to the image
+([Dockerfile](Dockerfile), [manifest builder](../deploy-manifest.mjs)).
 
 Kubernetes uses `probe-runtime.mjs --emit-program <runtime.json>` to emit the
 same in-container body for its adapter's operator connection. That adapter must

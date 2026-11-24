@@ -166,7 +166,8 @@ test("the image uses only the owner's additive read-only npm-ci context mount", 
   assert.equal([...current.matchAll(/npm ci --ignore-scripts/g)].length, 1);
   assert.match(current, /&& node -e 'require\.resolve\("@awebai\/aw-linux-"/);
   assert.match(current, /RUN --network=none npm rebuild @awebai\/aw --ignore-scripts=false --offline/);
-  assert.doesNotMatch(current, /^ARG |^COPY .*oats-pr-kernel/m);
+  assert.deepEqual(current.match(/^ARG .+$/gm), ["ARG TEAM_IMAGE_SOURCE_SHA"], "only deploy provenance, never a kernel-selection argument");
+  assert.doesNotMatch(current, /^COPY .*oats-pr-kernel/m);
 });
 
 test("PR context generation preserves HEAD and uses only its bound private tarball", async () => {
@@ -212,7 +213,7 @@ test("PR context generation preserves HEAD and uses only its bound private tarba
     assert.equal(git(["status", "--porcelain"]), before);
     const effective = JSON.parse(readFileSync(join(prepared.contextDir, "package.json")));
     assert.equal(effective.dependencies["@awebai/oats"], "file:../oats-build-inputs/oats-pr-kernel.tgz");
-    assert.deepEqual(readdirSync(prepared.contextDir).sort(), [".dockerignore", "Dockerfile", "agent-trust.sh", "entrypoint.sh", "liveness.mjs", "oats-pr-kernel.tgz", "package-lock.json", "package.json", "sshd_config", "supervisor.mjs"]);
+    assert.deepEqual(readdirSync(prepared.contextDir).sort(), [".dockerignore", "Dockerfile", "accept.mjs", "accept.sh", "agent-trust.sh", "compose.agent.inputs.yaml", "compose.agent.mirrors.yaml", "compose.agent.outbox.yaml", "compose.agent.trust.yaml", "compose.agent.work.yaml", "compose.agent.yaml", "deploy-manifest.mjs", "entrypoint.sh", "liveness.mjs", "oats-pr-kernel.tgz", "package-lock.json", "package.json", "sshd_config", "supervisor.mjs"]);
     assert.ok(readFileSync(join(prepared.contextDir, ".dockerignore"), "utf8").endsWith("!oats-pr-kernel.tgz\n"));
     assert.deepEqual(readFileSync(join(prepared.contextDir, "oats-pr-kernel.tgz")), readFileSync(join(prepared.root, "oats-build-inputs/oats-pr-kernel.tgz")));
     const proof = JSON.parse(readFileSync(prepared.inventoryPath));
@@ -290,7 +291,7 @@ else process.exit(2);
 `, { mode: 0o755 });
     const script = new URL("../.github/scripts/team-image-default-proof.sh", import.meta.url);
     const env = { PATH: `${join(root, "bin")}:${process.env.PATH}`, FIXTURE_DIR: root, RUNNER_TEMP: root,
-      AGENT_IMAGE: "oats-team-agent:fixture", ACCEPTED_IMAGE_ID: `sha256:${"a".repeat(64)}`, GITHUB_SHA: "c".repeat(40), GITHUB_STEP_SUMMARY: join(root, "summary") };
+      AGENT_IMAGE: "oats-team-agent:fixture", ACCEPTED_IMAGE_ID: `sha256:${"a".repeat(64)}`, GITHUB_SHA: "c".repeat(40), TEAM_IMAGE_SOURCE_SHA: "c".repeat(40), GITHUB_STEP_SUMMARY: join(root, "summary") };
     const run = () => spawnSync("bash", [script.pathname], { env, encoding: "utf8" });
     const equal = run(); assert.equal(equal.status, 0, equal.stderr);
     assert.match(readFileSync(env.GITHUB_STEP_SUMMARY, "utf8"), /Default installed payload.*PASS/);

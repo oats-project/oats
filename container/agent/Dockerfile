@@ -25,6 +25,13 @@ COPY --chmod=644 supervisor.mjs /usr/local/lib/agent-supervisor.mjs
 COPY --chmod=644 liveness.mjs /usr/local/lib/agent-liveness.mjs
 COPY --chmod=644 sshd_config /etc/agent-sshd_config
 COPY --chmod=644 agent-trust.sh /etc/profile.d/agent-trust.sh
+# Deploy scripts preserve their local imports; the source pin is mandatory.
+ARG TEAM_IMAGE_SOURCE_SHA
+COPY --chmod=644 compose.agent.yaml compose.agent.inputs.yaml compose.agent.mirrors.yaml compose.agent.outbox.yaml compose.agent.trust.yaml compose.agent.work.yaml accept.mjs supervisor.mjs /opt/oats/deploy/
+COPY --chmod=755 accept.sh /opt/oats/deploy/accept.sh
+COPY --chmod=644 deploy-manifest.mjs /usr/local/lib/oats-deploy-manifest.mjs
+RUN node /usr/local/lib/oats-deploy-manifest.mjs agent /opt/oats/deploy "$TEAM_IMAGE_SOURCE_SHA" \
+    && chmod 755 /opt/oats /opt/oats/deploy
 # Bash's SSH startup path reads the system bashrc instead of BASH_ENV.
 RUN sed -i '1i . /etc/profile.d/agent-trust.sh' /etc/bash.bashrc
 ENV HOME=/state/home
