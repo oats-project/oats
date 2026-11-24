@@ -302,6 +302,9 @@ README, “Human attribution”; the contract:
     active and a member, is the only one who can adopt it), or, with no current
     creator, a team admin or an owner or admin of the owning organisation (an
     editor isn't enough);
+  - the person's namespace verifies; a global root already enrolled in the
+    registry's ID tree is under the person's own home domain (else 409
+    `registered_adoption_domain_mismatch`);
   - time: the invitation expires after 24 hours by default (7 days at most), so
     steps 1 to 4 finish inside it.
 - **Files.** Make one new directory for this adoption on the root's host,

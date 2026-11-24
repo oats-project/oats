@@ -196,6 +196,9 @@ the contract is [the human IDs contract](design/2026-11-21-human-ids-contract.md
       who can adopt it.
     - **Otherwise** (no creator recorded, or they are gone), **a team admin, or an
       owner or admin of the owning organisation.** An editor isn't enough.
+  - The adopting person's namespace verifies. A global root already enrolled in
+    the registry's ID tree is under the person's own home domain (otherwise 409
+    `registered_adoption_domain_mismatch`).
   - Time: the dashboard's invitation expires after 24 hours by default (7 days at
     most), so steps 1 to 4 below finish inside it.
 - **The steps.** One root at a time. The setup agent runs the commands, on the
