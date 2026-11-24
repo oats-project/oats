@@ -77,10 +77,11 @@ jobs:
         run: |
           sh test/agent-egress-image.sh "$EGRESS_IMAGE"
           python3 test/agent-egress-ingress-image.py "$EGRESS_IMAGE"
+          python3 test/agent-egress-humanrole-ingress-image.py "$EGRESS_IMAGE"
 
       - name: Prove full and declared-role Compose boundaries
         run: |
-          for roles in full aweb,registry aweb,registry,secrets; do
+          for roles in full aweb,registry aweb,registry,secrets aweb,logs,registry,secrets; do
             python3 test/agent-egress-boundary-image.py "$EGRESS_IMAGE" "$AGENT_IMAGE" "$roles"
           done
 

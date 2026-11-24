@@ -71,14 +71,18 @@ function externalRoutes(policy, hosts) {
 export function compilePolicy(policy) {
   assert.ok(policy && typeof policy === "object" && !Array.isArray(policy), "egress policy has an invalid field set");
   const roles = policyRoles(policy), signer = roles.includes("signer"), registry = roles.includes("registry");
+  const hasHumanRole = Object.hasOwn(policy, "humanRole"), secrets = policy.humanRole === "secrets";
   const fields = ["deniedAddresses", "frontAddress", "privateIngressAddresses", "targets"];
-  if (signer) fields.push("humanOrigin");
+  if (signer || secrets) fields.push("humanOrigin");
+  if (hasHumanRole) fields.push("humanRole");
   if (registry) fields.push("authorityRecords");
   if (Object.hasOwn(policy, "roles")) fields.push("roles");
   if (Object.hasOwn(policy,"externalTargets") || Object.hasOwn(policy,"externalResolverAddresses"))
     fields.push("externalTargets", "externalResolverAddresses");
-  assert.equal(Object.keys(policy).sort().join(","), fields.sort().join(","),
-    "egress policy has an invalid field set; supply authorityRecords with registry and humanOrigin with signer");
+  assert.ok(Object.keys(policy).sort().join(",") === fields.sort().join(",")
+    && (!hasHumanRole || (policy.humanRole === "signer" && signer)
+      || (secrets && Object.hasOwn(policy, "roles") && roles.includes("secrets") && !signer)),
+  'egress policy has an invalid field set; supply authorityRecords with registry and humanOrigin with signer; humanRole must name a declared signer or secrets anchor; humanRole: "secrets" needs declared roles that include secrets and exclude signer, plus humanOrigin');
   assert.ok(isIP(policy.frontAddress) === 4, "egress policy front address must be IPv4");
   assert.ok(policy.targets && typeof policy.targets === "object" && !Array.isArray(policy.targets)
     && Object.keys(policy.targets).sort().join(",") === [...roles].sort().join(","),
@@ -90,7 +94,7 @@ export function compilePolicy(policy) {
     && Object.keys(target).sort().join(",") === "addresses,origin", "egress policy target has an invalid field set");
   const hosts = targets.map(target => originHost(target.origin));
   assert.ok(new Set(hosts).size === hosts.length, "egress policy service hostnames must be distinct");
-  if (signer) assert.ok(!hosts.includes(originHost(policy.humanOrigin)), "egress policy cannot route the human login origin");
+  if (signer || secrets) assert.ok(!hosts.includes(originHost(policy.humanOrigin)), "egress policy cannot route the human login origin");
   for (const target of targets) assert.ok(Array.isArray(target.addresses) && target.addresses.length > 0 && target.addresses.length <= 8
     && target.addresses.every(ip => isIP(ip) === 4), "egress policy upstream addresses must be pinned IPv4 literals");
   for (const target of targets) for (const ip of target.addresses) {

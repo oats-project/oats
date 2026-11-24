@@ -1102,7 +1102,14 @@ non-secret runtime policy from the shared deployment configuration and signer
 profile when signer is declared. An optional derived `roles` array selects a
 nonempty subset of aweb, logs, registry, secrets and signer, with exactly matching
 targets and probe paths. Omission retains the five-role policy and output.
-Signer `humanOrigin` is required with signer and refused without it. Registry
+`humanRole` optionally names the human ingress anchor: `"signer"` or `"secrets"`.
+Absent or `"signer"` retains the signer rule, requiring `humanOrigin` with signer.
+`humanRole: "secrets"` requires declared `roles` including secrets and excluding
+signer, plus `humanOrigin`. Selecting Secrets while declaring signer is refused.
+Without signer or
+an explicit Secrets anchor, `humanOrigin` is refused; it is never routed or
+external. Existing deployments change nothing. A bundle setting `humanRole`
+needs the new egress image, since older images refuse the field. Registry
 `authorityRecords` are required with registry and refused without it, independently
 of signer: messaging-only namespaces still need exact `_awid` TXT evidence for
 discovery and sender verification. The root-authoritative resolver has no
@@ -1137,9 +1144,14 @@ compiler/proxy image and probes to one reviewed commit and retain image digests.
 The ingress probe keeps backend non-delivery witnesses for owned routes. A
 wrapper may explicitly mark only the registry as external for verified-TLS 200
 controls, without third-party refusal or backend-log claims. When signer is
-declared, signer and human-surface ingress controls remain required.
-`probeIngress` explicitly refuses a policy without signer before sending controls;
-runtime role controls follow the compiler's canonical order for every declaration.
+declared, signer and human-surface ingress controls remain required. A Secrets
+anchor instead proves the Secrets API and console ingress, even when they share
+one backend and log. `--request-origin` and its pinned address name that anchor;
+the compatible request path/log must match its audit entry. Forbidden tags must
+be absent from every owned backend log, even if a backend returns 421 itself.
+The ingress control report and boundary report name the anchor; runtime role
+controls retain the compiler's canonical order. A policy without signer or an
+explicit Secrets anchor cannot invoke ingress admission.
 Deployment bundles default `team.registryRoute` to `external`; existing bundles serving a local registry
 must select `local` and refuse a URL their service does not serve. See the
 [route-mode contract](../container/agent/egress/README.md#ingress-admission-probe)
