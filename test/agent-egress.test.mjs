@@ -682,6 +682,7 @@ test("the shared ingress probe proves both protocol refusals before backend deli
   const qualified=await cli();
   assert.equal(qualified.code,0,qualified.stderr);
   assert.equal(qualified.stdout,"OATS_EGRESS_INGRESS_PASS\n");
+  assert.match(qualified.stderr,/^egress: human anchor: signer$/m);
   assert.match(qualified.stderr,/registry external: positive control only; refusal not claimed/);
   const remoteTrace=readFileSync(traceFile,"utf8").trim().split("\n").map(line=>JSON.parse(line))
     .filter(call=>externalPolicy.targets.registry.addresses.includes(call.host));
