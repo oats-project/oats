@@ -2592,7 +2592,7 @@ test("an alias minted with no local key is incomplete cleanup, not 'nothing to d
   const homeDir = join(base, "home"); mkdirSync(homeDir, { recursive: true });   // no .aw
   const r = spawnSync(process.execPath, [hook, "retire"], {
     encoding: "utf8",
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "retire", OATS_INSTANCE: "probe", OATS_HOME: homeDir, OATS_META: JSON.stringify({ alias: "probe", team: "default:acme.aweb.ai" }) },
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "retire", OATS_INSTANCE: "probe", OATS_HOME: homeDir, OATS_INSTANCE_HOME: homeDir, OATS_META: JSON.stringify({ alias: "probe", team: "default:acme.aweb.ai" }) },
   });
   // The remote record exists and its key is gone: the self-delete cannot be
   // authenticated, so this must NOT read as a vacuous no-op.
@@ -2603,7 +2603,7 @@ test("an alias minted with no local key is incomplete cleanup, not 'nothing to d
   // …while a retire with no alias at all genuinely has nothing to undo.
   const noAlias = spawnSync(process.execPath, [hook, "retire"], {
     encoding: "utf8",
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "retire", OATS_INSTANCE: "probe", OATS_HOME: homeDir, OATS_META: "{}" },
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "retire", OATS_INSTANCE: "probe", OATS_HOME: homeDir, OATS_INSTANCE_HOME: homeDir, OATS_META: "{}" },
   });
   assert.equal(noAlias.status, 0);
   assert.match(noAlias.stdout, /nothing-to-delete/);
