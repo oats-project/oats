@@ -41,7 +41,7 @@ arrives from.
 # oats-workspace.yaml: one default per slot, for every soul
 packages:
   oats.okf: v6.3.0
-  oats.aweb: v1.48.0
+  oats.aweb: v1.49.0
   oats.linear: v1.0.1
   oats.jira: v1.0.1
 defaults:
@@ -97,7 +97,7 @@ operations in full.
 - **`oats.aweb-tasks`** (in the `oats.aweb` package from 1.31.0) fills the
   tasks slot with aweb tasks, acting as the instance's own `oats.aweb`
   identity in its default team. **An existing workspace opts in** by pinning
-  `oats.aweb: v1.48.0` (the feature needs 1.31.0 or later), adding
+  `oats.aweb: v1.49.0` (the feature needs 1.31.0 or later), adding
   `tasks: { oats.aweb-tasks: { from: package } }` to `defaults`, and running
   `oats sync`. Only new spawns get it. A soul that names its own tasks
   provider in `capabilities:` (`oats.jira`, `oats.linear`) then holds two and
