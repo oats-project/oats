@@ -210,7 +210,9 @@ export function wakeRegistration({home, primaryIdentityHome, delivery, runtime, 
   return doc;
 }
 
-const canon = (p) => { try { return realpathSync(p); } catch { return resolve(String(p || '')); } };
+// The on-disk spelling (realpathSync.native): on a case-insensitive filesystem (macOS)
+// two spellings of one identity home are one locator, so the overlap guards see them.
+const canon = (p) => { try { return realpathSync.native(p); } catch { return resolve(String(p || '')); } };
 
 /** Whether `aw wake status --json` lists this home; a status without an
  *  instances list proves nothing, so it counts as listed. */

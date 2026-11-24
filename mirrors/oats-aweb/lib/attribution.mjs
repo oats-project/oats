@@ -325,12 +325,14 @@ function creatorLinkHeld(identityHome, did, userHome) {
   try { lstatSync(dir); } catch (e) { return entryAbsent(e, dir) ? undefined : "aw's retained invites can't be looked at"; }
   let entries;
   try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return "aw's retained invites can't be listed"; }
+  // In the on-disk spelling (realpathSync.native): on a case-insensitive filesystem
+  // (macOS) a link that spells this home in another case names it.
   let homeReal;
-  try { homeReal = realpathSync(identityHome); } catch { homeReal = undefined; }
+  try { homeReal = realpathSync.native(identityHome); } catch { homeReal = undefined; }
   const isThisHome = (p) => {
     if (typeof p !== "string" || !p) return false;
     if (resolve(p) === resolve(identityHome)) return true;
-    try { return homeReal !== undefined && realpathSync(p) === homeReal; } catch { return false; }
+    try { return homeReal !== undefined && realpathSync.native(p) === homeReal; } catch { return false; }
   };
   for (const entry of entries) {
     const name = entry.name;

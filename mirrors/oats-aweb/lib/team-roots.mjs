@@ -105,7 +105,9 @@ export function currentJoinRootChoice(team, home, { env = process.env, query = q
 export function instanceHomeHolding(dir, within) {
   let real = resolve(dir);
   for (;;) {
-    try { real = realpathSync(real); break; }
+    // The on-disk spelling, as `within` is: on a case-insensitive filesystem (macOS) a root
+    // that spells the deployment in another case is still inside it.
+    try { real = realpathSync.native(real); break; }
     catch (e) { if (e?.code !== 'ENOENT' && e?.code !== 'ENOTDIR') throw e; const parent = dirname(real); if (parent === real) break; real = parent; }
   }
   const inside = (d) => { const rel = relative(within, d); return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel); };
@@ -126,7 +128,7 @@ export function instanceHomeHolding(dir, within) {
  *  Returns the E_ROOT_INSIDE_INSTANCE_HOME error, or undefined. */
 export function rootInsideInstanceHomeError({ root, setting, label, deployment, beside }) {
   let within;
-  try { within = deployment ? realpathSync(deployment) : undefined; } catch { within = undefined; }
+  try { within = deployment ? realpathSync.native(deployment) : undefined; } catch { within = undefined; }
   const owner = instanceHomeHolding(root, within);
   if (!owner) return undefined;
   const unresolved = within === undefined ? ` (the deployment${deployment ? ` ${deployment}` : ''} couldn't be resolved, so any instance home above the root counts)` : '';

@@ -275,7 +275,9 @@ function awHoldsPendingIn(path) {
   catch (e) { return e?.code !== "ENOENT" && e?.code !== "ENOTDIR"; }
   if (entry.isSymbolicLink()) {
     let target, inside;
-    try { target = realpathSync(path); inside = isInside(realpathSync(home), target); }
+    // The on-disk spelling (realpathSync.native): on a case-insensitive filesystem
+    // (macOS) a link whose text spells the home in another case still points inside.
+    try { target = realpathSync.native(path); inside = isInside(realpathSync.native(home), target); }
     catch { return true; }
     if (!inside) return false;
     try { entry = lstatSync(target); path = target; } catch { return true; }
@@ -342,8 +344,20 @@ function heldIdentityHomeNames(dir) {
   const candidates = [...locators.map((p) => [p]), ...configured.map((p) => [p, join(p, ".aw")])].flat();
   for (const p of candidates) {
     if (!isAbsolute(p)) continue;
-    const rel = relative(dir, resolve(p));
-    if (!rel || !relInside(rel) || held.includes(rel) || names.includes(rel)) continue;
+    let rel = relative(dir, resolve(p));
+    if (!rel || !relInside(rel)) {
+      // Outside the home by path, it can still reach into it through a link
+      // (awebai/oats-aweb#312): count its resolved target. One that can't be
+      // resolved (a loop, a dangling link, an unreadable directory on the way)
+      // reaches no target, and the settings' own rules report it (#228, #318).
+      // realpathSync.native answers the on-disk spelling, so on a case-insensitive
+      // filesystem (macOS) a locator that spells the home in another case, directly
+      // or through a link, is counted too (#322).
+      try { rel = relative(realpathSync.native(dir), realpathSync.native(p)); }
+      catch { continue; }
+      if (!rel || !relInside(rel)) continue;
+    }
+    if (held.includes(rel) || names.includes(rel)) continue;
     if (awHoldsPendingIn(join(dir, rel))) held.push(rel);
   }
   return held;
@@ -695,8 +709,10 @@ if (["spawn", "launch"].includes(event)) {
   try { identityFlags = identityBooleans(identitySettings); }
   catch (error) { out({ warning: `oats-aweb: ${error.message}` }, 1); }
 }
-/** Whether two paths name the same place, by their real paths where both exist. */
-const samePath = (a, b) => { try { return realpathSync(a) === realpathSync(b); } catch { return resolve(a) === resolve(b); } };
+/** Whether two paths name the same place, by their real paths where both exist, in
+ *  their on-disk spelling (realpathSync.native): on a case-insensitive filesystem
+ *  (macOS) a lock naming this home in another case is this home's. */
+const samePath = (a, b) => { try { return realpathSync.native(a) === realpathSync.native(b); } catch { return resolve(a) === resolve(b); } };
 if (isClassicEnvironment() && ["spawn", "setup"].includes(event)) {
   if (event === "setup") { console.error(CLASSIC_REFUSAL); process.exit(1); }
   fatal(CLASSIC_REFUSAL);
@@ -2405,8 +2421,10 @@ function joinedTeamRootProblem(team, declared = declaredRootCandidate(team)) {
   const tried = (reason) => `${declared.key} (${reason}): ${declared.root}`;
   if (!isAbsolute(declared.root)) return tried("not an absolute directory");
   const root = resolve(declared.root);
-  // Canonical paths: a symlink to the home, or a .aw linking to the home's, is still the home's identity.
-  const canonical = (path) => { try { return realpathSync(path); } catch { return resolve(path); } };
+  // Canonical paths, in their on-disk spelling: a symlink to the home, a .aw linking to the
+  // home's, or the home spelled in another case on a case-insensitive filesystem (macOS) is
+  // still the home's identity.
+  const canonical = (path) => { try { return realpathSync.native(path); } catch { return resolve(path); } };
   if (canonical(root) === canonical(home) || (existsSync(join(home, ".aw")) && canonical(join(root, ".aw")) === canonical(join(home, ".aw")))) return tried("the instance home's own identity");
   if (!existsSync(join(root, ".aw"))) return tried("no .aw");
   if (!rootListsTeam(root, team)) return tried(`aw team list there: not a member of ${team}`);

@@ -251,13 +251,13 @@
     "oats.aweb": {
       "pin": {
         "url": "https://github.com/awebai/oats-aweb.git",
-        "ref": "v1.49.0",
+        "ref": "v1.49.1",
         "path": "oats-package"
       },
-      "commit": "9f09e599a80bd891471c62d7bcc7580868cfa124",
-      "tagObject": "c686a2c83734c093084ddfa9bedbcc652cbee61e",
-      "manifestText": "{\n  \"package\": \"oats.aweb\",\n  \"version\": \"1.49.0\",\n  \"description\": \"Official OATS messaging and tasks integrations for team-scoped aweb identities, mail, chat, roster discovery, and task coordination.\",\n  \"compatibility\": {\n    \"oats\": \">=0.70.0\"\n  },\n  \"capabilities\": [\n    \"capabilities/oats-aweb\",\n    \"capabilities/oats-aweb-tasks\"\n  ]\n}\n",
-      "manifestSha256": "25a3ce264425f065737430f7bdab1a0c558c9abea867aa766ea63aa25cbe4ec6",
+      "commit": "afdf0e2c925ef79a701b5e9496865d0beed2a39a",
+      "tagObject": "9bdf58d8646aa260315290bd87994f70f43ce994",
+      "manifestText": "{\n  \"package\": \"oats.aweb\",\n  \"version\": \"1.49.1\",\n  \"description\": \"Official OATS messaging and tasks integrations for team-scoped aweb identities, mail, chat, roster discovery, and task coordination.\",\n  \"compatibility\": {\n    \"oats\": \">=0.70.0\"\n  },\n  \"capabilities\": [\n    \"capabilities/oats-aweb\",\n    \"capabilities/oats-aweb-tasks\"\n  ]\n}\n",
+      "manifestSha256": "7f1c3ae92b0d5a8bcc79726b754896d46dde2f4297a6f03ceb08335de714d059",
       "entries": [
         {
           "path": "capabilities/oats-aweb",
@@ -340,7 +340,7 @@
           "type": "file",
           "mode": "100644",
           "size": 1583,
-          "sha256": "14cd5294e4ae8729f1c7c2c1f0b9b02f28ec49f4729f708c72b8b92a6d75bc7c"
+          "sha256": "e18c3082294022a3c619967d7c2958d2a7c7515b46b7d24812031a542ac00746"
         },
         {
           "path": "capabilities/oats-aweb-tasks/skills",
@@ -386,8 +386,8 @@
           "path": "capabilities/oats-aweb/bin/oats-aweb.mjs",
           "type": "file",
           "mode": "100755",
-          "size": 340214,
-          "sha256": "59d79e0d98583388fdb04246cc6bd615fb320c8bb4625bf246e4f79f5165a063"
+          "size": 341382,
+          "sha256": "192180cc95ddd78fe01955710fa118bbffe1a2afa780736d1a1f8e34500c8aa5"
         },
         {
           "path": "capabilities/oats-aweb/injects",
@@ -408,8 +408,8 @@
           "path": "capabilities/oats-aweb/lib/attribution.mjs",
           "type": "file",
           "mode": "100644",
-          "size": 32380,
-          "sha256": "0d4c5c01a8027758c6592c7a88e0a4e45d77bed99de14ad3bcfc9f48561fc82e"
+          "size": 32547,
+          "sha256": "834aa2066074771e2a39d0bf6e1650fdcfa88d95b4af42d4f1819628b938f7f6"
         },
         {
           "path": "capabilities/oats-aweb/lib/aw-child-env.mjs",
@@ -758,8 +758,8 @@
           "path": "capabilities/oats-aweb/lib/team-roots.mjs",
           "type": "file",
           "mode": "100644",
-          "size": 9692,
-          "sha256": "979c72f9663074652e731e97172883a2b43aa66b9a274166eae2527e6fe43202"
+          "size": 9869,
+          "sha256": "b4483f61ff6d41e085fa607ead4fdb2f41c9ae59182966a1ad58cb678a9e90f9"
         },
         {
           "path": "capabilities/oats-aweb/lib/team-server-url.mjs",
@@ -779,8 +779,8 @@
           "path": "capabilities/oats-aweb/lib/wake-receive.mjs",
           "type": "file",
           "mode": "100644",
-          "size": 49307,
-          "sha256": "3153e9350d00d9739b05ab3957d83432f5900b248448f4511ecb3ab3a36dfaba"
+          "size": 49489,
+          "sha256": "8d05ec432e4e32f16b7607761d15dc94b1b8150ab107b62af88ed05ffa18d704"
         },
         {
           "path": "capabilities/oats-aweb/lib/wake-service.mjs",
@@ -794,7 +794,7 @@
           "type": "file",
           "mode": "100644",
           "size": 14477,
-          "sha256": "7ca0a226dd8716d82843f4424f1cba83f0ce3ece5cdd041fec66332f81a113c2"
+          "sha256": "9b6334f66985e456f40a6a3992a5419c7a38a4df987db29ee8dd0682f435b2d7"
         },
         {
           "path": "capabilities/oats-aweb/phrases",
