@@ -495,3 +495,59 @@ for (const version of ["git version 2.45.0", "git version 2.44.9", "unknown"]) {
     assert.equal(probes, 1, "failed discovery shares one probe for the operation");
   });
 }
+
+test("a partial submodule in a nested source's foreign tree refuses plan and apply before effects", async (t) => {
+  const { f, spawned, work, recovery } = await retirement(t);
+  const leaf = observer(t), nested = join(work, "nested"), foreign = join(f.base, "foreign-tree");
+  mkdirSync(nested);
+  mkdirSync(foreign);
+  git(nested, "init", "-q");
+  writeFileSync(join(nested, "kept.txt"), "kept\n");
+  git(nested, "-c", "protocol.file.allow=always", "submodule", "add", "--quiet", leaf.work, "sub");
+  git(nested, "add", ".");
+  git(nested, "commit", "-qm", "nested with submodule");
+  const moduleDir = git(join(nested, "sub"), "rev-parse", "--absolute-git-dir");
+  for (const name of ["kept.txt", ".gitmodules", "sub"]) renameSync(join(nested, name), join(foreign, name));
+  writeFileSync(join(foreign, "sub", ".git"), `gitdir: ${moduleDir}\n`);
+  git(foreign, "--git-dir", moduleDir, "--work-tree", join(foreign, "sub"), "config", "core.worktree", join(foreign, "sub"));
+  git(nested, "config", "core.worktree", foreign);
+  git(join(foreign, "sub"), "config", "remote.origin.promisor", "true");
+  const snapshot = () => [exactTreeDigest(spawned.home), exactTreeDigest(f.member), exactTreeDigest(foreign), existsSync(recovery) ? exactTreeDigest(recovery) : null];
+  const before = snapshot();
+  await f.inEnv(() => {
+    const gitVersion = () => "git version 2.44.9";
+    const refused = (e) => {
+      assert.equal(e.code, "E_GIT_UNSUPPORTED");
+      assert.equal(e.details.submodule, "sub");
+      assert.equal(e.details.reason, "partial-clone");
+      assert.equal(e.details.found, "2.44.9");
+      assert.match(e.message, /the submodule sub is a partial clone/);
+      assert.match(e.message, /nothing was done/i);
+      return true;
+    };
+    assert.throws(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }), refused);
+    assert.throws(() => retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true }), refused);
+    assert.throws(() => core.copyRecoveryWork({ work, branchExists: true }, { work: "worktree", repo: f.member, branch: spawned.branch }, join(f.base, "copy"), { gitVersion }), (e) => {
+      assert.equal(e.code, "E_GIT_UNSUPPORTED");
+      assert.equal(e.details.submodule, "sub");
+      return true;
+    });
+  });
+  assert.deepEqual(snapshot(), before);
+  assert.equal(existsSync(join(f.base, "copy")), false);
+  assert.equal(existsSync(join(spawned.home, "hook-ran")), false);
+});
+
+test("an invalid empty nested .git does not admit a partial enclosing checkout", async (t) => {
+  const { f, spawned, work } = await retirement(t, { workMode: "directory" });
+  git(f.base, "init", "-q");
+  git(f.base, "config", "remote.origin.promisor", "true");
+  mkdirSync(join(work, "sub", ".git"), { recursive: true });
+  let probes = 0;
+  await f.inEnv(() => {
+    const gitVersion = () => { probes++; return "git version 2.44.9"; };
+    assert.doesNotThrow(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }));
+    assert.equal(retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true }).removedDir, true);
+  });
+  assert.equal(probes, 0);
+});

@@ -779,9 +779,13 @@ and a refusal names the submodule's path relative to the outer repository
 in `details.submodule`. At or above the floor no submodule config is read
 for this check. Only inspected working trees recurse into their submodules;
 object/ref-only sources (the recorded repository, for example) check their
-own config, and do not inspect that checkout's submodules. A nested source
-with its own `.git` checks that config even if its working tree is elsewhere;
-only the inspected tree's populated submodules are checked recursively. Full
+own config, and do not inspect that checkout's submodules. For a tree-reading
+source, one Git metadata read resolves the gitdir and the top level Git
+walks. A `.git` entry admits its own config only when Git resolves that
+directory or gitfile target; an invalid empty `.git` does not admit an
+enclosing checkout. A nested source whose working tree is elsewhere still
+has that tree inspected by the copier: its populated submodules are checked
+there, with paths relative to that top level in `details.submodule`. Full
 clones without populated submodules need no version probe when discovery
 succeeds. Failed discovery probes once: a modern Git proceeds under its own
 guard, and older or unknown Git refuses inspection. A plain work directory
