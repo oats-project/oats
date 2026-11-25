@@ -82,6 +82,11 @@ def run_split(plan, policy, proxy_image, prefix):
     run([*services_compose,"config","--quiet"])
     services_created = True
     run([*services_compose,"up","-d","--wait","--wait-timeout","60"])
+    print("Docker engine:", docker("version","--format","{{.Server.Version}} API {{.Server.APIVersion}}"),
+          "compose:", run(["docker","compose","version","--short"]), flush=True)
+    for service in ("postgres","redis"):
+        container_id = run([*services_compose,"ps","-q","--no-trunc",service])
+        print("fixture ports", service, docker("inspect","--format","{{json .Config.ExposedPorts}} {{json .HostConfig.PortBindings}} {{json .NetworkSettings.Ports}}",container_id), flush=True)
     redis_id = run([*services_compose,"ps","-q","--no-trunc","redis"])
     redis_address = json.loads(docker("inspect",redis_id))[0]["NetworkSettings"]["Networks"][services_project + "-backends"]["IPAddress"]
     # Disjoint projects: the agent project's outward bridge has no route to them.
