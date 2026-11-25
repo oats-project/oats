@@ -362,8 +362,10 @@ that sets YOLO. Its form says the same and saves YOLO. Only schedules are
 marked; a trigger's spawn is not.
 
 **A wake to a provider home** is edited as any wake. Under the home, the form
-says the wake is sent as the session's input and never starts a stopped home
-there: it waits, and is delivered once the home runs again.
+says the wake is sent as the session's input, that a home OATS stopped is
+started at the wake's due minute, in a fresh conversation, and gets the
+message once it runs, and that one stopped with the host waits until it is
+resumed.
 
 Styles: the notes use `--muted`, `--warn` and `--space-2` of `theme.css`; the
 warning note is in the computed contrast test.

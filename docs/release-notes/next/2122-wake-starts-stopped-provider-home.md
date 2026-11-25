@@ -12,4 +12,5 @@
   readable and is not carried on. A provider home whose session is lost
   (gone without an OATS stop, or stopped with the host) is still not
   started by a wake: its resume brings it back
-  ([schedules.md](../schedules.md#kinds)).
+  ([schedules.md](../schedules.md#kinds)). The Desktop's wake form says
+  the new rule under a provider home.

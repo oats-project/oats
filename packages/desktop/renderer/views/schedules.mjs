@@ -159,10 +159,11 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   }
   const setNote = (selector, text, warn = false) => { const note = q(selector); note.textContent = text; note.hidden = !text; note.classList.toggle("schedule-warn", !!text && warn); };
   /** A wake to a home on a session provider is a wake as any other; what differs is said: it goes to the session
-   * as input, and it never starts a stopped home (lib/schedule.mjs performWake starts a tmux home only). */
+   * as input; a home OATS stopped is started at the due minute, in a fresh conversation, as a tmux home is
+   * (lib/schedule.mjs performWake), and one stopped with the host waits for its resume. */
   function syncHome() {
     const row = field("kind").value === "wake" ? instances.find(i => i.home === field("home").value) : null, provider = row ? sessionProvider(row) : null;
-    setNote(".schedule-home-note", provider ? `This home runs on ${sessionProviderName(provider) ? provider : "a session provider"}, not in a terminal: the wake is sent as its session's input. A wake never starts a stopped home there: it waits, and is delivered once the home runs again.` : "");
+    setNote(".schedule-home-note", provider ? `This home runs on ${sessionProviderName(provider) ? provider : "a session provider"}, not in a terminal: the wake is sent as its session's input. A home OATS stopped is started at the wake's due minute, in a fresh conversation, and gets the message once it runs; one stopped with the host waits until it is resumed.` : "");
   }
   /** The Session backend's provider options: `names`, after "Soul default" and "tmux". A choice that is no longer
    * offered falls back to the soul's default. */

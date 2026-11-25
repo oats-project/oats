@@ -237,7 +237,7 @@ test("a schedule stored without YOLO on a provider that launches only in full mo
   }
 });
 
-test("a wake to a home on a session provider is edited as any wake, and the form says it never starts a stopped home", async () => {
+test("a wake to a home on a session provider is edited as any wake, and the form says a home OATS stopped is started at the due minute, and one stopped with the host waits", async () => {
   const bbHome = "/team/agents/reviewer/instances/bb-seat", saved = [];
   const wake = { id: "nudge", kind: "wake", enabled: true, cron: "*/15 * * * *", tz: "UTC", home: bbHome, message: "Anything new?" };
   const s = setup({ read: async () => ({ schedules: [wake], scheduler }), instances: [{ home, instance: "reviewer-seat" }, { home: bbHome, instance: "bb-seat", backend: "bb", running: false }],
@@ -247,7 +247,7 @@ test("a wake to a home on a session provider is edited as any wake, and the form
     const form = s.el.querySelector("form"), note = s.el.querySelector(".schedule-home-note");
     assert.equal(sheetOf(s).hidden, false); assert.equal(form.elements.home.value, bbHome); assert.equal(s.el.querySelector(".schedule-save").disabled, false);
     assert.equal(note.hidden, false);
-    assert.equal(note.textContent, "This home runs on bb, not in a terminal: the wake is sent as its session's input. A wake never starts a stopped home there: it waits, and is delivered once the home runs again.");
+    assert.equal(note.textContent, "This home runs on bb, not in a terminal: the wake is sent as its session's input. A home OATS stopped is started at the wake's due minute, in a fresh conversation, and gets the message once it runs; one stopped with the host waits until it is resumed.");
     assert.equal(form.elements.home.getAttribute("aria-describedby"), note.id);
     change(s, form.elements.home, home); assert.equal(note.hidden, true, "a tmux home: nothing to add");
     change(s, form.elements.home, bbHome); assert.equal(note.hidden, false);
