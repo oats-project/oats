@@ -341,7 +341,7 @@ test("a named role's private, mixed, deployment or malformed DNS answers never r
   const policy=namedPolicy();policy.targets.aweb.addresses=["9.9.9.9"];
   let calls=0;
   for (const answers of [["10.0.0.1","192.168.1.1"],["172.16.0.1"],["127.0.0.1"],["20.190.1.1","10.0.0.1"],
-    ["10.0.0.1","20.190.1.1"],["172.30.0.2"],["9.9.9.9"],["10.20.0.11"],[],Array(9).fill("20.190.1.1")]) {
+    ["10.0.0.1","20.190.1.1"],["172.30.0.2"],["9.9.9.9"],["10.20.0.11"],[],Array(17).fill("20.190.1.1"),[...Array(15).fill("20.190.1.1"),"10.0.0.1"]]) {
     await assert.rejects(connectExternal(policy,"graph.microsoft.com",{
       resolve4:async host=>{assert.equal(host,"graph.microsoft.com");return answers;},
       connect:()=>{calls++;throw new Error("must not connect");},
@@ -349,7 +349,7 @@ test("a named role's private, mixed, deployment or malformed DNS answers never r
   }
   assert.equal(calls,0);
   const {PassThrough}=await import("node:stream");const stream=new PassThrough();let options;
-  assert.equal(await connectExternal(policy,"graph.microsoft.com",{resolve4:async()=>Array(8).fill("20.190.1.1"),
+  assert.equal(await connectExternal(policy,"graph.microsoft.com",{resolve4:async()=>Array(16).fill("20.190.1.1"),
     connect:value=>{options=value;queueMicrotask(()=>stream.emit("connect"));return stream;}}),stream);
   assert.deepEqual(options,{host:"20.190.1.1",port:443,family:4});
   stream.destroy();

@@ -115,7 +115,8 @@ role, npm, codeload, raw-file or release-asset host is included.
 Agents resolve configured external names to the proxy address. Only the
 proxy resolves their upstream addresses, for each new connection. An
 image-owned loopback connector validates every returned IPv4 address, rejects
-mixed safe/unsafe answers, and connects to the selected IP literal without a
+mixed safe/unsafe answers and answers of more than 16 addresses (Microsoft's
+sign-in and Graph hosts answer with 8), and connects to the selected IP literal without a
 second lookup. Only the first validated answer is tried; an unreachable first
 address fails that connection without trying the remaining answers.
 Private, loopback, link-local, reserved and denied addresses,

@@ -16,3 +16,10 @@
   ([egress README](../../container/agent/egress/README.md#deployment-named-external-roles)).
   Team-image CI checks the routes against real public origins with a
   verified TLS handshake on pull requests that change the egress component.
+
+## Changed
+
+- **An external route accepts a DNS answer of up to 16 addresses**, for
+  every external role, source and model included. Microsoft's sign-in and
+  Graph hosts answer with 8, the previous limit. Every address must still
+  pass, and a mixed answer is refused whole.
