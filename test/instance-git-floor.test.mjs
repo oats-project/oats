@@ -96,7 +96,7 @@ test("the recovery copier refuses a partial source before copying anything", (t)
   assert.equal(exactTreeDigest(f.home), before);
 });
 
-async function retirement(t) {
+async function retirement(t, { retireScript } = {}) {
   // v2Deployment clones its empty local remote once before seeding it. Hold precisely that
   // expected Git warning; every other diagnostic still reaches stderr.
   const stderr = process.stderr.write;
@@ -108,7 +108,7 @@ async function retirement(t) {
   let f;
   try { f = v2Deployment({
     souls: { dev: { soul: { work: "worktree", capabilities: { "test.hook": { from: "here" } } }, agents: "# Dev\n" } },
-    capabilities: { "test.hook": { manifest: { hooks: { retire: "retire.mjs" } }, files: { "retire.mjs": 'import { writeFileSync } from "node:fs";\nimport { join } from "node:path";\nwriteFileSync(join(process.env.OATS_INSTANCE_HOME, "hook-ran"), "ran\\n");\n' } } },
+    capabilities: { "test.hook": { manifest: { hooks: { retire: "retire.mjs" } }, files: { "retire.mjs": retireScript ?? 'import { writeFileSync } from "node:fs";\nimport { join } from "node:path";\nwriteFileSync(join(process.env.OATS_INSTANCE_HOME, "hook-ran"), "ran\\n");\n' } } },
     files: { "file.txt": "before\n" },
   }); } finally { process.stderr.write = stderr; }
   assert.equal(emptyCloneWarnings, 1, "the fixture's one empty seed clone is expected");
@@ -256,8 +256,8 @@ function populatedSubmodules(t, work) {
 test("a partial submodule at depth two refuses old or unknown Git before observation, diff, retire or copying", async (t) => {
   const { f, spawned, work, recovery } = await retirement(t);
   const nested = populatedSubmodules(t, work);
-  git(nested.work, "config", "remote.origin.promisor", "true");
   const seen = observeInstanceGit(spawned.home);
+  git(nested.work, "config", "remote.origin.promisor", "true");
   const file = seen.files.find((entry) => entry.path === "file.txt");
   const before = [exactTreeDigest(spawned.home), exactTreeDigest(f.member)];
   for (const [version, found] of [["git version 2.44.9", "2.44.9"], ["unknown", "an unknown version"]]) {
@@ -311,4 +311,27 @@ test("old Git observes full-clone submodules recursively, with a single version 
   const seen = observeInstanceGit(f.home, { gitVersion: () => { calls++; return "git version 2.44.9"; } });
   assert.equal(seen.files.length, 1);
   assert.equal(calls, 1);
+});
+
+test("a retire hook making a submodule partial is refused at the post-hook inspection", async (t) => {
+  const { f, spawned, work } = await retirement(t, { retireScript: `
+import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+const home = process.env.OATS_INSTANCE_HOME, work = join(home, "work");
+const common = execFileSync("git", ["-C", work, "rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8" }).trim();
+execFileSync("git", ["-C", work, "-c", "protocol.file.allow=always", "submodule", "add", "--quiet", dirname(common), "modules/late"]);
+execFileSync("git", ["-C", join(work, "modules", "late"), "config", "remote.origin.promisor", "true"]);
+writeFileSync(join(home, "hook-ran"), "ran");
+` });
+  await f.inEnv(() => {
+    assert.throws(() => retireInstance(f.root, spawned.instance, { gitVersion: () => "git version 2.44.9", discardWorktree: true }), (e) => {
+      assert.equal(e.code, "E_WORK_INSPECTION_FAILED", e.message);
+      assert.equal(e.details.reached.phase, "after-hooks");
+      assert.match(e.message, /the submodule modules\/late is a partial clone/);
+      return true;
+    });
+  });
+  assert.equal(readFileSync(join(spawned.home, "hook-ran"), "utf8"), "ran");
+  assert.equal(existsSync(work), true);
 });
