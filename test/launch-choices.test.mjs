@@ -71,7 +71,9 @@ test("a manifest declares launch choices by name, each with a one-line descripti
   const said = schema.additionalProperties.properties.description, pattern = new RegExp(said.pattern, "u");
   assert.deepEqual([said.minLength, said.maxLength], [1, 200]);
   for (const text of ["How hard the model thinks", "ünïcödé is text"]) assert.equal(pattern.test(text), true, text);
-  for (const text of ["two\nlines", "an \u001b[31mescape", "a bidi \u202e override", "an isolate \u2066 mark", "a hidden \u200b space"]) assert.equal(pattern.test(text), false, JSON.stringify(text));
+  for (const text of ["two\nlines", "an \u001b[31mescape", "a bidi \u202e override", "an isolate \u2066 mark", "a hidden \u200b space", "a tag \u{E0041} character"]) assert.equal(pattern.test(text), false, JSON.stringify(text));
+  // The schema and the kernel refuse the same texts: none of these makes a provider the schema passes and the kernel does not.
+  for (const text of ["two\nlines", "a bidi \u202e override", "a tag \u{E0041} character", "a hidden \u200b space"]) assert.equal(Object.keys(sessionProvidersOf(provider({ level: { description: text } })).providers).length, 0, JSON.stringify(text));
 });
 
 test("the flag's grammar: <name>=<value>, each name once, at most eight; the rule that resolves one launch's choices refuses and never drops", () => {
@@ -191,6 +193,67 @@ test("REFUSE, NEVER DROP: a name the provider does not declare, a tmux home, a m
   // --resume runs the recorded launch as it is: no choice goes with it.
   refusedAs(sessionCli(fx, home, "start", ["--resume", ...choice("reasoning-level", "low")]), /--resume runs the launch this home recorded; it cannot be combined with --launch-choice/);
   assert.deepEqual(acted(fx), []);
+});
+
+test("a tmux HOME takes no launch choice at a start or a restart: refused before anything is planned, stopped or started, a home from before recipes included", (t) => {
+  const fx = deployment(t);
+  // A tmux home that was never launched: nothing of a terminal is needed to refuse.
+  const made = spawnCli(fx, "term", ["--no-launch"], []);
+  assert.equal(made.ok, true, JSON.stringify(made));
+  const home = made.result.home, record = join(home, "instance.json"), before = readFileSync(record, "utf8");
+  assert.equal(JSON.parse(before).backend ?? "tmux", "tmux");
+  const sentence = `term cannot take --launch-choice reasoning-level=${HIGH}: the tmux backend takes no launch choices yet; for pi, the model's own \`:level\` sets its thinking; nothing was stopped or started`;
+  for (const verb of ["start", "restart"]) {
+    const refused = sessionCli(fx, home, verb, choice("reasoning-level", HIGH));
+    assert.deepEqual([refused.ok, refused.error.code, refused.error.message], [false, "E_BAD_ARGS", sentence], `${verb}: ${JSON.stringify(refused)}`);
+  }
+  assert.equal(readFileSync(record, "utf8"), before, "the record did not move");
+  // A home from before recipes (it records a command and no recipe) plans nothing at a start: refused all the same,
+  // never started on its recorded command without the choice.
+  const legacy = JSON.parse(before);
+  delete legacy.launch;
+  writeFileSync(record, JSON.stringify(legacy, null, 2));
+  for (const verb of ["start", "restart"]) {
+    const refused = sessionCli(fx, home, verb, choice("reasoning-level", HIGH));
+    assert.deepEqual([refused.ok, refused.error.code, refused.error.message], [false, "E_BAD_ARGS", sentence], `${verb}, no recipe: ${JSON.stringify(refused)}`);
+  }
+  // With another launch flag beside it, the same.
+  assert.equal(sessionCli(fx, home, "start", [...choice("reasoning-level", HIGH), "--model", "opus"]).error.code, "E_BAD_ARGS");
+});
+
+test("a spawn's decision binds its launch choices, with no key for them: an apply with other choices is stale, and a replay of its key with others is a conflict", (t) => {
+  const fx = deployment(t);
+  fx.control({ stateful: true });
+  const preview = (extra) => fx.cli(["spawn", "dev", "--name", "bound", "--backend", "fake", "--launch-config", "claude", "--preview", "--json", ...extra]).json();
+  const none = preview([]), high = preview(choice("reasoning-level", HIGH)), low = preview(choice("reasoning-level", "low")), cleared = preview(choice("reasoning-level", "default"));
+  for (const p of [none, high, low, cleared]) assert.equal(p.ok, true, JSON.stringify(p).slice(0, 400));
+  // The decision's keys are the ones it had: the choices are in its revision only.
+  assert.deepEqual(Object.keys(high.result.decision).sort(), Object.keys(none.result.decision).sort());
+  assert.deepEqual(Object.keys(high.result.decision.effective).sort(), Object.keys(none.result.decision.effective).sort());
+  assert.equal(JSON.stringify(high.result).includes(HIGH), false, "and the preview's answer holds no choice");
+  const [r0, rHigh, rLow] = [none, high, low].map((p) => p.result.decision.revision);
+  assert.equal(new Set([r0, rHigh, rLow]).size, 3, "each set of choices is its own decision");
+  assert.equal(cleared.result.decision.revision, r0, "`default` chooses nothing: the decision of a spawn with no choice");
+  assert.equal(preview(choice("reasoning-level", HIGH)).result.decision.revision, rHigh, "stable");
+  const apply = (revision, extra, key = "k".repeat(64)) => fx.cli(["spawn", "dev", "--name", "bound", "--backend", "fake", "--launch-config", "claude", "--expect-decision", revision, "--idempotency-key", key, "--json", ...extra]).json();
+  // The previewed decision with other choices, or with none: stale, nothing created.
+  for (const extra of [choice("reasoning-level", "low"), []]) {
+    const stale = apply(rHigh, extra);
+    assert.deepEqual([stale.ok, stale.error.code], [false, "E_DECISION_STALE"], JSON.stringify(stale).slice(0, 400));
+  }
+  assert.equal(existsSync(join(fx.root, "dev", "instances", "bound")), false);
+  // Applied as previewed.
+  const applied = apply(rHigh, choice("reasoning-level", HIGH));
+  assert.equal(applied.ok, true, JSON.stringify(applied).slice(0, 400));
+  assert.deepEqual(recipeOf(applied.result.home).choices, { "reasoning-level": HIGH });
+  // The same key again, as it was: the replay. With other choices, or none: a conflict, never answered as taken.
+  assert.equal(apply(rHigh, choice("reasoning-level", HIGH)).result.replayed, true);
+  for (const extra of [choice("reasoning-level", "low"), [], [...choice("reasoning-level", HIGH), ...choice("service-tier", FAST)]]) {
+    const conflict = apply(rHigh, extra);
+    assert.deepEqual([conflict.ok, conflict.error.code], [false, "E_IDEMPOTENCY_CONFLICT"], JSON.stringify(conflict).slice(0, 400));
+    assert.match(conflict.error.message, /was used for bound with the launch choices reasoning-level=zz-high-9, and this spawn gives /);
+  }
+  assert.deepEqual(recipeOf(applied.result.home).choices, { "reasoning-level": HIGH }, "the home is as it was spawned");
 });
 
 test("a recorded choice the provider no longer declares refuses a plain start and restart, naming the way to clear it; cleared, the home starts", (t) => {

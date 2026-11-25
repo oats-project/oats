@@ -278,7 +278,7 @@
               "required": ["description"],
               "additionalProperties": false,
               "properties": {
-                "description": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069\\u200b\\u2060\\ufeff]*$", "description": "What the choice is, for a person: one line of safe text (no control or bidi character). A client may show it; nothing parses it." }
+                "description": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069\\u200b\\u2060\\ufeff\\u{E0000}-\\u{E007F}]*$", "description": "What the choice is, for a person: one line of safe text (no control or bidi character). A client may show it; nothing parses it." }
               }
             }
           },

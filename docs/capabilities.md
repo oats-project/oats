@@ -2214,6 +2214,11 @@ the kernel nothing.
   of its soul goes on). So a package that declares
   `launchChoices` raises its `compatibility.oats` to the release that lists
   `launch-choices`, and is pinned only once every host runs that kernel.
+- **The downgrade cost.** A kernel moved back below `launch-choices` does
+  not know the record's `choices`: it starts a home that holds recorded
+  choices **without them**, and says nothing. That is the one place a
+  choice can drop, and only by moving a kernel back; the rollout order
+  above is what prevents it.
 
 **Containment.** A malformed `sessionProviders` never refuses the capability:
 it is validated where a provider is used. A problem inside one provider

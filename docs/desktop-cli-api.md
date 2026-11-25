@@ -7823,6 +7823,15 @@ oats session start|restart --home <abs> [--launch-choice <name>=<value>]…
   item.
 - **Nowhere else yet.** A launch configuration, a soul, a host default, a
   schedule's job and a trigger's spawn carry no launch choice.
+- **A spawn's decision binds its choices.** The preview's
+  `decision.revision` covers the choices the preview was given, with no key
+  for them in `decision`: an apply (`--expect-decision`) with other choices
+  is `E_DECISION_STALE`, and a replay of an idempotency key with other
+  choices is `E_IDEMPOTENCY_CONFLICT`. A decision with no choice has the
+  revision it always had.
+- **Moving a kernel back** below the feature starts a home that holds
+  recorded choices without them: the one place a choice can drop
+  ([capabilities.md](capabilities.md#launch-choices-launchchoices)).
 
 <a id="relayed-check-warnings"></a>
 **The planned launch's model, and relayed check warnings** (feature
