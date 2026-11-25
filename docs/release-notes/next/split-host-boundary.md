@@ -3,14 +3,18 @@
 - The egress boundary probe takes plan schema 2 for an agent host whose
   services run on another host. It proves, from the isolated agent and the
   proxy's outward bridge, that the one declared services-host address refuses
-  TCP on the PostgreSQL and Redis ports (an external PostgreSQL is checked at
-  its own pinned, IP-wide denied address), and its `--json` document adds
-  `mode:"split"`, the wrapper's `run`, the deploy copy's `sourceCommit` and the
-  four role-by-vantage results, each naming the address it tested. A new services-host witness,
-  `egress/probe-services-backends.mjs`, selects the PostgreSQL and Redis
-  containers by their Compose labels and proves them running, healthy,
-  unpublished and reachable from their own networks. Both run only from a
-  deploy copy extracted from the egress image. `policy.mjs` exports
+  TCP on the Redis port, and on the PostgreSQL port when PostgreSQL runs there.
+  An external PostgreSQL at its own pinned address must be denied IP-wide by
+  the policy and refuse the isolated agent; the outward bridge's result for it
+  is recorded, not required, since the database's credentials protect it from
+  other hosts. The `--json` document adds `mode:"split"`, the wrapper's `run`,
+  the deploy copy's `sourceCommit` and the four role-by-vantage results, each
+  naming the address it tested and whether it is required. A new services-host
+  witness, `egress/probe-services-backends.mjs`, selects the Redis container,
+  and the PostgreSQL container when it runs on the services host, by their
+  Compose labels and proves them running, healthy, unpublished and reachable
+  from their own networks; it does not attest an external PostgreSQL. Both run
+  only from a deploy copy extracted from the egress image. `policy.mjs` exports
   `policyHash`, a canonical policy hash with a cross-language test vector. See
   the [run contract](../container.md#versioned-probe-and-live-lab-inputs) and
   the [split-host contract](../../container/agent/egress/README.md#split-agentservices-hosts).
