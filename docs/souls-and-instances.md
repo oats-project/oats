@@ -773,7 +773,12 @@ protection needs Git 2.45 or later. Before reading objects, retire (including
 read, with `E_GIT_UNSUPPORTED`: nothing was done, and the home, worktree,
 branch and recovery are unchanged. A repository is a partial clone when its
 effective configuration sets `extensions.partialClone` or sets a remote
-`promisor` to true. Full clones need no version probe and work as before. The
+`promisor` to true. This includes populated submodules at any depth: their
+configs are checked only below that floor or when the version is unknown,
+and a refusal names the submodule's path relative to the outer repository
+in `details.submodule`. At or above the floor no submodule config is read
+for this check. Full clones without populated submodules need no version
+probe and work as before. The
 caller's repository-local Git variables are not passed: Git's own list
 (`git rev-parse --local-env-vars`: `GIT_DIR`, `GIT_WORK_TREE`,
 `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, the object directories, `GIT_CONFIG`,

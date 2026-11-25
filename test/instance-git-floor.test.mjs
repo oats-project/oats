@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { diffInstanceFile, observeInstanceGit } from "../lib/instance-git.mjs";
+import * as instanceGit from "../lib/instance-git.mjs";
 import { exactTreeDigest, retireInstance, retirementRecoveryRoot } from "../lib/core.mjs";
 import { planRetire } from "../lib/instance-lifecycle.mjs";
 import { BEFORE_EFFECT_CODES } from "../lib/errors.mjs";
@@ -200,4 +201,114 @@ test("a stale nested gitfile keeps the full clone's existing copier refusal", as
 
 test("the partial-clone refusal is a before-effect code for retire", () => {
   assert.ok(BEFORE_EFFECT_CODES.retire.includes("E_GIT_UNSUPPORTED"));
+});
+
+test("an observer keeps E_NO_WORKTREE for a dangling gitfile", (t) => {
+  const f = observer(t);
+  rmSync(join(f.work, ".git"), { recursive: true });
+  writeFileSync(join(f.work, ".git"), `gitdir: ${join(f.home, "gone")}\n`);
+  assert.throws(() => observeInstanceGit(f.home, { gitVersion: () => assert.fail("not a repository") }), { code: "E_NO_WORKTREE" });
+});
+
+test("a plain work directory inside a partial parent keeps E_NO_WORKTREE", (t) => {
+  const f = observer(t);
+  rmSync(join(f.work, ".git"), { recursive: true });
+  git(f.home, "init", "-q");
+  git(f.home, "config", "remote.origin.promisor", "true");
+  assert.throws(() => observeInstanceGit(f.home, { gitVersion: () => "git version 2.44.0" }), { code: "E_NO_WORKTREE" });
+});
+
+test("an unreadable full-clone directory keeps plan success and the attributed inspection refusal", async (t) => {
+  const { f, spawned, work } = await retirement(t);
+  const locked = join(work, "locked");
+  mkdirSync(join(locked, "in"), { recursive: true });
+  f.beforeCleanup(() => { if (existsSync(locked)) chmodSync(locked, 0o700); });
+  chmodSync(locked, 0o000);
+  await f.inEnv(() => {
+    const gitVersion = () => assert.fail("full clones never probe the version");
+    assert.doesNotThrow(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }));
+    if (process.getuid?.() === 0) {
+      assert.equal(retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true }).removedDir, true);
+    } else {
+      assert.throws(() => retireInstance(f.root, spawned.instance, { gitVersion }), (e) => {
+        assert.equal(e.code, "E_WORK_INSPECTION_FAILED");
+        assert.match(e.message, /Nothing was stopped, run or removed/);
+        return true;
+      });
+    }
+  });
+});
+
+function populatedSubmodules(t, work) {
+  const leaf = observer(t), middle = observer(t);
+  const add = (parent, source, path) => git(parent, "-c", "protocol.file.allow=always", "submodule", "add", "--quiet", source, path);
+  add(middle.work, leaf.work, "inner");
+  git(middle.work, "add", ".");
+  git(middle.work, "commit", "-qm", "nested submodule");
+  add(work, middle.work, "modules/top");
+  git(work, "-c", "protocol.file.allow=always", "submodule", "update", "--init", "--recursive", "--quiet");
+  git(work, "add", ".");
+  git(work, "commit", "-qm", "populated submodules");
+  writeFileSync(join(work, "file.txt"), "modified after submodule commit\n");
+  return { path: "modules/top/inner", work: join(work, "modules/top", "inner") };
+}
+
+test("a partial submodule at depth two refuses old or unknown Git before observation, diff, retire or copying", async (t) => {
+  const { f, spawned, work, recovery } = await retirement(t);
+  const nested = populatedSubmodules(t, work);
+  git(nested.work, "config", "remote.origin.promisor", "true");
+  const seen = observeInstanceGit(spawned.home);
+  const file = seen.files.find((entry) => entry.path === "file.txt");
+  const before = [exactTreeDigest(spawned.home), exactTreeDigest(f.member)];
+  for (const [version, found] of [["git version 2.44.9", "2.44.9"], ["unknown", "an unknown version"]]) {
+    const gitVersion = () => version;
+    const refused = (e) => {
+      assert.equal(e.code, "E_GIT_UNSUPPORTED");
+      assert.equal(e.details.submodule, nested.path);
+      assert.equal(e.details.found, found);
+      assert.equal(e.details.minimum, "2.45");
+      assert.equal(e.details.reason, "partial-clone");
+      assert.equal(e.message.split("; nothing was done")[0], `the submodule ${nested.path} is a partial clone, and reading it safely needs Git 2.45 or later; this is Git ${found}`);
+      return true;
+    };
+    await f.inEnv(() => {
+      assert.throws(() => observeInstanceGit(spawned.home, { gitVersion }), refused);
+      assert.throws(() => diffInstanceFile(spawned.home, { gitVersion, fileId: file.id, revision: seen.observation.revision }), refused);
+      assert.throws(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }), refused);
+      assert.throws(() => retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true }), refused);
+      assert.throws(() => core.copyRecoveryWork({ work, branchExists: true }, { work: "worktree", repo: f.member, branch: spawned.branch }, join(f.base, "copy"), { gitVersion }), refused);
+    });
+    assert.deepEqual([exactTreeDigest(spawned.home), exactTreeDigest(f.member)], before);
+    assert.equal(existsSync(join(f.base, "copy")), false);
+    assert.equal(existsSync(recovery), false);
+    assert.equal(existsSync(join(spawned.home, "hook-ran")), false);
+  }
+});
+
+test("modern Git observes partial submodules without the guard reading any submodule config", (t) => {
+  const f = observer(t);
+  const nested = populatedSubmodules(t, f.work);
+  git(nested.work, "config", "extensions.partialClone", "origin");
+  let calls = 0;
+  const gitVersion = () => { calls++; return "git version 2.45.0"; };
+  assert.equal(observeInstanceGit(f.home, { gitVersion }).files.length, 1);
+  assert.equal(calls, 1);
+  const trace = join(f.home, "guard.trace");
+  // Trace real Git invocations of the shared guard alone; the later status is Git's own reader.
+  instanceGit.withGitReadSafety(gitVersion, () => instanceGit.assertSafeGitSubmodules(f.work, {
+    configEnv: { PATH: process.env.PATH, HOME: f.home, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TRACE: trace },
+  }));
+  const commands = readFileSync(trace, "utf8");
+  assert.match(commands, /ls-files --stage -z/);
+  assert.doesNotMatch(commands, /config --list/);
+  assert.equal(calls, 2, "one probe for each independent call");
+});
+
+test("old Git observes full-clone submodules recursively, with a single version probe", (t) => {
+  const f = observer(t);
+  populatedSubmodules(t, f.work);
+  let calls = 0;
+  const seen = observeInstanceGit(f.home, { gitVersion: () => { calls++; return "git version 2.44.9"; } });
+  assert.equal(seen.files.length, 1);
+  assert.equal(calls, 1);
 });

@@ -332,9 +332,9 @@ terminal); when `oats version --json` lists `session-attach-detach-key`, add
 These commands act on **other** instances only when your task, person or capabilities authorize it.
 Retire runs every module's hooks (identities, scheduled jobs), retaining work unless told to discard.
 Extra trees are removed when clean and retained with work; discard does not apply to them.
-Partial clones need Git 2.45+ for retire (`--plan` too). `E_GIT_UNSUPPORTED`
-means older or unparseable Git: nothing changed. Upgrade Git and retry.
-Full clones need no version probe.
+Partial clones (populated submodules included) need Git 2.45+ for retire (`--plan` too).
+`E_GIT_UNSUPPORTED` means older or unparseable Git: nothing changed. Upgrade Git and retry.
+Full clones without populated submodules need no version probe.
 From OATS 0.69.20, a home whose recorded retire hooks cannot run refuses with
 `E_UNIDENTIFIED_INSTANCE_HOME` before stopping anything, children included;
 `--plan` and Desktop Remove refuse the same way. This affects homes spawned
