@@ -52,7 +52,8 @@ the group can read it; no agent outside the group can. On a shared host:
   Compose commands: the fragment binds it read-only at
   `/etc/agent-credentials`, with `create_host_path: false`. Acceptance admits
   the mount only when `TEAM_CREDENTIALS_DIR` is set, refuses a source that
-  overlaps a writable source, `/inputs` or `/outbox`, and checks, as the
+  overlaps a writable source, `/inputs`, `/outbox`, `/mirrors` or the trust
+  CA (read-only sources the operator may mount into every group), and checks, as the
   runtime user, the directory's root:runtime-GID 0750, each regular file's
   root:runtime-GID 0440, that no file is writable and that a write is
   refused. It reads no name and no content. Without the fragment, it requires
@@ -204,7 +205,7 @@ Git mirrors), `/etc/agent-trust/ca.pem` (read-only public CA only) and
 its supplementary group; trust adds only `SSL_CERT_FILE` and
 `NODE_EXTRA_CA_CERTS` pointing at that CA. Acceptance refuses overlapping optional
 inputs/outbox and writable bind sources, and a credentials source that overlaps
-a writable source or `/inputs`. Every bind source must be absolute.
+a writable source, `/inputs`, `/mirrors` or the trust CA. Every bind source must be absolute.
 ([Work](../container/agent/compose.agent.work.yaml),
 [inputs](../container/agent/compose.agent.inputs.yaml),
 [outbox](../container/agent/compose.agent.outbox.yaml),

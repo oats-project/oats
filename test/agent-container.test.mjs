@@ -1348,7 +1348,7 @@ test("credentials acceptance requires a read-only root:runtime-GID 0750 director
   refused({...fs, writeFileSync: () => { throw fault("EIO"); }}, "write probe failed");
 });
 
-test("acceptance admits the credentials mount only when declared, read-only, and apart from writable sources, inputs and outbox", async () => {
+test("acceptance admits the credentials mount only when declared, read-only, and apart from writable sources, inputs, outbox, mirrors and the trust CA", async () => {
   const { inspectAgent: inspectOnHost } = await import("../container/agent/accept.mjs");
   const inspectAgent = (info, env, image) => inspectOnHost(info, env, image, undefined, source => source);
   const { env, image, inspected } = acceptanceFixture();
@@ -1379,7 +1379,7 @@ test("acceptance admits the credentials mount only when declared, read-only, and
   assert.throws(() => inspectAgent(...at(credentials, credentialsEnv, "relative/credentials"), image), /must be absolute/);
   for (const source of [env.TEAM_STATE_DIR, env.TEAM_STATE_DIR + "/credentials", "/srv/team"]) {
     const [changed, settings] = at(credentials, credentialsEnv, source);
-    assert.throws(() => inspectAgent(changed, settings, image), /credentials must stay outside agent-writable sources, \/inputs and \/outbox/, source);
+    assert.throws(() => inspectAgent(changed, settings, image), /credentials must stay outside agent-writable sources, \/inputs, \/outbox, \/mirrors and the trust CA/, source);
   }
   const work = structuredClone(credentials), workEnv = {...credentialsEnv, TEAM_WORK_DIR: "/srv/work"};
   mount(work, workEnv.TEAM_WORK_DIR, "/work", true);
@@ -1400,6 +1400,25 @@ test("acceptance admits the credentials mount only when declared, read-only, and
   for (const source of ["/srv/outbox", "/srv/outbox/credentials", "/srv"]) {
     assert.throws(() => inspectAgent(...at(outbox, outboxEnv, source), image), /must stay outside/, source);
   }
+  // Read-only, but the operator may mount them into every group: the credentials source stays apart from them too.
+  const mirrors = structuredClone(credentials), mirrorsEnv = {...credentialsEnv, AGENT_MIRRORS_DIR: "/srv/mirrors"};
+  mount(mirrors, mirrorsEnv.AGENT_MIRRORS_DIR, "/mirrors", false);
+  assert.doesNotThrow(() => inspectAgent(mirrors, mirrorsEnv, image));
+  for (const source of ["/srv/mirrors", "/srv/mirrors/credentials", "/srv"]) {
+    assert.throws(() => inspectAgent(...at(mirrors, mirrorsEnv, source), image), /credentials must stay outside agent-writable sources, \/inputs, \/outbox, \/mirrors and the trust CA/, source);
+  }
+  const trust = structuredClone(credentials), trustEnv = {...credentialsEnv, AGENT_CA_FILE: "/srv/trust/ca.pem"};
+  trust.Config.Env.push("SSL_CERT_FILE=/etc/agent-trust/ca.pem", "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem");
+  mount(trust, trustEnv.AGENT_CA_FILE, "/etc/agent-trust/ca.pem", false);
+  assert.doesNotThrow(() => inspectAgent(trust, trustEnv, image));
+  for (const source of ["/srv/trust", "/srv"]) {
+    assert.throws(() => inspectAgent(...at(trust, trustEnv, source), image), /credentials must stay outside agent-writable sources, \/inputs, \/outbox, \/mirrors and the trust CA/, source);
+  }
+  // The CA file inside the credentials directory: the same overlap from the other side.
+  const caInside = structuredClone(trust), caInsideEnv = {...trustEnv, AGENT_CA_FILE: credentialsEnv.TEAM_CREDENTIALS_DIR + "/ca.pem"};
+  const caMount = caInside.Mounts.findIndex(m => m.Destination === "/etc/agent-trust/ca.pem");
+  caInside.Mounts[caMount].Source = caInsideEnv.AGENT_CA_FILE; caInside.HostConfig.Mounts[caMount].Source = caInsideEnv.AGENT_CA_FILE;
+  assert.throws(() => inspectAgent(caInside, caInsideEnv, image), /credentials must stay outside agent-writable sources, \/inputs, \/outbox, \/mirrors and the trust CA/);
   assert.throws(() => inspectOnHost(credentials, credentialsEnv, image, undefined, () => { throw new Error("VALUE_MUST_BE_WITHHELD"); }),
     error => /credentials require resolvable Docker-host sources/.test(error.message) && !error.message.includes("VALUE_MUST_BE_WITHHELD"));
 });
