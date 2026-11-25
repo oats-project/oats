@@ -212,8 +212,9 @@ refuses the key on a trigger.
   no shell; `oats schedule` itself is refused) in `cwd`, an existing directory
   inside the deployment. The runner tracks any instance the command's
   envelope names, including an independent worker it reports, until its home
-  is gone. A command's return is not task completion. Command/operation runs and
-  workspace-spawn launches have a five-minute child timeout. The supervisor
+  is gone. A command's return is not task completion. Command/operation runs,
+  workspace-spawn launches and a wake's start of a provider home have a
+  five-minute child timeout. The supervisor
   sends SIGTERM to the child's process group, allows two seconds for cleanup,
   then sends SIGKILL if the group remains. It observes the direct child's exit
   before returning; inherited output pipes cannot hold the tick indefinitely.
@@ -257,7 +258,11 @@ refuses the key on a trigger.
   session start --home`, run by the tick: a new session of the provider, with
   the provider's own `check` first. A start that is refused is `skipped`
   with the refusal's `errorCode` (the provider's `E_BACKEND_*` among them),
-  and the delivery stays pending. Before this rule such a wake was only
+  and the delivery stays pending. That start is a child of the tick, with
+  a command job's five-minute timeout: one that times out or is interrupted
+  leaves the start unconfirmed (`whether the session was started is not
+  known`), and the job keeps its slot until the home is observed stopped or
+  running. Before this rule such a wake was only
   refused (`E_SESSION_NOT_RUNNING`) until a person started the home.
 
   A provider home whose session is **lost** is not started by a wake. To a
