@@ -961,7 +961,14 @@ the spawn is then rolled back.
 
 **What OATS checks for a provider launch, and what it does not.** The launch
 configuration, the harness, the model, yolo, the capabilities' hooks and the
-launch environment are decided as for tmux and handed to the provider. The
+launch environment are decided as for tmux and handed to the provider. So
+are the launch's choices, where the provider declares any (feature
+`launch-choices`): `--launch-choice <name>=<value>` on a spawn, a start or a
+restart gives one, the home records it for its later starts, and the kernel
+checks only that the provider declares the name. A choice it does not
+declare, and any choice on a tmux home, is refused `E_BAD_ARGS` before
+anything is created, stopped or started: never dropped
+([desktop-cli-api.md](desktop-cli-api.md#launch-choices-feature-launch-choices)). The
 checks about a terminal pane are skipped, because no pane runs the harness:
 the harness executable on the pane's `PATH`, folder trust, the Claude login
 credential, the development-channel prompt, the native-record wrapper. The

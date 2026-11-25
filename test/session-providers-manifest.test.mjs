@@ -39,7 +39,8 @@ test("sessionProviders: a sound provider is normalized; each rule's breach is on
   const ok = sessionProvidersOf(manifest({ fake: sound }));
   assert.deepEqual(ok.problems, []);
   assert.deepEqual(ok.providers.fake, {
-    name: "fake", description: "A fake session backend for tests", harnesses: ["claude"], wire: "1.3",
+    // (`launchChoices`, feature launch-choices: the choices it declares, none here; test/launch-choices.test.mjs.)
+    name: "fake", description: "A fake session backend for tests", harnesses: ["claude"], wire: "1.3", launchChoices: {},
     commands: {
       launch: { command: "session-launch", script: "bin/session.mjs", args: ["launch"] }, inspect: { command: "session-inspect", script: "bin/session.mjs", args: ["inspect"] },
       input: { command: "session-input", script: "bin/session.mjs", args: ["input"] }, stop: { command: "session-stop", script: "bin/session.mjs", args: ["stop"] },
