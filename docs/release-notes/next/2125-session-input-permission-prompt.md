@@ -7,7 +7,9 @@
   first option, so the command ran, the text was lost, and the answer said
   `verified: true`. The person answers the prompt in the agent's terminal
   (`oats session attach`) or through their client's prompt card; there is no
-  override. Feature `session-input-permission-refusal` in
+  override. A claim that outlived its dialog (Claude Code leaves it when a
+  prompt is refused) refuses the same way until the session's next prompt
+  or `oats instance waiting clear`; the refusal prints that command. Feature `session-input-permission-refusal` in
   `oats version --json` tells this refusal from a lost input. An input still
   answers other dialogs: a `question` claim's (AskUserQuestion takes the
   text; pi's confirm takes the Enter as its default option) and a startup

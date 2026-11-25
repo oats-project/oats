@@ -1885,7 +1885,10 @@ oats session attach --home /abs/home --detach-key 'C-\'
   While the session holds a `permission` claim, input is refused
   `E_SESSION_PROMPT_OPEN` and nothing is typed (feature
   `session-input-permission-refusal`): its Enter would answer the prompt.
-  Answer it in the agent's terminal or a client's prompt card. Input takes
+  Answer it in the agent's terminal or a client's prompt card. A claim
+  that outlived its dialog (a refused one leaves it) refuses like a live
+  one until the session's next prompt or `oats instance waiting clear`;
+  the refusal says how. Input takes
   no other hold: it types whatever other claim is set, and its Enter can
   answer any other open dialog (a question, a startup dialog with no claim,
   a permission prompt that opens right at the paste), so don't run it from a

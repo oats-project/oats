@@ -7893,9 +7893,10 @@ first Enter: the agent got both texts as one message, and both callers read
   input.
 - **What the lock does not cover:** keys a person types in an attached
   terminal (`oats session attach`, a client's terminal), another tool that
-  types into the pane (a messaging broker's own delivery), and a home on a
+  types into the pane itself, without `oats session input`, and a home on a
   session provider, whose inputs the provider orders itself. It serializes
-  the kernel's `session input` alone, a scheduled wake's delivery included.
+  the kernel's `session input` alone: a scheduled wake's delivery, and the
+  aweb host wake broker's, which delivers through this command.
   Text a person has typed and not sent is submitted by an input's Enter, as
   before.
 
@@ -7907,9 +7908,24 @@ Enter, as a session provider refuses it: the Enter would answer the prompt,
 and approve a command nobody saw. There is no override. The person answers
 the prompt where they can see it, in the agent's terminal (`oats session
 attach --home <abs>`) or through their client's own prompt card, and the
-input is sent again. Who meets the refusal: whatever runs `oats session
-input`, which is an agent or a script, a messaging layer that delivers
-through it, and a client that sends input through the kernel. A scheduled
+input is sent again.
+
+**A permission claim that outlived its dialog refuses like a live one.** A
+claim has no expiry ([A claim can outlive its dialog](schedules.md#a-held-wake)),
+and a refused dialog is the usual case: Claude Code fires no hook on Esc or
+"No", so the claim stays until the session's next prompt. Every input is
+refused until then. The refusal's message says so and prints the way out:
+send a prompt in the agent's terminal, or `oats instance waiting clear
+--producer <producer> --home <abs>`.
+
+Who meets the refusal: whatever runs `oats session input`. That is an agent
+or a script; a client that sends input through the kernel; and a messaging
+layer that delivers through it, such as the aweb host wake broker, whose
+mail and chat deliveries are refused the same way. What a caller does with
+the refusal (`E_SESSION_PROMPT_OPEN`, or the wait's
+`E_SESSION_INPUT_FAILED`) is its own: both say nothing was sent, so sending
+again later is safe; the kernel does not say what the aweb broker does with
+one (see oats.aweb). A scheduled
 wake already holds while a claim stands and does not reach it; should a
 prompt open right then, its delivery stays pending, as for every refused
 input. A trigger sends no input (it spawns). `--server` does not route

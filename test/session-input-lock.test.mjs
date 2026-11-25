@@ -264,7 +264,7 @@ test("an input to a home whose session holds a permission claim is refused E_SES
   setWaiting(fx.home, { producer: "oats.core", waiting: true, reason: "permission", message: "Claude needs your permission to use Bash" });
   const refused = fx.run("go on");
   assert.equal(refused.status, 1, refused.stderr);
-  assert.deepEqual(refused.envelope, { schemaVersion: 1, ok: false, error: { code: "E_SESSION_PROMPT_OPEN", message: `seat has a permission prompt open (the oats.core claim): an input's Enter would answer it, so nothing was sent. Answer it in the agent's terminal (oats session attach --home ${fx.home}) or in your client's own prompt card, then send the input again` } });
+  assert.deepEqual(refused.envelope, { schemaVersion: 1, ok: false, error: { code: "E_SESSION_PROMPT_OPEN", message: `seat has a permission prompt open (the oats.core claim): an input's Enter would answer it, so nothing was sent. Answer it in the agent's terminal (oats session attach --home ${fx.home}) or in your client's own prompt card, then send the input again. If no prompt is on its screen (a dialog that was refused leaves its claim), send a prompt in that terminal or clear the claim: oats instance waiting clear --producer oats.core --home ${fx.home}` } });
   assert.deepEqual(fx.events(), [], "no paste, no Enter, no key of any kind");
   // An attention claim with text beside it does not hide the permission one.
   setWaiting(fx.home, { producer: "agent", waiting: true, reason: "attention", message: "Which branch?" });
@@ -287,4 +287,12 @@ test("an input to a home whose session holds a permission claim is refused E_SES
   assert.equal(again.envelope.error.code, "E_SESSION_PROMPT_OPEN");
   assert.match(again.envelope.error.message, /\(the oats\.pi claim\)/);
   assert.deepEqual(fx.typed().length, 4);
+  // A claim that outlived its dialog (a prompt that was refused leaves it) refuses like a live
+  // one, and the refusal names the way out, which works: the clear it prints, then the input.
+  const clear = again.envelope.error.message.match(/clear the claim: oats (instance waiting clear --producer oats\.pi --home \S+)$/);
+  assert.ok(clear, again.envelope.error.message);
+  const cleared = spawnSync(process.execPath, [cli, ...clear[1].split(" "), "--json"], { cwd: fx.base, env: { PATH: process.env.PATH, HOME: fx.base, OATS_HOME_DIR: fx.oatsHome }, encoding: "utf8" });
+  assert.equal(cleared.status, 0, cleared.stderr || cleared.stdout);
+  assert.equal(fx.run("after the clear").status, 0);
+  assert.deepEqual(fx.messages().at(-1), "after the clear");
 });

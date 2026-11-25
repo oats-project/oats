@@ -1156,8 +1156,10 @@ more than that:
   `permission` claim
   ([Input](desktop-cli-api.md#input)). Run by a script or an agent at a
   session showing any other dialog, its Enter answers it.
-- **The aweb host wake broker types on its own path,** joined teams included. A
-  hold covers the kernel's wake delivery only, not mail.
+- **The aweb host wake broker delivers on its own path,** joined teams included. A
+  hold covers the kernel's wake delivery only, not mail: the broker's
+  `oats session input` is typed over any claim but a `permission` one, which
+  refuses it like every input.
 
 ## Wake at spawn
 
