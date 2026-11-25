@@ -248,12 +248,35 @@ test("a spawn's decision binds its launch choices, with no key for them: an appl
   assert.deepEqual(recipeOf(applied.result.home).choices, { "reasoning-level": HIGH });
   // The same key again, as it was: the replay. With other choices, or none: a conflict, never answered as taken.
   assert.equal(apply(rHigh, choice("reasoning-level", HIGH)).result.replayed, true);
-  for (const extra of [choice("reasoning-level", "low"), [], [...choice("reasoning-level", HIGH), ...choice("service-tier", FAST)]]) {
+  for (const [extra, given] of [[choice("reasoning-level", "low"), "reasoning-level=low"], [[], "none"], [[...choice("reasoning-level", HIGH), ...choice("service-tier", FAST)], `reasoning-level=${HIGH}, service-tier=${FAST}`]]) {
     const conflict = apply(rHigh, extra);
     assert.deepEqual([conflict.ok, conflict.error.code], [false, "E_IDEMPOTENCY_CONFLICT"], JSON.stringify(conflict).slice(0, 400));
-    assert.match(conflict.error.message, /was used for bound with the launch choices reasoning-level=zz-high-9, and this spawn gives /);
+    assert.equal(conflict.error.message, `idempotency key ${"k".repeat(64)} confirmed bound with other launch choices than this spawn gives (${given}); a key binds one confirmed decision`);
   }
   assert.deepEqual(recipeOf(applied.result.home).choices, { "reasoning-level": HIGH }, "the home is as it was spawned");
+  // A replay is held to what the key CONFIRMED, never to the home's choices now: after a restart
+  // that changed the choice, and one that cleared it, the same replay is still the replay.
+  const home = applied.result.home;
+  for (const then of ["low", "default"]) {
+    assert.equal(sessionCli(fx, home, "restart", choice("reasoning-level", then)).ok, true);
+    const again = apply(rHigh, choice("reasoning-level", HIGH));
+    assert.deepEqual([again.ok, again.result?.replayed], [true, true], `after reasoning-level=${then}: ${JSON.stringify(again).slice(0, 400)}`);
+    assert.equal(apply(rHigh, choice("reasoning-level", "low")).error.code, "E_IDEMPOTENCY_CONFLICT", "and the choice the home has now is still not what the key confirmed");
+  }
+  // The other way round: a spawn confirmed with no choice, a start that then adds one, and its replay.
+  const plainPreview = fx.cli(["spawn", "dev", "--name", "unbound", "--backend", "fake", "--launch-config", "claude", "--preview", "--json"]).json();
+  const plainApply = (extra) => fx.cli(["spawn", "dev", "--name", "unbound", "--backend", "fake", "--launch-config", "claude", "--expect-decision", plainPreview.result.decision.revision, "--idempotency-key", "p".repeat(64), "--json", ...extra]).json();
+  const unbound = plainApply([]);
+  assert.equal(unbound.ok, true, JSON.stringify(unbound).slice(0, 400));
+  assert.equal(plainApply([]).result.replayed, true, "a decision with no choice replays as it always did");
+  assert.equal(sessionCli(fx, unbound.result.home, "restart", choice("reasoning-level", HIGH)).ok, true);
+  assert.equal(plainApply([]).result.replayed, true);
+  assert.equal(plainApply(choice("reasoning-level", HIGH)).error.code, "E_IDEMPOTENCY_CONFLICT");
+  // A tmux spawn's decision (no provider, no choice) replays too: the recorded decision makes its own revision again.
+  const termPreview = fx.cli(["spawn", "dev", "--name", "termkey", "--launch-config", "claude", "--no-launch", "--preview", "--json"]).json();
+  const termApply = () => fx.cli(["spawn", "dev", "--name", "termkey", "--launch-config", "claude", "--no-launch", "--expect-decision", termPreview.result.decision.revision, "--idempotency-key", "t".repeat(64), "--json"]).json();
+  assert.equal(termApply().ok, true);
+  assert.equal(termApply().result.replayed, true);
 });
 
 test("a recorded choice the provider no longer declares refuses a plain start and restart, naming the way to clear it; cleared, the home starts", (t) => {

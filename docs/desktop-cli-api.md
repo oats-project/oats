@@ -7827,7 +7827,9 @@ oats session start|restart --home <abs> [--launch-choice <name>=<value>]…
   `decision.revision` covers the choices the preview was given, with no key
   for them in `decision`: an apply (`--expect-decision`) with other choices
   is `E_DECISION_STALE`, and a replay of an idempotency key with other
-  choices is `E_IDEMPOTENCY_CONFLICT`. A decision with no choice has the
+  choices than the ones it confirmed is `E_IDEMPOTENCY_CONFLICT`. A replay
+  is held to what the key confirmed, never to the home's choices now, which
+  a later start may have changed. A decision with no choice has the
   revision it always had.
 - **Moving a kernel back** below the feature starts a home that holds
   recorded choices without them: the one place a choice can drop
