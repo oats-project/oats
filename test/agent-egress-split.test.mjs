@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
-import { policyHash } from "../container/agent/egress/policy.mjs";
+import { compilePolicy, policyHash } from "../container/agent/egress/policy.mjs";
 import { classifyProgram, tcpClassify, tcpFromNetwork } from "../container/agent/egress/canary.mjs";
 
 // The cross-language vector from the split-host spec. It exercises the hash
@@ -124,4 +124,84 @@ test("the emitted runtime program carries the classify body for schema-2 tuples"
   const program = runtimeProgram(plan);
   assert.match(program,/const tcpClassify=\(async function tcpClassify/);
   assert.match(program,/remoteEndpoints/);
+});
+
+// ---- Split-host plan admission (pure) ----
+const servicesAddress = "93.184.215.14";
+function splitPolicy() {
+  return {roles:["aweb","logs","secrets"],humanRole:"secrets",humanOrigin:"https://approve.example.invalid",frontAddress:"172.30.0.2",
+    privateIngressAddresses:[],deniedAddresses:["10.20.0.11"],
+    targets:Object.fromEntries(["aweb","logs","secrets"].map(role=>[role,{origin:`https://${role}.example.invalid`,addresses:[servicesAddress]}]))};
+}
+function remote(mode = "bundled") {
+  return {servicesAddress, backends: mode === "bundled"
+    ? [{role:"postgres",port:5432},{role:"redis",port:6379}]
+    : [{role:"redis",port:6379},{role:"postgres",port:5432,address:"10.20.0.11",external:true}]};
+}
+const observed = {
+  networks:[{IPAM:{Config:[{Subnet:"172.30.0.0/24"},{Subnet:"fd00::/64"}]}},{IPAM:{Config:null},Driver:"host"}],
+  links:[{ifname:"eth0",addr_info:[{family:"inet",local:"10.0.0.4",prefixlen:24},{family:"inet6",local:"fe80::1",prefixlen:64}]}],
+};
+const codeOf = code => error => { assert.equal(error.code, code, error.message); assert.ok(error.message.startsWith(code + ": ")); return true; };
+
+test("a shared front address compiles and yields per-port tuples, never an IP-wide deny", async () => {
+  const { admitRemoteBackends } = await import("../container/agent/egress/split.mjs");
+  const policy = splitPolicy();
+  compilePolicy(policy);
+  assert.ok(!policy.deniedAddresses.includes(servicesAddress));
+  assert.deepEqual(admitRemoteBackends(remote(), policy, observed), {servicesAddress, tuples:[
+    {role:"postgres",address:servicesAddress,port:5432,external:false},{role:"redis",address:servicesAddress,port:6379,external:false}]});
+  assert.deepEqual(admitRemoteBackends(remote("external"), policy, observed).tuples, [
+    {role:"postgres",address:"10.20.0.11",port:5432,external:true},{role:"redis",address:servicesAddress,port:6379,external:false}]);
+  // A services host in the agent host's own interface prefix is legitimate.
+  assert.doesNotThrow(() => admitRemoteBackends({...remote(),servicesAddress:"10.0.0.5"}, {...policy,targets:{...policy.targets}}, observed));
+});
+
+test("split mode v1 takes exactly one services-host address", async () => {
+  const { admitRemoteBackends } = await import("../container/agent/egress/split.mjs");
+  const policy = splitPolicy();
+  for (const value of [[remote(),remote()], {...remote(),servicesAddress:[servicesAddress,"93.184.215.15"]},
+    {...remote(),backends:[{role:"postgres",port:5432},{role:"redis",port:6379,address:"93.184.215.15"}]}])
+    assert.throws(() => admitRemoteBackends(value, policy, observed), codeOf("E_EGRESS_REMOTE_ADDRESSES"));
+});
+
+test("an address inside a Docker subnet or equal to an agent-host interface address is local", async () => {
+  const { admitRemoteBackends } = await import("../container/agent/egress/split.mjs");
+  const policy = splitPolicy();
+  for (const address of ["172.30.0.9","10.0.0.4"]) {
+    assert.throws(() => admitRemoteBackends({...remote(),servicesAddress:address}, policy, observed), codeOf("E_EGRESS_REMOTE_LOCAL"));
+    const external = remote("external"); external.backends[1].address = address;
+    assert.throws(() => admitRemoteBackends(external, {...policy,deniedAddresses:[address]}, observed), codeOf("E_EGRESS_REMOTE_LOCAL"));
+  }
+});
+
+test("an external database address must be denied IP-wide, distinct and never a target", async () => {
+  const { admitRemoteBackends } = await import("../container/agent/egress/split.mjs");
+  const policy = splitPolicy();
+  const external = address => { const value = remote("external"); value.backends[1].address = address; return value; };
+  assert.throws(() => admitRemoteBackends(external(servicesAddress), policy, observed), codeOf("E_EGRESS_EXTERNAL_DB_TARGET"));
+  assert.throws(() => admitRemoteBackends(external("93.184.215.20"), policy, observed), codeOf("E_EGRESS_EXTERNAL_DB_DENIED"));
+  const otherServices = {...external("10.20.0.11"),servicesAddress:"10.20.0.11"};
+  assert.throws(() => admitRemoteBackends(otherServices, policy, observed), codeOf("E_EGRESS_EXTERNAL_DB_DENIED"));
+});
+
+test("remote backend inventories other than postgres plus redis refuse", async () => {
+  const { admitRemoteBackends } = await import("../container/agent/egress/split.mjs");
+  const policy = splitPolicy();
+  for (const backends of [[], [{role:"redis",port:6379}], [{role:"redis",port:6379},{role:"redis",port:6380}],
+    [{role:"postgres",port:0},{role:"redis",port:6379}], [{role:"postgres",port:5432,extra:1},{role:"redis",port:6379}],
+    [{role:"postgres",port:5432,address:"10.20.0.11",external:"yes"},{role:"redis",port:6379}],
+    [{role:"postgres",port:5432},{role:"redis",port:6379,external:true,address:"10.20.0.11"}]])
+    assert.throws(() => admitRemoteBackends({servicesAddress,backends}, policy, observed), /remote backend inventory/);
+  assert.throws(() => admitRemoteBackends({servicesAddress:"not-ip",backends:remote().backends}, policy, observed), /services-host address must be one IPv4/);
+});
+
+test("the run binding requires the recomputed policy hash and bounded identifiers", async () => {
+  const { admitRun } = await import("../container/agent/egress/split.mjs");
+  const policy = splitPolicy(), run = {id:"run-2026.11.24:1",policyHash:policyHash(policy),servicesDeployment:"services-b"};
+  assert.deepEqual(admitRun(run, policy), run);
+  assert.throws(() => admitRun({...run,policyHash:policyHash({...policy,deniedAddresses:[]})}, policy), codeOf("E_EGRESS_POLICY_HASH"));
+  for (const bad of [undefined, {...run,extra:1}, {...run,id:""}, {...run,id:"a b"}, {...run,id:"x".repeat(129)},
+    {...run,servicesDeployment:7}, {...run,policyHash:"sha256:ABC"}])
+    assert.throws(() => admitRun(bad, policy), /run binding is invalid/);
 });

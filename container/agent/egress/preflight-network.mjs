@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 
 const keys = ["AGENTS_SUBNET", "AGENTS_GATEWAY", "AGENT_IP", "EGRESS_ADDRESS", "SERVICES_SUBNET", "SERVICES_GATEWAY"];
 const number = ip => ip.split(".").reduce((value, octet) => value * 256 + Number(octet), 0);
-function cidr(value, canonical = false) {
+export function cidr(value, canonical = false) {
   assert.ok(typeof value === "string", "network CIDR is missing");
   const [ip, prefix, extra] = value.split("/");
   assert.ok(isIP(ip) === 4 && extra === undefined && /^(?:[0-9]|[12][0-9]|3[0-2])$/.test(prefix), "network CIDR is invalid");
