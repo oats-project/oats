@@ -124,16 +124,17 @@ test('bundled Omarchy flag still uses the exact argv value without sending IPC',
   }
 });
 
-test('bundled termWrite accepts the agent view options exactly as the source does', () => {
+test('bundled termWrite invokes term:answer exactly as the source does', async () => {
   const source = load(read('preload.cjs'), [], false);
   const built = load(bundle);
   const h = { id: 1, lease: 'a'.repeat(64) };
-  const call = p => p.worlds.oatsDesktop.termWrite(h, 'agent view input', { answer: true });
-  const expected = call(source);
-  assert.equal(expected.ok, true);
-  assert.ok(source.calls.some(([method, channel]) => method === 'send' && channel === 'term:write'));
-  assert.deepEqual(plain(call(built)), plain(expected));
-  assert.deepEqual(plain(built.calls), plain(source.calls));
+  const text = 'agent view input';
+  const answer = { terminalApi: 2, ok: true, status: 'sent' };
+  for (const p of [source, built]) {
+    p.reply(answer);
+    assert.deepEqual(plain(await p.worlds.oatsDesktop.termWrite(h, text, { answer: true })), answer);
+    assert.deepEqual(plain(p.calls), [['invoke', 'term:answer', h, text]]);
+  }
 });
 
 test('bundled invocation methods preserve every IPC channel, argument order and result', async () => {
@@ -146,11 +147,21 @@ test('bundled invocation methods preserve every IPC channel, argument order and 
     workspaceOnboard: 'workspace:onboard', workspaceRemoveListed: 'workspace:remove-listed',
     windowClaimWorkspace: 'window:claim-workspace', windowReleaseAnswer: 'window:release-answer',
     windowChoices: 'window:choices', windowOpenWorkspace: 'window:open-workspace', cliPickBinary: 'cli:pick',
+    termWrite: 'term:answer',
   };
-  p.reply({ ok: true, marker: 'unchanged' });
+  const h = { id: 1, lease: 'a'.repeat(64) };
+  const passthrough = { ok: true, marker: 'unchanged' };
+  const refusal = { terminalApi: 2, ok: false, code: 'E_TERM_IN_MODE', message: 'Nothing was typed.' };
   for (const [method, channel] of Object.entries(methods)) {
+    if (method === 'termWrite') {
+      p.reply(refusal);
+      assert.deepEqual(plain(await api.termWrite(h, 'answer', { answer: true })), refusal);
+      assert.deepEqual(plain(p.calls.at(-1)), ['invoke', channel, h, 'answer']);
+      continue;
+    }
     const args = Array.from({ length: api[method].length }, (_, i) => `argument-${i}`);
-    assert.deepEqual(await api[method](...args), { ok: true, marker: 'unchanged' });
+    p.reply(passthrough);
+    assert.deepEqual(await api[method](...args), passthrough);
     assert.deepEqual(p.calls.at(-1), ['invoke', channel, ...args]);
   }
 });
