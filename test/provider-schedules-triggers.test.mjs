@@ -9,7 +9,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectInstanceSession, retireClaimPath, stopInstanceSession } from "../lib/core.mjs";
@@ -117,6 +117,12 @@ const rowIn = (considered, id) => considered.find((row) => row.id === id);
 const askedOf = (fx, instance) => fx.verbs().filter((c) => c.instance === instance && !["inspect", "inspectMany"].includes(c.verb)).map((c) => c.verb);
 const threadsOf = (fx, instance) => [...sessionsOf(fx.events())].filter(([, session]) => session.home === instance).map(([thread, session]) => [thread, session.running]);
 
+test("KP-1: the kernel announces it: feature wake-starts-provider-home", async () => {
+  const { KERNEL_FEATURES, WAKE_STARTS_PROVIDER_HOME_FEATURE } = await import("../lib/kernel-features.mjs");
+  assert.equal(WAKE_STARTS_PROVIDER_HOME_FEATURE, "wake-starts-provider-home");
+  assert.ok(KERNEL_FEATURES.includes("wake-starts-provider-home"));
+});
+
 test("KP-1: a wake due for a provider home OATS stopped starts it, a plain start in a new session, and its text is delivered once the session runs; a later tick sends nothing more", async (t) => {
   const fx = providerDeployment(t);
   fx.control({ stateful: true });
@@ -126,6 +132,9 @@ test("KP-1: a wake due for a provider home OATS stopped starts it, a plain start
   addWake(fx, "nudge", home, message);
   await fx.inEnv(() => stopInstanceSession(home, {}));
   assert.deepEqual(threadsOf(fx, "sleeper"), [[first, false]], "stopped by OATS");
+  // (A command that reads the workspace brings it to this host: what a start then resolves the
+  // deployment's configuration from, without reaching a remote.)
+  assert.equal(fx.cli(["spawn", "dev", "--backend", "fake", "--launch-config", "claude", "--preview", "--json"]).status, 0);
   fx.clearCalls();
 
   // Due: started. No input yet, and no resume: a launch, of a new session.
@@ -135,6 +144,11 @@ test("KP-1: a wake due for a provider home OATS stopped starts it, a plain start
   assert.deepEqual(fx.hooks("launch").map((h) => h.instance), ["sleeper"], "the launch hooks ran, as at any start");
   const launch = fx.verbs("launch")[0].request.input;
   assert.deepEqual([launch.previous, launch.promptFile], [{ server: FAKE_SERVER, threadId: first }, join(home, "TASK.md")], "a plain start on TASK.md: the earlier session is only named as the previous one");
+  // The start is `oats session start`, the tick's child: the one way the launch is handed the
+  // deployment's configuration as it is now (the sandbox allowances). A start made in the tick's
+  // own process could not resolve it, and its launch would say `sandbox: { unavailable }`, which
+  // a provider that sandboxes refuses.
+  assert.deepEqual(launch.sandbox, { domains: [], write: [{ path: join(realpathSync(fx.dep), ".agents", "events"), reason: "oats events" }], missing: [] }, "the allowances are resolved, as a person's start resolves them");
   const threads = threadsOf(fx, "sleeper");
   assert.equal(threads.length, 2);
   const second = threads.find(([thread]) => thread !== first)[0];
