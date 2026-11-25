@@ -29,6 +29,10 @@ compose = []
 services_compose = []
 created = False
 services_created = False
+# The non-local listener mutant's namespace and listener, removed in finally.
+listener_namespace = "oats-split-" + str(os.getpid())
+listener_link = "osp" + str(os.getpid() % 100000)
+listener = None
 # Unassigned and unrouted: not local to this engine host, and nothing answers.
 services_address = "192.0.2.10"
 external_database = "192.0.2.11"
@@ -128,6 +132,7 @@ def run_split(plan, policy, proxy_image, prefix):
                               "image":proxy_image,"imageId":proxy_image,"networks":[services_project + "-backends"],"port":declared["port"],
                               "health":"healthy","published":False,"control":"CONNECTED"}, record
         assert result["observed"]["addressOnHost"] is False and result["observed"]["composeProject"] == services_project
+        assert result["observed"]["engineVersion"] == docker("version","--format","{{.Server.Version}}")
         del result["observed"]
         assert result == {"passed":True,"run":run_binding,"sourceCommit":source,"servicesAddress":services_address,"canaryImage":proxy_image}, result
         print("PASS split boundary and services witness:", mode, flush=True)
@@ -144,6 +149,33 @@ def run_split(plan, policy, proxy_image, prefix):
     assert result.returncode == 1 and "redis publishes a port on the services host" in result.stderr, result.stderr
     assert json.loads(result.stdout) == {"passed":False,"receipts":[],"error":"services witness refused"}
     print("PASS published port mutant", flush=True)
+
+    # A services address that is not local to this host (outside every Docker
+    # subnet, on no host interface) with a live listener on the PostgreSQL port:
+    # a namespace behind a veth pair, routed from the host. E_EGRESS_REMOTE_LOCAL
+    # stays in force; the outward bridge reaches the listener and must refuse.
+    global listener
+    host_end, namespace_end = "10.250.0.1", "10.250.0.2"
+    subprocess.run(["sudo","ip","netns","add",listener_namespace], check=True)
+    subprocess.run(["sudo","ip","link","add",listener_link,"type","veth","peer","name","osn"], check=True)
+    subprocess.run(["sudo","ip","link","set","osn","netns",listener_namespace], check=True)
+    subprocess.run(["sudo","ip","addr","add",host_end + "/30","dev",listener_link], check=True)
+    subprocess.run(["sudo","ip","link","set",listener_link,"up"], check=True)
+    for command in (["ip","addr","add",namespace_end + "/30","dev","osn"], ["ip","link","set","osn","up"], ["ip","link","set","lo","up"],
+                    ["ip","route","add","default","via",host_end]):
+        subprocess.run(["sudo","ip","netns","exec",listener_namespace,*command], check=True)
+    listener = subprocess.Popen(["sudo","ip","netns","exec",listener_namespace,"python3","-c",
+        "import socket\ns=socket.create_server(('" + namespace_end + "',5432))\nprint('LISTENING',flush=True)\nwhile True:\n c,_=s.accept()\n c.close()"],
+        stdout=subprocess.PIPE, text=True)
+    assert listener.stdout.readline().strip() == "LISTENING"
+    plan["remoteBackends"] = {"servicesAddress":namespace_end,"backends":[{"role":"postgres","port":5432},{"role":"redis","port":6379}]}
+    result = subprocess.run(["node",probe,"--plan",write("split-listener.json",json.dumps(plan)),"--json"], env=env, text=True, capture_output=True)
+    assert result.returncode == 1, result.stderr
+    assert "egress boundary: outward bridge did not get DENIED from a services-host backend" in result.stderr, result.stderr
+    assert "E_EGRESS_REMOTE_LOCAL" not in result.stderr
+    refused = json.loads(result.stdout)
+    assert refused["passed"] is False and refused["error"] == "boundary probe refused" and refused["receipts"], refused
+    print("PASS non-local listener mutant", flush=True)
 
     # The proxy compiled its policy at startup. Rewrite the mounted file in place
     # (same inode, so the bind mount shows it) and regenerate the plan from it:
@@ -303,6 +335,17 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
     docker("network","disconnect",env["SERVICES_NETWORK"],plan["probeContainer"])
     print("PASS alternate-network mutant:",sys.argv[3],flush=True)
 finally:
+    if listener is not None:
+        # sudo relays SIGTERM to the listener; SIGKILL would orphan it.
+        listener.terminate()
+        try:
+            listener.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            listener.kill()
+            listener.wait()
+    if split:
+        subprocess.run(["sudo","ip","netns","delete",listener_namespace], env=env, stderr=subprocess.DEVNULL)
+        subprocess.run(["sudo","ip","link","delete",listener_link], env=env, stderr=subprocess.DEVNULL)
     if services_created:
         subprocess.run([*services_compose,"down","--timeout","5"],env=env,check=True)
     if created:

@@ -638,7 +638,7 @@ What a split pair must prove, and the scope of each claim:
 
 1. **Agent-host isolation.** The isolated agent reaches only the proxy, and the proxy reaches only pinned :443 targets. The universal checks and the in-container runtime program prove this, unchanged.
 2. **Agent-host negative.** From exactly two vantage points, the isolated agent and the proxy's outward bridge (`servicesNetwork`), the declared services-host address does not accept TCP on the declared PostgreSQL and Redis ports. The claim covers those two vantage points, that one address and those two ports. It says nothing about other networks on the agent host, privileged host processes, or other ports.
-3. **Services-host witness.** The selected PostgreSQL and Redis containers are running and healthy. Docker publishes none of their ports, and neither uses host network mode. Each accepts TCP on its port from its own private network. The claim covers what Docker publishes for those containers. It does not prove the services host has no independent listener or forwarding rule. Item 2 covers that for the declared address and ports.
+3. **Services-host witness.** The selected PostgreSQL and Redis containers are running and healthy. Docker publishes none of their ports, and neither uses host network mode. Each accepts TCP on its port from its own private network. The claim covers what Docker publishes for those containers. It does not prove the services host has no independent listener or forwarding rule. Item 2 covers that for the declared address and ports. The witness proves what Docker publishes; a peer that has a route to the services host's bridge subnets can reach unpublished container ports on engines that allow direct routing, which [Docker Engine 28.0.0](https://docs.docker.com/engine/release-notes/28/) blocks by default unless a network sets the `nat-unprotected` gateway mode or the daemon sets `allow-direct-routing`, so the wrapper should require Engine 28.0.0 or later (the witness reports `observed.engineVersion`) or a firewall rule.
 4. **Ingress.** The unchanged ingress probe, run services-side.
 
 For an external database the proof is that the isolated agent cannot open TCP to it and the proxy will not forward to it. It does not prove the database refuses other hosts; its credentials, which the agent host never holds, are the control.
@@ -761,8 +761,9 @@ the agent host's `proxyImage`; `namePrefix` is optional, as in the boundary plan
 The witness selects containers itself and does not trust a caller's container
 name: for each role exactly one running container labelled
 `com.docker.compose.project=<composeProject>` and
-`com.docker.compose.service=<service>`; none or several refuses. For each it
-requires running and healthy, a network mode other than `host` or
+`com.docker.compose.service=<service>`; none or several refuses, naming the
+project, service and the count found (`… is required for redis; found 0`). For
+each it requires running and healthy, a network mode other than `host` or
 `container:`, no `HostConfig.PortBindings` and no host binding in
 `NetworkSettings.Ports`, the declared port in `Config.ExposedPorts` (as
 `<port>/tcp`, or a bare `<port>`, which Docker reads as TCP and Compose writes
@@ -773,13 +774,17 @@ containers through an inspect template that selects only those fields: no
 environment, command, mount or healthcheck log is read or printed. It reports
 whether `servicesAddress` is among the services host's IPv4 interface addresses
 (`addressOnHost`), an observation and not a refusal, because a NAT'd public
-address is legitimately absent.
+address is legitimately absent, and the engine's version as `engineVersion`
+(`docker version --format {{.Server.Version}}`). A running container with no
+healthcheck refuses with `<role> has no healthcheck; add one to its Compose
+service`; one that is not running, or whose healthcheck is not healthy, refuses
+with `<role> must be running and healthy`.
 
 `--json` on success returns:
 
 ```json
 {"passed":true,"run":{},"sourceCommit":"…","servicesAddress":"…","canaryImage":"…",
- "observed":{"composeProject":"…","hostAddresses":["…"],"addressOnHost":false},
+ "observed":{"composeProject":"…","hostAddresses":["…"],"addressOnHost":false,"engineVersion":"28.0.4"},
  "backends":[{"role":"postgres","service":"…","containerId":"…","image":"…","imageId":"sha256:…",
    "networks":["…"],"port":5432,"health":"healthy","published":false,"control":"CONNECTED"}],
  "receipts":[]}

@@ -292,4 +292,6 @@ test("reviewed team-image CI runs the split leg after building the egress image"
   const script = readFileSync(new URL("./agent-egress-boundary-image.py", import.meta.url), "utf8");
   assert.match(script, /docker\("cp", container \+ ":\/opt\/oats\/deploy", str\(deploy\)\)/, "the split leg runs the extracted deploy copy");
   assert.match(script, /json\.dumps\(policy, sort_keys=True, separators=\(",", ":"\), ensure_ascii=False\)/, "the leg hashes the policy as other languages do");
+  for (const mutant of ["local services address", "published port", "non-local listener", "stale proxy policy"])
+    assert.ok(script.includes(`print("PASS ${mutant} mutant", flush=True)`), `the split leg runs the ${mutant} mutant`);
 });

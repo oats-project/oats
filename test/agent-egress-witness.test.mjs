@@ -39,6 +39,7 @@ function witnessDocker(t, { containers, matches = {}, classify = () => "CONNECTE
     }
     assert.equal(command, "docker");
     if (args[0] === "context") return ok('"unix:///var/run/docker.sock"');
+    if (args[0] === "version") { assert.deepEqual(args, ["version","--format","{{.Server.Version}}"]); return ok("28.0.4\n"); }
     if (args[0] === "network" && args[1] === "ls") return ok("");
     if (args[0] === "ps" && args[1] === "--no-trunc") {
       assert.equal(args.length, 8);
@@ -83,7 +84,7 @@ test("the witness passes the clean bundled case with its pinned JSON shape", asy
   const result = await probeServicesBackends(witnessPlan());
   assert.deepEqual(Object.keys(result), ["passed","run","sourceCommit","servicesAddress","canaryImage","observed","backends","receipts"]);
   assert.deepEqual({...result,receipts:undefined}, {passed:true,run:witnessPlan().run,sourceCommit:deploySourceCommit,servicesAddress,canaryImage:image,
-    observed:{composeProject:"services-b",hostAddresses:["10.0.0.9"],addressOnHost:false},
+    observed:{composeProject:"services-b",hostAddresses:["10.0.0.9"],addressOnHost:false,engineVersion:"28.0.4"},
     backends:[record("postgres","db",5432),record("redis","cache",6379)],receipts:undefined});
   assert.equal(result.receipts.length, 2); assert.ok(result.receipts.every(r => r.created && r.absentVerified && r.network === "services-b_default"));
   assert.deepEqual(calls.filter(call => call[1] === "run").map(call => call.slice(-2)), [["172.40.0.3","5432"],["172.40.0.4","6379"]]);
@@ -95,7 +96,7 @@ test("a redis-only witness passes for an external PostgreSQL, and a NAT'd addres
   witnessDocker(t, {containers:{cache:clean().cache}, links:[{ifname:"eth0",addr_info:[{family:"inet",local:servicesAddress,prefixlen:24},{family:"inet6",local:"fe80::1",prefixlen:64}]}]});
   const result = await probeServicesBackends(witnessPlan("external"));
   assert.deepEqual(result.backends, [record("redis","cache",6379)]);
-  assert.deepEqual(result.observed, {composeProject:"services-b",hostAddresses:[servicesAddress],addressOnHost:true});
+  assert.deepEqual(result.observed, {composeProject:"services-b",hostAddresses:[servicesAddress],addressOnHost:true,engineVersion:"28.0.4"});
 });
 
 test("a backend on several networks needs CONNECTED from each of them", async t => {
@@ -118,17 +119,20 @@ test("a port Compose records without a protocol is exposed as TCP, as Docker rea
 });
 
 const refusals = [
-  ["no container matching a role's project and service", {matches:{cache:[]}}, /exactly one running container/],
-  ["more than one matching container", {matches:{cache:["a".repeat(64),"b".repeat(64)]}}, /exactly one running container/],
+  ["no container matching a role's project and service", {matches:{cache:[]}},
+    /^exactly one running container labelled services-b\/cache is required for redis; found 0$/],
+  ["more than one matching container", {matches:{cache:["a".repeat(64),"b".repeat(64)]}},
+    /^exactly one running container labelled services-b\/cache is required for redis; found 2$/],
   ["a published port binding", {change:c => { c.cache.PortBindings = {"6379/tcp":[{HostIp:"",HostPort:"6379"}]}; }}, /publishes a port/],
   ["a published port in the live port map", {change:c => { c.cache.Ports = {"6379/tcp":[{HostIp:"0.0.0.0",HostPort:"32768"}]}; }}, /publishes a port/],
   ["host network mode", {change:c => { c.cache.NetworkMode = "host"; c.cache.Networks = {host:{IPAddress:""}}; }}, /host network mode/],
   ["a container network mode", {change:c => { c.cache.NetworkMode = "container:abc"; c.cache.Networks = {}; }}, /own network/],
-  ["an unhealthy container", {change:c => { c.db.Health = "unhealthy"; }}, /running and healthy/],
-  ["a container without a healthcheck", {change:c => { c.db.Health = null; }}, /running and healthy/],
-  ["a container that is not running", {change:c => { c.db.Status = "paused"; }}, /running and healthy/],
+  ["an unhealthy container", {change:c => { c.db.Health = "unhealthy"; }}, /^postgres must be running and healthy$/],
+  ["a container without a healthcheck", {change:c => { c.db.Health = null; }}, /^postgres has no healthcheck; add one to its Compose service$/],
+  ["a container that is not running", {change:c => { c.db.Status = "paused"; }}, /^postgres must be running and healthy$/],
   ["an unexposed port", {change:c => { c.db.ExposedPorts = {"5433/tcp":{}}; }}, /does not expose its declared port/],
-  ["labels that differ from the selection", {change:c => { c.db.Project = "other"; }}, /exactly one running container/],
+  ["labels that differ from the selection", {change:c => { c.db.Project = "other"; }},
+    /^exactly one running container labelled services-b\/db is required for postgres; found 0$/],
   ["a DENIED control", {classify:() => "DENIED\n"}, /not CONNECTED/],
   ["an ERROR control", {classify:() => "ERROR EACCES\n"}, /not CONNECTED/],
 ];
@@ -136,7 +140,7 @@ for (const [label, mode, pattern] of refusals) test(`the witness refuses ${label
   const {probeServicesBackends} = await stagedWitness(t);
   const containers = clean(); mode.change?.(containers);
   witnessDocker(t, {containers, matches:mode.matches, classify:mode.classify});
-  await assert.rejects(probeServicesBackends(witnessPlan()), pattern);
+  await assert.rejects(probeServicesBackends(witnessPlan()), error => { assert.match(error.message, pattern); return true; });
 });
 
 test("the witness refuses a policy hash mismatch, an inventory other than [redis] or [postgres, redis] and other plan schemas", async t => {

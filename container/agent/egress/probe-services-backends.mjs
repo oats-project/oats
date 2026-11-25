@@ -45,12 +45,15 @@ function admitWitnessPlan(plan) {
 function witnessBackend(plan,backend,receipts) {
   const labels=["--filter",`label=com.docker.compose.project=${plan.composeProject}`,"--filter",`label=com.docker.compose.service=${backend.service}`];
   const ids=docker(["ps","--no-trunc",...labels,"--format","{{.ID}}"]).split("\n").filter(Boolean);
-  const selection=`exactly one running container labelled ${plan.composeProject}/${backend.service} is required for ${backend.role}`;
-  assert.ok(ids.length === 1 && /^[a-f0-9]{64}$/.test(ids[0]),selection);
+  const selection=found=>`exactly one running container labelled ${plan.composeProject}/${backend.service} is required for ${backend.role}; found ${found}`;
+  assert.ok(ids.length === 1,selection(ids.length));
+  assert.ok(/^[a-f0-9]{64}$/.test(ids[0]),"Docker returned an invalid container ID (output withheld)");
   let info;
   try { info=JSON.parse(docker(["inspect","--format",inspectTemplate,ids[0]])); }
   catch { throw new Error("Docker returned invalid inspect output (output withheld)"); }
-  assert.ok(info.Id === ids[0] && info.Project === plan.composeProject && info.Service === backend.service,selection);
+  // A container whose labels changed after selection no longer matches.
+  assert.ok(info.Id === ids[0] && info.Project === plan.composeProject && info.Service === backend.service,selection(0));
+  assert.ok(info.Status !== "running" || info.Health !== null,`${backend.role} has no healthcheck; add one to its Compose service`);
   assert.ok(info.Status === "running" && info.Health === "healthy",`${backend.role} must be running and healthy`);
   assert.ok(info.NetworkMode !== "host",`${backend.role} uses host network mode`);
   const bindings=Object.values(info.PortBindings ?? {}).flat(), live=Object.values(info.Ports ?? {}).flat();
@@ -79,9 +82,11 @@ export async function probeServicesBackends(plan) {
     const sourceCommit=deploySource(fileURLToPath(new URL("..",import.meta.url)),"egress/probe-services-backends.mjs");
     // An observation, not a refusal: a NAT'd public address is legitimately absent.
     const hostAddresses=interfaceAddresses(observeNetworks().links);
+    const engineVersion=docker(["version","--format","{{.Server.Version}}"]).trim();
+    assert.ok(/^[0-9][0-9A-Za-z.+~-]{0,63}$/.test(engineVersion),"Docker returned an invalid engine version (output withheld)");
     const records=backends.map(backend=>witnessBackend(plan,backend,receipts));
     return {passed:true,run,sourceCommit,servicesAddress:plan.servicesAddress,canaryImage:plan.canaryImage,
-      observed:{composeProject:plan.composeProject,hostAddresses,addressOnHost:hostAddresses.includes(plan.servicesAddress)},
+      observed:{composeProject:plan.composeProject,hostAddresses,addressOnHost:hostAddresses.includes(plan.servicesAddress),engineVersion},
       backends:records,receipts};
   } catch (error) {
     receipts.splice(0,receipts.length,...new Map([...receipts,...(error.receipts || [])].map(receipt=>[receipt.name,receipt])).values());

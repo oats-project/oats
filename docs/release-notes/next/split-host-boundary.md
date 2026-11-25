@@ -13,7 +13,10 @@
   witness, `egress/probe-services-backends.mjs`, selects the Redis container,
   and the PostgreSQL container when it runs on the services host, by their
   Compose labels and proves them running, healthy, unpublished and reachable
-  from their own networks; it does not attest an external PostgreSQL. Both run
+  from their own networks; it does not attest an external PostgreSQL. It
+  reports the Docker Engine version, since engines before 28.0.0 can allow direct
+  routed access to unpublished container ports, and its refusals name the fix
+  (a missing healthcheck, the number of matching containers found). Both run
   only from a deploy copy extracted from the egress image. `policy.mjs` exports
   `policyHash`, a canonical policy hash with a cross-language test vector. The
   proxy now records the hash of the policy it loaded at startup in
