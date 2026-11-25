@@ -336,15 +336,37 @@ esac
   }
 });
 
+// The oats.aweb floors before 1.33.1, as the skill would write them: oats.aweb's
+// refs are bare tags (`v1.33.1`). The framework's are `oats-framework/v…` refs
+// and the skeleton's `oats.framework: v…` pin, so a framework release numbered
+// 1.31.x or 1.32.x is not one of them.
+const OLD_AWEB_LITERAL = /(?<!oats-framework\/|oats\.framework: )v1\.3[12]\.\d/;
+
 test("the skill's minimums are framework 1.19.0 and oats.aweb 1.33.1, and the catalog meets both", () => {
   const flat = skill.replace(/\s+/g, " ");
   assert.ok(flat.includes("**A new workspace needs `oats.framework` 1.19.0 or later**"));
   assert.ok(flat.includes("is below `1.19.0`, or with aweb `oats.aweb`'s is below `v1.33.1`, this OATS release is older than this skill"));
   assert.ok(flat.includes("its owner pins `oats.framework` 1.19.0 or later"));
   assert.ok(flat.includes("that one never below `v1.33.1`"));
-  assert.doesNotMatch(flat, /1\.18\.0|v1\.3[12]\.\d/);
+  assert.doesNotMatch(flat, /1\.18\.0/);
+  assert.doesNotMatch(flat, OLD_AWEB_LITERAL);
   const fw = catalog.packages["oats.framework"].ref.replace(/^oats-framework\/v/, "");
   const aweb = catalog.packages["oats.aweb"].ref.replace(/^v/, "");
+  // The guard is scoped to oats.aweb: a framework release numbered like an old
+  // oats.aweb floor passes, and an old oats.aweb literal still trips it.
+  const swap = (from, to) => {
+    assert.ok(flat.includes(from), `the skill no longer carries ${from}`);
+    return flat.replace(from, to);
+  };
+  for (const old of ["1.31.0", "1.32.4"]) {
+    const pinned = swap(`oats.framework: v${fw} `, `oats.framework: v${old} `);
+    assert.doesNotMatch(pinned, OLD_AWEB_LITERAL, `a framework pin of v${old} is no oats.aweb literal`);
+    const example = swap(`oats-framework/v${fw} v${aweb}`, `oats-framework/v${old} v${aweb}`);
+    assert.doesNotMatch(example, OLD_AWEB_LITERAL, `a framework ref of v${old} is no oats.aweb literal`);
+    assert.match(swap(`oats.aweb: v${aweb} `, `oats.aweb: v${old} `), OLD_AWEB_LITERAL);
+    assert.match(swap(`oats-framework/v${fw} v${aweb}`, `oats-framework/v${fw} v${old}`), OLD_AWEB_LITERAL);
+    assert.match(swap("that one never below `v1.33.1`", `that one never below \`v${old}\``), OLD_AWEB_LITERAL);
+  }
   // The step 4 example and the skeleton's pins show the catalog's versions.
   assert.ok(flat.includes(`for example \`oats-framework/v${fw} v${aweb}\``));
   assert.ok(flat.includes(`oats.framework: v${fw} `) && flat.includes(`oats.aweb: v${aweb} `));
