@@ -8,7 +8,8 @@
 //   session that is there and that OATS started; the file is never read there.
 // The tmux homes are real spawns recorded on a private tmux server; the provider homes are real
 // spawns on the fake provider (test/helpers/session-provider-fixture.mjs). Who writes the record is
-// each harness's own test: packages/pi/test/turn-record.test.mjs, test/oats-core-turn-record.test.mjs.
+// each harness's own test: packages/pi/test/turn-record.test.mjs for pi; oats.core's Claude Code
+// hooks bring theirs with them.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -18,7 +19,7 @@ import { retirePendingMarkerPath, storedTreeDigest } from "../lib/core.mjs";
 import { KERNEL_FEATURES, STATUS_ACTIVITY_FEATURE } from "../lib/kernel-features.mjs";
 import { rosterGroups, writeServers } from "../lib/servers.mjs";
 import { judgeInspect } from "../lib/session-providers.mjs";
-import { ACTIVITY, CLAUDE_OPEN_TURN_MAX_MS, RECORD_MAX, TURN_EVENT, TURN_FILE, readActivity, tmuxActivity } from "../lib/turn-activity.mjs";
+import { ACTIVITY, CLAUDE_OPEN_TURN_MAX_MS, RECORD_MAX, START_PENDING_FILE, TURN_EVENT, TURN_FILE, readActivity, tmuxActivity } from "../lib/turn-activity.mjs";
 import { deploymentStatusData } from "../packages/client/deployment-data.mjs";
 import { remotePanel } from "../packages/client/remote-roster.mjs";
 import { endServers, recordLaunch, startServer, tmuxOn, SESSION } from "./helpers/recorded-tmux-server.mjs";
@@ -77,6 +78,42 @@ test("a tmux home's record: counted from startedAt, and anything that is not a r
   writeFileSync(file, JSON.stringify({ event: "turn-end", at: new Date(started + 5).toISOString(), session: "s-1", activity: "working" }));
   assert.equal(read(), ACTIVITY.IDLE);
 
+  // A start under way: its pending receipt names its instant before the row does (the record is
+  // written once the pane is made and the launch prompt seen), and the new harness already runs. A
+  // record dated between the row's startedAt and the pending start is the previous session's.
+  const pendingFile = join(home, START_PENDING_FILE);
+  const pendingAt = (ms) => writeFileSync(pendingFile, JSON.stringify({ id: "s-2", target: { backend: "tmux" }, command: "pi", model: null, startedAt: new Date(ms).toISOString() }));
+  for (const event of [TURN_EVENT.START, TURN_EVENT.END]) {
+    turn(home, event, started + 30_000);
+    pendingAt(started + 40_000);
+    assert.equal(read(), null, `${event} before a pending start`);
+    // The new start's own boundary counts, at its instant and after.
+    turn(home, event, started + 40_000);
+    assert.equal(read(), event === TURN_EVENT.START ? ACTIVITY.WORKING : ACTIVITY.IDLE);
+  }
+  // Once the start is recorded the receipt stays, with the row's own instant: nothing changes.
+  assert.equal(tmuxActivity(home, { startedAt: new Date(started + 40_000).toISOString(), now: started + 60_000 }), ACTIVITY.IDLE);
+  // An older receipt (an earlier start's) never moves the count back before the row's startedAt.
+  pendingAt(started - 60_000);
+  turn(home, TURN_EVENT.END, started - 1);
+  assert.equal(read(), null);
+  // With no startedAt on the row (a start whose record was never written), the receipt's counts.
+  turn(home, TURN_EVENT.START, started - 30_000);
+  assert.equal(tmuxActivity(home, { startedAt: null }), ACTIVITY.WORKING);
+  turn(home, TURN_EVENT.START, started - 60_001);
+  assert.equal(tmuxActivity(home, { startedAt: null }), null);
+  // A receipt that is none says nothing: bad JSON, no instant, a link.
+  turn(home, TURN_EVENT.END, started + 30_000);
+  for (const bytes of ["{", "null", JSON.stringify({ startedAt: "soon" }), JSON.stringify({ startedAt: started + 40_000 })]) {
+    writeFileSync(pendingFile, bytes);
+    assert.equal(read(), ACTIVITY.IDLE, bytes);
+  }
+  rmSync(pendingFile);
+  writeFileSync(join(home, "later.json"), JSON.stringify({ startedAt: new Date(started + 40_000).toISOString() }));
+  symlinkSync(join(home, "later.json"), pendingFile);
+  assert.equal(read(), ACTIVITY.IDLE, "a linked receipt is not followed");
+  rmSync(pendingFile);
+
   // Bad JSON, a missing field, an unknown event, an `at` that is no instant, no object.
   const at = new Date(started + 1000).toISOString();
   for (const [what, bytes] of [
@@ -106,7 +143,7 @@ test("a tmux home's record: counted from startedAt, and anything that is not a r
   assert.equal(read(), null, "a linked .oats");
 });
 
-test("Claude Code: a turn that started and wrote no end reads working for 30 minutes, then null; an ended one stays idle, and no other harness is bounded", (t) => {
+test("Claude Code: a turn that started and wrote no end reads working for 30 minutes, then null; an ended one stays idle; pi is not bounded, and Codex reads null always", (t) => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), "oats-turn-")));
   t.after(() => rmSync(home, { recursive: true, force: true }));
   mkdirSync(join(home, ".oats"));
@@ -117,7 +154,14 @@ test("Claude Code: a turn that started and wrote no end reads working for 30 min
   assert.equal(read("claude", 0), "working");
   assert.equal(read("claude", CLAUDE_OPEN_TURN_MAX_MS), "working", "at 30 minutes");
   assert.equal(read("claude", CLAUDE_OPEN_TURN_MAX_MS + 1), null, "past 30 minutes: an interrupt fires no hook, so OATS cannot tell");
-  for (const harness of ["pi", "codex", null, undefined]) assert.equal(read(harness, 24 * 60 * 60 * 1000), "working", `${harness}: its end is always written`);
+  for (const harness of ["pi", null, undefined]) assert.equal(read(harness, 24 * 60 * 60 * 1000), "working", `${harness}: its end is always written`);
+  // Codex reads null, always: nothing is written for it, and a record that stands in its home
+  // (written by hand, or by a pi started inside it) is never read as its turn.
+  for (const event of [TURN_EVENT.START, TURN_EVENT.END]) {
+    turn(home, event, at);
+    assert.equal(read("codex", 0), null, `codex: ${event}`);
+  }
+  turn(home, TURN_EVENT.START, at);
   turn(home, TURN_EVENT.END, at);
   assert.equal(read("claude", 24 * 60 * 60 * 1000), "idle", "a turn that ended is idle however long ago");
 });
@@ -201,6 +245,15 @@ test("tmux rows: the key is on a row that runs and on no other; it reads the rec
   turn(live, TURN_EVENT.START, started + 61_000);
   assert.equal(said(rowOf(fx, "live")), "working", "and this start's own launch prompt counts");
 
+  // A start under way: its pending receipt names a later start than the row does, and the last
+  // session's record, which the row's own startedAt would count, reads null on the row that runs.
+  const pendingFile = join(live, START_PENDING_FILE);
+  writeFileSync(pendingFile, JSON.stringify({ id: "s-2", startedAt: new Date(started + 120_000).toISOString() }));
+  assert.equal(said(rowOf(fx, "live")), null, "the previous session's turn-start, while the next start is under way");
+  turn(live, TURN_EVENT.START, started + 121_000);
+  assert.equal(said(rowOf(fx, "live")), "working", "the new start's launch prompt");
+  rmSync(pendingFile);
+
   // Claude Code: an open turn older than 30 minutes reads null; pi's reads working.
   const old = Date.now() - CLAUDE_OPEN_TURN_MAX_MS - 60_000;
   record(live, { harness: "claude", restarts: [{ startedAt: new Date(old - 1000).toISOString(), model: null, reused: "pane" }] });
@@ -208,6 +261,10 @@ test("tmux rows: the key is on a row that runs and on no other; it reads the rec
   assert.equal(said(rowOf(fx, "live")), null);
   record(live, { harness: "pi" });
   assert.equal(said(rowOf(fx, "live")), "working");
+  // A Codex row that runs carries the key, and it is null whatever the record says.
+  record(live, { harness: "codex" });
+  assert.equal(said(rowOf(fx, "live")), null);
+  record(live, { harness: "pi" });
 
   // The key is only ever the listing's own read: one written into the home's record is not on a row.
   record(homes.never, { activity: "working" });
@@ -236,7 +293,7 @@ test("the inspect key: optional, one of the three values, and only null for a se
 
 test("provider rows: the provider's answer is relayed on a session that is there and that OATS started, whatever its running; the file is never read", async (t) => {
   const fx = providerDeployment(t);
-  const names = ["turn", "waiting", "unloaded", "untold", "silent", "lost", "badword", "refused"];
+  const names = ["turn", "waiting", "unloaded", "untold", "silent", "shell", "lost", "badword", "refused"];
   const homes = {};
   for (const name of names) homes[name] = (await fx.launch(name)).home;
   // The pi bridge writes the record in every home, a provider's too: it says the opposite of each
@@ -249,7 +306,9 @@ test("provider rows: the provider's answer is relayed on a session that is there
     // An agent waiting on a person: the provider cannot tell a live idle session from a settled one.
     waiting: { inspect: { result: { ...LIVE, running: null, activity: "idle" } } },
     // The provider unloaded an idle harness between turns: the session is still there, and idle.
-    unloaded: { inspect: { result: { present: true, state: "shell", running: false, activity: "idle" } } },
+    unloaded: { inspect: { result: { ...LIVE, running: false, activity: "idle" } } },
+    // The harness ended and something else holds the session: no turn to report, whatever it sends.
+    shell: { inspect: { result: { present: true, state: "shell", running: false, activity: "working" } } },
     untold: { inspect: { result: { ...LIVE, activity: null } } },
     silent: { inspect: { result: LIVE } },
     lost: { inspect: { result: LOST } },
@@ -259,15 +318,15 @@ test("provider rows: the provider's answer is relayed on a session that is there
   const expected = {
     turn: [true, "working"], waiting: [null, "idle"], unloaded: [false, "idle"],
     untold: [true, null], silent: [true, null],
-    // A session that is gone, an answer outside the contract's words and a refusal: no key.
-    lost: [false, "absent"], badword: [null, "absent"], refused: [null, "absent"],
+    // A session left at its shell, one that is gone, an answer outside the contract's words and a refusal: no key.
+    shell: [false, "absent"], lost: [false, "absent"], badword: [null, "absent"], refused: [null, "absent"],
   };
   const read = () => Object.fromEntries(rowsOf(fx).map((row) => [row.instance, [row.running, said(row)]]));
   fx.clearCalls();
   assert.deepEqual(read(), expected, "through inspectMany");
   assert.equal(fx.verbs()[0].verb, "inspectMany");
   const rows = Object.fromEntries(rowsOf(fx).map((row) => [row.instance, row]));
-  assert.deepEqual([rows.lost.sessionEnd, rows.badword.runtimeState, rows.refused.runtimeState], ["lost", "unreachable", "unreachable"]);
+  assert.deepEqual([rows.unloaded.runtimeState, rows.shell.runtimeState, rows.lost.sessionEnd, rows.badword.runtimeState, rows.refused.runtimeState], ["unknown", "shell", "lost", "unreachable", "unreachable"]);
 
   // A home being retired has no key, whatever its provider answers.
   writeFileSync(retirePendingMarkerPath(homes.turn), JSON.stringify({ reason: "retire pending" }));
@@ -330,7 +389,7 @@ test("a remote roster relays the key as its host's status gave it, from a host t
     assert.equal(await far({ ...bbRow, activity: value }), value, `provider: ${value}`);
   }
   // A provider row relays it whatever its running: an idle harness the provider unloaded.
-  assert.equal(await far({ ...bbRow, running: false, runtimeState: "shell", activity: "idle" }), "idle");
+  assert.equal(await far({ ...bbRow, running: false, runtimeState: "unknown", activity: "idle" }), "idle");
   // A host that sends no key says nothing, and nothing is added.
   assert.equal(await far(tmuxRow), "absent");
   // A value that is not one of the three drops the key.
@@ -344,6 +403,8 @@ test("a remote roster relays the key as its host's status gave it, from a host t
     { ...tmuxRow, running: false, sessionEnd: "lost" }, { ...bbRow, running: false, runtimeState: "stopped", sessionEnd: "stopped" },
     { ...bbRow, running: false, runtimeState: "stopped", sessionEnd: "stopped", outsideOats: { code: "running-outside-oats", backend: "bb", message: "x" } },
     { ...tmuxRow, retirePending: true }, { ...tmuxRow, retire: { state: "running" } },
+    // A provider's session left at its shell: its harness ended.
+    { ...bbRow, running: false, runtimeState: "shell" },
     // Neither a tmux row nor a provider's.
     { instance: "far", home: "/srv/far", running: true },
   ]) assert.equal(await far({ ...row, activity: "working" }), "absent", JSON.stringify(row));

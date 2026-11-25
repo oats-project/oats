@@ -64,12 +64,13 @@ export function processStart(pid) {
   catch { return null; }
 }
 
-/** Whether the process a mark names is still that process. One that cannot be told
+/** Whether the process a mark names (`{ pid, start }`: the claim's mark here, the turn writer's in
+ *  turn-record.mjs) is still that process. One that cannot be told
  *  apart from it counts as alive: a live holder's claim taken for a dead one's would
  *  be cleared under an open dialog. A process that has exited and waits for its
  *  parent to reap it (Linux state Z, or X) is gone; where there is no /proc, such a
  *  one counts as alive until it is reaped. */
-function holderAlive(mark) {
+export function holderAlive(mark) {
   try { process.kill(mark.pid, 0); }
   catch (error) { if (error?.code !== "EPERM") return false; }
   const state = procStat(mark.pid)?.state;

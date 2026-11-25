@@ -194,7 +194,7 @@ see the [official catalog](official-catalog.md) for current pins.
 | `spawn-task-stdin` | `oats spawn <soul> --task-file -` reads the task from standard input. A spawn routed with `--server` sends its `--task` or `--task-file` text that way, to the preview and to the apply, to a host that lists this, and not as an argument; a host that does not list it gets the text as an argument, and the answer's `warnings` gains one line that says it was readable in both machines' process lists ([servers.md](servers.md#a-routed-spawns-task)) |
 | `session-providers` | session backends a capability supplies ([Session providers](#session-providers-feature-session-providers)): `--backend <provider>` on `oats spawn` (a schedule's `backend`, a trigger's `spawn.backend`); a provider home's `backend`, `session` and `open` on its status row (the endpoint only on its local inspect, spawn and start answers; nothing of it relayed); `backend: "tmux"` on a tmux home's status row; `sessionProviders` in `oats inspect` and `oats capabilities show`; a provider's readiness in `oats readiness`; `backends` on a capability's `requires` row; the codes `E_BACKEND_UNKNOWN`, `E_BACKEND_AMBIGUOUS`, `E_BACKEND_HARNESS`, `E_BACKEND_LAUNCH_ARG`, `E_BACKEND_NOT_READY`, `E_SESSION_NO_TERMINAL`, `E_SESSION_PROMPT_OPEN`, `E_SESSION_INPUT_QUEUED`; `backend` on the sweep's rows of provider homes; `oats session resume --plan --without-provider-inspect`, which is `oats host run`'s own switch for its shutdown listing, not a client's. A routed `--backend <provider>` is sent only to a host that lists it. |
 | `provider-outside-oats` | a harness that runs in a provider home an operator stopped is reported: `outsideOats: {code: "running-outside-oats", backend, message}` on that home's `oats status --json` row and its `oats server roster --json` row, present only when it applies: a home an operator stopped ([`outsideOats`](#row-outside-oats)). The row's `running`, `runtimeState` and `sessionEnd` stay what OATS recorded. A home stopped with the host whose harness runs again has no key: it reads running, and the sweep adopts it. The provider's `stop` input carries `reason: "host"` for every stop of a recorded session after which the home stays stopped with the host: the host shutdown's, the stop after a failed resume notice of such a home, and the stop after an input that crossed a stop with the host; never a stop with `endpoint: null`. A row from a kernel or a host without the feature never carries the key, so its absence says nothing there. `oats instance upgrade` refuses such a home (`E_SESSION_RUNNING`). |
-| `status-activity` | the turn fact: `activity` (`"working"`, `"idle"` or `null`) on `oats status --json` instance rows and `oats server roster --json` rows, present only on a row whose session is there ([`activity`](#row-activity)). A tmux row reads it from the turn boundaries its harness's hooks write (oats.core for Claude Code, `@awebai/oats-pi` for pi; a Codex row reads `null`); a provider row carries its provider's answer, the optional `activity` key of `inspect` and `inspectMany` ([capabilities.md](capabilities.md#inspect-and-inspectmany)). Display only: no act reads it. A row from a kernel or a host without the feature never carries the key, so its absence says nothing there | |
+| `status-activity` | the turn fact: `activity` (`"working"`, `"idle"` or `null`) on `oats status --json` instance rows and `oats server roster --json` rows, present only on a row whose session is there ([`activity`](#row-activity)). A tmux row reads it from the turn boundaries its harness's hooks write (oats.core for Claude Code, `@awebai/oats-pi` for pi; a Codex row reads `null`); a provider row carries its provider's answer, the optional `activity` key of `inspect` and `inspectMany` ([capabilities.md](capabilities.md#inspect-and-inspectmany)). Display only: no act reads it. A row from a kernel or a host without the feature never carries the key, so its absence says nothing there. |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
 `workspaceStatusApi: 1`, `capabilitiesApi: 1`, the `oats souls` document's
@@ -3919,8 +3919,12 @@ its absence.
     harness killed mid-turn never reads `"working"`: its row does not run.
   - **A boundary counts only from the row's `startedAt`.** A start begins
     only after the previous harness is gone, so a record dated before it is
-    the last session's and reads `null`. A clock set back makes a boundary
-    read `null`, never a wrong value, until the next one.
+    the last session's and reads `null`. While a start is under way, the
+    new harness runs before the row's `startedAt` moves: the start's own
+    instant, which its pending receipt in the home holds, counts from then
+    on, so the previous session's record reads `null` there too. A clock
+    set back makes a boundary read `null`, never a wrong value, until the
+    next one.
   - **`null` on a tmux row that runs:** no file yet, a file that is not a
     record (bad JSON, no `event` or `at`, an unknown event, not a regular
     file of at most 4 KiB), or a record from before `startedAt`. Who writes
@@ -3930,7 +3934,7 @@ its absence.
     |---|---|---|---|
     | Claude Code (oats.core's hooks) | `UserPromptSubmit`, a launch prompt's included | `Stop`; `StopFailure`; the `idle_prompt` notification, for a turn whose end no hook reported | with an oats.core from before the record; from 30 minutes after a turn start with no end |
     | pi (`@awebai/oats-pi`) | the agent's start, a launch prompt's included | the agent's end, an abort included | with a bridge from before the record |
-    | Codex | never | never | always: its notify hook reports turn ends only, which would read `"idle"` while it works |
+    | Codex | never | never | always, whatever stands in the file: its notify hook reports turn ends only, which would read `"idle"` while it works |
 
     **The first turn of a start reads `"working"`:** the launch prompt
     (`TASK.md`, or a wake's or an input's text) is a turn start like any
@@ -3946,15 +3950,16 @@ its absence.
   - **A provider row carries its provider's own answer at that read,** the
     optional `activity` key of its `inspect` or `inspectMany` result
     ([capabilities.md](capabilities.md#inspect-and-inspectmany)), never
-    stored: wherever the provider answers the session present on a home OATS
-    started, whatever its `running`, and `null` where the provider sends
-    none. `<home>/.oats/turn.json` is never read on a provider home.
+    stored: wherever the provider answers the session present, and not at
+    its `shell`, on a home OATS started, whatever its `running`, and `null`
+    where the provider sends none. `<home>/.oats/turn.json` is never read on a provider home.
 
     | a provider row | `activity` |
     |---|---|
     | `running: true` | the provider's answer at this read (`"working"`, `"idle"`, or `null` where it cannot tell) |
     | `running: null` (an agent waiting on a person, or one whose harness the provider cannot see) | the provider's answer at this read; typically `"idle"` for an agent waiting on a person |
-    | `running: false`, the session present (the provider unloaded the harness between turns, or after its own restart) | the provider's answer at this read (`"idle"` for a session it lists as idle) |
+    | `running: false`, `runtimeState: "unknown"`: the session present (the provider unloaded the harness between turns, or after its own restart) | the provider's answer at this read (`"idle"` for a session it lists as idle) |
+    | `runtimeState: "shell"`: the harness ended and something else holds the session | no key: there is no turn to report, whatever the provider sent |
     | stopped, lost (the session is gone), `retirePending` or [`retire`](#row-retire), a provider that failed or answered outside the contract | no key |
     | [`outsideOats`](#row-outside-oats) (a harness OATS did not start) | no key: OATS reports only on the sessions it started |
 
@@ -3964,12 +3969,16 @@ its absence.
     on.
   - **The file is the agent's own home's,** and in full mode its user can
     write any file there: a record written by hand gives a wrong value and
-    nothing else. A second pi in the home (a nested one, a subagent's
-    process) writes nothing while the home's own pi lives, and a Claude Code
-    subagent writes nothing. A second Claude Code started inside the home
-    with the home's environment (a nested `claude -p`) does write its own
-    boundaries: its end reads `"idle"` while the home's own turn goes on,
-    until the next prompt there.
+    nothing else.
+  - **A second harness inside the home.** The row is the turn of the home's
+    own session. A second pi session in the home's pi (a subagent's or a
+    workflow agent's) and a pi process started below it (a nested `pi`)
+    write nothing while the home's own pi lives, and a Claude Code subagent
+    writes nothing. Two cases do write their own boundaries, and their end
+    reads `"idle"` while the home's own turn goes on, until the next prompt
+    there: a second Claude Code started inside a Claude Code home with the
+    home's environment (a nested `claude -p`), and a pi started inside a
+    home whose harness is not pi (a Codex row reads `null` all the same).
   - **How it stands beside the row's other session fields:**
 
     | field | means | source | which acts read it |
@@ -4408,7 +4417,8 @@ route target:
   (`"working"`, `"idle"` or `null`), as the host's status gave it: its
   meaning is the [local row's](#row-activity). A value that is not one of
   the three drops the key, and so does a row that cannot carry it: a tmux
-  row that does not read `running: true`, a row with `sessionEnd`,
+  row that does not read `running: true`, a provider row that reads
+  `runtimeState: "shell"`, a row with `sessionEnd`,
   `outsideOats`, `retirePending` or `retire`. A host without the feature, a
   saved route the host did not list and a host that was not reached carry
   none: a row this roster did not read says nothing of the turn.

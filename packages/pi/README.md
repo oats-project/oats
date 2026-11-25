@@ -55,14 +55,15 @@ from the same release tag). This bridge registers no operational tools. It only:
   the home's current start, and shows the row as `activity: "working"` or
   `"idle"` ([the row field](../../docs/desktop-cli-api.md#row-activity)). The
   file is kernel-private, and read on no session provider's home. Only the
-  home's own pi writes it: a second pi in the home (a nested one, a
-  subagent's or a workflow agent's process) would end its runs while the
-  home's turn goes on, so the recording bridge marks its own process
-  environment (`OATS_PI_TURN_WRITER`, this package's alone), and a pi started
-  below it that finds the mark of a live process for this home writes
-  nothing. Between two
-  attempts of a retried turn the row reads idle, for the length of pi's
-  backoff;
+  home's own pi session writes it, since a second pi in the home would end
+  its runs while the home's turn goes on. A second session in the same
+  process (a subagent's or a workflow agent's) writes nothing while the
+  first bridge's session lives: that one holds the process's writer until
+  it shuts down, and a /reload's next bridge takes it. A pi in another
+  process started below it (a nested `pi`) inherits the writing bridge's
+  mark in its environment (`OATS_PI_TURN_WRITER`, this package's alone) and,
+  while that process lives, writes nothing. Between two attempts of a
+  retried turn the row reads idle, for the length of pi's backoff;
 - journals compaction summaries and sends resume nudges when the active
   knowledge capability created `STATE.md`/`log.md`. A startup gets the nudge
   only when pi kept an earlier session of the home (pi files a session once
