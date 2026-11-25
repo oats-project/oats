@@ -413,7 +413,7 @@ test("in this order: the outcome is written, then the marker goes, then the even
   writeFileSync(parent.marker, JSON.stringify(intent, null, 2) + "\n");
   const run = f.completeGated(intent, [
     { name: "marker", fn: "rmSync", path: parent.marker, when: "before", waitMs: COMPLETION_MS },
-    { name: "event", fn: "appendFileSync", path: parent.workspaceLog, contains: "retire-refused", when: "before", waitMs: COMPLETION_MS },
+    { name: "event", fn: "appendEventRow", path: parent.workspaceLog, contains: "retire-refused", when: "before", waitMs: COMPLETION_MS },
   ]);
   try {
     // Held before the marker is removed: a second --self that reads the marker now finds the outcome beside it.

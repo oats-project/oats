@@ -201,9 +201,13 @@ test("oats server + --server: registry, check, remote spawn with a hostile task,
     assert.equal(r.json().error.code, "E_REMOTE_INCOMPATIBLE");
     assert.match(r.json().error.message, /harness gemini was not established as supported there \(it advertises harnesses pi, claude, codex/, "an advertising remote's list is quoted, nothing more is claimed");
     assert.equal(readFileSync(log, "utf8").includes("spawn dev --purpose nope"), false, "no spawn command was sent");
+    // A backend that is none of the host's own is a session provider (feature session-providers):
+    // this host lists the feature, so the spawn is relayed and the HOST answers. No capability of
+    // the soul there declares `screen`, and nothing is created. (A host without the feature is
+    // refused E_REMOTE_INCOMPATIBLE before anything is sent: test/session-providers-manifest.test.mjs.)
     r = oats(env, ["spawn", "dev", "--server", "build", "--purpose", "nope", "--backend", "screen", "--no-launch", "--json"]);
-    assert.equal(r.json().error.code, "E_REMOTE_INCOMPATIBLE");
-    assert.match(r.json().error.message, /session backend screen/);
+    assert.equal(r.json().error.code, "E_BACKEND_UNKNOWN");
+    assert.match(r.json().error.message, /unknown session backend "screen": no capability of this instance declares it as a session provider; the backends available here: tmux; nothing was created/);
     // --runtime, the pre-0.27 name, is routed too: the forwarded envelope keeps ONE deprecated-runtime-name
     // warning, this command's note merged with whatever the host said (lead call 6).
     r = oats(env, ["spawn", "dev", "--server", "build", "--purpose", "alias", "--runtime", "pi", "--no-launch", "--json"]);

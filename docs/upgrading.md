@@ -6,12 +6,12 @@ host that comes from it.
 
 ## Upgrading to the latest version
 
-The latest version is **OATS 0.69.23** ([release notes](release-notes/v0.69.23.md)).
-The 0.69.23 Desktop accepts OATS CLIs `>=0.26.0`, tested through 0.69: the
+The latest version is **OATS 0.70.7** ([release notes](release-notes/v0.70.7.md)).
+The 0.70.7 Desktop accepts OATS CLIs `>=0.26.0`, tested through 0.70: the
 Desktop and the CLI can be upgraded [in either order](#either-order-works).
 
 **First, read the `## Upgrade` section of every release after yours, up to
-0.69.23,** in the [release notes](release-notes/): it says what to do before
+0.70.7,** in the [release notes](release-notes/): it says what to do before
 the CLI changes, and what else must change with it (the Desktop, another
 tool, a package pin). [Coming from an older version](#coming-from-an-older-version)
 names the releases that ask for more than the steps below. `oats version`
@@ -20,8 +20,8 @@ prints the version you have.
 Then, on each host:
 
 ```sh
-                                     # 0. where the Desktop is installed: Desktop 0.69.23, in either order
-npm install -g @awebai/oats@0.69.23  # 1. the CLI
+                                     # 0. where the Desktop is installed: Desktop 0.70.7, in either order
+npm install -g @awebai/oats@0.70.7   # 1. the CLI
 oats update                          # 2. in each deployment: the plan, then it asks before it runs
 oats doctor                          # 3. in the same deployment
 ```
@@ -138,7 +138,10 @@ because their package is no longer locked, and member drift for information.
 A kept package module moves only by a respawn; `oats session start` and
 `restart` say so in one warning that names each one.
 One provider refusal refuses the whole move. A running or unreadable session
-refuses with `E_SESSION_RUNNING`; stop it first. A stale plan returns
+refuses with `E_SESSION_RUNNING`; stop it first. So does a home on a session
+provider that OATS recorded stopped while its provider runs a harness there
+(a home an operator stopped says so on its status row, as `outsideOats`):
+`oats instance stop <name>` stops it. A stale plan returns
 `E_PLAN_STALE` and a fresh plan to review.
 
 Modules move whole, with skills, instructions and hooks recomposed from the
@@ -217,6 +220,40 @@ of the Desktop and the CLI, and an optional package pin. A change a script
 must follow is in its release's Upgrade section whether or not it is listed
 here.
 
+- **[0.70.7](release-notes/v0.70.7.md#upgrade):** the catalog pins
+  oats.aweb 1.49.1, which needs OATS 0.70.0 or later, and oats.framework
+  1.30.0: upgrade the CLI before `oats sync`, and respawn or move instances
+  with `oats instance upgrade` to take them.
+- **[0.70.5](release-notes/v0.70.5.md#upgrade):** a session provider's
+  `inspectMany` also receives the homes OATS stopped, and a `stop` may carry
+  `reason: "host"`: a provider answers each home by itself and refuses no
+  stop for the key.
+- **[0.70.4](release-notes/v0.70.4.md#upgrade):** a directory-mode home on
+  Linux spawned before 0.58.0, on a volume whose device number changes at
+  each mount (btrfs, a remounted overlay), still refuses to start after a
+  reboot: retire it and spawn it again.
+- **[0.70.2](release-notes/v0.70.2.md#upgrade):** the catalog pins
+  oats.aweb 1.48.0, which needs OATS 0.70.0 or later, and oats.framework
+  1.29.0: upgrade the CLI before `oats sync`, and respawn or move instances
+  with `oats instance upgrade` to take them.
+- **[0.70.1](release-notes/v0.70.1.md#upgrade):** a scheduled or triggered
+  spawn on a provider that launches only in full mode (bb's) needs `yolo:
+  true`, or a launch configuration that sets it; a job without it is now
+  refused when saved.
+- **[0.70.0](release-notes/v0.70.0.md#upgrade):** upgrade the Desktop with
+  the CLI: a Desktop of 0.69.18 to 0.69.24 runs the 0.70.0 CLI in its
+  reduced, above-tested mode until Desktop 0.70.0 is installed; a Desktop of
+  0.69.17 or older refuses it until then. A session-provider home spawned by
+  an earlier kernel is retired with `--force` and spawned again (no released
+  provider exists). Capability authors: in a provider home, hooks run from
+  the kernel's copy of the capability; find the home by `OATS_INSTANCE_HOME`.
+- **[0.69.24](release-notes/v0.69.24.md#upgrade):** OATS needs Node.js 22.5
+  or later: Node 18 and 20 now refuse every command (`E_NODE_UNSUPPORTED`).
+  The catalog pins oats.framework 1.28.0 and oats.aweb 1.47.0. Respawn an
+  instance of `oats-maintainer` or `oats-setup-admin` once (okf.json version
+  2), and respawn or move other instances with `oats instance upgrade` to take
+  oats.core 2.16.0. A legacy oats.aweb grant seat (1.12–1.24) fills its seat
+  record at its next start, or refuses with the respawn remedy.
 - **[0.69.23](release-notes/v0.69.23.md#upgrade):** the catalog pins
   oats.framework 1.27.0, oats.aweb 1.46.0 and oats.okf 6.3.0. Respawn
   instances, or move stopped ones with `oats instance upgrade`, to take the

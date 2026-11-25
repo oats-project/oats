@@ -49,7 +49,7 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   confirmed `/api/spawn?ws=` transaction. An empty opening instruction waits
   for instructions; attached-mode souls cannot launch standalone. The shell's
   `app.chooseSoul` (⌘N / Ctrl+Shift+N, **Souls: choose a soul to spawn (Workspace › Souls)**) navigates to soul
-  selection, and the sidebar foot's **New agent** opens Quick Open (`app.quickOpenSouls`); neither launches.
+  selection, and **New agent** at the roster's end opens Quick Open (`app.quickOpenSouls`); neither launches.
   Capability facts and source provenance use negotiated read-only inspection,
   never inferred membership, installation or remote discovery. Shared CLI recovery
   stays visible across subtabs; incompatible installations are observation-only.
@@ -157,9 +157,9 @@ changed only the chrome there). Before D2, Omarchy's font also set the chrome
   `--mono` are `"JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace,
   SFMono-Regular, Menlo, monospace` (no file is bundled), and the terminals keep
   Inconsolata. On every platform Omarchy's font also sets `--name-size: 12px`,
-  which an instance's name on its sidebar row (`.ctx-name`) and its tab (`.tab`)
-  read as `font-size: var(--name-size, 12.5px)`: the wider monospace face, a
-  little smaller (the product owner, 2026-10-26). System font sets nothing.
+  which nothing reads since slice 3d: an instance's name on its sidebar row
+  (`.ctx-name`, 13px) and its tab (`.tab`, 12.5px) are fixed sizes, the chrome
+  being the system sans in every choice (D2). System font sets nothing.
 - **Every UI font rule follows it** by reading `font-family: var(--ui-font,
   <its own stack>)`, a longhand beside its size, weight and line-height (never
   inside a `font` shorthand: jsdom drops a shorthand that holds `var()`, so a
@@ -552,36 +552,39 @@ not read the panel. What they say (a deployment's state in words, the primary, t
 split into sections) is `packages/client/roster-sections.mjs`.
 
 - **The sidebar, top to bottom** (the product owner, 2026-10-26; slice 1 of the Desktop UI rework, its head,
-  pinned rows, rows and foot): the head (`.side-head`, 40px, its 8px top padding keeping the heading's centre 24px
-  down, as in the 48px bar, so the first row sits close under it; no line under it): the heading `#ws-heading`
-  "Workspace" (13.5px 700 `--fg`; it labels the list), then **Add local workspace…** (`#ws-add-open`), a 28px
-  `.side-icon-button` box; the list (`#ws-list`, a 1.5px `--border` line under it, a little bolder than the 1px one
-  before the instances; rows `.ws-option`, 4px 8px 4px 10px, at least 24px tall); the pinned rows (`#nav`, PINNED:
-  Home, Automations; 8px above the first and below the last, 4px on the left as the roster's list; a
-  column of 32px `.nav-item`s in the roster rows' style: the icon on the roster's dot column, 18px in, the name in
-  the roster's name type, 12.5px 600 `--fg`, the current one 650 on `--sel`; Automations carries `.nav-failed`, an
-  8px `--danger` dot in the right-hand column, 25px from the right, and the sr-only ", a run failed", while
-  `automations-failure.mjs` says a run failed: `paintAutomationsFailed` adds it and removes it); the roster
-  (`#instance-roster`, its top border the line before the instances) under its heading, a `.ctx-head` (13px 500
-  `--nav-fg`) holding "Instances" and the count, with "Refreshing…" after the count when loading.mjs adds it; then
-  the foot (`#nav-foot`, pushed to the bottom, under a `--border` line, 4px 10px 4px 6px), one bar (`#sidebar-bar`,
-  `role="group"` "Sidebar tools"), `[need you] … [New agent][?]`, built by `sidebar-foot.mjs`: **N need you**
-  (`#sidebar-need-you`, hidden at 0; the needs-input mark and "2 need you" in `--fg` 600, its name "2 agents need
-  you. Go to the first"; its mark on the rows' dots, 18px in: the foot's 6px, the bar's 2px, its own 5px, half the
+  pinned rows, rows and foot; slice 3d, the prototype's frame A, their type and spacing): the head (`.side-head`,
+  34px, 4px down, its 6px top padding keeping the kicker's centre 24px down, so the first row sits close under it;
+  no line under it): the heading `#ws-heading` "Workspaces", the prototype's kicker (10px 650 capitals tracked
+  .075em, `--muted`; it labels the list), then **Add local workspace…** (`#ws-add-open`), a quiet 26x24
+  `.side-icon-button`; the list (`#ws-list`, 8px in from both edges, a 1.5px `--border` line under it; rows
+  `.ws-option`, 0 8px 0 12px, 28px tall, 13px); the pinned rows (`#nav`, PINNED: Home, Workspace, Automations;
+  8px above the first, 4px below the last, 8px in as the roster's list; a column of 34px `.nav-item`s: the 16px
+  icon centred on the dots' column, 24px in, the name 40px in, 13px 500 `--fg`, the current one on `--sel`;
+  Automations carries `.nav-failed`, "N failed" right after its name in `--danger`, in its accessible name too (an
+  sr-only ", " before it: "Automations, 2 failed", the label in the name), while `automations-failure.mjs` counts a failed run (`onCount`): `paintAutomationsFailed(count)`
+  adds it and removes it); the roster (`#instance-roster`, no line before it) under its heading, a `.ctx-head`
+  (the WORKSPACES kicker's type) holding "Agents" and the count (11px), with "Refreshing…" after the count when
+  loading.mjs adds it; its rows two compact lines (`.ctx-name` 13px/17px 400, `.ctx-row-detail` 11.5px/15px
+  `--muted`), the dot 12px in (`--dot-inset`, which the guides read), "new" a 1px-ringed lower-case pill; then
+  the foot (`#nav-foot`, pushed to the bottom, under a `--border` line, 8px 14px 10px), one bar (`#sidebar-bar`,
+  `role="group"` "Sidebar tools"), `[need you] … [?]` (New agent ends the roster since slice 3d), built by `sidebar-foot.mjs`: **N need you**
+  (`#sidebar-need-you`, hidden at 0; the needs-input mark and "2 need you" in `--fg` 13px 400, its name "2 agents need
+  you. Go to the first"; its mark on the rows' dots, 24px in: the foot's 14px, its own 5px, half the
   10px mark; it runs `focusFirstNeedingYou`, which focuses the first row in the roster's order with a claim, itself: chosen
   from the model in the painted order (sidebarSections, main then Background) with the count's gate, so a row a
   held parent hides is found though it draws no roll-up; its section opened, its collapsed ancestors expanded,
   then the list painted again and the row focused, its terminal not opened),
   painted by every roster paint from this workspace's rows with a claim (`waitingClaim`, the held-stale gate);
-  **New agent** (`#sidebar-spawn`, `app.quickOpenSouls`: Quick Open), a + and its words (24px tall, 12px
+  **New agent** (`#sidebar-spawn`, `app.quickOpenSouls`: Quick Open), since slice 3d at the roster's end, after its
+  list (the prototype's quiet `.row.add`): a 34px row, its + on the dots' column and its words 40px in, 13px
   `--muted`, no fill at rest; `--surface-2` on hover and `--sel` on keyboard focus, in rules it shares with the
-  count) with no hint element, its chord in its title (`applyChordTitles`); and 6px after it **?**
-  (`#sidebar-help`, `app.shortcuts`: the shortcuts editor), a 24px `.side-icon-button`, centred 25px in from the
-  right edge (the foot's 10px, the bar's 3px, half its 24px). No mark, no sidebar toggle (`sidebar.toggle` is
+  count, with no hint element, its chord in its title (`applyChordTitles`); and at the bar's right end **?**
+  (`#sidebar-help`, `app.shortcuts`: the shortcuts editor), a round 22px `.side-icon-button`, centred 25px in from
+  the right edge (the foot's 14px, half its 22px). No mark, no sidebar toggle (`sidebar.toggle` is
   ⌘B / Ctrl+Shift+B, the palette's and Show sidebar's) and no settings cog (Theme…, Font… and Keyboard
   shortcuts… are the palette's). The foot's nouns are `DESKTOP_NOUNS`' (desktop-terms.mjs: "agent", D3 decided; the CLI and the docs keep
   "instance"), never in the markup.
-  Every `#nav-foot [data-action]` runs its action through the same registry as the keys. The workspace rows'
+  Every `#nav-foot [data-action]`, and `#sidebar-spawn`, runs its action through the same registry as the keys. The workspace rows'
   names are the sidebar's 13px (the current one at 650), the roster's machine labels (`.ctx-deployment`) 11px 650
   muted capitals, its agent groups 12px apart (`.ctx-group`) and each top-level bundle inside a group 12px after
   the one before (`.ctx-bundle-gap`, a spacer: no row box is spaced). The palette has no button: it has its own
@@ -591,7 +594,7 @@ split into sections) is `packages/client/roster-sections.mjs`.
   filter field (the TUI keeps its own): the palette finds an instance by name. `sidebar.focusFilter`
   keeps its id, chord and leader key (**Focus the instance roster**): `focusRoster` lands on
   `rosterEntry()`, the roster's current row, else its first row, else a control it shows under its heading
-  (Retry), else, on an empty roster, its one action, the foot's **New agent** (Quick Open; F6's stop in an
+  (Retry), else, on an empty roster, its one action, **New agent** at its end (Quick Open; F6's stop in an
   empty roster too: one way in, the product owner's rule), else, while the roster is hidden (a window with no
   workspace), the list of workspaces' stop, else **Add local workspace…**, so focus never falls to `<body>`.
   The same entry takes focus when the last terminal tab closes, and a focused Retry that goes on an empty
@@ -601,9 +604,15 @@ split into sections) is `packages/client/roster-sections.mjs`.
 - **A roster row** (slice 1): a 44px `.ctx-tree-row` box (the button 40px inside 2px transparent borders, the dot
   centred on it) of two lines, `.ctx-name` and `.ctx-meta.ctx-row-detail`, the shared row facts
   (`packages/client/roster-row-facts.mjs` `rosterRowFacts`, for the TUI too): the display name, then
-  `<soul> · <machine>` (its deployment's machine, else a server row's label, else this machine: `here`, the host name
-  the kernel reports, else `DESKTOP_TERMS.thisMachine`; a row of this machine's own deployment is this machine's; the
-  machine alone with no soul). `here` is the schedule list's `host.name` (oats-local.yaml), which the Automations
+  the harness's mark (identity-marks.mjs `createHarnessMark`: Claude's, Codex's or Pi's own shape, 10px,
+  monochrome in --tree-link, the faintest ink held at 3:1 on the row's fills and lighter than the line's --muted,
+  aria-hidden, none for another harness; slice 3d, Joan's decision 2026-11-22 ("yes but monochrome a bit more
+  discrete"), on Juan's request, superseding slice 1's removal; the row's title keeps "harness · model"), then `<soul>`, and ` · <machine>` only for another
+  machine's row (slice 3d, the prototype's, superseding slice 1's
+  this-machine name; `local` says which): its deployment's machine, else a server row's label, else this machine
+  (`here`, the host name the kernel reports, else `DESKTOP_TERMS.thisMachine`; a row of this machine's own deployment
+  is this machine's); the machine alone with no soul). This machine's name shows once, at the status line's right
+  (`statusLine.setMachine`, from the same `onHost`, by the rows' rule: roster-row-facts.mjs `shownLine`). `here` is the schedule list's `host.name` (oats-local.yaml), which the Automations
   mark's reader hands on (`onHost`, shell.mjs `thisHostName`; the roster repaints when it first arrives). No repository, branch, pull request, reason label or harness badge on the row, no
   hover card and no tools overlay: the instance panel shows the facts (Work: repository and branch; Session:
   harness, model, the reporting-gap note and the runtime error; Needs input: the claim's words, its wait and its
@@ -1758,7 +1767,7 @@ the keyboard audit are documented in `../docs/desktop-keyboard.md`; this
 section is the module map.
 
 - **⌘F / Alt+F** reveals the sidebar and focuses the instance roster (its current row; on an empty roster, the
-    foot's New agent); **⌘N /
+    New agent at its end); **⌘N /
   Ctrl+Shift+N** opens Workspace's soul chooser, never automatically spawning
   an instance. Visible hints and tooltips follow the effective bindings
   (including explicit unbinds). Existing user overrides are retained.
@@ -1856,9 +1865,9 @@ section is the module map.
   outside a terminal; `focus.leaveTerminal` from inside one): workspaces →
   views (`#nav`, under the list) → roster → main → instance panel, hidden regions skipped, each region's
   current item focused, never `<body>`. The head's control (Add local workspace…) counts as workspaces. The
-  foot (its bar: N need you, New agent, ?) is no region: Tab reaches it,
-  F6 from it goes on to main, Shift+F6 back to the roster. An empty roster's stop is the foot's New
-  instance (after a failed read's Retry), and Shift+F6 from that stop goes back as from the roster. F6 and
+  foot (its bar: N need you and ?) is no region: Tab reaches it,
+  F6 from it goes on to main, Shift+F6 back to the roster. An empty roster's stop is New agent at its end
+  (after a failed read's Retry), the roster's own control (slice 3d). F6 and
   the tab switches are no-ops
   under an open modal.
 - **surface-return.mjs** — "back to where you were" after a flow that moved
@@ -1920,7 +1929,8 @@ section is the module map.
   (`surface-return.mjs`). No second spawn form exists.
 - **status-line.mjs** — the status line (slice 4): one line at the bottom of the window with
   the three keys for where the focus is (`statusKeys` in the shell) and one-line messages
-  (`say`). It asks nothing: its y/n questions for Stop, Start and Restart were taken out of the
+  (`say`). Slice 3d drew it as the prototype's key bar: 28px on `--bg`, the keys in the chrome's sans (500 `--fg`),
+  their words `--muted`, a 3px `--muted` dot between two keys (a CSS shape, no character to read aloud). It asks nothing: its y/n questions for Stop, Start and Restart were taken out of the
   slice after five review rounds, and those keep their dialogs.
 - **sheet.mjs** — centred sheets over the scrim with a 150 ms ease (none with reduced
   motion), focus trapped and returned: `openSheet` (Appearance), and the `sheet` /
@@ -2279,9 +2289,13 @@ tablist with a single selected, tabbable trigger; arrows walk the group).
 Tab sizing (spec F, superseding "strips scroll instead of compressing"): tabs fit
 their strip like VS Code's "shrink" mode. Each `.tab` is `flex: 1 1 0px` with
 `max-width: fit-content` (its natural width, which the trigger caps so a tab
-never passes `--tab-max`, 280px) and `min-width: --tab-min` (168px, measured
-live in bold: the status dot, the name's start and an ellipsis ("oats-…") and its
-last eight characters, next to the close button).
+never passes `--tab-max`, 280px) and `min-width: --tab-min` (181px on a terminal
+tab, measured live in bold: the number, the name's start and an ellipsis
+("oats-…") and its last eight characters, and the 12px status slot, next to the
+close button; 176px on a tab with no slot, whose icon leads instead). The slot
+is 12px whichever mark shows: the 7px dot centred in it, or the Needs input
+glyph filling it, so the name never moves when an agent starts or stops waiting
+and the glyph is never clipped.
 Below the floor the strip scrolls. Names share long prefixes (the soul), so a
 terminal tab truncates in the middle: `tabNameTailStart()` (`tab-a11y.mjs`)
 picks a tail (the last eight characters, or what follows the soul when that is
@@ -2372,14 +2386,66 @@ home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
   selected target (Open in split) speaks only of that target: when its own read holds the
   home's replacement, it says the identity changed.
 
-The Schedules form is unchanged: it offers and keeps tmux only, so a schedule whose `backend` is a session
-provider is refused as before ("edit it with the CLI"). `scheduleDraft` takes the backends a form can keep
-(`schedule-read-data.mjs`, "tmux" alone by default) and `packages/client/session-backends.mjs` gives the names
-the kernel lists; a form that keeps a provider's schedule, with the read of its soul's inspection that needs,
-comes with the New agent form's backend choice.
+The Schedules form offers a spawn schedule the session providers of its soul and keeps a stored one
+(`views/schedules.mjs`; `scheduleDraft` takes the backends the kernel lists for the soul,
+`packages/client/session-backends.mjs` `sessionBackendNames`). An Edit of such a schedule opens the form at once
+and holds it until the soul's inspection answers; a later Edit, a Delete, a list read, another workspace and the
+automations page's own acts (its `onBusy`) drop it. A provider that launches only in full mode takes YOLO
+(`FULL_MODE_ONLY_PROVIDERS`). In full: [the local form](../docs/desktop-automations.md#the-local-form). The New
+agent form still offers tmux alone.
 
-Tests: `provider-rows.test.mjs`, and the A4 cases of `workspace-tab-memory.test.mjs`,
+Tests: `provider-rows.test.mjs`, `schedules-provider.test.mjs`, and the A4 cases of `workspace-tab-memory.test.mjs`,
 `retired-tabs.test.mjs` and `instance-tree.test.mjs`.
+
+### The agent view (`agent-board.mjs`, `agent-board-tabs.mjs`)
+
+With the kernel's board (feature `instance-board`; the shared contract module
+`packages/client/instance-board.mjs` validates the row's `board` and the
+`inspect --home --board` answer, and holds the rules both clients share: the
+three shown facts, the hidden-fact rule, the typed answer `<id>: <option>`,
+the dialog claims; a link the display filter would withhold is dropped from its fact), a terminal tab is the agent's view. `syncTabNeedsInput`
+calls `tabBoards.sync(tab, row, claim, workspace)` for each terminal tab, and
+gives the waiting row the claim only when that answers false: the board's own
+claim (producer `oats.board`) shows in the question zone instead. The view
+prepends `.agent-facts` and appends `.agent-questions` either side of the
+tab's `.term-wrap` (`place`, also after the shell appends the wrap), and the
+pane becomes a flex column (`.agent-view`), as with the waiting row; the
+terminal's geometry is never set here. Its two reads, the detail through
+`/api/capabilities` (`board: true`) and the claims through
+`/api/instance-events`, each carry a latest-intent counter checked on success
+and on rejection, and run when the view opens and when the board or the claim
+changes, never on an unchanged poll. The answer goes through
+`createTerminalTab`'s `type(text)`, the tab's own PTY lease (no control
+character, no line end, never while the pane isn't active): `desk.termWrite(h, text, { answer: true })`, which main
+answers (`term:answer`, terminal-owner.mjs `answer`, the same frame guard and lease as a write) only after reading
+the viewer pane's `#{pane_in_mode}` on its `=`-anchored session, synchronously, and writes with no turn of the event
+loop in between. Only a read of 0 types. In a mode (tmux copy mode, where `q` is cancel and `q1: Yes` would arrive as
+`1: Yes`) it answers `E_TERM_IN_MODE` (`IN_MODE_NOTE`); a read that failed or didn't resolve, or a remote viewer, which
+has no local pane to read, answers `E_TERM_MODE_UNKNOWN` (`MODE_UNKNOWN_NOTE`); either way not one character is
+written, and never a cancel. A remote row's view (`row.server`) never asks: its numbers are disabled from the start,
+with `remoteNote` (follow-up #2029: the remote kernel reporting the pane's mode would enable it). The frame and lease checks come before the read, so a document that holds no lease learns
+nothing about a pane. Not closed: a key the person presses into the scrollback during the read's few milliseconds. The view keeps no state about the input line: a card stays until the agent clears its
+question, and after a press the zone shows `TYPED_NOTE`, information only, which the next terminal input (`input`; not the terminal's own focus or mouse reports) or a
+changed board ends. While the board has a question, `sync` keeps its claim off the waiting row. The person's input is seen through its
+`onInput` observer. Before a number types, the view reads the claims again
+(`checkClaims`): only the latest claims read paints and may let the press type,
+and the shell's `inView` (the tab's pane active, the tab layer shown, its
+workspace current) is checked before the read, after it and at the write.
+A question's "typed" note and its context are keyed by its occurrence (`id@since`). The
+facts strip and the question zone are F6 regions (`focus-regions.mjs`, `facts`
+before `main` and `questions` after it, through the active tab's `part` and
+`focusPart`); `agent.viewFocus`, the palette's command, has no chord (Alt+T is
+Claude Code's extended thinking) and no leader key (the shared table is the TUI's).
+A repaint rebuilds a fact's row, the address box and the zone's options only
+when what they show changed (each keyed: the rows by fact, `factRows`, the others
+by `dataset.key`), and never takes out a row that stays, whatever the repaint (a
+poll's, or the budget's, which lays the strip out full and then compact): a focus
+in the pane selects its tab, which reads the roster and syncs the board again, so
+a repaint that replaced the focused control and focused its new copy would loop,
+and a press would land on a replaced button. A focused control whose row was
+replaced, or moved (a fact the agent unsets and sets again goes last), is given
+the focus back (`agent-view.test.mjs`, "no loop", "a compact strip keeps its row"
+and "a moved row").
 
 ### Workspace-local tab memory
 

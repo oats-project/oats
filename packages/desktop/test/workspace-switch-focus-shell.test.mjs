@@ -200,7 +200,7 @@ test("focus places: transit surfaces are never a place; the tab layer, the roste
   assert.deepEqual({ ...s.c.focusPlaces.describe(), handle: undefined }, { kind: "other", region: "main", handle: undefined });
   document.querySelector("#nav .nav-item").focus();
   assert.equal(s.c.focusPlaces.describe().region, "views");
-  document.getElementById("sidebar-spawn").focus();
+  document.getElementById("sidebar-help").focus();
   assert.equal(s.c.focusPlaces.describe().region, null, "the foot is no region");
   s.row("A").focus();
   assert.equal(s.c.focusPlaces.describe(), null, "the list of workspaces: none");

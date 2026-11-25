@@ -31,7 +31,7 @@ const mount = "RUN --mount=type=bind,source=.,target=/opt/oats-build-inputs,read
 assert.equal(source.split(mount).length, 2, "default proof requires exactly the approved mount line");
 writeFileSync(file, source.replace(mount, "RUN npm ci"));
 JS
-docker build --platform linux/amd64 --tag "$legacy" "$fixture/context"
+docker build --platform linux/amd64 --build-arg "TEAM_IMAGE_SOURCE_SHA=${TEAM_IMAGE_SOURCE_SHA:?Set TEAM_IMAGE_SOURCE_SHA}" --tag "$legacy" "$fixture/context"
 built=1
 previous=$(docker image inspect --format '{{.Id}}' "$legacy")
 program=$(cat .github/scripts/team-image-payload.cjs)

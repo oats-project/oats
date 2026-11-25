@@ -14,7 +14,7 @@ let workNotes = 0;
 export const contextPanelCSS = `
 #context-panel.context-panel { display:flex; flex:0 0 340px; width:340px; min-width:0; min-height:0; flex-direction:column; box-sizing:border-box; overflow:hidden; border-left:1px solid var(--border); background:var(--surface); color:var(--fg); font-weight:normal; font-size:13px; line-height:1.45; font-family:var(--ui-font,-apple-system,"Segoe UI",system-ui,sans-serif); }
 #context-panel.context-panel[hidden], #context-panel [hidden] { display:none !important; }
-#context-panel .context-panel-header { display:flex; align-items:center; flex:none; height:48px; box-sizing:border-box; border-bottom:1px solid var(--border); padding:0 6px; gap:4px; }
+#context-panel .context-panel-header { display:flex; align-items:center; flex:none; height:var(--bar-h); box-sizing:border-box; border-bottom:1px solid var(--border); padding:0 6px; gap:4px; }
 #context-panel .context-panel-tabs { display:flex; flex:1; min-width:0; height:100%; align-items:center; gap:2px; }
 #context-panel .context-panel-control { font:inherit; color:var(--muted); background:var(--surface); border:0; border-radius:4px; cursor:pointer; padding:6px; }
 #context-panel .context-panel-tab { font-size:12px; white-space:nowrap; min-height:32px; }

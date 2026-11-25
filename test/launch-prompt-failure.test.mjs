@@ -6,7 +6,8 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import YAML from 'yaml';
-import { v2Deployment } from './helpers/v2-deployment.mjs';
+import { v2Deployment, writeFixtureExecutable } from './helpers/v2-deployment.mjs';
+import { eventLog } from '../lib/instance-events.mjs';
 import { startInstanceSession } from '../lib/core.mjs';
 import { readEvents } from '../lib/instance-events.mjs';
 
@@ -16,8 +17,7 @@ function setup(t, name, options = {}) {
   const fx = v2Deployment(options);
   t.after(() => fx.cleanup());
   const executable = join(fx.base, 'stub');
-  writeFileSync(executable, `#!${process.execPath}\nconsole.log('SYNTHETIC unexpected frame');\nsetInterval(() => {}, 1000);\n`);
-  chmodSync(executable, 0o755);
+  writeFixtureExecutable(fx.base, executable, `#!${process.execPath}\nconsole.log('SYNTHETIC unexpected frame');\nsetInterval(() => {}, 1000);\n`);
   const home = join(fx.root, 'dev', 'instances', name);
   const configFile = join(fx.dep, 'oats-local.yaml');
   const config = YAML.parse(readFileSync(configFile, 'utf8'));
@@ -220,7 +220,7 @@ for (const phase of ['spawn-metadata', 'start-pending', 'start-metadata']) for (
   const { fx, home } = setup(t, name);
   const spawning = phase.startsWith('spawn');
   if (!spawning) await fx.spawn('dev', { name, launchConfig: 'stub', launch: false });
-  const originalWrite = fs.writeFileSync, originalAppend = fs.appendFileSync;
+  const originalWrite = fs.writeFileSync, originalAppend = eventLog.appendRow;
   const suffix = phase === 'start-pending' ? '.oats-start-pending.json' : 'instance.json';
   const failedPath = join(home, `${suffix}.tmp-${process.pid}`);
   let failures = 0;
@@ -231,7 +231,8 @@ for (const phase of ['spawn-metadata', 'start-pending', 'start-metadata']) for (
     }
     return originalWrite(path, value, ...rest);
   });
-  const appends = t.mock.method(fs, 'appendFileSync', (path, value, ...rest) => {
+  // (The kernel's one write of an event row: lib/instance-events.mjs eventLog.appendRow.)
+  const appends = t.mock.method(eventLog, 'appendRow', (path, value, ...rest) => {
     if (auditFails && typeof value === 'string') {
       let row; try { row = JSON.parse(value); } catch { /* other append */ }
       if (row?.kind === 'launch-prompt' && row.data?.status === 'incomplete') throw new Error('injected incomplete audit failure');
@@ -267,11 +268,11 @@ for (const spawning of [false, true]) test(`${spawning ? 'spawn' : 'start'} refu
   const { fx, home } = setup(t, name);
   if (!spawning) await fx.spawn('dev', { name, launchConfig: 'stub', launch: false });
   const workspaceLog = join(fx.dep, '.agents', 'events', `dev--${name}.jsonl`);
-  const originalAppend = fs.appendFileSync;
+  const originalAppend = eventLog.appendRow;
   const originalHome = join(fx.base, 'original-home');
   const replacement = JSON.stringify({ instance: name, createdAt: 'replacement', workspace: { deployment: join(fx.base, 'untrusted-deployment') } });
   let swapped = false, workspaceBytes;
-  const mock = t.mock.method(fs, 'appendFileSync', (path, value, ...rest) => {
+  const mock = t.mock.method(eventLog, 'appendRow', (path, value, ...rest) => {
     const result = originalAppend(path, value, ...rest);
     let row; try { row = JSON.parse(value); } catch { /* other append */ }
     if (!swapped && path === workspaceLog && row?.kind === 'launch-prompt' && row.data?.status === 'blocked') {

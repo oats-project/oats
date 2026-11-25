@@ -1,0 +1,12 @@
+#!/usr/bin/env node
+// `npm run test:provider-lifecycle`: every schedule of the session-provider lifecycle's explorer
+// (test/session-provider-explorer.test.mjs), where `npm test` runs a seeded sample of them.
+// Pull-request CI runs this, as a job of its own, for a change that touches the lifecycle
+// (scripts/provider-lifecycle-changed.mjs), and a nightly run does on main: the full enumeration
+// takes minutes, and a sample is what would let the next ordering through.
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const explorer = fileURLToPath(new URL("../test/session-provider-explorer.test.mjs", import.meta.url));
+const run = spawnSync(process.execPath, ["--test", explorer], { stdio: "inherit", env: { ...process.env, OATS_EXPLORER_COUNT: "all" } });
+process.exit(run.status ?? 1);

@@ -1,6 +1,6 @@
 // oats.core's Claude Code waiting emitter (the first producer of `oats instance waiting`):
 // its spawn/launch hook manages oats.core's own entries in <home>/.claude/settings.json,
-// and claude-waiting.sh, which those entries run, reports set/clear through the CLI.
+// adds tui when absent, and claude-waiting.sh reports set/clear through the CLI.
 // The script's pinned condition: it can never hurt the Claude session — exit 0, empty
 // stdout, bounded time — whatever the CLI or the environment does.
 import test from "node:test";
@@ -165,6 +165,10 @@ test("the launch hook answers {} for claude in preview and real mode alike, and 
   const before = readFileSync(settingsOf(h), "utf8");
   assert.deepEqual(runHook("launch", { ...env, OATS_LAUNCH_PREVIEW: "1" }), {});
   assert.equal(readFileSync(settingsOf(h), "utf8"), before);
+  // An existing file without tui also stays byte-for-byte untouched in preview.
+  writeFileSync(settingsOf(h), '{"model":"opus"}\n');
+  assert.deepEqual(runHook("launch", { ...env, OATS_LAUNCH_PREVIEW: "1" }), {});
+  assert.equal(readFileSync(settingsOf(h), "utf8"), '{"model":"opus"}\n');
 });
 
 test("codex and pi: the hook answers {} and writes nothing, at spawn and at launch", () => {
@@ -172,6 +176,10 @@ test("codex and pi: the hook answers {} and writes nothing, at spawn and at laun
     const h = home();
     assert.deepEqual(runHook(event, { OATS_HARNESS: harness, OATS_INSTANCE_HOME: h, OATS_CLI_BIN: FAKE_CLI_ABS }), {});
     assert.ok(!existsSync(join(h, ".claude")), `${harness} ${event}: nothing written`);
+    mkdirSync(join(h, ".claude"));
+    writeFileSync(settingsOf(h), '{"model":"opus"}\n');
+    assert.deepEqual(runHook(event, { OATS_HARNESS: harness, OATS_INSTANCE_HOME: h, OATS_CLI_BIN: FAKE_CLI_ABS }), {});
+    assert.equal(readFileSync(settingsOf(h), "utf8"), '{"model":"opus"}\n');
   }
 });
 
@@ -180,7 +188,8 @@ test("the real pass writes settings.json 0600 with absolute, single-quoted comma
   assert.deepEqual(runHook("spawn", { OATS_HARNESS: "claude", OATS_INSTANCE_HOME: h, OATS_CLI_BIN: FAKE_CLI_ABS }), REPORTED);
   assert.equal(statSync(settingsOf(h)).mode & 0o777, 0o600);
   const settings = readJson(settingsOf(h));
-  assert.deepEqual(Object.keys(settings), ["hooks"]);
+  assert.deepEqual(Object.keys(settings), ["hooks", "tui"]);
+  assert.equal(settings.tui, "default");
   assert.deepEqual(Object.keys(settings.hooks), ["Notification", "PermissionRequest", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "StopFailure", "SessionEnd"]);
   const map = Object.entries(settings.hooks).flatMap(([event, groups]) => groups.map((g) => [event, g.matcher ?? null, g.hooks.map((e) => e.command.match(/claude-waiting\.sh' ((?:set(?:-late)? [\w-]+)|clear(?:-tool)?) /)[1])]));
   assert.deepEqual(map, [
@@ -242,7 +251,8 @@ test("merge by marker: unrelated keys and hooks stay, in order; a second run is 
   const env = { OATS_HARNESS: "claude", OATS_INSTANCE_HOME: h, OATS_CLI_BIN: FAKE_CLI_ABS };
   assert.deepEqual(runHook("launch", env), REPORTED);
   const merged = readJson(settingsOf(h));
-  assert.deepEqual(Object.keys(merged), ["model", "permissions", "hooks", "env"], "top-level keys keep their order");
+  assert.deepEqual(Object.keys(merged), ["model", "permissions", "hooks", "env", "tui"], "top-level keys keep their order");
+  assert.equal(merged.tui, "default");
   assert.equal(merged.model, "opus");
   assert.deepEqual(merged.permissions, existing.permissions);
   assert.deepEqual(merged.env, existing.env);
@@ -267,6 +277,47 @@ test("mergeSettings (pure): the Stop event re-added as ours, nothing foreign tou
   assert.equal(r.ok, true);
   assert.deepEqual(r.settings.hooks.Stop, ours.hooks.Stop);
   for (const bad of [[], "x", null, { hooks: [] }, { hooks: { Stop: {} } }]) assert.equal(mergeSettings(bad, ours, "/m/claude-waiting.sh").ok, false, JSON.stringify(bad));
+});
+
+test("mergeSettings (pure): tui is added only when absent, preserving every existing value and key order", () => {
+  const ours = claudeWaitingSettings({ script: SCRIPT, node: process.execPath, cli: FAKE_CLI_ABS });
+  const absent = mergeSettings({ model: "opus", env: { KEPT: "yes" } }, ours, SCRIPT);
+  assert.equal(absent.ok, true);
+  assert.equal(absent.settings.tui, "default");
+  assert.deepEqual(Object.keys(absent.settings), ["model", "env", "hooks", "tui"]);
+  for (const tui of ["fullscreen", "default", "unexpected", null, false, 0, { custom: true }, []]) {
+    const existing = { model: "opus", tui, env: { KEPT: "yes" } };
+    const merged = mergeSettings(existing, ours, SCRIPT);
+    assert.equal(merged.ok, true);
+    assert.deepEqual(merged.settings.tui, tui);
+    assert.deepEqual(Object.keys(merged.settings), ["model", "tui", "env", "hooks"]);
+    assert.equal(merged.settings.model, existing.model);
+    assert.deepEqual(merged.settings.env, existing.env);
+    assert.equal(Object.hasOwn(existing, "hooks"), false, "the input is not mutated");
+  }
+});
+
+test("tui survives spawn and launch with hooks added, and the second pass does not rewrite the file", () => {
+  for (const tui of ["fullscreen", "default", null, false, 0]) {
+    const h = home();
+    mkdirSync(join(h, ".claude"));
+    writeFileSync(settingsOf(h), JSON.stringify({ model: "opus", tui, env: { KEPT: "yes" } }));
+    const env = { OATS_HARNESS: "claude", OATS_INSTANCE_HOME: h, OATS_CLI_BIN: FAKE_CLI_ABS };
+    assert.deepEqual(runHook("spawn", env), REPORTED);
+    const settings = readJson(settingsOf(h));
+    assert.deepEqual(settings.tui, tui);
+    assert.deepEqual(Object.keys(settings), ["model", "tui", "env", "hooks"]);
+    assert.equal(allEntries(settings).length, 11);
+    // An old timestamp makes even a fast accidental rewrite observable.
+    const old = new Date(1000000);
+    utimesSync(settingsOf(h), old, old);
+    const before = readFileSync(settingsOf(h), "utf8");
+    const stat = statSync(settingsOf(h));
+    assert.deepEqual(runHook("launch", env), REPORTED);
+    assert.equal(readFileSync(settingsOf(h), "utf8"), before);
+    assert.equal(statSync(settingsOf(h)).mtimeMs, stat.mtimeMs);
+    assert.equal(statSync(settingsOf(h)).ino, stat.ino, "the atomic writer did not replace the file");
+  }
 });
 
 test("an unparseable or non-object settings.json is left untouched, with a warning and exit 0", () => {

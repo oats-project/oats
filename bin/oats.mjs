@@ -26,17 +26,25 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import { spawnSync as spawnSyncProc } from "node:child_process";
+import { nodeVersionFailure } from "../lib/node-version.mjs";
 import { enableCliCompileCache } from "../lib/compile-cache.mjs";
 import { hotImport, hotRead } from "../lib/hot-reads.mjs";
 import { installStamp } from "../lib/install-stamp.mjs";
+
+const unsupportedNode = nodeVersionFailure(process.versions.node);
+if (unsupportedNode) {
+  if (process.argv.includes("--json")) process.stdout.write(`${JSON.stringify(unsupportedNode)}\n`);
+  else process.stderr.write(`${unsupportedNode.error.message}\n`);
+  process.exit(1);
+}
 
 // The warm reader's baseline (lib/reader.mjs): its install's stamp before any kernel module loads, so that an
 // install changed while the kernel loads is never the install the reader believes it answers from.
 const READER_STAMP = process.argv[2] === "reader" ? installStamp() : null;
 
 // Node's compile cache is on before the kernel is parsed (lib/compile-cache.mjs): static imports are
-// all parsed and linked before this module's body runs, so they are Node built-ins and the three small
-// dependency-free modules above, and the kernel and `yaml` are imported here, in order, once it is on.
+// all parsed and linked before this module's body runs, so they are Node built-ins and the small
+// dependency-free startup modules above, and the kernel and `yaml` are imported here once it is on.
 enableCliCompileCache();
 // A hot read (lib/hot-reads.mjs) imports only the leaves it uses, never core.mjs: each line below takes
 // the leaves its names come from, and every other command imports every module, in this order. A hot
@@ -95,7 +103,7 @@ const { readBoardDetail, askBoardQuestion, clearBoardQuestion, setBoardFact, uns
 const { CLIENT_VIA, addDeployment, deploymentAtOrAbove, importDesktopDeployments, listDeployments, listResolved, removeDeployment } = await kernelImport("deployments", () => import("../lib/deployments.mjs"));
 const { observeResolvedDeployment } = await kernelImport("resolved-deployment", () => import("../lib/resolved-deployment.mjs"));
 const { SESSION_RESUME_FEATURE } = await kernelImport("session-resume-contract", () => import("../lib/session-resume-contract.mjs"));
-const { BOARD_API, KERNEL_FEATURES, READER_API } = await kernelImport("kernel-features", () => import("../lib/kernel-features.mjs"));
+const { BOARD_API, BUILTIN_SESSION_BACKENDS, KERNEL_FEATURES, READER_API, SESSION_PROVIDER_NAME_RE } = await kernelImport("kernel-features", () => import("../lib/kernel-features.mjs"));
 const { inheritedContextRefusal } = await kernelImport("captured-context", () => import("../lib/captured-context.mjs"));
 const { callSession, parseMaxAge, readBudget } = await kernelImport("read-call", () => import("../lib/read-call.mjs"));
 const { cachedWorkspace, legacyLayoutProblems, statusAnswer, statusView } = await kernelImport("roster-read", () => import("../lib/roster-read.mjs"));
@@ -518,7 +526,8 @@ function scopeSouls(ctx, { extraRoots = [] } = {}) {
   const roots = [...new Set([findRoot(ctx), ...extraRoots].filter(Boolean).map((p) => realOrResolved(resolve(p))))];
   const souls = [];
   for (const root of roots) {
-    for (const a of listInstances(root)) {
+    // Names only: no session provider is asked.
+    for (const a of listInstances(root, undefined, undefined, { askProviders: false })) {
       const soul = findAgent(root, a.name) || a;
       const e = soulEntry(soul, root);
       e.instances = (a.instances || []).map((i) => i.instance);
@@ -676,6 +685,8 @@ function printWorkspaceInspect(doc) {
   if (doc.identity) console.log(`  identity: ${servedIdentityLine(doc.identity)}`);
   for (const l of LAYERS) console.log(`  ${l} capability: ${doc.layers[l].id || "none"}`);
   for (const c of doc.capabilities) console.log(`  ${c.id}@${c.version || "?"} ${c.from?.kind === "package" ? `package ${c.from.package}` : c.from?.kind === "member" ? `member ${c.from.repoKey}` : ""}${c.operations.length ? `  ops: ${c.operations.map((o) => `${o.name}${o.available ? "" : "(unavailable)"}`).join(", ")}` : ""}`);
+  // Feature session-providers: the backends `--backend` takes here beside tmux, each with the capability that supplies it.
+  if (doc.sessionProviders?.length) console.log(`  session backends: tmux, ${doc.sessionProviders.map((p) => `${p.name} (${p.capability})`).join(", ")}`);
   for (const p of doc.problems) console.log(`  ! ${p.code}: ${p.message}`);
   for (const w of doc.warnings) console.log(`  warning  ${w.code}  ${w.message}`);
   const board = doc.instance?.board;
@@ -710,6 +721,19 @@ async function homeLiveTeams(home) {
   return Array.isArray(teams) ? { teams, defaultTeam, teamsSource: source } : {};
 }
 
+/** For a start or a restart of a home on a session provider: the deployment's configuration its
+ *  sandbox allowances are computed from (lib/instance-resolution.mjs homeSandboxSource), read now.
+ *  → `{ sandboxSource }`, or `{}` for a tmux home, which reads nothing. (A `--resume` launches
+ *  nothing on a provider, and reads nothing either.) The home's record only says whether to read:
+ *  which deployment and which soul are the home's path's to say. */
+async function homeSandboxSourceOf(home) {
+  let meta;
+  try { meta = JSON.parse(readFileSync(join(home, "instance.json"), "utf8")); } catch { return {}; }
+  const { recordsSessionProvider } = await import("../lib/session-providers.mjs");
+  if (!recordsSessionProvider(meta)) return {};
+  const { homeSandboxSource } = await import("../lib/instance-resolution.mjs");
+  return { sandboxSource: await homeSandboxSource(home, { remoteOptions: remoteOptionsFromEnv() }) };
+}
 /** For `--reselect-launch`: what the home's launch layers need of the workspace to say which keys of
  *  souls.launch name no soul (lib/core.mjs homeLaunchLayers), read only when they need it and the layers
  *  decide (`named`: --harness names the launch, so no key is consulted). A home the start will refuse
@@ -827,6 +851,9 @@ async function workspaceOperation(t, { bail, address, layer, opName }) {
   const [script, ...rest] = spec.trim().split(/\s+/);
   const abs = lp?.executable(script);
   if (!abs) return bail("E_CAPABILITY_BROKEN", `${mod.name} ${op.command}: script not found (${script})`);
+  // A provider home's own copy is never run: the kernel runs its copy of it (a guard; `dir` is that copy).
+  const untrustedCopy = lp.dir ? (await import("../lib/home-integrity.mjs")).moduleCopyProblemAt(lp.dir) : null;
+  if (untrustedCopy) return bail("E_CAPABILITY_BLOCKED", `${address} was not run: ${untrustedCopy}`);
   const settings = lp.settings;
   const cwd = op.context === "home" ? t.home : t.deployment;
   const env = { ...lp.env(mod.name, settings), OATS_OPERATION: address, OATS_CONTEXT: t.deployment, OATS_ROOT: t.agentsRoot, PI_AGENTS_ROOT: t.agentsRoot };
@@ -890,6 +917,16 @@ function doctorMachineLaunchConfigs() {
     return { file, present: true, ok: false, configurations: [], error: e.message };
   }
 }
+/** The shared Git version probe reports support, not each repository's recorded fetch mode.
+ *  An older Git is supported too; this is information, never a warning or a refusal. */
+async function doctorGitInformation() {
+  const version = await remoteModule.gitVersion();
+  if (!version) return "git-version: Git version could not be read; partial-cache support unknown";
+  const mode = remoteModule.keepsPartialCache(version)
+    ? "partial caches supported (a remote or an existing cache may still use whole-tree fetches)"
+    : `whole-tree fallback (partial caches need Git ${remoteModule.PARTIAL_FETCH_GIT.join(".")} or later)`;
+  return `git-version: Git ${terminalText(version.text)}; ${mode}`;
+}
 /** The machine's resume lock when it needs a person (lib/session-resume.mjs resumeLockProblem), as
  *  doctor's problems: read where a sweep would take it, nothing taken. It is this machine's, the
  *  same from every deployment. */
@@ -913,7 +950,7 @@ async function doctorWorkspaceJson(ctx, soulName, ws) {
     schemaVersion: 1, workspaceApi: 2, context: ctx,
     workspace: { file: ws.local.path, ref: ws.local.workspace },
     workspaceError: ws.localError, lockFile: ws.lockFile, packages: ws.packages, lockError: ws.lockError,
-    information: [...(operationalKnowledgeNote(composition, soulName) ? [operationalKnowledgeNote(composition, soulName)] : []), ...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...disabledSouls.information, ...hookEvents.information, ...processScanInformation(), ...doctorRetained(ws).flat()],
+    information: [...(operationalKnowledgeNote(composition, soulName) ? [operationalKnowledgeNote(composition, soulName)] : []), await doctorGitInformation(), ...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...disabledSouls.information, ...hookEvents.information, ...processScanInformation(), ...doctorRetained(ws).flat()],
     machineLaunchConfigs: doctorMachineLaunchConfigs(),
     composedInstructions: composition?.text, instructionBlocks: composition?.blocks,
     ...(problems.length ? { problems } : {}),
@@ -973,7 +1010,7 @@ async function doctor(dir) {
   const hookEvents = composition ? { warnings: composition.warnings, information: [] } : await doctorHookWarnings(ws);
   for (const w of hookEvents.warnings) console.log(`\nwarning  ${w.code}  ${w.message}`);
   if (!soulName) for (const w of doctorCaptureWarnings()) console.log(`\nwarning  ${w.code}  ${terminalText(w.message)}`);
-  for (const line of [...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...disabledSouls.information, ...hookEvents.information, ...processScanInformation()]) console.log(`\nINFO: ${line}`);
+  for (const line of [await doctorGitInformation(), ...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...disabledSouls.information, ...hookEvents.information, ...processScanInformation()]) console.log(`\nINFO: ${line}`);
   for (const block of doctorRetained(ws)) console.log(`\n${block.map((line) => `INFO: ${line}`).join("\n")}`);
   if (soulName) {
     const information = operationalKnowledgeNote(composition, soulName);
@@ -1116,7 +1153,7 @@ function launchConfigContext(bail) {
  *  a soul) would run under a selection, resolved against the current scoped
  *  configuration, preflighted, read-only; environment values withheld and
  *  the prompt named, never the TASK body. */
-function launchPreview(bail) {
+async function launchPreview(bail) {
   for (const k of ["launch-config", "harness", "runtime", "model"]) if (flag(k) === true) bail("E_BAD_ARGS", `--${k} needs a value`);
   const sel = { launchConfig: flag("launch-config"), harness: harnessFlag(), model: flag("model"), yolo: yoloFlag() };
   if (sel.harness !== undefined && !LAUNCH_HARNESSES.includes(sel.harness)) bail("E_BAD_ARGS", `--harness must be one of ${LAUNCH_HARNESSES.join(", ")}`);
@@ -1153,11 +1190,17 @@ function launchPreview(bail) {
   // The same planner a start uses, in preview mode: failed checks are listed, nothing is touched.
   // Its checks read the pane a launch would run in, as a command that only reads can know it (a
   // home's recorded session, a soul's session default; with no server running, not established).
+  // A home on a session provider: its provider is asked what a start will ask it (its check, with
+  // the launch that is planned), from the deployment's configuration as it is now, as a start reads it.
+  const providerCheck = meta ? await homeSandboxSourceOf(home) : null;
   let plan;
-  try { plan = planLaunch({ home, instance, meta, contextDir: context, agentLike, selection: sel, resolvedCfg: r, preview: true, pane: () => previewPaneEnvironment(meta ? { home, meta } : { deployment: context }) }); } catch (e) { bail(e.code || "E_BAD_ARGS", e.message); }
+  try { plan = planLaunch({ home, instance, meta, contextDir: context, agentLike, selection: sel, resolvedCfg: r, preview: true, pane: () => previewPaneEnvironment(meta ? { home, meta } : { deployment: context }), providerCheck }); } catch (e) { bail(e.code || "E_BAD_ARGS", e.message); }
   const { recipe } = plan;
-  const command = renderLaunchRecipe(recipe, { home, instance, redact: true, trustHome: plan.trustHome });
-  const d = describeLaunchCommand(command);
+  // A home on a session provider has no command line: its launch is handed to the provider as data
+  // (`command` and `argv` null, the executable's path null); its environment is listed by name.
+  const onProvider = plan.command === undefined;
+  const command = onProvider ? null : renderLaunchRecipe(recipe, { home, instance, redact: true, trustHome: plan.trustHome });
+  const d = onProvider ? { argv: null, environment: [...Object.keys(recipe.hooks?.env || {}).sort().map((name) => ({ name, redacted: true })), ...Object.keys(recipe.env || {}).sort().map((name) => (typeof recipe.env[name] === "string" ? { name, redacted: true } : { name, reference: true }))] } : describeLaunchCommand(command);
   const environment = d.environment.map((e) => e.reference && recipe.env[e.name] && typeof recipe.env[e.name] === "object" ? { name: e.name, ...recipe.env[e.name] } : e);
   jsonOk({ context, selected, ...(plan.warnings?.length ? { warnings: plan.warnings } : {}), selection: { source: plan.selectionSource, launchConfig: recipe.launchConfig, harness: sel.harness ?? null, model: sel.model ?? null, yolo: sel.yolo ?? null }, harness: plan.harness, model: recipe.model, modelSource: plan.modelSource, yolo: recipe.yolo ?? null, launchConfig: recipe.launchConfig, launchConfigSource: recipe.launchConfigSource, launchConfigDefault: recipe.launchConfigDefault === true, executable: { path: plan.executable.path, declared: plan.executable.declared ?? null, resolvedFrom: plan.executable.resolvedFrom }, argv: d.argv, environment, command, prompt: recipe.prompt, hooks: redactLaunchRecipe(recipe).hooks, preflight: plan.preflight, ok: plan.ok });
 }
@@ -1166,7 +1209,7 @@ async function launchConfigCmd() {
   dropAmbientRoot();
   const sub = args[1];
   const usage = "usage: oats launch-config list [--dir <scope> | --home <abs> | --soul <name> [--dir <scope>] [--agents-root <abs>]] [--json] | set <name> --file <json> [--keep-env] [--dir <scope>] [--json] | remove <name> [--dir <scope>] [--json] | preview (--home <abs> | --soul <name> [--dir <scope>]) [--launch-config <name>|none] [--harness r] [--model m] [--yolo|--no-yolo] --json";
-  if (sub === "preview") { launchPreview(bail); return; }
+  if (sub === "preview") { await launchPreview(bail); return; }
   if (!["list", "set", "remove"].includes(sub)) bail("E_USAGE", usage);
   const { context: dir, selected } = sub === "list" ? launchConfigContext(bail) : { context: dirFlag(), selected: null };
   // Lead decision 2: launch configurations are a HOST choice, declared in the
@@ -1755,6 +1798,7 @@ async function readinessCmd() {
     }
     if (doc.policy) console.log(`  policy: child spawns ${doc.policy.childSpawns.allowed ? "allowed" : "disabled"} (${doc.policy.childSpawns.origin.kind}${doc.policy.childSpawns.enforced ? ", enforced" : ""}); worktrees ${doc.policy.worktrees.allowed === null ? "unknown" : doc.policy.worktrees.allowed ? "allowed" : "not in this work mode"}`);
     for (const w of doc.warnings) console.log(`  warning  ${w.code}  ${w.message}`);
+    printSandboxAllowances(doc.sandbox, "  ");
     for (const n of doc.notes) console.log(`  note: ${terminalText(n)}`);
     return;
   }
@@ -2603,6 +2647,26 @@ async function capabilityShowCmd(bail) {
     }
     for (const p of doc.triggerSourceProblems ?? []) console.log(`  trigger source problem: ${p.pointer} — ${safeText(p.message, 300)}`);
   }
+  if (doc.sessionProviders !== undefined) {
+    // As declared (a malformed declaration is shown, never refused), made safe to print.
+    const { safeText } = await import("../lib/refused-text.mjs");
+    const decl = doc.sessionProviders && typeof doc.sessionProviders === "object" && !Array.isArray(doc.sessionProviders) ? doc.sessionProviders : null;
+    console.log(decl && Object.keys(decl).length ? "  session providers:" : `  session providers: ${decl ? "(none)" : "(malformed — see session provider problems)"}`);
+    for (const [n, provider] of Object.entries(decl ?? {})) {
+      const o = provider && typeof provider === "object" ? provider : {};
+      console.log(`    ${safeText(n, 60)}  harnesses ${Array.isArray(o.harnesses) ? o.harnesses.map((h) => safeText(String(h), 40)).join(",") : "?"}${typeof o.description === "string" ? `  — ${safeText(o.description, 200)}` : ""}`);
+    }
+    for (const p of doc.sessionProviderProblems ?? []) console.log(`  session provider problem: ${p.pointer} — ${safeText(p.message, 300)}`);
+  }
+  if (doc.sandboxDomains !== undefined) {
+    // As declared, made safe to print: the settings whose hosts a session provider's sandbox may be widened by.
+    const { safeText } = await import("../lib/refused-text.mjs");
+    // A `{ setting }` line: the setting's host. A `{ settingFile, urls }` line: the hosts in the file the setting names.
+    const lines = Array.isArray(doc.sandboxDomains) ? doc.sandboxDomains.map((l) => (typeof l?.setting === "string" ? `the host of setting ${safeText(l.setting, 80)}${l.optional === true ? " (optional)" : ""}`
+      : typeof l?.settingFile === "string" ? `the hosts in the file of setting ${safeText(l.settingFile, 80)} at ${safeText(String(l.urls ?? "?"), 200)}` : "?")) : null;
+    console.log(`  sandbox domains: ${lines ? lines.join("; ") : "(malformed — see sandbox domain problems)"}`);
+    for (const p of doc.sandboxDomainProblems ?? []) console.log(`  sandbox domain problem: ${safeText(p, 300)}`);
+  }
   for (const p of doc.problems) console.log(`  problem: ${p.code}${p.path ? ` ${p.path}` : ""} — ${p.message}`);
   for (const w of doc.warnings) console.log(`  warning  ${w.code}  ${w.message}`);
   console.log(`\n  a file's text: oats capabilities show ${doc.name}${doc.kind === "package" ? ` --package ${doc.package}` : ""} --file <path>`);
@@ -2731,8 +2795,10 @@ function printStatus({ root, agents: data, ws, problems }, verbose) {
     if (a.description) console.log(`      ${a.description}`);
     for (const i of a.instances) {
       // Feature instance-background: the row is marked; it is listed like any other.
-      console.log(`      • ${i.instance}${i.background === true ? " [background]" : ""}  ${statusWord(i)}  (branch ${i.branch || "?"}, ${i.work || "?"})${i.runtimeError ? `  ${i.runtimeError}` : ""}`);
+      console.log(`      • ${i.instance}${i.background === true ? " [background]" : ""}  ${statusWord(i)}  (branch ${i.branch || "?"}, ${i.work || "?"}${i.session ? `, on ${i.backend}` : ""})${i.runtimeError ? `  ${i.runtimeError}` : ""}`);
       { const lost = lostLine(i); if (lost) console.log(`          ${lost}`); }
+      // Feature provider-outside-oats: a harness runs in a provider home OATS recorded stopped.
+      if (i.outsideOats) console.log(`          ! ${i.outsideOats.message}`);
       // Feature waiting-on-you: non-null only on a running row; the reader has
       // already validated the message (one line, no control characters).
       { const waiting = waitingLine(i); if (waiting) console.log(`          ${waiting}`); }
@@ -2745,6 +2811,9 @@ function printStatus({ root, agents: data, ws, problems }, verbose) {
       if (s && (verbose || s.status !== "current")) console.log(`          ${soulDriftLine(s, a.name)}`);
       const rows = ws?.drift.get(key) || [];
       for (const r of rows) if (verbose || r.status !== "current") console.log(`          ${driftLine(r)}`);
+      // A provider home: the kernel runs its own copy of the home's modules; said when the home's
+      // own record of them is not the receipt's, and always with --verbose.
+      if (i.moduleCopy && (verbose || i.moduleCopy.homeCopy === "differs")) console.log(`          modules: the kernel runs its own copy${i.moduleCopy.homeCopy === "differs" ? `; the home's own record differs${i.moduleCopy.differs.length ? ` for ${i.moduleCopy.differs.join(", ")}` : ""} (oats readiness --home ${i.home} compares the files)` : "; the home's record of them is the same"}`);
     }
     for (const f of a.retireFailures || []) {
       console.log(`      ! deferred retirement of ${f.instance} FAILED${f.completedAt ? ` at ${f.completedAt}` : ""}: ${f.error || (f.incomplete || []).join("; ") || "see result file"} — retry with \`oats retire ${f.instance}\``);
@@ -2777,6 +2846,21 @@ function namingLine(naming) {
   if (naming?.source === "numbered") return `numbered (${terminalText(naming.reason)}: ${terminalText(naming.message)})`;
   return null;
 }
+/** What a session provider may widen its harness's sandbox by (lib/sandbox-allowances.mjs), as a
+ *  spawn preview and readiness say it in text: each host with who asked for it, each path with its
+ *  reason, what is missing, what was left out or not read; or why there is none. Nothing for a
+ *  launch that has none (tmux). */
+function printSandboxAllowances(sb, indent = "") {
+  if (!sb) return;
+  if (sb.unavailable) { console.log(`${indent}sandbox allowances: none could be computed (${terminalText(sb.unavailable)})`); return; }
+  if (sb.refused) { console.log(`${indent}sandbox allowances: refused (${sb.refused.code}): ${terminalText(sb.refused.message)}`); return; }
+  console.log(`${indent}sandbox allowances:`);
+  for (const d of sb.domains) console.log(`${indent}  host ${terminalText(d.host)}  asked by ${terminalText(d.capability)} (setting ${terminalText(d.setting)}${d.team ? `, for team ${terminalText(d.team)}, which this instance may join` : ""})`);
+  for (const w of sb.write) console.log(`${indent}  path ${terminalText(w.path)}  asked by the kernel (${terminalText(w.reason)})`);
+  for (const m of sb.missing) console.log(`${indent}  missing${m.optional ? " (optional)" : ""}: ${terminalText(m.capability)} setting ${terminalText(m.setting)}${m.team === null ? " has no value" : ` has no entry for team ${terminalText(m.team)}${m.defaultTeam ? " (the default team)" : ""}`}`);
+  for (const k of sb.skipped ?? []) console.log(`${indent}  left out: ${terminalText(k.capability)}: ${terminalText(k.reason)}`);
+  for (const u of sb.unread ?? []) console.log(`${indent}  not read: ${terminalText(u.capability)} setting ${terminalText(u.setting)}: ${terminalText(u.reason)}`);
+}
 /** A spawn preview's text: the local one, or a host's answer to a routed
  *  preview (`server`, its id), which this side printed the same way (#610). */
 function printSpawnPreview(r, { server, soulFetched = false } = {}) {
@@ -2787,6 +2871,7 @@ function printSpawnPreview(r, { server, soulFetched = false } = {}) {
   { const line = namingLine(r.naming); if (line) console.log(`name: ${line}`); }
   if (r.background === true) console.log(`list: background (from the ${r.backgroundFrom === "flag" ? "--background flag" : "soul"})`);
   if (Array.isArray(r.worktreeHooks)) console.log(r.worktreeHooks.length ? `worktree hooks: ${r.worktreeHooks.map((h) => `${h.capability}${h.required ? " (required)" : ""}`).join(", ")}` : "worktree hooks: none");
+  printSandboxAllowances(r.sandbox);
   for (const w of r.warnings || []) console.log(`  WARNING: ${terminalText(w)}`);
 }
 async function spawnCmd() {
@@ -2798,7 +2883,9 @@ async function spawnCmd() {
   const yolo = yoloFlag();
   { const herdr = herdrSpawnFlag(); if (herdr) { const e = herdrSettingRemoved(`${herdr} was given`); bail(e.code, e.message); } }
   const backend = valueFlag("backend");
-  if (backend !== undefined && backend !== "tmux") bail("E_BAD_ARGS", "--backend must be tmux");
+  // tmux, or a session provider one of the soul's capabilities declares: the kernel resolves the name
+  // against the instance's modules (E_BACKEND_UNKNOWN names the backends available there).
+  if (backend !== undefined && !SESSION_PROVIDER_NAME_RE.test(backend)) bail("E_BAD_ARGS", "--backend must be tmux or a session provider's name (1 to 40 lowercase letters, digits and dashes)");
   const requestedWork = valueFlag("work");
   const workDir = valueFlag("work-dir"), branch = valueFlag("branch"), repo = valueFlag("repo");
   const checkDirectoryOptions = (work) => {
@@ -3067,7 +3154,8 @@ async function spawnCmd() {
       // #917: what this spawn's start did with Claude's development-channel prompt, as a start answers it.
       ...(r.launchPrompts ? { launchPrompts: r.launchPrompts } : {}),
       ...(wakeSchedule ? { wakeSchedule } : {}), ...(wakeScheduleError ? { wakeScheduleError } : {}),
-      tmux: r.tmux || null, backend: "tmux", repo: r.repo || null, harness: r.harness || null,
+      // A home on a session provider carries its backend's name and `session` ({ provider, endpoint }), and no tmux.
+      tmux: r.tmux || null, backend: r.session ? r.backend : "tmux", ...(r.session ? { session: r.session } : {}), repo: r.repo || null, harness: r.harness || null,
       model: r.model || null, parent: r.parentInstance || null,
       sibling: r.siblingInstance || null, relation: r.relation || null,
       spawnOrigin: r.spawnOrigin, attach: r.attach,
@@ -3085,7 +3173,7 @@ async function spawnCmd() {
     });
     return;
   }
-  console.log(`Spawned ${r.instance} (${r.work}${r.branch ? `, branch ${r.branch}` : ""})${r.launched ? ` — tmux window "${r.tmux.window}"` : " — not launched"}`);
+  console.log(`Spawned ${r.instance} (${r.work}${r.branch ? `, branch ${r.branch}` : ""})${r.launched ? (r.session ? ` — ${r.backend} session` : ` — tmux window "${r.tmux.window}"`) : " — not launched"}`);
   console.log(`  home:   ${shortPath(r.home)}`);
   if (r.background === true) console.log(`  list:   background (from the ${r.backgroundFrom === "flag" ? "--background flag" : "soul"})`);
   { const line = namingLine(r.naming); if (line) console.log(`  name:   ${line}`); }
@@ -3095,7 +3183,8 @@ async function spawnCmd() {
   if (wakeScheduleError) console.error(`  wake:   NOT saved — ${wakeScheduleError.message} (the instance is created and launched; add the wake by hand with oats schedule add)`);
   if (!r.launched) console.log(`  launch: oats session start --home ${shellQuote(r.home)}`);
   for (const w of r.warnings || []) console.log(`  WARNING: ${terminalText(w)}`);
-  console.log(`  attach: ${r.attach}`);
+  if (r.attach) console.log(`  attach: ${r.attach}`);
+  else if (r.session) console.log(`  open:   oats session inspect --home ${shellQuote(r.home)} --json (its \`open\` link; ${terminalText(r.backend)} has no terminal to attach to)`);
 }
 
 /** The line naming the branch a FAILED_SPAWN_BRANCH_LEFT item speaks of, on a line of its own: the item names
@@ -3586,7 +3675,7 @@ async function sessionCmd() {
       const deployment = flag("deployment");
       if (deployment === true || (typeof deployment === "string" && !deployment.trim())) throw Object.assign(new Error(`--deployment needs a deployment directory\n${usage}`), { code: "E_BAD_ARGS" });
       const { resumeSessions } = await import("../lib/session-resume.mjs");
-      const answer = await resumeSessions({ deployment, plan: args.includes("--plan"), kernel: { execPath: process.execPath, bin: CLI_BIN } });
+      const answer = await resumeSessions({ deployment, plan: args.includes("--plan"), askProviders: !args.includes("--without-provider-inspect"), kernel: { execPath: process.execPath, bin: CLI_BIN } });
       if (JSON_MODE) { jsonOk(answer); return; }
       for (const d of answer.deployments) console.log(`${d.deployment}: ${d.swept ? "swept" : `not swept (${d.reason}${d.code ? `, ${d.code}` : ""})`}`);
       for (const r of answer.rows) console.log(`  ${r.instance}  ${answer.plan ? "would be " : ""}${r.outcome}${r.reason ? ` (${r.reason}${r.code ? `, ${r.code}` : ""})` : ""}${r.message ? `: ${terminalText(r.message)}` : ""}`);
@@ -3620,7 +3709,7 @@ async function sessionCmd() {
       // upgrade that runs (it holds the claim) the start is busy, not a partial upgrade: that one is
       // left to the claim. A resume is always refused under the claim.
       if (!resume && !upgradeHoldsClaim(home)) assertNoPartialUpgrade(home);
-      const opts = { model: model || undefined, launchConfig, harness, yolo: yoloFlag(), ...(reselectLaunch ? { reselectLaunch: true, launchOffered: await homeLaunchOffered(home, { named: harness !== undefined }) } : {}), ...(resume ? { resume: true } : {}), env: process.env, ...(await homeLiveTeams(home)) };
+      const opts = { model: model || undefined, launchConfig, harness, yolo: yoloFlag(), ...(resume ? {} : await homeSandboxSourceOf(home)), ...(reselectLaunch ? { reselectLaunch: true, launchOffered: await homeLaunchOffered(home, { named: harness !== undefined }) } : {}), ...(resume ? { resume: true } : {}), env: process.env, ...(await homeLiveTeams(home)) };
       if (args[1] === "restart") {
         const grace = flag("stop-grace");
         if (grace !== undefined) { if (grace === true || !/^\d+$/.test(String(grace)) || Number(grace) < 1 || Number(grace) > 300) bad("--stop-grace needs a number of seconds (1..300) to wait for the harness after SIGTERM"); opts.stopGraceMs = Number(grace) * 1000; }
@@ -4075,8 +4164,13 @@ async function capabilityCommand() {
     try {
       if (metaFile && existsSync(metaFile)) {
         const meta = JSON.parse(readFileSync(metaFile, "utf8"));
-        activeIds = (meta.capabilities || []).map((c) => c.id);
-        for (const c of meta.capabilities || []) { capSettings[c.id] = c.settings || {}; capOrigins[c.id] = c.settingsOrigins || {}; }
+        // A provider home's capabilities and their settings are its receipt's, never its own
+        // record's, which its agent can write (lib/home-integrity.mjs).
+        const { capabilityRuntimeOf, providerHomeTrust } = await import("../lib/home-integrity.mjs");
+        const trust = providerHomeTrust(instanceHome);
+        const rows = trust ? capabilityRuntimeOf(instanceHome, meta, trust) : meta.capabilities || [];
+        activeIds = rows.map((c) => c.id);
+        for (const c of rows) { capSettings[c.id] = c.settings || {}; capOrigins[c.id] = c.settingsOrigins || {}; }
         // Workspace-model homes only (lead decision c3 Q2).
         if (isCapturedHome(meta)) { const e = capturedHomeRefusal(instanceHome, "nothing was dispatched"); bail(e.code, e.message, e.details); }
         if (!isWorkspaceHome(meta)) { const e = preWorkspaceHome(instanceHome, "nothing was dispatched"); bail(e.code, e.message); }
@@ -4169,6 +4263,9 @@ async function capabilityCommand() {
     try { abs = capabilityExecutablePath(withDir, script); }
     catch (e) { bail("E_CAPABILITY_BROKEN", e.message); }
     if (!abs) bail("E_CAPABILITY_BROKEN", `${cmd} ${sub}: script not found (${join(dir, script)})`);
+    // A provider home's own copy is never run: the kernel runs its copy of it (a guard; `dir` is that copy).
+    const untrustedCopy = (await import("../lib/home-integrity.mjs")).moduleCopyProblemAt(dir);
+    if (untrustedCopy) bail("E_CAPABILITY_BLOCKED", `oats ${cmd} ${sub} was not run: ${untrustedCopy}`);
     // The soul the command acts for → { dir, cleanup, agent, id }: a home's recorded soul directory, or
     // (operator dispatch) the soul read at its resolved commit, whose temporary copy goes when this
     // process exits; with its name and stable id, as the soul's lifecycle hooks get them.
@@ -4307,7 +4404,7 @@ function versionCmd() {
     // Phase B: `instance-modules` and `spawn-provider-payload` are advertised only once spawn
     // runs on resolve/materialize (contract §6); a feature the binary does not implement is
     // never listed.
-    console.log(JSON.stringify({ schemaVersion: 1, name: "@awebai/oats", version: OATS_VERSION, desktopApi: 1, harnesses: ["pi", "claude", "codex"], sessionBackends: ["tmux"], launchOptions: ["yolo"], remote: ["spawn", "retire", "status", "session", "session-start", "session-restart", "launch-config", "roster", "harvest", "schedule", "session-upload", "operations", "readiness", "instance-events", "instance-git", "lifecycle-plans"], features: KERNEL_FEATURES, automationsApi: A.AUTOMATIONS_API, workspaceApi: 2, instanceGitApi: 1, spawnApplyApi: 1, soulsApi: 2, lifecycleApi: 1, readinessApi: 2, spawnPreviewApi: 2, eventsApi: 2, scheduleHistoryApi: 3, scheduleApi: SCHEDULE_API, operationsApi: 2, capabilityShowApi: 1, readerApi: READER_API, boardApi: BOARD_API, sessionViewer: readSessionViewer(), package: OATS_PACKAGE_NAME }));
+    console.log(JSON.stringify({ schemaVersion: 1, name: "@awebai/oats", version: OATS_VERSION, desktopApi: 1, harnesses: ["pi", "claude", "codex"], sessionBackends: BUILTIN_SESSION_BACKENDS, launchOptions: ["yolo"], remote: ["spawn", "retire", "status", "session", "session-start", "session-restart", "launch-config", "roster", "harvest", "schedule", "session-upload", "operations", "readiness", "instance-events", "instance-git", "lifecycle-plans"], features: KERNEL_FEATURES, automationsApi: A.AUTOMATIONS_API, workspaceApi: 2, instanceGitApi: 1, spawnApplyApi: 1, soulsApi: 2, lifecycleApi: 1, readinessApi: 2, spawnPreviewApi: 2, eventsApi: 2, scheduleHistoryApi: 3, scheduleApi: SCHEDULE_API, operationsApi: 2, capabilityShowApi: 1, readerApi: READER_API, boardApi: BOARD_API, sessionViewer: readSessionViewer(), package: OATS_PACKAGE_NAME }));
     return;
   }
   console.log(`${OATS_PACKAGE_NAME} ${OATS_VERSION} (desktop API v1)`);
@@ -4404,6 +4501,8 @@ async function serverCmd() {
       for (const i of g.instances) {
         console.log(`      • ${i.instance}${i.background === true ? " [background]" : ""}  ${i.missingRemotely ? "GONE on the host (saved route is stale: oats server forget)" : livenessWord(i)}${i.retirePending ? " RETIRING" : ""}${i.rollbackIncomplete ? " QUARANTINED" : ""}${i.savedRoute ? "" : "  (observed only, no saved route)"}${i.runtimeError ? `  ${i.runtimeError}` : ""}`);
         const lost = lostLine(i, { host: g.target.sshHost || g.server }); if (lost) console.log(`          ${lost}`);
+        // (Relayed in the kernel's own shape only: one line, lib/servers.mjs rowOutsideOats.)
+        if (i.outsideOats) console.log(`          ! ${i.outsideOats.message} (on the host)`);
       }
       for (const f of g.retireFailures || []) console.log(`      ! deferred retirement of ${f.instance} (${f.agent}) FAILED there${f.error?.message ? `: ${f.error.message}` : ""}${f.retry ? ` — retry on the host: ${f.retry}` : ""}`);
     }
@@ -4787,7 +4886,7 @@ async function serverRouteCmd() {
   // The host's answer decides, not the flag: one that spawned is reported as the spawn it was.
   if (cmd === "spawn" && rest.includes("--preview") && r.preview === true) printSpawnPreview(r, { server: id, soulFetched: r.soulFetched === true });
   else if (cmd === "spawn") {
-    console.log(`Spawned ${r.instance} on ${id} (${r.work}${r.branch ? `, branch ${r.branch}` : ""})${r.launched ? ` — tmux window "${r.tmux?.window}" on ${r.target.sshHost}` : " — not launched"}`);
+    console.log(`Spawned ${r.instance} on ${id} (${r.work}${r.branch ? `, branch ${r.branch}` : ""})${r.launched ? (r.session ? ` — ${terminalText(r.backend)} session on ${r.target.sshHost}` : ` — tmux window "${r.tmux?.window}" on ${r.target.sshHost}`) : " — not launched"}`);
     console.log(`  remote home: ${r.home}`);
     { const line = namingLine(r.naming); if (line) console.log(`  name: ${line}`); }
     console.log(`  route snapshot: ${r.snapshot ? shortPath(r.snapshot) : "none (see the warning)"}`);
@@ -5187,7 +5286,7 @@ Usage:
                                             is a unit (a conflicting --harness is refused)
       [--model <id>|@native-default]        override the selected model; @native-default
                                             selects the harness's own model default
-      [--backend tmux] [--yolo|--no-yolo]    session backend and launch permission option
+      [--backend tmux|<provider>] [--yolo|--no-yolo]  session backend (tmux, or a session provider of the soul's capabilities) and launch permission option
       [--background|--no-background]        list the instance under Background (presentation
                                             only); default: the soul's background:, else no
       [--no-launch] [--json]                 scaffold without launching; JSON result envelope

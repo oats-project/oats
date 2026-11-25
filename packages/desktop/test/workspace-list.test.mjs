@@ -57,7 +57,7 @@ test("rows: the matched views, then the unattached ones, in one flat list with n
   s.controller.begin()(A, [LOOSE, A, HELD]); await tick();
   assert.deepEqual(s.rows().map(s.keyOf), [A.id, HELD.id, LOOSE.id], "matched first, in their order, then the unattached");
   const list = s.document.getElementById("ws-list");
-  assert.equal(s.document.getElementById(list.getAttribute("aria-labelledby")).textContent, "Workspace", "the head's heading (the product owner, 2026-10-26)");
+  assert.equal(s.document.getElementById(list.getAttribute("aria-labelledby")).textContent, "Workspaces", "the head's heading (slice 3d: the prototype's WORKSPACES, capitals by CSS)");
   const groups = [...s.document.querySelectorAll("#ws-options > *")];
   assert.equal(groups.length, 1, "one list");
   assert.equal(groups[0].tagName, "UL"); assert.ok(groups[0].classList.contains("ws-group"));
@@ -144,9 +144,9 @@ test("a long name: the line cuts it with an ellipsis (CSS) and the tooltip gives
   assert.match(rule, /text-overflow:\s*ellipsis/); assert.match(rule, /white-space:\s*nowrap/); assert.match(rule, /overflow:\s*hidden/);
   // The name inherits the row's 13px and weight (the product owner, 2026-10-26: no larger, bolder name of its own).
   assert.doesNotMatch(rule, /font-size|font-weight/, "the name keeps the row's type");
-  // One compact row (the product owner, 2026-10-26): 4px above and below, at least 24px tall.
+  // One compact row (slice 3d, the prototype's): 28px tall, its circle 12px in, 13px type.
   const row = css.match(/^\.ws-option\s*\{([^}]*)\}/m)[1];
-  assert.match(row, /padding:\s*4px 8px 4px 10px;/); assert.match(row, /min-height:\s*24px;/);
+  assert.match(row, /padding:\s*0 8px 0 12px;/); assert.match(row, /min-height:\s*28px;/); assert.match(row, /font-size:\s*13px;/);
 });
 
 test("the current row: aria-current on that row only, marked by style alone (no check icon); the list's description names it", async (t) => {
@@ -515,9 +515,9 @@ test("the head is the heading and Add alone; the list shows every workspace, a w
   assert.equal(head.nextElementSibling, s.document.getElementById("ws-list"));
   const headRule = css.match(/^\.side-head\s*\{([^}]*)\}/m)[1];
   assert.doesNotMatch(headRule, /border(?!-box)/, "no line under the head");
-  // 40px tall, its 8px top padding keeping the heading's centre 24px down, the first row close under it.
-  assert.match(headRule, /height:\s*40px;/); assert.match(headRule, /box-sizing:\s*border-box;/);
-  assert.match(headRule, /padding:\s*8px 10px 0 13px;/);
+  // Slice 3d: 34px tall, 4px down, its 6px top padding keeping the kicker's centre 24px down, the first row close under it.
+  assert.match(headRule, /height:\s*34px;/); assert.match(headRule, /margin-top:\s*4px;/); assert.match(headRule, /box-sizing:\s*border-box;/);
+  assert.match(headRule, /padding:\s*6px 10px 0 20px;/);
   assert.match(css.match(/^\.ws-list\s*\{([^}]*)\}/m)[1], /border-bottom:\s*1\.5px solid var\(--border\)/, "the line before the nav, a little bolder than the roster\'s");
   assert.deepEqual(s.rows().filter((b) => !b.hidden).map(s.keyOf), [A.id, B.id, C.id], "every workspace");
   assert.ok(s.row(B.id).querySelector(".ws-waiting"), "another workspace's wait keeps its mark");

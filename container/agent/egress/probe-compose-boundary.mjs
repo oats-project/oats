@@ -20,7 +20,14 @@ const safeName=value=>typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]*$
 export async function probeComposeBoundary(plan) {
   const receipts=[];
   let unownedNames=[];
-  try { return await runBoundary(plan,receipts); }
+  try {
+    if (plan?.schema !== 1) {
+      const schema = plan?.schema;
+      const found = schema === undefined ? "none" : typeof schema === "number" ? String(schema) : `invalid ${typeof schema}`;
+      throw Object.assign(new Error(`E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1; found ${found}; regenerate the plan with schema: 1`), { code: "E_EGRESS_PLAN_SCHEMA" });
+    }
+    return await runBoundary(plan,receipts);
+  }
   catch (error) {
     receipts.splice(0,receipts.length,...new Map([...receipts,...(error.receipts || [])].map(receipt=>[receipt.name,receipt])).values());
     error.receipts=receipts;

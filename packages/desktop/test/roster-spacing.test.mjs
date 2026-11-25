@@ -86,8 +86,10 @@ function assertRoom(u) {
   assert.equal(u.rule(".ctx-tree-row").backgroundClip, "padding-box", "the background stops short of the gap");
   assert.equal(u.rule(".ctx-inst").minHeight, "40px", "the whole painted row is one click target");
   assert.equal(u.rule(".ctx-inst").height, "auto", "never squeeze two labels into a fixed box");
-  assert.equal(u.rule(".ctx-copy").gap, "3px", "name/meta gap follows the supplied 3px stack");
-  assert.equal(u.rule(".ctx-head").height, "36px", "the head is the only chrome above the list");
+  // Slice 3d (the prototype's two-line row): no gap; the lines' own heights (17px, then 15px) stack in the 40px fill.
+  assert.equal(u.rule(".ctx-copy").gap, "0px", "name/meta stack on their line heights, the 17px/15px stack");
+  assert.deepEqual([u.rule(".ctx-name").lineHeight, u.rule(".ctx-meta.ctx-row-detail").lineHeight], ["17px", "15px"], "the 17px/15px stack");
+  assert.equal(u.rule(".ctx-head").height, "32px", "the head is the only chrome above the list");
   assert.match(u.rule(".ctx-head").flex, /^(none|0 0 auto)$/, "it never shrinks into the list");
   for (const row of u.rows) {
     const button = row.querySelector(".ctx-inst");
@@ -99,7 +101,8 @@ function assertRoom(u) {
       assert.match(style.marginBottom, /^0(?:px)?$/);
       assert.equal(style.overflowY, "visible", "do not clip the label stack or focus ring vertically");
     }
-    assert.equal(u.computed(button).paddingLeft, "10px", "the dot sits on the connector column");
+    assert.equal(u.rule(".ctx-inst").paddingLeft, "var(--dot-inset, 10px)", "the dot sits on the connector column");
+    assert.equal(u.rule(".ctx-tree-row").getPropertyValue("--dot-inset"), "12px", "12px in, the prototype's");
   }
 }
 
@@ -109,7 +112,7 @@ test("roster spacing (non-layout): 44px rows with a 4px gap, padded controls, th
   // No filter field since the product owner removed it (the command palette finds an instance by name).
   const roster = u.doc.getElementById("instance-roster");
   assert.equal(roster.querySelector(".ctx-filter, .ctx-filter-field, input"), null, "the roster has no filter");
-  assert.deepEqual([...roster.children].map(el => el.className), ["ctx-head", "ctx-list"]);
+  assert.deepEqual([...roster.children].map(el => el.className || el.id), ["ctx-head", "ctx-list", "sidebar-spawn"], "then New agent, at the roster's end (slice 3d)");
   const head = roster.querySelector(".ctx-head");
   assert.equal(head.nextElementSibling.className, "ctx-list");
   assert.equal(u.computed(head.nextElementSibling).overflowY, "auto", "longer rosters still scroll");
@@ -155,8 +158,9 @@ test("roster typography (non-layout): valid control family and supplied sidebar 
   assert.equal(u.rule(".ctx-bundle-gap").height, "12px", "and the same before a bundle inside a group");
   assert.equal(u.rule(".ctx-group:first-child").height, "6px", "the first row sits closer to the head (human, 2026-09-29)");
   assert.equal(u.rule(".ctx-inst").getPropertyValue("font"), "inherit");
-  assert.equal(u.rule(".ctx-name").fontSize, "var(--name-size, 12.5px)", "12.5px, or the font choice's (12px in Omarchy's font)");
-  assert.equal(u.rule(".ctx-name").fontWeight, "600");
+  // Slice 3d: the prototype's row names, 13px in the body weight (the selection's fill tells the current row).
+  assert.equal(u.rule(".ctx-name").fontSize, "13px");
+  assert.equal(u.rule(".ctx-name").fontWeight, "400");
   // The second line (slice 1): `<soul> · <machine>` in the UI face, 11.5px (Inconsolata is narrow: the operator,
   // 2026-10-02, kept), muted; an unknown row keeps it (its reason is its description).
   assert.equal(u.rule(".ctx-meta.ctx-row-detail").fontSize, "11.5px");
@@ -167,7 +171,7 @@ test("roster typography (non-layout): valid control family and supplied sidebar 
     const first = row.querySelector(".ctx-disclosure") ? name.parentElement : name;
     assert.equal(first.nextElementSibling, meta, "both lines remain in the same vertical stack");
     assert.equal(meta.className, "ctx-meta ctx-row-detail");
-    assert.equal(meta.textContent, "dev · This Mac", "soul · machine, whatever the row's state");
+    assert.equal(meta.textContent, "dev", "its soul (a local row says no machine, slice 3d), whatever the row's state");
     for (const label of [name, meta]) {
       assert.equal(u.computed(label).textOverflow, "ellipsis");
       assert.equal(u.computed(label).whiteSpace, "nowrap");
@@ -187,7 +191,7 @@ function assertConnectors(u) {
   // room between them in the sidebar, the link 2px left of the dot's centre (7px apart).
   assert.equal(u.rule(".ctx-tree-row").getPropertyValue("--tree-branch-offset"), "5px", "the lineage column's offset");
   assert.equal(u.rule(".ctx-tree-row").getPropertyValue("--tree-link-shift"), "2px", "the sibling link 2px left of the dot's centre: 7px from the lineage");
-  assert.equal(u.rule(".ctx-guide").left, "calc(13.25px + var(--tree-branch-offset) + var(--guide-level) * var(--tree-step))",
+  assert.equal(u.rule(".ctx-guide").left, "calc(var(--dot-inset, 10px) + 3.25px + var(--tree-branch-offset) + var(--guide-level) * var(--tree-step))",
     "the solid lineage sits on the offset column, right of the dot column");
   assert.equal(u.rule(".ctx-guide").borderLeft, "1.5px solid var(--tree-stroke)", "a visible stroke, in the token that holds 3:1 (contrast-inventory.mjs)");
   assert.equal(u.rule(".ctx-guide.elbow").borderBottom, "1.5px solid var(--tree-stroke)", "the elbow's run, the same stroke");
@@ -199,8 +203,8 @@ function assertConnectors(u) {
   assert.equal(u.rule(".ctx-guide.elbow").borderBottomLeftRadius, "5px", "rounded elbows");
   assert.equal(u.rule(".ctx-guide.down").top, "50%", "a parent's line leaves from its own dot");
   const link = u.rule(".ctx-guide.link-in, .ctx-guide.link-out, .ctx-guide.link-through");
-  assert.equal(link.left, "calc(13.25px - var(--tree-link-shift, 0px) + var(--guide-level) * var(--tree-step))",
-    "the sibling link sits on the dot centre column (10px inset + 4px radius - half the stroke), shifted left by --tree-link-shift");
+  assert.equal(link.left, "calc(var(--dot-inset, 10px) + 3.25px - var(--tree-link-shift, 0px) + var(--guide-level) * var(--tree-step))",
+    "the sibling link sits on the dot centre column (the row's --dot-inset + 4px radius - half the stroke), shifted left by --tree-link-shift");
   assert.equal(link.borderLeft, "1.5px dotted var(--tree-link)", "sibling links are dotted");
   assert.equal(u.rule(".ctx-dot").boxShadow, "0 0 0 2px var(--row-solid, var(--surface))",
     "the dot's ring hides the line under it, in the row's own solid colour");
@@ -312,8 +316,8 @@ test("sidebar metadata uses the reported soul and the machine, no repository, br
   const u = fixture(t);
   u.render([{ ...roster[0], agent: "soul-<literal>", branch: "feature/<branch>", harness: "pi" }]);
   const row = u.doc.querySelector(".ctx-inst");
-  assert.equal(row.querySelector(".ctx-meta").textContent, "soul-<literal> · This Mac");
-  assert.equal(row.querySelector(".ctx-meta").children.length, 0);
+  assert.equal(row.querySelector(".ctx-meta").textContent, "soul-<literal>");
+  assert.deepEqual([...row.querySelector(".ctx-meta").children].map(el => el.getAttribute("class")), ["runtime-mark ctx-harness"], "its text, after Pi's mark (slice 3d), no markup from the row");
   assert.doesNotMatch(row.textContent, /feature|desktop-repo/, "neither the branch nor the repository is on the row");
   assert.equal(row.querySelector(".ctx-runtime, .runtime-badge"), null, "no harness badge on the row");
   assert.equal(row.querySelector("literal, branch"), null);
@@ -323,11 +327,11 @@ test("sidebar metadata uses the reported soul and the machine, no repository, br
 // or browser is needed to prove the contracts reject the reported regressions.
 for (const [label, before, after, check, message] of [
   ["fixed button height", "min-height: 40px; height: auto; display: flex", "min-height: 40px; height: 36px; display: flex", assertRoom, /fixed box/],
-  ["cramped label gap", "align-items: flex-start; gap: 3px", "align-items: flex-start; gap: 0", assertRoom, /3px stack/],
-  ["sibling links off the dot column", "left: calc(13.25px - var(--tree-link-shift, 0px) + var(--guide-level)", "left: calc(8px + var(--guide-level)", assertConnectors, /dot centre column/],
-  ["sibling links on the lineage column", "{ left: calc(13.25px - var(--tree-link-shift, 0px) + var(--guide-level) * var(--tree-step));", "{", assertConnectors, /dot centre column/],
+  ["cramped name line", "font-weight: 400; line-height: 17px;", "font-weight: 400; line-height: 12px;", assertRoom, /17px\/15px stack/],
+  ["sibling links off the dot column", "left: calc(var(--dot-inset, 10px) + 3.25px - var(--tree-link-shift, 0px) + var(--guide-level)", "left: calc(8px + var(--guide-level)", assertConnectors, /dot centre column/],
+  ["sibling links on the lineage column", "{ left: calc(var(--dot-inset, 10px) + 3.25px - var(--tree-link-shift, 0px) + var(--guide-level) * var(--tree-step));", "{", assertConnectors, /dot centre column/],
   ["sibling links back on the dot's centre", "--tree-link-shift: 2px;", "--tree-link-shift: 0px;", assertConnectors, /7px from the lineage/],
-  ["lineage back on the dot column", "left: calc(13.25px + var(--tree-branch-offset) + var(--guide-level)", "left: calc(13.25px + var(--guide-level)", assertConnectors, /offset column/],
+  ["lineage back on the dot column", "left: calc(var(--dot-inset, 10px) + 3.25px + var(--tree-branch-offset) + var(--guide-level)", "left: calc(var(--dot-inset, 10px) + 3.25px + var(--guide-level)", assertConnectors, /offset column/],
   ["notched branch verticals", ".ctx-guide.line { top: 0; bottom: 0; }", ".ctx-guide.line { top: 50%; bottom: 0; }", assertConnectors, /no notch/],
   ["elbows short of the child dot", "width: calc(var(--tree-step) - var(--tree-branch-offset) - 4.25px)", "width: 9px", assertConnectors, /child dot's ring/],
   ["square elbows", "border-bottom-left-radius: 5px", "border-bottom-left-radius: 0", assertConnectors, /rounded elbows/],
@@ -353,7 +357,7 @@ test("running dot stays solid --accent on selected and hovered rows; its ring is
   assert.equal(u.rule(".ctx-tree-row.active").getPropertyValue("--row-solid"), "var(--sel)", "the ring on a selected row is the tint");
   assert.equal(u.rule(".ctx-tree-row:hover").getPropertyValue("--row-solid"), "var(--surface-2)", "and on hover the hover surface");
   assert.equal(u.computed(active).getPropertyValue("--row-solid").trim(), "var(--sel)", "the selected row resolves its own solid colour");
-  assert.equal(u.rule(".ctx-dot").background, "var(--surface)", "only a stopped dot is hollow");
+  assert.equal(u.rule(".ctx-dot").background, "var(--row-solid, var(--surface))", "only a stopped dot is hollow: the row's own fill inside its ring (slice 3d)");
   assert.equal(u.rule(".ctx-dot.on").background, "var(--accent)");
 });
 
@@ -402,7 +406,7 @@ test('a row that cannot open keeps soul · machine on its second line and says w
   for (const [row, , sentence] of rows) {
     const button = [...u.doc.querySelectorAll('.ctx-inst')].find(b => b.querySelector('.ctx-name').dataset.name === row.instance);
     assert.ok(button, row.instance);
-    assert.equal(button.querySelector('.ctx-meta').textContent, `dev · ${row.server ? row.repoName : 'This Mac'}`, `${row.instance}: soul · machine`);
+    assert.equal(button.querySelector('.ctx-meta').textContent, row.server ? `dev · ${row.repoName}` : 'dev', `${row.instance}: soul, and another machine's name (slice 3d)`);
     assert.equal(button.getAttribute('aria-disabled'), 'true');
     assert.equal(button.title.split('\n')[0], sentence); assert.equal(button.getAttribute('aria-description'), sentence);
     assert.equal(button.closest('.ctx-tree-row').querySelector('.ctx-instance-actions'), null, `${row.instance}: no ⋯ trigger (#1559)`);

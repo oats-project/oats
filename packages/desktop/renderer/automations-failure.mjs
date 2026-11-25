@@ -1,5 +1,6 @@
-/* The Automations row's failure mark (the Desktop UI rework, slice 1): the sidebar's pinned Automations row shows a
-   --danger dot, and says "a run failed", while any automation of the workspace failed its last run. Read from the
+/* The Automations row's failure mark (the Desktop UI rework, slice 1; slice 3d's words): the sidebar's pinned
+   Automations row says how many failed after its name ("1 failed", also in its accessible name), and Home's tile shows
+   a --danger dot, while any automation of the workspace failed its last run. Read from the
    kernel's own list answers (POST /api/automations { kind, action: "list" }, the read the Automations page makes), the
    existing `lastRun` facts only: no new field.
 
@@ -12,7 +13,8 @@ import { automationRows } from "./automation-rows.mjs";
 export const FAILED_OUTCOMES = Object.freeze(["launch-failed", "invalid"]);
 /** Re-read at most this often per workspace (the roster's poll asks on every read). */
 export const AUTOMATIONS_FAILURE_TTL = 60_000;
-/** What the mark says, after the row's name: "Automations, a run failed". */
+/** What Home's Automations tile says after its name: "Automations, 4, a run failed" (the sidebar's row says its
+ * shown count instead, "Automations, 2 failed", slice 3d). */
 export const FAILED_RUN_TEXT = ", a run failed";
 
 /** Whether one automation row (automation-rows.mjs `automationRow`) failed its last run. */
@@ -35,20 +37,25 @@ export function failedRuns(answers) {
 /** `onHost(name)`: the schedule list's `host.name`, this machine's name as the kernel reports it (oats-local.yaml
  * `host.name`), after each owned read that answers: the name, or null when the answer records none (so a name taken
  * away stops showing); a failed read hands on nothing and the last name stands. */
-export function createAutomationsFailure({ read, supported = () => true, onChange = () => {}, onHost = () => {}, now = () => Date.now(), ttl = AUTOMATIONS_FAILURE_TTL }) {
-  let ws = null, failed = false, readAt = -Infinity, serial = 0, inFlight = false;
-  const set = (value) => { if (value !== failed) { failed = value; onChange(value); } };
+export function createAutomationsFailure({ read, supported = () => true, onChange = () => {}, onCount = () => {}, onHost = () => {}, now = () => Date.now(), ttl = AUTOMATIONS_FAILURE_TTL }) {
+  let ws = null, failed = false, count = 0, readAt = -Infinity, serial = 0, inFlight = false;
+  // The verdict, and how many rows failed (slice 3d: the row's "1 failed"); onCount is told each change of the count.
+  const set = (n) => {
+    const value = n > 0;
+    if (value !== failed) { failed = value; onChange(value); }
+    if (n !== count) { count = n; onCount(n); }
+  };
   return {
     async refresh(next) {
-      if (next !== ws) { ws = next; readAt = -Infinity; serial++; inFlight = false; set(false); }
-      if (!ws || !supported()) { if (!ws) set(false); return; }
+      if (next !== ws) { ws = next; readAt = -Infinity; serial++; inFlight = false; set(0); }
+      if (!ws || !supported()) { if (!ws) set(0); return; }
       if (inFlight || now() - readAt < ttl) return;
       const ticket = ++serial, asked = ws;
       inFlight = true;
       try {
         const answers = await Promise.all(["schedule", "trigger"].map(async (kind) => [kind, await read(asked, kind)]));
         if (ticket !== serial || asked !== ws) return;
-        readAt = now(); set(failedRuns(answers) > 0);
+        readAt = now(); set(failedRuns(answers));
         const host = automationRows(answers[0][1], "schedule")?.host?.name;
         onHost(typeof host === "string" && host ? host : null);
       } catch {
@@ -59,5 +66,6 @@ export function createAutomationsFailure({ read, supported = () => true, onChang
       }
     },
     get failed() { return failed; },
+    get count() { return count; },
   };
 }

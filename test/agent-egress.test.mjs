@@ -121,12 +121,12 @@ function externalPolicy() {
 test("the closed proxy build context admits each Dockerfile COPY source", () => {
   const root=new URL("../container/agent/egress/",import.meta.url);
   const dockerfile=readFileSync(new URL("Dockerfile",root),"utf8");
-  const admitted=readFileSync(new URL(".dockerignore",root),"utf8").trim().split("\n");
+  const admitted=readFileSync(new URL("Dockerfile.dockerignore",root),"utf8").trim().split("\n");
   assert.equal(admitted[0],"**");
   for(const line of dockerfile.split("\n").filter(line=>line.startsWith("COPY --chmod="))) {
     for(const source of line.trim().split(/\s+/).slice(2,-1)) {
       assert.ok(admitted.includes("!"+source),"Dockerfile source excluded from the closed context: "+source);
-      assert.ok(existsSync(new URL(source,root)));
+      assert.ok(existsSync(new URL(source,new URL("../",root))));
     }
   }
 });
@@ -682,6 +682,7 @@ test("the shared ingress probe proves both protocol refusals before backend deli
   const qualified=await cli();
   assert.equal(qualified.code,0,qualified.stderr);
   assert.equal(qualified.stdout,"OATS_EGRESS_INGRESS_PASS\n");
+  assert.match(qualified.stderr,/^egress: human anchor: signer$/m);
   assert.match(qualified.stderr,/registry external: positive control only; refusal not claimed/);
   const remoteTrace=readFileSync(traceFile,"utf8").trim().split("\n").map(line=>JSON.parse(line))
     .filter(call=>externalPolicy.targets.registry.addresses.includes(call.host));
@@ -908,7 +909,7 @@ test("an unavailable proxy policy source has a fixed path-free diagnostic", asyn
   };
   writeFileSync(join(dir,"docker"),"#!/usr/bin/env node\nconst r="+JSON.stringify(responses)+";const k=process.argv.slice(2).join(' ');if(!Object.hasOwn(r,k))process.exit(2);process.stdout.write(JSON.stringify(r[k]));\n",{mode:0o755});
   const plan=join(dir,"plan.json");
-  writeFileSync(plan,JSON.stringify({policy,probeContainer:"probe",proxyContainer:"proxy",agentsNetwork:"proof_agents",servicesNetwork:"proof_services",
+  writeFileSync(plan,JSON.stringify({schema:1,policy,probeContainer:"probe",proxyContainer:"proxy",agentsNetwork:"proof_agents",servicesNetwork:"proof_services",
     probeImage,proxyImage,uid:20001,gid:20001,approvedProbeMounts:mounts,protectedSources:state.protectedSources}));
   const child=spawn(process.execPath,[fileURLToPath(new URL("../container/agent/egress/probe-compose-boundary.mjs",import.meta.url)),"--plan",plan],{
     env:{...process.env,PATH:dir+":"+process.env.PATH},stdio:["ignore","pipe","pipe"],timeout:5000});

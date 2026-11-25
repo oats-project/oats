@@ -134,11 +134,18 @@ export function eventsData(v, expected, limit = 100, { publicView = false } = {}
     // Unknown incarnation cannot license ANY current-incarnation claim. Do not
     // repeat the PR89 producer's null-incarnation/all-history fallback.
     if (v.incarnation === null && claims.length) return null;
-    const positive = v.waitingClaims.filter(c => c.waiting).sort((a, b) => a.since.localeCompare(b.since)).at(-1);
+    // The kernel's rule (lib/instance-events.mjs positiveOf, #1502): the newest positive claim that carries a message,
+    // so a claim with no text never hides one a person can read; the newest text-less claim only adds the reason it
+    // lacks. With no message anywhere, the newest positive claim. (Before, this read the newest positive claim alone,
+    // and refused as a protocol error every answer where a text-less claim, a harness's dialog, came after one with
+    // text, such as the board's own question.)
+    // The message is compared raw when either side owns it (a missing key is null): one-sided is a mismatch.
+    const message = side => Object.hasOwn(side, 'message') ? side.message : null;
+    const positives = v.waitingClaims.filter(c => c.waiting).sort((a, b) => a.since.localeCompare(b.since));
+    const said = positives.filter(c => message(c) !== null).at(-1), unsaid = positives.filter(c => message(c) === null).at(-1);
+    const positive = said ? (said.reason === null && unsaid ? { ...said, reason: unsaid.reason } : said) : unsaid;
     let waitingOnYou = null;
     if (positive) {
-      // The message is compared raw when either side owns it (a missing key is null): one-sided is a mismatch.
-      const message = side => Object.hasOwn(side, 'message') ? side.message : null;
       if (!record(v.waitingOnYou) || ['producer', 'since', 'reason'].some(k => v.waitingOnYou[k] !== positive[k])
         || message(v.waitingOnYou) !== message(positive)) return null;
       waitingOnYou = { producer: positive.producer, since: positive.since, reason: nullableDetail(positive.reason), message: waitingMessage(v.waitingOnYou.message) };

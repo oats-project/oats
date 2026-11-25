@@ -1,7 +1,0 @@
-**
-!Dockerfile
-!policy.mjs
-!supervisor.mjs
-!external.mjs
-!health.mjs
-!probe-ingress.mjs

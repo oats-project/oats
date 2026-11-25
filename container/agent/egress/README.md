@@ -54,7 +54,16 @@ For example, a messaging-only derived policy is:
 }
 ```
 
-`humanOrigin` is required with signer and refused without signer.
+`humanRole` is optional and closed to `"signer" | "secrets"`. Absent or
+`"signer"` keeps the existing signer anchor: signer must be declared whenever
+`humanOrigin` is present, and signer requires `humanOrigin`. With
+`humanRole: "secrets"`, `roles` must be declared, include `secrets`, exclude
+`signer`, and supply `humanOrigin`. Selecting Secrets while declaring signer is refused; the probe
+never guesses one from the role set. Without signer or an explicit Secrets
+anchor, `humanOrigin` is refused. It is never a routed or external hostname.
+The new field changes no zone, Corefile or nginx bytes for existing policies.
+A bundle setting `humanRole` must use the new egress image; older images refuse
+that field. Existing deployments need change nothing.
 `authorityRecords` is required with registry and refused without registry,
 independently of signer. The full default keeps both fields. Namespace authority
 is needed for registry discovery and sender verification in messaging-only
@@ -224,7 +233,10 @@ IPv4-only and uses isolated gateway mode; the proxy alone connects it to
 eight addresses, distinct usable endpoints and disjoint agent/services ranges.
 Do not overlay an extra agent network or replace isolated mode.
 
-On the **Linux Docker engine host**, choose candidate values and run the
+Every deployment that creates its own agents/services networks runs this
+preflight, including wrappers other than the minimal example. From the extracted
+egress directory, use `node egress/preflight-network.mjs`. On the
+**Linux Docker engine host**, choose candidate values and run the
 read-only preflight immediately before network creation. These are fictional
 candidate ranges, not defaults or an allocation recommendation:
 
@@ -272,7 +284,9 @@ credentials**. There is no codeload, raw-file, release-asset or other source-fet
 exception to obtain them later. Retain one reviewed source commit for the
 policy compiler/proxy build, this wrapper and the probe, plus the resulting
 proxy and agent image digests and control reports. Do not mix a released proxy
-with an unreviewed wrapper/probe checkout.
+with an unreviewed wrapper/probe checkout. Agent and egress manifests must have
+the same source commit and identical hashes for every shared deploy file;
+a consumer refuses a mixed-source pair even when both images verify separately.
 
 Kubernetes uses the same image and derived policy. An enforcing CNI must restrict
 agent egress to proxy TCP/UDP 53 and TCP 443, and proxy egress to the pinned TLS
@@ -285,12 +299,13 @@ for them: it must permit public TCP 443, with the external hostname and
 per-answer address restrictions enforced by the connector. Kubernetes
 adapter/CNI qualification remains separate from the Compose component proof.
 
-**An SNI map does not enforce HTTP origins.** Before enabling the signer route,
+**An SNI map does not enforce HTTP origins.** Before enabling the human
+anchor's API route (signer by default, or explicit Secrets),
 the TLS ingress must reject mismatched SNI and HTTP Host, including HTTP/2
 `:authority`, before routing. The runtime journey must show that allowed request
 SNI with the excluded human Host/authority cannot reach the human service, that
 matched traffic succeeds, and that unknown or absent SNI has no default route.
-If this cannot be proved, keep the signer route closed and use isolated ingress
+If this cannot be proved, keep the anchor's API route closed and use isolated ingress
 listeners or upstreams. Exact authority and port comparisons are required.
 
 ## Ingress admission probe
@@ -348,25 +363,30 @@ Final matched controls and common-path coverage on each local route/address
 and the human surface provide
 later log records after the negative cases. Responses and log contents
 are never printed. Success prints exactly `OATS_EGRESS_INGRESS_PASS`; require
-that token and exit 0 before enabling the signer route and admitting agents.
+that token and exit 0 before enabling the anchor's API route and admitting agents.
+On success stderr names the proved anchor as `egress: human anchor: signer` or
+`egress: human anchor: secrets`; retain it with the token.
 
 The CLI requires `--policy <derived-policy.json>` and
 `--route-logs <runtime-audit.json>` and `--audit-path <common-path>` together;
 a partial signer-only call or missing audit path fails
-without an admission token. Signer policies use this additional ingress proof;
-policies without signer do not invoke the signer admission CLI. The exported
-`probeIngress` routine refuses such a policy with
-`ingress admission requires the signer role` before sending any controls; the
-packaged CLI retains its fixed values-withheld failure diagnostic. The latter file
+without an admission token. Signer policies and policies with `humanRole: "secrets"`
+use this additional ingress proof. Other policies without signer do not invoke
+this admission CLI; the exported `probeIngress` routine refuses them with
+`ingress admission requires the signer role` before sending any controls.
+The packaged CLI retains its fixed values-withheld failure diagnostic. The latter file
 has exactly the policy's declared role
 keys. Local entries hold `{ "path": "/ready", "log": "/logs/aweb.log" }` for that
 role's harmless 200 endpoint and actual backend log. Use signer `/readyz` and
 registry `/health` where those are the supported routes; `--human-path` and
 `--human-log` still name the human surface. Begin capturing every owned backend before
 the call. The policy supplies all origins and pinned addresses; it is not copied
-into a new operator schema. `--address` must be one pinned signer address for
-the final human control. If supplied, the compatible `--request-log` and
-`--request-path` must equal the signer's runtime-audit entry.
+into a new operator schema. `--request-origin` must equal the anchor's API origin;
+`--address` must be one of its pinned addresses for the human controls. If
+supplied, `--request-log` and `--request-path` must equal the anchor's runtime-audit
+entry. The Secrets API and console may share one backend and one log; use that
+same log for `--human-log` and the Secrets audit entry. A 421 from that backend
+still fails when the forbidden query tag reaches any owned backend log.
 
 Only the registry may instead use exactly
 `{ "path": "/health", "external": true }`, without a `log` key. The wrapper
@@ -384,7 +404,7 @@ positive connectivity, not remote authority refusal or backend non-delivery.
 After all obligations pass, the CLI records
 `egress: registry external: positive control only; refusal not claimed` on stderr
 and the usual admission token on stdout. Retain both streams and the route-mode
-input with the result. An external declaration does not relax signer-SNI/human-
+input with the result. An external declaration does not relax anchor-SNI/human-
 Host refusal, the human 200 control, or any owned backend's log barriers.
 
 The deployment bundle owns `team.registryRoute: external | local`, with
@@ -412,7 +432,11 @@ adds its public certificates to Node's normal public roots.
 
 ## Build and prove
 
-Build from this directory with `docker build -t <local-name> .`. The image runs as
+Build from the repository root with
+`docker build --build-arg "TEAM_IMAGE_SOURCE_SHA=$(git rev-parse HEAD)" -f container/agent/egress/Dockerfile -t <local-name> container/agent`.
+The Dockerfile-specific allowlist admits only runtime and deploy inputs;
+`/opt/oats/deploy` preserves the agent/egress hierarchy for extraction without a
+checkout (see [Run contract](../../../docs/container.md#run-contract)). The image runs as
 10001:10001 with read-only root, dropped capabilities, no new privileges and only
 `/tmp` writable. The namespaced unprivileged-port sysctl enables ports 53 and 443
 without adding capabilities. Loss of either DNS or TLS child fails the image and
@@ -433,7 +457,8 @@ capability restrictions.
 Team-image CI builds the proxy from the same reviewed checkout as the wrapper
 and probes. It runs the legacy smoke and packaged ingress proof, then
 `python3 test/agent-egress-boundary-image.py PROXY_IMAGE AGENT_IMAGE ROLES`
-for `full` (no declaration), `aweb,registry` and `aweb,registry,secrets`.
+for `full` (no declaration), `aweb,registry`, `aweb,registry,secrets` and
+`aweb,logs,registry,secrets` with `humanRole: "secrets"`.
 Each run uses the minimal wrapper with explicit preflight-admitted IPAM,
 credential-free state/login and local image content IDs; it requires live
 role HTTPS controls, backend controls, denied unlisted DNS/TLS, denied host
@@ -452,6 +477,13 @@ witness refusal and the valid human CSS control. It creates only
 its own containers, internal network and temporary public trust fixture, and
 removes its private test key at cleanup. Python 3, OpenSSL and Docker are required;
 this is a transport regression, not an identity or mail-wake fixture.
+
+`python3 test/agent-egress-humanrole-ingress-image.py IMAGE` adds a four-role
+Secrets-anchor fixture with real HTTP backends behind the H1/H2 TLS ingress.
+The console and Secrets API share one backend and one log. It requires the
+anchor-labelled CLI PASS, and refuses human-authority forwarding into the API,
+role-to-role misdelivery, and a backend returning 421 after logging the forbidden
+tag. The same fixture runs without Docker in `test/agent-egress-humanrole.test.mjs`.
 
 `test/agent-egress.test.mjs` checks policy compilation and admitted Compose
 metadata. `assertComposeBoundary()` takes Docker container/network inspections,
@@ -475,6 +507,7 @@ The runtime JSON is derived by the deployment wrapper. Its fields are:
 
 | Field | Runtime value |
 | --- | --- |
+| `schema` | Required integer `1`. Missing or unknown schemas refuse before engine access with `E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1; found none; regenerate the plan with schema: 1` (an unknown numeric schema replaces `none` with its value; other types report `invalid <type>`). Update plan writers to emit `"schema": 1`. |
 | `probeContainer`, `proxyContainer` | Existing running container name or ID. The deployment wrapper owns the probe's creation/removal. |
 | `agentsNetwork`, `servicesNetwork` | Existing bundle network names. No replacement agents network is created. |
 | `probeImage`, `proxyImage` | Reviewed repository digest references; a local content ID is also accepted for a disposable image test. |
@@ -527,7 +560,7 @@ Universal controls always include sole isolated network membership, an explicit
 IPv4 IPAM gateway, live host-gateway refusal, direct upstream/backend refusal,
 unlisted DNS/TLS refusal and absence of protected paths. An alternate bridge or
 host must never be admitted to make a subset pass. The end-to-end TLS proxy does
-not claim to filter encrypted HTTP paths; signer ingress admission separately
+not claim to filter encrypted HTTP paths; anchor ingress admission separately
 checks the witnessed authority/path combinations above.
 The adapter names each temporary container with a UUID. Without `namePrefix`,
 the defaults are `oats-egress-canary-` and `oats-egress-tcp-`. A fresh ownership
@@ -562,8 +595,11 @@ refusal leaves stdout empty. The exported `probeComposeBoundary(plan)` returns
 The helper `tcpFromNetwork` returns `{reachable,receipt}`; callers must check
 `.reachable`. `withGatewayCanary` and `checkDockerGateway` return the canary and
 two TCP control receipts, and failures carry partial receipts too.
-These host-side helpers are outside the closed egress image build context;
-the egress image inputs do not change.
+These host-side helpers ship under `/opt/oats/deploy/egress/` with their
+complete local import closure; `/opt/egress` retains only the runtime files.
+Extract the deploy directory before invoking the probe on the engine host.
+The manifest binds every deploy file to the image
+([Dockerfile](Dockerfile), [manifest builder](../deploy-manifest.mjs)).
 
 Kubernetes uses `probe-runtime.mjs --emit-program <runtime.json>` to emit the
 same in-container body for its adapter's operator connection. That adapter must

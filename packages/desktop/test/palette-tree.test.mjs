@@ -606,9 +606,14 @@ test("the palette's tree rows reuse the sidebar's guide rules with the sidebar's
     assert.equal(prop(".ctx-tree-row", name), value, `the sidebar's ${name}`);
     assert.equal(prop(".palette-item.tree", name), value, name);
   }
+  // The guides' dot column is var(--dot-inset, 10px) + 3.25px: the palette's rows take the default 10px, set no
+  // --dot-inset, and pad their dots in by it; the sidebar's rows set 12px (slice 3d, the prototype's) and pad by it too.
   assert.equal(prop(".palette-item.tree", "padding-left"), "calc(10px + var(--depth, 0) * var(--tree-step))",
-    "the sidebar's 10px inset (.ctx-inst) plus its indent, so the dot column is the sidebar's 13.25px rule");
-  assert.match(rule(".ctx-inst"), /padding: 0 8px 0 10px/, "the sidebar's inset the palette matches");
+    "the guides' default 10px inset plus its indent, so the dot column is the shared rule's");
+  assert.equal(prop(".palette-item.tree", "--dot-inset"), undefined, "the palette keeps the default");
+  assert.equal(prop(".ctx-inst", "padding-left"), "var(--dot-inset, 10px)", "a sidebar row pads its dot by the same inset");
+  assert.equal(prop(".ctx-tree-row", "--dot-inset"), "12px", "the sidebar's own");
+  assert.match(prop(".ctx-guide", "left"), /^calc\(var\(--dot-inset, 10px\) \+ 3\.25px /, "the guides read the inset");
   assert.equal(prop(".palette-item.tree", "--row-gap"), "0px", "rows touch: lines run on from row to row");
   assert.equal(prop(".palette-item.tree", "--row-solid"), "var(--surface)", "the dot's ring is the palette's surface");
   assert.equal(prop(".palette", "background"), "var(--surface)");

@@ -682,8 +682,8 @@ test("operational commands are gated by active instance metadata; doctor exposes
   assert.equal(r.status, 0, r.stderr);
   const doctor = JSON.parse(r.stdout); assert.match(doctor.composedInstructions, /Canonical dev/);
   // No oats.core: no operating instructions at all (the kernel ships no "You run on OATS" copy since 0.26), and doctor says so.
-  // Operator coverage (#671) reports on its own lines; this pins the oats.core note.
-  assert.deepEqual(doctor.information.filter((l) => !l.startsWith("operator-coverage-unknown:")), ["soul dev has no oats.core capability (the workspace default); it gets no OATS operating instructions"]);
+  // Operator coverage and Git support report on their own lines; this pins the oats.core note.
+  assert.deepEqual(doctor.information.filter((l) => !l.startsWith("operator-coverage-unknown:") && !l.startsWith("git-version:")), ["soul dev has no oats.core capability (the workspace default); it gets no OATS operating instructions"]);
   assert.doesNotMatch(doctor.composedInstructions, /You run on OATS/);
   assert.ok(doctor.instructionBlocks.some((b) => b.source === "kernel:instance-boundary"));
   // The module's inject is part of what doctor shows, as it is of what a spawned home carries.
@@ -2592,7 +2592,7 @@ test("an alias minted with no local key is incomplete cleanup, not 'nothing to d
   const homeDir = join(base, "home"); mkdirSync(homeDir, { recursive: true });   // no .aw
   const r = spawnSync(process.execPath, [hook, "retire"], {
     encoding: "utf8",
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "retire", OATS_INSTANCE: "probe", OATS_HOME: homeDir, OATS_META: JSON.stringify({ alias: "probe", team: "default:acme.aweb.ai" }) },
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "retire", OATS_INSTANCE: "probe", OATS_HOME: homeDir, OATS_INSTANCE_HOME: homeDir, OATS_META: JSON.stringify({ alias: "probe", team: "default:acme.aweb.ai" }) },
   });
   // The remote record exists and its key is gone: the self-delete cannot be
   // authenticated, so this must NOT read as a vacuous no-op.
@@ -2603,7 +2603,7 @@ test("an alias minted with no local key is incomplete cleanup, not 'nothing to d
   // …while a retire with no alias at all genuinely has nothing to undo.
   const noAlias = spawnSync(process.execPath, [hook, "retire"], {
     encoding: "utf8",
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "retire", OATS_INSTANCE: "probe", OATS_HOME: homeDir, OATS_META: "{}" },
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "retire", OATS_INSTANCE: "probe", OATS_HOME: homeDir, OATS_INSTANCE_HOME: homeDir, OATS_META: "{}" },
   });
   assert.equal(noAlias.status, 0);
   assert.match(noAlias.stdout, /nothing-to-delete/);

@@ -76,9 +76,9 @@ import { createWorkspaceSwitcher } from "./workspace-switcher.mjs";
 import { NAV, NAV_TABS, PINNED, pinnedRowFor, navTab, stageSidebarMode, loadStageView } from "./shell-nav.mjs";
 import { shellIcon, mountShellIcons, iconElement } from "./shell-icons.mjs";
 import { createSidebarFoot, emptyRosterText } from "./sidebar-foot.mjs";
-import { createAutomationsFailure, FAILED_RUN_TEXT } from "./automations-failure.mjs";
+import { createAutomationsFailure } from "./automations-failure.mjs";
 import { automationsSupported } from "./views/automations.mjs";
-import { identityCSS } from "./identity-marks.mjs";
+import { identityCSS, createHarnessMark } from "./identity-marks.mjs";
 import { rowFactsTitle } from "./row-facts-title.mjs";
 import { createContextPanel, contextPanelCSS } from "./context-panel.mjs";
 import { createInstanceTeamsSection, teamsCSS } from "./instance-teams.mjs";
@@ -97,6 +97,8 @@ import { revealInScrollport } from "./reveal-in-scrollport.mjs";
 import { rosterRowFacts } from "../../client/roster-row-facts.mjs";
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../client/waiting-on-you.mjs";
 import { syncWaitingRow } from "./waiting-row.mjs";
+import { createTabBoards } from "./agent-board-tabs.mjs";
+import { eventsSupported } from "../../client/instance-events-contract.mjs";
 import { createPanelOwner } from "./panel-owner.mjs";
 import { collapseKey, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE, instanceSiblings, relatedSiblings, rowPinned, PIN_FEATURE } from "../../client/instance-tree.mjs";
 import { withParentGate, drawsParentLine } from "../../client/related-work.mjs";
@@ -169,10 +171,10 @@ const automationsFailure = createAutomationsFailure({
   },
   supported: () => automationsSupported(cliStatus()),
   onChange: (failed) => {
-    paintAutomationsFailed(failed);
     for (const listener of automationsFailedListeners) { try { listener(failed); } catch (e) { console.error(e); } }
   },
-  onHost: (name) => { if (name !== thisHostName) { thisHostName = name; if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } },
+  onCount: (count) => paintAutomationsFailed(count),
+  onHost: (name) => { statusLine.setMachine(name); if (name !== thisHostName) { thisHostName = name; if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } },
 });
 // A workspace switch (or the chooser) revokes the mark and any read in flight at once, before the new workspace's
 // roster answers: a late answer for the workspace left never marks the one shown (the roster's read asks again).
@@ -1324,9 +1326,9 @@ function renderContextRoster(instances) {
           elsewhere && i.running !== false ? elsewhere.sentence : null].filter(Boolean).join(" · ");
         // Slice 1 (the Desktop UI rework): no hover card. An unavailable row keeps its reason as a title; every row's
         // waiting facts are its description, and the instance panel shows them in full (its Needs input line).
-        // Line 2: `<soul> · <machine>`, the shared row facts (packages/client roster-row-facts.mjs), the machine in
-        // this Desktop's words for this one. The repository, the branch, the harness and the pull request are the
-        // instance panel's; a row's reason is its description.
+        // Line 2: the harness's mark, then `<soul>`, and ` · <machine>` for another machine's row (slice 3d), the shared
+        // row facts (packages/client roster-row-facts.mjs). The repository, the branch, the harness's name and model and
+        // the pull request are the instance panel's and the row's title; a row's reason is its description.
         const facts = rosterRowFacts(i, DESKTOP_TERMS, { deployments: contextDeployments, here: thisHostName });
         const heldStale = rowHeldStale(i);
         // Needs input: this row's own claim (waitingClaim is the only gate), and the waiting rows hidden under it.
@@ -1374,6 +1376,10 @@ function renderContextRoster(instances) {
         const meta = document.createElement("span");
         meta.className = "ctx-meta ctx-row-detail";
         meta.textContent = facts.detail;
+        // Line 2 leads with the harness's mark (slice 3d, Juan's request: which agent am I talking to): monochrome, the
+        // line's own ink, decorative (the row's title says "harness · model"); none for an unknown harness.
+        const harnessMark = createHarnessMark(document, i.harness);
+        if (harnessMark) meta.prepend(harnessMark);
         // #802: a quarantined home reads its state (text, never colour alone) and what finishes it, muted; its
         // repository and branch stay in the instance panel.
         const heldLines = [];
@@ -1382,7 +1388,7 @@ function renderContextRoster(instances) {
           // #1247: a retiring home has no hint (nothing to do but wait).
           if (held.hint) { const hint = document.createElement("span"); hint.className = "ctx-meta ctx-held-hint"; hint.textContent = held.hint; heldLines.push(hint); }
         }
-        // Spec E: a spawn the operator was not taken to says New (text and a dot, never colour alone)
+        // Spec E: a spawn the operator was not taken to says New (the word, never colour alone)
         // until its row is opened, or its tab is (the first paint where it is the active row).
         if (isActive) spawnJobs.seen?.(ws, i);
         if (attn) { meta.className = "ctx-meta ctx-attn-line"; meta.replaceChildren(attn); }
@@ -1402,9 +1408,9 @@ function renderContextRoster(instances) {
           if (pinned) line.append(pinnedMark(document));
           if (told) line.append(told.spoken);
           if (isNew) {
+            // Slice 3d: the prototype's "new" pill, the word alone (no dot).
             const mark = document.createElement("span"); mark.className = "ctx-new";
-            const markDot = document.createElement("span"); markDot.className = "ctx-new-dot"; markDot.setAttribute("aria-hidden", "true");
-            mark.append(markDot, "New"); line.append(mark);
+            mark.append("New"); line.append(mark);
           }
           copy.append(line, ...[spoken].filter(Boolean), meta, ...heldLines, ...[stateWords, relation].filter(Boolean));
         } else copy.append(name, ...[spoken].filter(Boolean), meta, ...heldLines, ...[stateWords, relation].filter(Boolean));
@@ -1923,6 +1929,10 @@ function refreshPanelInstance(instances, workspace) {
  * or cleared reaches an open tab; the dot's state stays as it was drawn. The same claim draws the waiting row over the
  * tab's terminal (waiting-row.mjs, #1502), so each group's shown tab carries its own. */
 let tabNeedsInputRoster = { instances: [], workspace: null };
+// The agent view (S2-D, agent-board-tabs.mjs): the board around a terminal tab's terminal, while the CLI reports it.
+const tabBoards = createTabBoards({ features: () => cliStatus()?.features ?? null, eventsReadable: () => eventsSupported(cliStatus()),
+  post: (pathname, body) => api(pathname, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+  openLink: (url) => ctx.openExternal(url) });
 function syncTabNeedsInput(instances, workspace) {
   tabNeedsInputRoster = { instances, workspace };
   const now = Date.now();
@@ -1950,7 +1960,8 @@ function syncTabNeedsInput(instances, workspace) {
     }
     if (trigger.getAttribute("aria-label") !== label) trigger.setAttribute("aria-label", label);
     setTabTitle(trigger, { note });
-    syncWaitingRow(tab.paneEl, claim, now);
+    // The board's own claim shows in the agent view's question zone (agent-board-tabs.mjs), not in the waiting row.
+    syncWaitingRow(tab.paneEl, tabBoards.sync(tab, row, claim, workspace) ? null : claim, now);
   }
 }
 const workspaceTabMemory = createWorkspaceTabMemory();
@@ -2329,6 +2340,7 @@ function closeTab(id, restoreFocus = false, { explicit = true, confirmed = false
     if (r && typeof r.then === "function" && t.key) reserveKey(t.key, r);
   } catch (e) { console.error(e); }
   t.tabEl.remove();
+  tabBoards.close(t);
   syncWaitingRow(t.paneEl, null);
   t.paneEl.remove();
   tabs.delete(id);
@@ -2597,6 +2609,7 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
   if (!commitDestination()) return notify('The terminal destination changed. Select the instance again.');
   const wrap = document.createElement("div");
   wrap.className = "term-wrap";
+  let madeId = null; // the tab's id once added: the board's input observer reads its record
 
   const type = terminalTypography();
   const term = new Terminal(terminalOptions({
@@ -2659,6 +2672,8 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
       if (ev.type === "keydown") handleKeydown(ev, { insideTerminal: true });
       return true;
     },
+    // The person's own typing ends the agent view's "typed" note (agent-board.mjs); it hides no card.
+    onInput: (data) => { const record = madeId === null ? null : tabs.get(madeId); if (record) tabBoards.input(record, data); },
   });
 
   const made = addTab({
@@ -2685,7 +2700,16 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
   if (!made) { unwire(); term.dispose(); return; } // lost a race to an identical tab
   // A tab opened on a waiting instance shows it at once, from the last painted roster (#558).
   syncTabNeedsInput(tabNeedsInputRoster.instances, tabNeedsInputRoster.workspace);
+  madeId = made.id;
+  // The agent view's two hooks (agent-board.mjs), read when used: its answer goes through this tab's own PTY lease, and
+  // the person's Enter sends it from the terminal, which takes the focus.
+  // `inView`: this terminal is on screen now, in this window's current workspace (a visible split's group counts).
+  const record = tabs.get(made.id);
+  Object.assign(record, { typeText: (text) => tab.type(text), focusTerminal: () => term.focus(),
+    inView: () => tabLayerVisible && document.visibilityState !== "hidden" && !record.paneEl.hidden && record.paneEl.classList.contains("active")
+      && record.workspace === currentWorkspace() && tabs.get(made.id) === record });
   made.paneEl.append(wrap);
+  tabBoards.place(tabs.get(made.id));
   term.open(wrap);
   glyphs.ensure();
   fitTerminal(term, fit);
@@ -2699,8 +2723,8 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
 // instance tree in the sidebar is the instances surface itself — selecting
 // an instance opens its terminal; there is no separate Instances stage.
 // The pinned destinations (the Desktop UI rework, slices 1, 2 and 2b): Home, Workspace and Automations, rows under the
-// switcher in the roster rows' style. Automations carries a --danger dot while a run failed (automations-failure.mjs,
-// paintAutomationsFailed), its words after the name, so the row's name says it ("Automations, a run failed").
+// switcher in the roster rows' style. Automations says "N failed" after its name while a run failed (slice 3d;
+// automations-failure.mjs, paintAutomationsFailed), the words its name says too ("Automations, 2 failed").
 const navEl = document.getElementById("nav");
 for (const v of PINNED) {
   const b = document.createElement("button");
@@ -2715,23 +2739,26 @@ for (const v of PINNED) {
   b.addEventListener("click", () => runAction(`stage.${v.name}`));
   navEl.append(b);
 }
-/** Show or clear the Automations row's failure mark: the --danger dot and, after the name, its words (the row's
- * accessible name then says "Automations, a run failed"). Absent while nothing failed, so it says nothing then. */
-function paintAutomationsFailed(failed) {
+/** Show or clear the Automations row's failure mark: after the name, "N failed" in the failure ink (slice 3d, the
+ * prototype's). The shown words are in its accessible name ("Automations, 2 failed": the label in the name, WCAG
+ * 2.5.3), a comma for assistive tech before them. Absent while nothing failed, so it says nothing then. `count`: how
+ * many rows failed their last run. */
+function paintAutomationsFailed(count) {
   const row = document.querySelector('#nav .nav-item[data-view="automations"]');
   if (!row) return;
   row.querySelector(":scope > .nav-failed")?.remove();
-  if (!failed) return;
+  if (!(count > 0)) return;
   const mark = document.createElement("span"); mark.className = "nav-failed";
-  const dot = document.createElement("span"); dot.className = "nav-failed-dot"; dot.setAttribute("aria-hidden", "true");
-  const said = document.createElement("span"); said.className = "sr-only"; said.textContent = FAILED_RUN_TEXT;
-  mark.append(dot, said); row.append(mark);
+  const comma = document.createElement("span"); comma.className = "sr-only"; comma.textContent = ", ";
+  const shown = document.createElement("span"); shown.className = "nav-failed-count"; shown.textContent = `${count} failed`;
+  mark.append(comma, shown); row.append(mark);
 }
 
-// The foot's controls use exactly the same registry as keyboard actions (the nav's buttons run theirs above): New
-// instance (Quick Open, app.quickOpenSouls, the spawn flow) and ? (Keyboard shortcuts, app.shortcuts). Hide sidebar
+// The foot's controls use exactly the same registry as keyboard actions (the nav's buttons run theirs above): ?
+// (Keyboard shortcuts, app.shortcuts), and New instance at the roster's end (slice 3d; Quick Open, app.quickOpenSouls,
+// the spawn flow). Hide sidebar
 // is Ctrl+Shift+B and the palette's; Theme…, Font… and Keyboard shortcuts… are the palette's (slice 1).
-for (const button of document.querySelectorAll("#nav-foot [data-action]")) {
+for (const button of document.querySelectorAll("#nav-foot [data-action], #sidebar-spawn")) {
   button.addEventListener("click", () => runAction(button.dataset.action));
 }
 
@@ -3117,17 +3144,17 @@ window.addEventListener('pagehide', () => mailSheet.dispose(), { once: true });
 
 /** The sidebar's way into the instances, never nothing (the roster's filter was that once): the roster's current
  * row (the roving stop), else its first row, else a control the roster shows (Retry, after a failed read), else, on
- * an empty roster, its one action, the foot's Spawn instance (F6's stop there too, focus-regions.mjs:
+ * an empty roster, its one action, New agent at the roster's end (F6's stop there too, focus-regions.mjs:
  * one way into an empty roster), else, while the roster is hidden (no workspace), the list of workspaces' stop, else
  * its Add local workspace…, always shown with the sidebar. */
 function rosterEntry() {
   const list = contextRosterEl?.querySelector(".ctx-list");
   const spawn = document.getElementById("sidebar-spawn");
-  // A control the roster shows (Retry, in its notice or its failed block) before the foot's Spawn instance.
+  // A control the roster shows (Retry, in its notice or its failed block) before New agent at its end.
   // #1579: the Background heading is a stop of the roster's roving order, and the list's only one when every row is in its closed section.
   return list?.querySelector('.ctx-inst[tabindex="0"], .ctx-background-toggle[tabindex="0"]') || list?.querySelector(".ctx-inst, .ctx-background-toggle")
     || contextRosterEl?.querySelector(':scope > :not(.ctx-head) button:not([disabled])')
-    // Spawn instance is in the foot, shown with the sidebar: it is the roster's way in only while the roster is.
+    // New agent ends the roster (slice 3d): it is the roster's way in while the roster is shown (it hides with it).
     || (contextRosterEl && !contextRosterEl.hidden && spawn && !spawn.disabled ? spawn : null)
     || document.querySelector('#ws-options [tabindex="0"]') || document.getElementById("ws-add-open");
 }
@@ -3162,7 +3189,7 @@ function focusFirstNeedingYou() {
 
 /** sidebar.focusFilter, kept under its id (a keys.json rebind still applies) since the roster's filter went
  * (the command palette finds an instance by name): focus the roster's current row, else rosterEntry's next best
- * (an empty roster's Spawn instance). */
+ * (an empty roster's New agent, at its end). */
 function focusRoster() {
   tabOpenIntents.invalidate(); // also when the roster already has DOM focus
   contextPanel.setFocusMode(false);
@@ -3324,7 +3351,11 @@ function focusMainContent() {
   if (first) tabOpenIntents.applyFocus(() => first.focus());
   return !!first && document.activeElement === first;
 }
-const focusRegions = createFocusRegions({ doc: document, tabLayerVisible: () => tabLayerVisible, focusMainContent });
+// The agent view's two regions (S2-D): the active tab's facts and questions, around its terminal.
+const activeTerminalTab = () => { const t = activeTab == null ? null : tabs.get(activeTab); return t?.kind === "terminal" ? t : null; };
+const focusRegions = createFocusRegions({ doc: document, tabLayerVisible: () => tabLayerVisible, focusMainContent,
+  agentView: { part: name => { const t = activeTerminalTab(); return t ? tabBoards.part(t, name) : null; },
+    focus: name => { const t = activeTerminalTab(); return !!t && tabBoards.focusPart(t, name); } } });
 
 // ── a workspace switch puts the keyboard back where it was there ──────────
 // focus-place.mjs describes where the focus is; every focus outside the transit surfaces (the list of
@@ -3470,7 +3501,7 @@ for (const [id, action, label] of [['instance.openSplit', 'open-split', 'Instanc
 /** The leader's target (leaderTargetId) where the palette was opened from: its instance entries act on it. */
 let paletteTargetId = null;
 registerAction({ id: "app.palette", label: "Open the command palette", context: "global", run: () => { tabOpenIntents.invalidate(); if (!palette.isOpen()) paletteTargetId = leaderTargetId(document.activeElement); palette.toggle(); } });
-// New agent (Alt+N, the Desktop UI rework's key; decided 2026-11-19): what the foot's New agent and Alt+P do.
+// New agent (Alt+N, the Desktop UI rework's key; decided 2026-11-19): what New agent at the roster's end and Alt+P do.
 registerAction({ id: "app.newAgent", label: `New ${DESKTOP_NOUNS.instance}`, context: "global", run: () => openPaletteOnSouls() });
 // New agent (slice 4): the palette on its souls ("+"); pressed again while it is open, it closes it.
 registerAction({ id: "app.quickOpenSouls", label: `New ${DESKTOP_NOUNS.instance}: choose a soul`, context: "global", run: () => openPaletteOnSouls() });
@@ -3598,8 +3629,11 @@ function statusKeys() {
   const region = focusRegions?.regionOfFocus?.() ?? null;
   const inTerminal = !!document.activeElement?.closest?.(".xterm");
   const page = workspacePageKeys(key);
+  // New agent sits at the roster's end (slice 3d) and is the roster's region, but not a row: the rows' keys do
+  // nothing there, so it shows the default set.
+  const onSpawn = document.activeElement?.id === "sidebar-spawn";
   const rows = page ? page
-    : region === "roster" ? [["Enter", "open"], [key("sidebar.key.stop"), "stop"], [key("app.palette"), "palette"]]
+    : region === "roster" && !onSpawn ? [["Enter", "open"], [key("sidebar.key.stop"), "stop"], [key("app.palette"), "palette"]]
     : region === "workspaces" ? [["Enter", "show"], ["↑↓", "move"], [key("app.palette"), "palette"]]
     : inTerminal ? [[key("app.leader"), "prefix"], [key("tabs.close"), "close tab"], [key("app.palette"), "palette"]]
     : [[key("app.palette"), "palette"], [key("app.leader"), "prefix"], [key("app.quickOpenSouls"), `new ${DESKTOP_NOUNS.instance}`]];
@@ -3787,6 +3821,15 @@ for (const [id, does] of [["roster.openPrevious", "previous"], ["roster.openNext
 }
 // The instance's name and colour (#1421; CHORDS edit-instance, no leader key): the leader's target, from
 // every focus, a terminal's included. Inert under a modal dialog or the palette, as the leader is.
+// The agent view (S2-D): the palette's command moves the focus through the shown terminal tab's view: its question
+// zone, its facts, back to its terminal. No chord (Alt+T is Claude Code's extended thinking): F6 reaches the same two
+// regions (focus-regions.mjs), Ctrl+Shift+F6 from the terminal. Nothing when the tab shows no board. Inert under a
+// modal dialog or the palette.
+function focusAgentView() {
+  const t = activeTab == null ? null : tabs.get(activeTab);
+  if (!t || t.kind !== "terminal" || !tabBoards.cycleFocus(t)) sayInHint("This agent has no questions or facts to show.");
+}
+registerAction({ id: "agent.viewFocus", label: "Agent: questions and facts (focus)", context: "global", when: () => !modalOpen(), run: () => focusAgentView() });
 registerAction({ id: "instance.edit", label: "Instance: name and colour…", context: "global", when: () => !modalOpen(),
   run: (e) => openInstanceEdit(leaderTargetId(e?.target ?? document.activeElement)) });
 // The agent's mail (CHORDS mail): the leader's target, from every focus, a terminal's included. Inert under any other

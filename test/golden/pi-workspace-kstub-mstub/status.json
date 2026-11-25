@@ -392,6 +392,7 @@
           "teams": [],
           "defaultTeam": null,
           "launched": false,
+          "backend": "tmux",
           "startedAt": null,
           "identityAddress": null,
           "attributedHuman": null,

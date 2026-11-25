@@ -1,9 +1,9 @@
 {
   "capability": "oats.aweb",
   "command": "aweb",
-  "version": "1.46.0",
+  "version": "1.49.1",
   "compatibility": {
-    "oats": ">=0.68.0"
+    "oats": ">=0.70.0"
   },
   "layer": "messaging",
   "launchPreview": true,
@@ -21,7 +21,10 @@
       "install": "pi install npm:@awebai/pi, then, if the @awebai/pi installed is below 0.5.0, make its entry {\"source\": \"npm:@awebai/pi\", \"skills\": []} in the pi folder's settings.json (PI_CODING_AGENT_DIR, else ~/.pi/agent), so pi loads the extension without its bundled skills. Never install @awebai/claude-skills in a pi folder that OATS homes use: a home's skills come from its capabilities (README, \"The pi extension without its skills\")",
       "when": {
         "delivery": "channel"
-      }
+      },
+      "backends": [
+        "tmux"
+      ]
     },
     {
       "runtime": "claude",
@@ -31,7 +34,10 @@
       "install": "claude plugin marketplace add awebai/claude-plugins && claude plugin install aweb-channel@awebai-marketplace",
       "when": {
         "delivery": "channel"
-      }
+      },
+      "backends": [
+        "tmux"
+      ]
     },
     {
       "runtime": "pi",
@@ -40,6 +46,9 @@
       "when": {
         "delivery": "session"
       },
+      "backends": [
+        "tmux"
+      ],
       "why": "an ambient aweb pi extension, if one is installed, must honour AWEB_DELIVERY=session (0.3.10 and later); an older one would open a second event stream beside the wake broker; no extension at all is fine",
       "install": "pi install npm:@awebai/pi@latest, then, if the @awebai/pi installed is below 0.5.0, make its entry {\"source\": \"npm:@awebai/pi@latest\", \"skills\": []} in the pi folder's settings.json (PI_CODING_AGENT_DIR, else ~/.pi/agent), so pi loads the extension without its bundled skills. Never install @awebai/claude-skills in a pi folder that OATS homes use: a home's skills come from its capabilities (README, \"The pi extension without its skills\")",
       "ifInstalled": true
@@ -52,7 +61,33 @@
       "when": {
         "delivery": "session"
       },
+      "backends": [
+        "tmux"
+      ],
       "why": "an ambient aweb-channel plugin for Claude Code, if one is installed, must honour AWEB_DELIVERY=session (1.7.9 and later); an older one starts its own channel server beside the wake broker and can fetch and acknowledge a message before the broker delivers it; no plugin at all is fine",
+      "install": "update the aweb-channel plugin from the awebai marketplace in Claude Code",
+      "ifInstalled": true
+    },
+    {
+      "runtime": "pi",
+      "package": "npm:@awebai/pi",
+      "minVersion": "0.3.10",
+      "backends": [
+        "session-provider"
+      ],
+      "why": "a session provider's launch is delivered by the host wake broker under either delivery value (AWEB_DELIVERY=session), so an ambient aweb pi extension, if one is installed, must honour it (0.3.10 and later); an older one would open a second event stream beside the wake broker; no extension at all is fine",
+      "install": "pi install npm:@awebai/pi@latest, then, if the @awebai/pi installed is below 0.5.0, make its entry {\"source\": \"npm:@awebai/pi@latest\", \"skills\": []} in the pi folder's settings.json (PI_CODING_AGENT_DIR, else ~/.pi/agent), so pi loads the extension without its bundled skills. Never install @awebai/claude-skills in a pi folder that OATS homes use: a home's skills come from its capabilities (README, \"The pi extension without its skills\")",
+      "ifInstalled": true
+    },
+    {
+      "runtime": "claude",
+      "package": "aweb-channel@awebai-marketplace",
+      "marketplace": "awebai/claude-plugins",
+      "minVersion": "1.7.9",
+      "backends": [
+        "session-provider"
+      ],
+      "why": "a session provider's launch is delivered by the host wake broker under either delivery value (AWEB_DELIVERY=session), so an ambient aweb-channel plugin for Claude Code, if one is installed, must honour it (1.7.9 and later); an older one starts its own channel server beside the wake broker and can fetch and acknowledge a message before the broker delivers it; no plugin at all is fine",
       "install": "update the aweb-channel plugin from the awebai marketplace in Claude Code",
       "ifInstalled": true
     }

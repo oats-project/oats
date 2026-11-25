@@ -7,6 +7,7 @@ import { runInNewContext } from 'node:vm';
 import { join } from 'node:path';
 import { createTerminalOwnerBroker, installTerminalHandlers } from '../terminal-owner.mjs';
 import { createTerminalIo, readTerminalCli } from '../terminal-io.mjs';
+import { admitTerminalTarget } from '../terminal-target.mjs';
 import { runTerminalCommand } from '../../client/terminal-exec.mjs';
 import { prepareTerminalAttachments } from '../terminal-attachments.mjs';
 import { handle, opened, confirmed, ready } from './helpers/terminal-wire.mjs';
@@ -204,4 +205,56 @@ test('actual main composition registers owner BEFORE load and uses shared broker
   assert.equal((await bridge.termClose(result.handle)).status, 'closed'); assert.equal(vm.terminalBroker.counts().slots, 0);
   assert.ok(commands.some(([, args]) => args.includes('=agents:=one')));
   for (const [bin, args] of commands) { assert.equal(bin, 'tmux'); assert.ok(args.includes('/memory/socket')); }
+});
+
+test('preload termWrite with { answer: true } asks main (term:answer) and resolves its answer, E_TERM_IN_MODE included', async () => {
+  const calls = [];
+  let reply = { terminalApi: 2, ok: true, status: 'sent' };
+  const ipc = { send: (...args) => calls.push(['send', ...args]), invoke: async (...args) => { calls.push(['invoke', ...args]); return reply; } };
+  const bridge = createTerminalBridge(ipc, {}), h = handle(3);
+  assert.deepEqual(await bridge.termWrite(h, 'q1: Yes', { answer: true }), { terminalApi: 2, ok: true, status: 'sent' });
+  assert.deepEqual(calls, [['invoke', 'term:answer', { ...h }, 'q1: Yes']]);
+  reply = { terminalApi: 2, ok: false, code: 'E_TERM_IN_MODE', message: 'The terminal is in its scrollback. Nothing was typed.' };
+  assert.equal((await bridge.termWrite(h, 'q1: Yes', { answer: true })).code, 'E_TERM_IN_MODE');
+  reply = { terminalApi: 2, ok: true, status: 'opened' };
+  assert.equal((await bridge.termWrite(h, 'q1: Yes', { answer: true })).code, 'E_TERM_TRANSPORT');
+  calls.length = 0;
+  for (const options of [null, {}, { answer: 1 }, { answer: true, extra: 1 }]) assert.equal((await bridge.termWrite(h, 'q1: Yes', options)).code, 'E_TERM_BAD_ARGS');
+  assert.equal((await bridge.termWrite(7, 'q1: Yes', { answer: true })).code, 'E_TERM_LEASE');
+  assert.deepEqual(calls, [], 'nothing reaches main for a refused request');
+  reply = { terminalApi: 2, ok: false, code: 'E_TERM_MODE_UNKNOWN', message: 'The terminal could not be checked for its scrollback. Nothing was typed.' };
+  assert.equal((await bridge.termWrite(h, 'q1: Yes', { answer: true })).code, 'E_TERM_MODE_UNKNOWN');
+  assert.equal(bridge.termWrite.length, 2, 'the option has a default: the exposed key keeps its arity (D-3)');
+  // Without the option, termWrite is as before: synchronous, one-way, never an invoke.
+  calls.length = 0;
+  assert.deepEqual(bridge.termWrite(h, 'q'), { terminalApi: 2, ok: true, status: 'sent' });
+  assert.deepEqual(calls, [['send', 'term:write', { ...h }, 'q']]);
+});
+
+// The Opus whole read r4 (minor): the real mode read behind term:answer, pinned at the tmux boundary. The local io reads
+// `#{pane_in_mode}` on the viewer's own =-anchored session through the saved socket, synchronously; only "0" and "1"
+// are answers, and anything else (an empty line, another value, a tmux failure) is unknown, which types nothing.
+test('the local terminal io reads the viewer pane\'s mode on its =-anchored session; anything but 0 or 1 is unknown', () => {
+  let reply = () => '0';
+  const commands = [];
+  const io = createTerminalIo({ context: () => 'ctx', attachmentDirectory: () => '/memory/attachments', sweep() {},
+    spawnPty: () => ({ onData() {}, onExit() {}, write() {}, resize() {}, kill() {} }),
+    execFileSync: (bin, args) => {
+      commands.push([bin, args]);
+      if (args.includes('display-message')) return reply();
+      return args.includes('new-session') ? '@81\n' : '';
+    },
+    fetch: async () => assert.fail('a local terminal reads no CLI'), run: async () => assert.fail('the mode read is synchronous') });
+  const { spec } = admitTerminalTarget({ session: 'agents', window: 'one', socket: '/memory/socket', cols: 80, rows: 24 });
+  const opened = io.create(spec, undefined, { current: () => true });
+  assert.equal(typeof opened.inMode, 'function');
+  commands.length = 0;
+  assert.equal(opened.inMode(), false);
+  assert.deepEqual(commands, [['tmux', ['-u', '-S', '/memory/socket', 'display-message', '-p', '-t', `=${opened.viewer}:`, '#{pane_in_mode}']]]);
+  assert.match(opened.viewer, /^oatsdesk-/);
+  reply = () => '1\n'; assert.equal(opened.inMode(), true);
+  for (const bad of [() => '', () => '2', () => 'true', () => { throw new Error('tmux: no server'); }]) {
+    reply = bad;
+    assert.throws(() => opened.inMode(), 'unknown, never a mode or no mode');
+  }
 });

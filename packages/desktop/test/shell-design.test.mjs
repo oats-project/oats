@@ -123,7 +123,7 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
 
 // The sidebar (the product owner, 2026-10-26; slice 1 of the Desktop UI rework), the list of workspaces on top: the head
 // (the Workspace heading and Add local workspace…), the list, the pinned views, a line, the instances, then the foot.
-test("the head is the Workspace heading and Add local workspace…; the list's semantics and ids survive", t => {
+test("the head is the WORKSPACES heading and Add local workspace…; the list's semantics and ids survive", t => {
   const { document } = shell(t);
   const sidebar = document.getElementById("sidebar");
   const head = document.querySelector("#sidebar > .side-head");
@@ -132,14 +132,14 @@ test("the head is the Workspace heading and Add local workspace…; the list's s
   // trigger, no popup menu, no cog.
   assert.deepEqual([...head.children].map(el => el.id), ["ws-heading", "ws-add-open"]);
   assert.equal(document.getElementById("ws-current-only"), null, "no Show only the current workspace");
-  assert.match(html, /<div class="side-head">\s*<span id="ws-heading" class="ws-heading">Workspace<\/span>\s*<button id="ws-add-open" class="ws-add-open side-icon-button icon-button"/, "the markup says the same");
+  assert.match(html, /<div class="side-head">\s*<span id="ws-heading" class="ws-heading">Workspaces<\/span>\s*<button id="ws-add-open" class="ws-add-open side-icon-button icon-button"/, "the markup says the same");
   assert.equal(document.querySelector(".ws-head, .ctx-head.ws-head, .ws-brand-mark, .ws-brand-image, .ws-brand-icon, [data-shell-icon=\"oats\"]"), null, "no plain heading of 2026-10-23, no mark in the head");
   assert.equal(head.querySelector("img"), null, "the heading shows no artwork");
   assert.deepEqual([...sidebar.querySelectorAll("img")], [], "no artwork in the sidebar (slice 1: the mark left the foot)");
   assert.equal(document.getElementById("ws-trigger"), null, "the dropdown's trigger is gone");
   assert.equal(document.getElementById("ws-menu"), null, "the dropdown's menu is gone");
   assert.equal(document.getElementById("ws-menu-search"), null, "the menu's search is gone");
-  assert.equal(document.getElementById("ws-heading").textContent, "Workspace");
+  assert.equal(document.getElementById("ws-heading").textContent, "Workspaces");
   const addOpen = document.getElementById("ws-add-open");
   assert.equal(addOpen.tagName, "BUTTON"); assert.equal(addOpen.type, "button");
   assert.equal(addOpen.getAttribute("aria-label"), "Add local workspace…");
@@ -156,7 +156,7 @@ test("the head is the Workspace heading and Add local workspace…; the list's s
   assert.equal(list.getAttribute("role"), null, "not a listbox: the sidebar's plain keys stay live on it");
   assert.ok(list.querySelector(":scope > #ws-options"));
   // The rules (the product owner, 2026-10-26): none under the head (the heading sits over its list), one under the
-  // list, the line before the instances (the roster's top), none under the Instances heading, none of the views' own. JSDOM does not expand a border shorthand that uses var(), so read the
+  // list, none before the agents (slice 3d: the prototype has none), none under the AGENTS heading, none of the views' own. JSDOM does not expand a border shorthand that uses var(), so read the
   // declarations of every shipped rule matching each element.
   const drawn = (el, side) => [...document.styleSheets].flatMap(sheet => [...sheet.cssRules])
     .filter(rule => rule.selectorText && (() => { try { return el.matches(rule.selectorText); } catch { return false; } })())
@@ -165,7 +165,7 @@ test("the head is the Workspace heading and Add local workspace…; the list's s
   assert.deepEqual(drawn(head, "top"), []);
   assert.deepEqual(drawn(head, "bottom"), [], "no line between the heading and its list");
   assert.deepEqual(drawn(list, "bottom"), [".ws-list { border-bottom: 1.5px solid var(--border) }"], "one rule under the list, a little bolder");
-  assert.deepEqual(drawn(document.getElementById("instance-roster"), "top"), ["#instance-roster { border-top: 1px solid var(--border) }"], "the line before the instances");
+  assert.deepEqual(drawn(document.getElementById("instance-roster"), "top"), [], "no line before the agents");
   for (const side of ["top", "bottom"]) assert.deepEqual(drawn(document.getElementById("nav"), side), [], `no rule of the views' own (${side})`);
   const rosterHead = document.querySelector("#instance-roster > .ctx-head");
   assert.deepEqual(drawn(rosterHead, "bottom"), [], "no line under the Instances heading");
@@ -260,7 +260,7 @@ test("static SVG inventory stays 16px, hidden to AT and rejects arbitrary markup
   }
 });
 
-test("the foot is one bar: N need you, New agent (Quick Open) and ? (Keyboard shortcuts); no mark, no toggle, no cog; all dispatch the real registry", async t => {
+test("the foot is one bar: N need you and ? (Keyboard shortcuts), New agent (Quick Open) at the roster's end; no mark, no toggle, no cog; all dispatch the real registry", async t => {
   const s = shell(t), q = id => s.document.getElementById(id);
   // The tools row is gone again (the product owner, 2026-10-26): no theme, shortcuts, leader or palette button
   // anywhere. Slice 1 of the Desktop UI rework: the brand mark, Hide sidebar and the settings cog leave the foot too
@@ -273,7 +273,7 @@ test("the foot is one bar: N need you, New agent (Quick Open) and ? (Keyboard sh
   assert.equal(foot, q("sidebar").lastElementChild, "the sidebar's bottom row");
   const bar = q("sidebar-bar");
   assert.equal(bar.getAttribute("role"), "group"); assert.equal(bar.getAttribute("aria-label"), "Sidebar tools");
-  assert.deepEqual([...bar.children].map(el => el.id), ["sidebar-need-you", "sidebar-spawn", "sidebar-help"]);
+  assert.deepEqual([...bar.children].map(el => el.id), ["sidebar-need-you", "sidebar-help"]);
   // N need you: hidden while nothing needs you (the shell paints it with the roster; sidebar-slice1.test.mjs).
   const need = q("sidebar-need-you");
   assert.equal(need.type, "button"); assert.equal(need.hidden, true); assert.equal(need.textContent, "");
@@ -288,8 +288,10 @@ test("the foot is one bar: N need you, New agent (Quick Open) and ? (Keyboard sh
   assert.equal(help.getAttribute("aria-label"), "Keyboard shortcuts"); assert.equal(help.textContent.trim(), "?");
   assert.equal(help.title, "Keyboard shortcuts (Ctrl+,)", "the title is the label, then the bound chord");
   help.click(); assert.deepEqual(s.events, [["shortcuts"]], "it runs its action, once");
-  // New agent: the spawn flow (app.quickOpenSouls, Quick Open), its noun DESKTOP_NOUNS's, the chord appended to its title.
+  // New agent: the spawn flow (app.quickOpenSouls, Quick Open), its noun DESKTOP_NOUNS's, the chord appended to its title;
+  // at the roster's end since slice 3d (the prototype's), after the list.
   const spawn = q("sidebar-spawn");
+  assert.equal(spawn.parentElement, q("instance-roster")); assert.equal(spawn.previousElementSibling, s.document.querySelector("#instance-roster > .ctx-list"));
   assert.equal(spawn.type, "button"); assert.equal(spawn.hidden, false); assert.equal(spawn.disabled, false); assert.ok(spawn.tabIndex >= 0);
   assert.equal(spawn.classList.contains("primary"), false, "its words, no primary fill");
   assert.equal(spawn.dataset.action, "app.quickOpenSouls");
@@ -299,7 +301,7 @@ test("the foot is one bar: N need you, New agent (Quick Open) and ? (Keyboard sh
   assert.equal(spawn.querySelector("svg")?.getAttribute("aria-hidden"), "true", "its + is decoration");
   assert.equal(spawn.querySelector(".shortcut-hint, [data-shortcut], kbd"), null, "no hint element: the chord is in the tooltip");
   assert.match(html, /<button id="sidebar-spawn" type="button" data-action="app\.quickOpenSouls"><\/button>/, "its words are the shell's, from desktop-terms.mjs");
-  // The roster's heading (Agents: DESKTOP_NOUNS, slice 2): its title and the count only (no + : New agent is the foot's).
+  // The roster's heading (Agents: DESKTOP_NOUNS, slice 2): its title and the count only (no + : New agent ends the list).
   const head = s.document.querySelector("#instance-roster > .ctx-head");
   assert.deepEqual([...head.children].map(el => el.id || el.className || el.textContent), ["Agents", "ctx-count"]);
   assert.match(source, /const rosterTitle = DESKTOP_NOUNS\.instances\[0\]\.toUpperCase\(\) \+ DESKTOP_NOUNS\.instances\.slice\(1\);\n  contextRosterEl\.setAttribute\("aria-label", rosterTitle\);/, "the shell names it from DESKTOP_NOUNS");
@@ -857,7 +859,7 @@ test('focusRoster exits focus mode, reveals the sidebar and focuses the roster\'
   assert.equal(listActions().find(a => a.id === 'sidebar.focusFilter')?.label, 'Focus the instance roster', 'same id, relabelled');
 });
 
-test('focusRoster without a roving stop lands on the first row, else Retry, else the foot\'s New agent, else (no roster) the workspace list: never nothing', t => {
+test('focusRoster without a roving stop lands on the first row, else Retry, else New agent at the roster\'s end, else (no roster) the workspace list: never nothing', t => {
   const s = shell(t), q = id => s.document.getElementById(id), list = s.document.querySelector('#instance-roster .ctx-list');
   const rows = s.paintRows(-1);
   q('sidebar-spawn').focus(); runAction('sidebar.focusFilter');
@@ -865,7 +867,7 @@ test('focusRoster without a roving stop lands on the first row, else Retry, else
   assert.equal(rows[0].tabIndex, 0, 'and it becomes the stop');
   list.innerHTML = '<div class="loading-failed"><button type="button" class="act">Retry</button></div>';
   q('sidebar-spawn').focus(); runAction('sidebar.focusFilter');
-  assert.equal(s.document.activeElement.textContent, 'Retry', 'a failed first read: its Retry, never the foot\'s New agent before it');
+  assert.equal(s.document.activeElement.textContent, 'Retry', 'a failed first read: its Retry, never New agent at the roster\'s end before it');
   // A stale notice's Retry sits between the heading and the list (instance-tree-view.mjs createRosterLoading).
   list.innerHTML = '<div class="ctx-empty">No instances.</div>';
   const notice = s.document.createElement('div'); notice.className = 'ctx-status'; notice.innerHTML = '<button type="button" class="act">Retry</button>';
@@ -873,11 +875,11 @@ test('focusRoster without a roving stop lands on the first row, else Retry, else
   q('sidebar-spawn').focus(); runAction('sidebar.focusFilter');
   assert.equal(s.document.activeElement, notice.firstElementChild, "a stale notice's Retry");
   notice.remove();
-  // No instances: the roster's one action, the foot's New agent (as F6's: see the next test), never the workspaces.
+  // No instances: the roster's one action, New agent at the roster's end (as F6's: see the next test), never the workspaces.
   list.innerHTML = '<div class="ctx-empty">No instances.</div>';
   q('ws-options').innerHTML = '<ul class="ws-group"><li class="ws-option-row"><button type="button" class="ws-option" aria-current="true" tabindex="0">A</button></li></ul>';
   q('ws-add-open').focus(); runAction('sidebar.focusFilter');
-  assert.equal(s.document.activeElement, q('sidebar-spawn'), 'an empty roster: the foot\'s New agent');
+  assert.equal(s.document.activeElement, q('sidebar-spawn'), 'an empty roster: New agent at the roster\'s end');
   // A window with no workspace hides the roster: the list of workspaces' stop.
   q('instance-roster').hidden = true;
   q('sidebar-spawn').blur(); runAction('sidebar.focusFilter');
@@ -887,9 +889,9 @@ test('focusRoster without a roving stop lands on the first row, else Retry, else
   assert.equal(s.document.activeElement, q('ws-add-open'), 'and with no workspace row: Add local workspace…');
 });
 
-// One rule for an empty roster (the product owner): its keyboard way in is its one action, the foot's New agent, by
+// One rule for an empty roster (the product owner): its keyboard way in is its one action, New agent at the roster's end, by
 // F6 (the region cycle needs a stop inside the roster) and by ⌘F / Alt+F alike; a failed read's Retry comes first.
-test('an empty roster: F6 and ⌘F / Alt+F (sidebar.focusFilter) both land on the foot\'s New agent, a Retry before it', t => {
+test('an empty roster: F6 and ⌘F / Alt+F (sidebar.focusFilter) both land on New agent at the roster\'s end, a Retry before it', t => {
   const s = shell(t), q = id => s.document.getElementById(id), list = s.document.querySelector('#instance-roster .ctx-list');
   const regions = createFocusRegions({ doc: s.document });
   s.document.getElementById('nav').innerHTML = '<button type="button" class="nav-item" aria-current="page">Workspace overview</button>';

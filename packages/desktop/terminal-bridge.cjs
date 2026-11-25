@@ -6,6 +6,8 @@ const messages = {
   E_TERM_BAD_ARGS: 'Invalid terminal request.',
   E_TERM_INPUT_LIMIT: 'Terminal input exceeds the safe write limit. Nothing was sent.',
   E_TERM_TRANSPORT: 'The terminal service did not confirm the operation.',
+  E_TERM_IN_MODE: 'The terminal is in its scrollback. Nothing was typed.',
+  E_TERM_MODE_UNKNOWN: 'The terminal could not be checked for its scrollback. Nothing was typed.',
   E_TERM_ATTACHMENT_FAILED: 'Could not prepare these attachments.',
 };
 const fail = code => ({ terminalApi: 2, ok: false, code, message: messages[code] });
@@ -27,6 +29,7 @@ function createTerminalBridge(ipc, webUtils) {
         if (!Array.isArray(r.paths) || r.paths.length > 16 || r.paths.some(p => typeof p !== 'string' || p.length > 4096)) return fail('E_TERM_TRANSPORT');
         return { terminalApi: 2, ok: true, status: 'attached', paths: [...r.paths] };
       }
+      if (channel === 'term:answer') return r.status === 'sent' ? { terminalApi: 2, ok: true, status: 'sent' } : fail('E_TERM_TRANSPORT');
       const h = handle(r.handle), expected = channel === 'term:open' ? ['opened', 'reused'] : channel === 'term:ready' ? ['ready'] : ['closed'];
       if (!h || !expected.includes(r.status) || (channel !== 'term:open' && !same(h, args[0]))) return fail('E_TERM_TRANSPORT');
       return { terminalApi: 2, ok: true, status: r.status, handle: h };
@@ -51,7 +54,19 @@ function createTerminalBridge(ipc, webUtils) {
     termOpen: spec => invoke('term:open', spec),
     termReady: h => leasedInvoke('term:ready', h),
     termClose: h => leasedInvoke('term:close', h),
-    termWrite(h, data) {
+    // `{ answer: true }`: the agent view's answer (terminal-owner answer). Main types it only when the pane is in no mode
+    // (tmux copy mode), so it resolves, a promise, with main's own answer: sent, or a refusal such as E_TERM_IN_MODE.
+    // `options` has a default so the exposed function's length stays 2 (D-3 pins each preload key's arity).
+    termWrite(h, data, options = undefined) {
+      if (options !== undefined) {
+        try {
+          const copy = handle(h);
+          if (!copy) return Promise.resolve(fail('E_TERM_LEASE'));
+          if (!options || typeof options !== 'object' || Object.keys(options).length !== 1 || options.answer !== true
+            || typeof data !== 'string' || !data || data.length > 512 || !data.isWellFormed()) return Promise.resolve(fail('E_TERM_BAD_ARGS'));
+          return invoke('term:answer', copy, data);
+        } catch { return Promise.resolve(fail('E_TERM_TRANSPORT')); }
+      }
       try {
         const copy = handle(h); if (!copy) return fail('E_TERM_LEASE');
         if (typeof data !== 'string' || !data.isWellFormed()) return fail('E_TERM_BAD_ARGS');

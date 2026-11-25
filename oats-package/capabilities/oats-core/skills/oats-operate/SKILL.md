@@ -23,6 +23,10 @@ walking up to `oats-local.yaml`), or pass `--dir <deployment>`. Use `--json`
 when you parse output. Flags take `--flag value` or `--flag=value`. When a flag
 is not shown here, read `oats help`; never invent one.
 
+Use Node.js 22.5 or later. From OATS 0.69.24, Node 18 and 20 refuse every command with
+`E_NODE_UNSUPPORTED`, including `version`, the reader and capabilities.
+An older Node that cannot parse the entry may fail before that refusal.
+
 ## Your two directories
 
 ```
@@ -200,6 +204,9 @@ oats doctor                  # this deployment's local file and lock, plus diagn
                              # and, from OATS 0.50.0, what retires left (recovery copies, retained worktrees)
 ```
 
+From OATS 0.69.24, doctor's `git-version:` line (`information[]` in JSON) reports cache support, never a warning or refusal.
+Git before 2.45 works with whole-tree fetches; newer Git supports partial caches, but a remote or existing cache may still use whole trees.
+
 ## Spawn: preview, then apply
 
 Spawn only when your task, your human or your soul's capabilities say so: a
@@ -290,8 +297,8 @@ feature, then `wakeHold` on `oats session inspect --home <home> --json`:
   2.11.0, on a Claude Code that fires them).
 - `not-exposed`: a capability vouches that it has no dialog an Enter can answer.
 - `unknown`: **not covered**, so a dialog there takes the wake's Enter. A pi home
-  reads this: an extension can open its own dialog, and the kernel can't see
-  which load.
+  reads this: its pi bridge's claim (`@awebai/oats-pi` 0.70.2) holds a wake
+  over an extension's dialog, but a screen of pi's own has no claim.
 
 `on-claims` isn't protection. A dialog still takes the Enter in the lag before its
 claim is written, and claims can't cover every Claude dialog: the rate-limit menu
@@ -451,6 +458,7 @@ for a question you ask in text, by mail or by chat. Your attention claim is
 yours alone, and the emitter never clears it. A claim with text is shown over
 one without, so a later claim with no text does not hide your question. A later
 one with text, such as a permission prompt's, is shown in its place.
+On pi, an extension's dialog (a question tool's) is reported too, from `@awebai/oats-pi` 0.70.2.
 
 From OATS 0.69.7, a turn that ends in a provider error sets a claim the same
 way, because the error ends the turn and you can't: `Turn failed: <the error>`,

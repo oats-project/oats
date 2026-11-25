@@ -17,7 +17,9 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
  * io.admit(input) -> {key, spec}, copied/frozen, throws on invalid input
  *   (E_TERM_BAD_ARGS; an error coded E_HERDR_REMOVED keeps its code).
  * io.prepare(spec, {signal,current,context}) -> bounded promise (remote only).
- * io.create(spec, prepared, {current}) -> synchronous {pty,killViewer}.
+ * io.create(spec, prepared, {current}) -> synchronous {pty,killViewer,inMode?}. inMode() -> synchronously true while
+ *   the viewer's pane is in a mode (tmux copy mode), false when not; a throw, anything else, or no inMode (a remote
+ *   viewer) is unknown, and an answer is typed only on false.
  * An uncertain failed create must throw with private terminalCleanup callback.
  * killViewer resolves only when cleanup is confirmed; rejection means uncertain.
  * admitFrame(event) -> true when the opening frame may open terminals at all (main: its window still shows
@@ -169,6 +171,7 @@ export function createTerminalOwnerBroker({ rendererUrl, io, context = () => '',
       const opened = io.create(r.spec, prepared, { current: () => preparingCurrent(r) });
       r.pty = opened.pty; r.exited = false;
       r.cleanup = opened.killViewer; r.cleaned = typeof r.cleanup !== 'function';
+      r.inMode = typeof opened.inMode === 'function' ? opened.inMode : null;
       r.subscriptions.push(r.pty.onExit(exit => onExit(r, exit)));
       r.subscriptions.push(r.pty.onData(data => onData(r, data)));
       if (!preparingCurrent(r)) throw fail(r.failure || 'E_TERM_CONTEXT_CHANGED');
@@ -208,7 +211,7 @@ export function createTerminalOwnerBroker({ rendererUrl, io, context = () => '',
           acquiring: true, closing: false, ready: false, exited: true, cleaned: true, cleaning: false,
           cleanup: null, pty: null, killRequested: false, failure: null, exitCode: null, exitSent: false,
           buffer: [], bufferBytes: 0, readyTimer: null, prepareTimer: null, subscriptions: [],
-          attaching: null, abort: new AbortController(), done: deferred(), work: null };
+          attaching: null, inMode: null, abort: new AbortController(), done: deferred(), work: null };
         // Reservation is synchronous, BEFORE even a microtask of preparation.
         records.add(r); leases.set(lease, r); owner.targets.set(r.key, r);
         r.work = Promise.resolve().then(() => acquire(r));
@@ -243,6 +246,29 @@ export function createTerminalOwnerBroker({ rendererUrl, io, context = () => '',
       if (typeof data !== 'string' || data.length > TERM_WRITE_BYTES || Buffer.byteLength(data) > TERM_WRITE_BYTES || !data.isWellFormed()) return fail('E_TERM_BAD_ARGS');
       a.r.pty.write(data);
       return ok('sent'); // means forwarded, never a promise of agent consumption
+    } catch { return fail('E_TERM_LEASE'); }
+  }
+  /** The agent view's answer (agent-board.mjs): `data` typed as `write` types it, but only into a pane read to be in no
+   * mode. In tmux's copy mode the copy-mode table takes the keys (q is cancel), so `q1: Yes` would reach the agent as
+   * `1: Yes`, or not at all. The pane's mode is read first, on the viewer's own anchored target, synchronously, and the
+   * write follows with no turn of the event loop in between: only a read that says "no mode" types. In a mode,
+   * E_TERM_IN_MODE; a read that failed, or a viewer with no reader (a remote one), E_TERM_MODE_UNKNOWN; either way not
+   * one character is written. Never a cancel: leaving the mode is the person's key. What remains: tmux may take a key
+   * the person pressed into the scrollback between the read and the write; that window is the read's own few
+   * milliseconds, not closed. No line end and no control character: an answer goes on the input line, and the
+   * person's Enter sends it. The frame, the lease and readiness are checked first, as `write` checks them, so a
+   * document that holds no lease learns nothing about any pane. */
+  function answer(e, h, data) {
+    try {
+      const a = authorize(e, h); if (a.error) return fail(a.error);
+      const state = active(a.r); if (state) return fail(state);
+      if (typeof data !== 'string' || !data || data.length > 512 || !data.isWellFormed() || /[\x00-\x1f\x7f-\x9f]/.test(data)) return fail('E_TERM_BAD_ARGS');
+      let mode = null;
+      try { mode = a.r.inMode ? a.r.inMode() : null; } catch { mode = null; }
+      if (mode === true) return fail('E_TERM_IN_MODE');
+      if (mode !== false) return fail('E_TERM_MODE_UNKNOWN');
+      a.r.pty.write(data);
+      return ok('sent');
     } catch { return fail('E_TERM_LEASE'); }
   }
   function resize(e, h, cols, rows) {
@@ -308,7 +334,7 @@ export function createTerminalOwnerBroker({ rendererUrl, io, context = () => '',
     } catch { return fail('E_TERM_LEASE'); }
   }
   return {
-    register, revoke, open, ready, write, resize, close, attachments, rekey,
+    register, revoke, open, ready, write, answer, resize, close, attachments, rekey,
     invalidatePreparations() { for (const r of records) if (r.acquiring && r.spec.remote) closeResource(r, 'E_TERM_CONTEXT_CHANGED'); },
     dispose() {
       stopped = true; for (const o of owners) revoke(o.wc);
@@ -325,7 +351,7 @@ export function createTerminalOwnerBroker({ rendererUrl, io, context = () => '',
 /** Actual IPC adapters are shared by production and handler tests. All domain
  * operations resolve; one-way handlers deliberately discard safe refusals. */
 export function installTerminalHandlers(ipc, broker) {
-  for (const [channel, method] of [['open', 'open'], ['ready', 'ready'], ['close', 'close'], ['attachments', 'attachments']]) {
+  for (const [channel, method] of [['open', 'open'], ['ready', 'ready'], ['close', 'close'], ['attachments', 'attachments'], ['answer', 'answer']]) {
     ipc.handle(`term:${channel}`, async (event, ...args) => {
       try { return await broker[method](event, ...args); } catch { return fail('E_TERM_TRANSPORT'); }
     });

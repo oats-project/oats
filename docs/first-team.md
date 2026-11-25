@@ -25,6 +25,17 @@ with read access to the repositories below (your own credential helpers; the
 kernel never prompts), tmux, and an authenticated harness (Pi, Claude or
 Codex).
 
+Node 18 and 20 get
+`E_NODE_UNSUPPORTED` before any command runs, including `version` and
+capability commands. With `--json` the refusal is one failure envelope on
+stdout and exit 1; without it the message is on stderr. A Node too old to
+parse the entry (for example Node 12) can fail with a SyntaxError first.
+The npm package declares `engines.node: ">=22.5.0"` so npm warns at install time.
+
+Git 2.45 or later recommended (partial caches); an older Git works, with
+whole-tree fetches. `oats doctor` reports the version and cache support as
+information, without refusing an older Git.
+
 ```bash
 npm install -g @awebai/oats@latest
 node --version && tmux -V && oats version --json   # features must list workspace-v2

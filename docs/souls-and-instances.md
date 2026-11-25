@@ -209,6 +209,18 @@ the locked package versions with `oats instance upgrade`. Member modules and
 the soul body still require a new spawn. See
 [upgrading package modules](upgrading.md#moving-existing-homes-to-locked-package-versions).
 
+For a home on a session provider the kernel keeps its own copy of the
+home's modules outside the home, beside the home's receipt, and the receipt
+records the home's capability rows (its `composition`). The kernel runs such
+a home's hooks and commands from its own copy and reads their settings from
+the receipt, never from the home's copies or its `instance.json`. A retire
+removes that copy with the home, and `oats instance upgrade` exchanges it
+and rewrites the rows in one write of the receipt, so that a failed upgrade
+leaves the old copy and the old rows together, and `--undo` names the
+previous pair again. An interrupted upgrade of such a home is not resumed:
+its journal is in the home. See
+[What the kernel trusts in a provider home](capabilities.md#what-the-kernel-trusts-in-a-provider-home).
+
 ### The harness starts normally
 
 OATS is a skill contributor, not a skill sandbox. The harness (pi, Claude Code,
@@ -1550,6 +1562,51 @@ still name the old path. A child attached to one of the home's extra trees
 is handled the same way, tree by tree
 ([extra trees at retire](#extra-trees-at-retire)).
 
+#### Retiring a home on a session provider
+
+A home whose session runs on a
+[session provider](execution-targets.md#session-providers) (its
+`instance.json` records `backend` and `session`) is retired by a kernel that
+lists the feature `session-providers`, in this order:
+
+1. **The stop is recorded** (`stoppedAt` in the home's receipt): from then on
+   inspect answers stopped and every input to the home is refused
+   `E_SESSION_NOT_RUNNING`, so nothing restarts its session.
+2. **Inputs that were being sent are waited for.** An input already on its
+   way when the stop was recorded can have the provider restart the session,
+   and once the home is gone nothing could stop it. The retire waits for
+   those inputs to end (at most an input's timeout and 5 s). An input still
+   being sent after that does not hold the retire: its provider command is
+   ended, and the retire goes on, with a warning that names that input's
+   process. An input whose `oats` command was killed is not waited for: its
+   provider command is ended at once. (Every stop of a provider home waits
+   so, a plain `oats instance stop` too.)
+3. **The provider is asked to stop the session**, with the usual grace,
+   never escalated. A launch that was sent and never recorded (a command
+   killed while it launched) is settled the same way: the provider is asked
+   to stop whatever it runs for the home.
+4. **No process may work in the home**, whatever the provider answered: a
+   stop it confirms can still leave one behind (a harness that outlives its
+   server for a while), and there is no window whose absence would say
+   otherwise. With a process working in the home, or when that cannot be
+   told, the retire refuses `E_RUNTIME_QUIESCE_FAILED` at once, names the
+   processes and keeps the home; its stop stays recorded. A shell whose
+   working directory is in the home counts too, and one named in the
+   refusal may be your own: leaving the home's directory clears it.
+5. The retire hooks run (the provider's own archives its session there), the
+   work is preserved as for any home, and the home is removed.
+
+**When the provider cannot confirm the stop** (it fails, it does not answer,
+or its capability is no longer among the home's modules after an upgrade),
+the retire does not strand the home. It goes on when step 4 finds no
+process in the home, and its answer then carries a warning that the session
+was not stopped through its backend: archive or remove that session with the
+provider's own tooling.
+
+A retire's plan (`oats retire <instance> --plan`) reads the session through
+the provider, as `oats session inspect` does. A kernel without the feature
+refuses to retire such a home (`E_RUNTIME_ENDPOINT_UNKNOWN`) and keeps it.
+
 #### What `work/` is at retire
 
 The retire and its plan read what is at `<home>/work` once, by one rule
@@ -2076,10 +2133,31 @@ A start refuses a directory home whose home or `work/` is no longer the
 directory the spawn recorded (`directory home was exchanged` or `directory work
 was exchanged`), for example when another directory was renamed into its
 place. The spawn records each root's device, inode and birth time. A root is
-the same directory when its device and inode match. On macOS, which gives a
-volume a new device number each time it is mounted (every reboot), an equal
-inode is enough, provided the birth time also matches when one was recorded
-(a home spawned by a kernel that recorded none is judged by the inode alone).
+the same directory when its device and inode match. Some volumes get a new
+device number each time they are mounted, so it changes at every reboot: an
+APFS volume on macOS, a btrfs subvolume or an overlay mount on Linux. There a
+changed device number is accepted as follows:
+
+- **macOS:** an equal inode is enough, provided the birth time also matches
+  when one was recorded (a home spawned by a kernel that recorded none is
+  judged by the inode alone).
+- **Linux and other systems:** an equal inode and an equal recorded birth time
+  are both needed. A home whose spawn recorded no birth time (a kernel before
+  0.58.0) or a birth time of `0` (a filesystem that has none, as NFS often does)
+  still needs its device number to match. After it changes, the start refuses
+  with `directory home is on a volume whose device number changed since
+  spawn`: retire the instance and spawn it again. The rule is stricter than on macOS because btrfs
+  numbers the inodes of every subvolume from the same start, while Linux has
+  no call that sets a birth time, so a copy of a directory gets a new one.
+
+Accepting a changed device number lets through what a matching one refused:
+any filesystem mounted at the home's path that shows the recorded inode and
+birth time. A snapshot or a block-level copy of the volume that holds the
+home does, since it keeps both: that is the home itself, as it was when the
+snapshot was taken. So can a filesystem the home's own user mounts there,
+such as a FUSE mount that reports those values. That user can already rewrite
+the spawn record, so the check was never a defence against it
+([Trust model](trust-model.md#what-oats-does-not-promise)).
 
 ### `workspace` — cross-repo coordinator
 

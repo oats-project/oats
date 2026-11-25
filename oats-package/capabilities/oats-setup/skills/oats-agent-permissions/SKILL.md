@@ -4,8 +4,8 @@ description: >-
   Use when setting up or checking Claude Code's permissions for the OATS
   instances on a machine: which settings layer to write (the user settings of
   the Claude config a launch uses, never the home's `.claude/settings.json`),
-  auto mode (`permissions.defaultMode`, `--permission-mode auto` in a launch
-  configuration, the `autoMode` block), the narrow allow rules for the
+  auto mode (`permissions.defaultMode` in user settings, the `autoMode`
+  block), the narrow allow rules for the
   `oats` and `gh` reads, `oats spawn` and reading `aw` mail and chat (git
   is left to Claude's read-only set and the classifier), what stays gated, and
   the check that a spawned instance meets no permission prompt. Also for an
@@ -33,10 +33,10 @@ need a recent Claude Code, and the docs name the version.
 |---|---|---|
 | Managed settings (root-owned file, MDM, server-managed) | a human admin | The only layer that can forbid something on every session (`permissions.deny`, `permissions.disableAutoMode`). Name it to the admin; never write it. |
 | **User settings: `settings.json` in the Claude config the launch uses** | **you, approved by the person** | **This skill's layer:** `permissions.defaultMode`, `allow`, `ask`, `deny` and the `autoMode` block |
-| A launch configuration's `args` | you (`oats launch-config set`) | Optional: `--permission-mode auto` for the launches of one configuration only |
+| A launch configuration's `args` | you (`oats launch-config set`) | Refused at spawn with `E_LAUNCH_PROBE_UNSUPPORTED` while a capability requires a package for that harness; with oats.aweb, this covers every Claude launch |
 | The home's `.claude/settings.json` | oats.core, at every start | Never: it is capability-managed, and Claude ignores `defaultMode: "auto"` and `autoMode` in project files |
 | The home's `.claude/settings.local.json` | Claude's "don't ask again" | Per instance, gone at respawn: not a setup layer |
-| `--settings` | none | Not used: Claude honours only the last `--settings` on a command line, so OATS capabilities avoid it |
+| `--settings` | none | Refused in `args` by the same package check; Claude also honours only the last `--settings`, so capabilities avoid it |
 
 **Which Claude config a launch uses.** It is the `CLAUDE_CONFIG_DIR` in the
 `env` of the Claude launch configuration (`oats launch-config list --json`
@@ -51,6 +51,15 @@ Without one, it is the person's own `~/.claude`. Then the person chooses:
   (`/oats-host-delivery`, Choice 1) then target that directory too.
   Recommend this when the person also uses Claude for their own work.
 
+**Why not launch args.** The package probe, `claude plugin list --json`,
+cannot carry them, and args such as `--settings` can change which plugins
+load. OATS refuses any non-empty `args` when a capability has a harness
+package requirement, rather than verifying a different launch. The probe
+does carry `env`, including `CLAUDE_CONFIG_DIR`: use that to select the
+agents-only config, and put permissions in its user `settings.json`.
+A wrapper `executable` is the other supported route; both the probe and
+the launch run it.
+
 ## 2. Auto mode
 
 **What it does.** Each action goes through a fixed order:
@@ -62,10 +71,10 @@ Without one, it is the person's own `~/.claude`. Then the person chooses:
 After 3 blocks in a row, or 20 in a session, auto mode pauses and Claude
 prompts. In an OATS pane that shows as `waitingOnYou`.
 
-**How to choose it.** Either:
-- `"permissions": {"defaultMode": "auto"}` in that user settings file, for
-  every launch on that config; or
-- `--permission-mode auto` in one launch configuration's `args`.
+**How to choose it.** Put `"permissions": {"defaultMode": "auto"}` in
+that user settings file, for every launch on that config. For the agents
+only, choose their own `CLAUDE_CONFIG_DIR` through the launch
+configuration's `env` as above.
 
 From Claude Code 2.1.283, auto is already the starting mode of interactive
 sessions where it is available. Setting it makes the choice explicit. When
@@ -277,9 +286,9 @@ oats launch-config preview --soul S --json
 oats readiness --soul S --json
 ```
 
-- The preview's argv shows `--permission-mode auto` when a launch
-  configuration sets it. A running instance's pane shows auto mode in its
-  status line.
+- The preview names the intended launch configuration, and its preflight
+  checks must pass, including package verification.
+  A running instance's pane shows auto mode in its status line.
 - `CLAUDE_CONFIG_DIR=<config dir> claude auto-mode config` prints the
   effective `autoMode` with your entries. Drop the variable for `~/.claude`.
 

@@ -153,29 +153,28 @@ test("numberTabStrips writes only what changed, so a strip observer sees nothing
   assert.deepEqual(seen, []);
 });
 
-// The number never crowds out the name (shell.css .tab-trigger). jsdom has no layout, so the geometry is
-// proven live: the renderer's shell.css and theme.css in Chromium (dark palette, the shipped system UI face,
-// 12.5px, bold active tab; Playwright on a static page, 2026-10-23). The number is 6.6px wide at 11px
-// ui-monospace, after the trigger's 8px gap.
-//   - At the floor (168px tab, 117px trigger), "oats-desktop-developer-spawn-flow" (natural 213px) and
-//     "…-tabs-palette" show "oats-…awn-flow" / "oats-…palette" at exactly 102px and no number: it sits on the
-//     clipped second line (its top 55px into the 47px trigger), not a half-clipped digit.
-//   - At the floor, "README.md" (icon, 74px) and "A-reviewer" (dot, 60px) keep their numbers, centred (0px off).
-//   - Shrinking one long-named tab a pixel at a time: the number shows down to a 183px tab, where the name is
-//     102.4px, and hides at 182px, where the name takes the room back (116px); with a branch, 191px / 190px
-//     (the branch's own gap), and the branch wraps away at 175px. An artifact tab with a long name: 190px / 189px,
-//     its name 95px at the floor as before (the icon's lead).
-//   - With room, "oats-desktop-developer-ui" (natural 156.28px) shows whole beside its number: the tab is
-//     236.88px = 51 chrome + 15 dot + 156.28 + 8 + 6.6, so the number adds to the tab's natural width and takes
-//     nothing from the name. Tabs and triggers stay 47px tall in #tabbar and .group-tabbar; content is centred.
+// Slice 3d (the prototype's "1 name ●"): the number leads, the status dot follows the name, the branch comes last, and
+// the floor budgets all three, so at the floor the name gives way and the number and the dot stay. The DOM keeps its
+// order (dot, name, branch, number; the trigger's name is its aria-label); CSS `order` lays the line out. jsdom has no
+// layout, so the geometry is proven live: the renderer's shell.css and theme.css in the Desktop's own Chromium (dark
+// palette, the shipped system UI face, 12.5px, the active tab, 2026-11-22). The number is 6.1px wide at 11px in the
+// chrome's sans, before the trigger's 8px gap. The status slot is 12px since 2026-11-23 (the 7px dot centred in it, or
+// the 12px Needs input glyph), which added 5px to the floor and to a tab's natural width (Chromium, shell.css).
+//   - At the floor (181px tab, 137px trigger), "oats-desktop-developer-spawn-flow" keeps its name at 102.9px, the
+//     number and the dot on the first line (8px and 11px into the 28px trigger); with a branch, the branch wraps away.
+//   - At the floor, "A-reviewer" (59.8px) shows whole beside its number and its dot.
+//   - With room, "oats-desktop-developer-ui" (144.5px) shows whole: the tab is 222.7px = 44 chrome + 6.1 + 8 + 144.5 +
+//     8 + 12, the number and the status slot adding to its natural width. Tabs and triggers are 28px pills, centred in the bar.
 // This pins the rules that make that happen.
-test("the number gives way to the name: the trigger wraps onto a clipped line once the name is at its minimum", t => {
+test("the number leads, the dot follows the name, and the floor keeps both: the name gives way (slice 3d)", t => {
   const { doc, window } = fixture(t);
   const name = "oats-desktop-developer-spawn-flow";
   const { tabEl, triggerEl } = createTabChrome(doc, "n", name, false, { dot: "on", detail: "feat/x", tailAt: tabNameTailStart(name, "oats-desktop-developer"), tailEnd: name.length });
   doc.getElementById("tabbar").append(tabEl);
   const style = el => window.getComputedStyle(el);
-  assert.deepEqual([...triggerEl.children].map(el => el.className), ["tab-dot on", "tab-label split", "tab-detail", "tab-num"], "the number comes last");
+  assert.deepEqual([...triggerEl.children].map(el => el.className), ["tab-dot on", "tab-label split", "tab-detail", "tab-num"], "the DOM's order is unchanged");
+  const order = el => style(triggerEl.querySelector(el)).order;
+  assert.deepEqual([order(".tab-num"), order(".tab-label"), order(".tab-dot"), order(".tab-detail")], ["-1", "0", "1", "2"], "the line reads 1 · name · dot · branch");
   const trigger = style(triggerEl);
   assert.deepEqual([trigger.display, trigger.flexWrap, trigger.alignContent, trigger.alignItems, trigger.overflow, trigger.alignSelf],
     ["flex", "wrap", "flex-start", "center", "hidden", "stretch"], "what wraps lands on a second line the trigger clips");
@@ -186,13 +185,13 @@ test("the number gives way to the name: the trigger wraps onto a clipped line on
   assert.deepEqual(["content", "width", "height", "margin-right", "flex-shrink"].map(p => spacer.style.getPropertyValue(p)),
     ['""', "0px", "100%", "-8px", "0"], "zero wide, full height, its gap cancelled");
   const label = style(triggerEl.querySelector(".tab-label"));
-  assert.equal(label.flexBasis, "min(var(--tab-name-min), 100% - 22px)", "line breaking sees the name at its minimum at most");
+  assert.equal(label.flexBasis, "min(var(--tab-name-min), 100% - 37px)", "line breaking sees the name at its minimum at most");
   assert.deepEqual([label.flexGrow, label.flexShrink, label.maxWidth, label.minWidth], ["1000", "1", "max-content", "0px"],
     "it grows from there to its whole width, no further, ahead of the branch");
   const px = prop => Number.parseFloat(style(tabEl).getPropertyValue(prop));
-  const DOT_AND_GAP = 7 + 8, WIDEST_LEAD = 14 + 8; // the dot (or the Needs input glyph) and its gap; an artifact's icon and its gap
-  assert.equal(px("--tab-name-min"), px("--tab-min") - px("--tab-chrome") - DOT_AND_GAP,
-    "the name's minimum is what the floor budgets it (visual-rendering-regressions.test.mjs), so at the floor a long name hides the number");
+  const DOT_AND_GAP = 12 + 8, NUMBER_AND_GAP = 7 + 8, WIDEST_LEAD = NUMBER_AND_GAP + 14 + 8; // the status slot (the dot or the Needs input glyph) and its gap; the number and its; an artifact's icon and its gap after the number
+  assert.equal(px("--tab-name-min"), px("--tab-min") - px("--tab-chrome") - NUMBER_AND_GAP - DOT_AND_GAP,
+    "the name's minimum is what the floor budgets it (visual-rendering-regressions.test.mjs), so at the floor the number and the dot stay");
   assert.equal(Number(/100% - (\d+)px/.exec(label.flexBasis)[1]), WIDEST_LEAD,
     "the basis never exceeds the line after the widest lead, so the name itself never wraps");
   const detail = style(triggerEl.querySelector(".tab-detail"));

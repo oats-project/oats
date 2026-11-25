@@ -120,14 +120,14 @@ test("showStage routes a NAV_TABS name to openWorkspaceSouls(tab); showStageFocu
   assert.match(src, /const WORKSPACE_TAB_NAMES = \{ machines: "Machines", souls: "Souls", capabilities: "Capabilities", teams: "Teams", sources: "Setup" \};/);
 });
 
-// The nav sits under the list of workspaces, outside the foot; the foot's bar's controls (New agent and ?, slice 1;
-// "N need you" is sidebar-foot.mjs's) are wired by one loop over the foot's [data-action], which never reaches the nav,
+// The nav sits under the list of workspaces, outside the foot; the foot's ? and New agent at the roster's end (slice 3d;
+// "N need you" is sidebar-foot.mjs's) are wired by one loop over the foot's [data-action] and #sidebar-spawn, which never reaches the nav,
 // so a nav button runs its action once (its own listener), not twice. The shipped nav build and that wiring, run on
 // the shipped index.html.
 test("a nav button runs its stage action once; New agent and ? run their own once; the nav is under the list", () => {
   const src = shellSource();
   const block = src.slice(src.indexOf('const navEl = document.getElementById("nav");'), src.indexOf("// This is a chooser entry"));
-  assert.match(block, /for \(const button of document\.querySelectorAll\("#nav-foot \[data-action\]"\)\) \{\n  button\.addEventListener\("click", \(\) => runAction\(button\.dataset\.action\)\);\n\}/);
+  assert.match(block, /for \(const button of document\.querySelectorAll\("#nav-foot \[data-action\], #sidebar-spawn"\)\) \{\n  button\.addEventListener\("click", \(\) => runAction\(button\.dataset\.action\)\);\n\}/);
   assert.doesNotMatch(src, /createSettingsMenu|sidebar-settings/, "the settings cog is gone (slice 1)");
   assert.ok(!src.includes("#sidebar-tools"), "the tools row is gone");
   const dom = new JSDOM(readFileSync(join(PKG, "renderer", "index.html"), "utf8"));
@@ -146,8 +146,8 @@ test("a nav button runs its stage action once; New agent and ? run their own onc
     ran.length = 0; b.click();
     assert.deepEqual(ran, [b.dataset.action], `${b.dataset.view}: one run per click`);
   }
-  // The foot's actions, in the bar's order (slice 1): New agent (Quick Open), then ? (Keyboard shortcuts).
-  const foot = [...document.querySelectorAll("#nav-foot [data-action]")];
+  // The foot's action, ? (Keyboard shortcuts), and New agent (Quick Open) at the roster's end (slice 3d).
+  const foot = [...document.querySelectorAll("#nav-foot [data-action], #sidebar-spawn")];
   assert.deepEqual(foot.map((b) => [b.id, b.dataset.action]), [["sidebar-spawn", "app.quickOpenSouls"], ["sidebar-help", "app.shortcuts"]]);
   for (const b of foot) {
     for (let click = 1; click <= 2; click++) {
