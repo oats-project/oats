@@ -237,25 +237,32 @@ test("a schedule stored without YOLO on a provider that launches only in full mo
   }
 });
 
-test("a wake to a home on a session provider is edited as any wake, and the form says a home OATS stopped is started at the due minute, and one stopped with the host waits", async () => {
-  const bbHome = "/team/agents/reviewer/instances/bb-seat", saved = [];
-  const wake = { id: "nudge", kind: "wake", enabled: true, cron: "*/15 * * * *", tz: "UTC", home: bbHome, message: "Anything new?" };
-  const s = setup({ read: async () => ({ schedules: [wake], scheduler }), instances: [{ home, instance: "reviewer-seat" }, { home: bbHome, instance: "bb-seat", backend: "bb", running: false }],
-    mutate: async (path, body) => { assert.ok(path.startsWith("/api/schedules"), path); return scheduleRequest(body, { workspace, cli, instances: [{ home }, { home: bbHome }], invoke: async (bin, args) => { saved.push(args.spec); return { ok: true, result: {} }; } }); } });
-  try {
-    await tick(); s.rowAction("nudge", "edit").click(); await ticks();
-    const form = s.el.querySelector("form"), note = s.el.querySelector(".schedule-home-note");
-    assert.equal(sheetOf(s).hidden, false); assert.equal(form.elements.home.value, bbHome); assert.equal(s.el.querySelector(".schedule-save").disabled, false);
-    assert.equal(note.hidden, false);
-    assert.equal(note.textContent, "This home runs on bb, not in a terminal: the wake is sent as its session's input. A home OATS stopped is started at the wake's due minute, in a fresh conversation, and gets the message once it runs; one stopped with the host waits until it is resumed.");
-    assert.equal(form.elements.home.getAttribute("aria-describedby"), note.id);
-    change(s, form.elements.home, home); assert.equal(note.hidden, true, "a tmux home: nothing to add");
-    change(s, form.elements.home, bbHome); assert.equal(note.hidden, false);
-    change(s, form.elements.kind, "spawn"); assert.equal(note.hidden, true); change(s, form.elements.kind, "wake");
-    form.elements.task.value = "Anything new today?"; submit(s); await ticks();
-    assert.deepEqual(saved, [{ cron: "*/15 * * * *", tz: "UTC", enabled: true, kind: "wake", home: bbHome, message: "Anything new today?" }]);
-  } finally { s.cleanup(); }
-});
+// What a wake does with a stopped home on a session provider is the kernel's rule, which changed (feature
+// `wake-starts-provider-home`, KP-1): the form says the rule of the kernel it talks to, never the other's.
+const WAKE_NOTE = "This home runs on bb, not in a terminal: the wake is sent as its session's input. ";
+const WAKE_STARTS = "A home OATS stopped is started at the wake's due minute, in a fresh conversation, and gets the message once it runs; one stopped with the host waits until it is resumed.";
+const WAKE_WAITS = "A wake never starts a stopped home there: it waits, and is delivered once the home runs again.";
+for (const [kernel, features, sentence] of [["a kernel that lists wake-starts-provider-home", ["wake-starts-provider-home"], WAKE_STARTS], ["a kernel without the feature", [], WAKE_WAITS], ["a kernel that lists only other features", ["session-providers", "wake-hold"], WAKE_WAITS]]) {
+  test(`a wake to a home on a session provider is edited as any wake, and with ${kernel} the form says what that kernel does with a stopped home`, async () => {
+    const bbHome = "/team/agents/reviewer/instances/bb-seat", saved = [];
+    const wake = { id: "nudge", kind: "wake", enabled: true, cron: "*/15 * * * *", tz: "UTC", home: bbHome, message: "Anything new?" };
+    const s = setup({ cliFacts: { features }, read: async () => ({ schedules: [wake], scheduler }), instances: [{ home, instance: "reviewer-seat" }, { home: bbHome, instance: "bb-seat", backend: "bb", running: false }],
+      mutate: async (path, body) => { assert.ok(path.startsWith("/api/schedules"), path); return scheduleRequest(body, { workspace, cli, instances: [{ home }, { home: bbHome }], invoke: async (bin, args) => { saved.push(args.spec); return { ok: true, result: {} }; } }); } });
+    try {
+      await tick(); s.rowAction("nudge", "edit").click(); await ticks();
+      const form = s.el.querySelector("form"), note = s.el.querySelector(".schedule-home-note");
+      assert.equal(sheetOf(s).hidden, false); assert.equal(form.elements.home.value, bbHome); assert.equal(s.el.querySelector(".schedule-save").disabled, false);
+      assert.equal(note.hidden, false);
+      assert.equal(note.textContent, WAKE_NOTE + sentence);
+      assert.equal(form.elements.home.getAttribute("aria-describedby"), note.id);
+      change(s, form.elements.home, home); assert.equal(note.hidden, true, "a tmux home: nothing to add");
+      change(s, form.elements.home, bbHome); assert.equal(note.hidden, false); assert.equal(note.textContent, WAKE_NOTE + sentence);
+      change(s, form.elements.kind, "spawn"); assert.equal(note.hidden, true); change(s, form.elements.kind, "wake");
+      form.elements.task.value = "Anything new today?"; submit(s); await ticks();
+      assert.deepEqual(saved, [{ cron: "*/15 * * * *", tz: "UTC", enabled: true, kind: "wake", home: bbHome, message: "Anything new today?" }]);
+    } finally { s.cleanup(); }
+  });
+}
 
 // THE RACE (spec C1b, 4). An Edit that is still reading its soul's inspection holds the definition as the list had
 // it at the press. Whatever moves on meanwhile drops it, whether the read then answers or fails: no form is left
