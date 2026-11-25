@@ -90,6 +90,15 @@ test("team image verification proves credential groups isolated, with every muta
   assert.match(script, /OATS_CREDENTIAL_GROUPS_MUTANTS_CAUGHT/);
   assert.match(script, /container\/agent\/compose\.agent\.credentials\.yaml/, "the real Compose fragment");
   assert.match(script, /"--credential", group\.team/, "markers go through the receiver's credential mode");
+  // What it finds on the runner stays: a refused preflight removes nothing.
+  const found = job.steps.findIndex((s) => s.name === "Prove the credential groups proof leaves what it finds");
+  assert.ok(found > 0 && found < at, "before the proof itself");
+  for (const line of ["/etc/oats-login/receiver.json already exists on this runner", 'test "$(sudo sha256sum /etc/oats-login/receiver.json)" = "$found"',
+    "group 20003 already exists on this runner", 'test "$(getent group 20003 | cut -d: -f1)" = oats-found-group']) {
+    assert.ok(job.steps[found].run.includes(line), line);
+  }
+  assert.match(script, /def cleanup\(\):\n    \"\"\"Remove what this run created, and nothing it found/);
+  assert.match(script, /O_CREAT \| os\.O_EXCL \| os\.O_NOFOLLOW/, "the receiver configuration is created exclusively");
 });
 
 test("the shared acceptance fixture runs the image owner's acceptance against Compose", () => {

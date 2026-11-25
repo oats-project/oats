@@ -48,6 +48,8 @@ WAKE_SOCKET = "/state/home/.config/aw/wake/control.sock"
 # The documented operator route (docs/container.md, "OATS over SSH").
 RELAY = """node -e 'const s=require("node:net").connect(2222,"127.0.0.1");process.stdin.pipe(s);s.pipe(process.stdout);s.on("error",()=>process.exit(1));'"""
 ISOLATED = "DENIED"
+# What this run created, and so may remove: cleanup never touches what it found.
+CREATED = {"host_root": False, "config_dir": False, "config": False, "groups": [], "dirs": [], "networks": [], "projects": []}
 
 
 class Group:
@@ -142,6 +144,8 @@ def compose(group, d):
 
 def start(group, mutant):
     d = deployment(group, mutant)
+    if group.project not in CREATED["projects"]:
+        CREATED["projects"].append(group.project)
     run([*compose(group, d), "up", "-d", "--force-recreate", "--wait", "--wait-timeout", "120"], env=compose_env(group, d))
 
 
@@ -157,26 +161,39 @@ def provision():
         for key in (str(g.gid), g.unix_group):
             if run(["getent", "group", key], check=False).returncode == 0:
                 raise RuntimeError(f"group {key} already exists on this runner")
-        if g.dir.exists():
+        if g.dir.exists() or g.dir.is_symlink():
             raise RuntimeError(f"{g.dir} already exists on this runner")
+        if run(["docker", "network", "inspect", g.network], check=False).returncode == 0:
+            raise RuntimeError(f"network {g.network} already exists on this runner")
     if not HOST_ROOT.exists():
         sudo("install", "-d", "-o", "0", "-g", "0", "-m", "755", HOST_ROOT)
+        CREATED["host_root"] = True
     run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "oats-credential-groups-operator", "-f", SCRATCH / "operator"])
     write("resolv.conf", "nameserver 127.0.0.1\n")
     for g in GROUPS:
         sudo("groupadd", "-g", g.gid, g.unix_group)
-        sudo("install", "-d", "-o", "0", "-g", "0", "-m", "755", g.dir)
+        CREATED["groups"].append(g.unix_group)
+        sudo("mkdir", "-m", "755", "--", g.dir)
+        CREATED["dirs"].append(g.dir)
         sudo("install", "-d", "-o", g.uid, "-g", g.gid, "-m", "700", g.state)
         sudo("install", "-d", "-o", "0", "-g", g.gid, "-m", "750", g.login)
         sudo("install", "-o", "0", "-g", "0", "-m", "644", SCRATCH / "operator.pub", g.dir / "authorized_keys")
         sudo("install", "-o", "0", "-g", "0", "-m", "644", SCRATCH / "resolv.conf", g.dir / "resolv.conf")
         run(["docker", "network", "create", "--internal", "--ipv6=false", "--opt", "com.docker.network.bridge.gateway_mode_ipv4=isolated",
              "--subnet", g.subnet, g.network])
+        CREATED["networks"].append(g.network)
     # The uid mutant's cred-b: a provisioner that reused cred-a's UID for cred-b's state.
     sudo("install", "-d", "-o", A.uid, "-g", B.gid, "-m", "700", UID_MUTANT_STATE)
     config = {"credentials": {g.team: {"group": g.unix_group, "path": str(g.marker_path), "access": "read-only"} for g in GROUPS if g.credential}}
-    sudo("install", "-d", "-o", "0", "-g", "0", "-m", "755", RECEIVER_CONFIG.parent)
-    sudo("install", "-o", "0", "-g", "0", "-m", "644", write("receiver.json", json.dumps(config)), RECEIVER_CONFIG)
+    if not RECEIVER_CONFIG.parent.exists():
+        sudo("install", "-d", "-o", "0", "-g", "0", "-m", "755", RECEIVER_CONFIG.parent)
+        CREATED["config_dir"] = True
+    # Exclusive: a configuration that appeared since the preflight is refused, never replaced.
+    sudo("/usr/bin/python3", "-I", "-c", "import os, sys\n"
+         "fd = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)\n"
+         "os.fchmod(fd, 0o644)\nos.write(fd, sys.stdin.buffer.read())\nos.fsync(fd)\nos.close(fd)",
+         RECEIVER_CONFIG, input=json.dumps(config))
+    CREATED["config"] = True
 
 
 def receiver(group, action, value=""):
@@ -471,20 +488,26 @@ def main():
 
 
 def cleanup():
+    """Remove what this run created, and nothing it found. Answers whether any removal failed."""
     failed = False
     for g in GROUPS:
-        result = stop(g, None)
-        if result.returncode != 0 and "no such" not in result.stderr.lower():
-            print(f"cleanup: compose down {g.name}: {result.stderr.strip()}", file=sys.stderr)
-            failed = True
-        run(["docker", "network", "rm", g.network], check=False)
-        if g.dir.exists():
-            failed |= sudo("rm", "-rf", "--", g.dir, check=False).returncode != 0
-        if run(["getent", "group", g.unix_group], check=False).returncode == 0:
-            failed |= sudo("groupdel", g.unix_group, check=False).returncode != 0
-    failed |= sudo("rm", "-f", "--", RECEIVER_CONFIG, check=False).returncode != 0
-    sudo("rmdir", RECEIVER_CONFIG.parent, check=False)
-    sudo("rmdir", HOST_ROOT, check=False)
+        if g.project in CREATED["projects"]:
+            result = stop(g, None)
+            if result.returncode != 0:
+                print(f"cleanup: compose down {g.name}: {result.stderr.strip()}", file=sys.stderr)
+                failed = True
+    for network in CREATED["networks"]:
+        failed |= run(["docker", "network", "rm", network], check=False).returncode != 0
+    for directory in CREATED["dirs"]:
+        failed |= sudo("rm", "-rf", "--", directory, check=False).returncode != 0
+    for name in CREATED["groups"]:
+        failed |= sudo("groupdel", name, check=False).returncode != 0
+    if CREATED["config"]:
+        failed |= sudo("rm", "-f", "--", RECEIVER_CONFIG, check=False).returncode != 0
+    if CREATED["config_dir"]:
+        failed |= sudo("rmdir", RECEIVER_CONFIG.parent, check=False).returncode != 0
+    if CREATED["host_root"]:
+        failed |= sudo("rmdir", HOST_ROOT, check=False).returncode != 0
     run(["rm", "-rf", "--", SCRATCH], check=False)
     return failed
 

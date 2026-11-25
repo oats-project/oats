@@ -1375,8 +1375,10 @@ The job also runs the credential receiver's root-only checks
 fails it) and the credential groups proof
 (`test/agent-credential-groups-image.py`, [Credential groups](#credential-groups)).
 The proof creates its unix groups, its `/srv/oats-team` trees and
-`/etc/oats-login/receiver.json` on the runner, and removes them. It never
-replaces a receiver configuration it finds there.
+`/etc/oats-login/receiver.json` on the runner, and removes them. When the
+runner already holds one of them, it refuses before creating anything and
+removes nothing it found; CI checks this with an existing configuration and an
+existing group.
 
 The `publish-team-image` job in
 [Release](../.github/workflows/release.yml) waits for the existing `publish`

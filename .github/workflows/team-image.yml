@@ -116,6 +116,32 @@ jobs:
       - name: Prove the split agent/services boundary and services witness
         run: python3 test/agent-egress-boundary-image.py "$EGRESS_IMAGE" "$AGENT_IMAGE" split
 
+      # The proof refuses a runner that already holds what it would create, and
+      # leaves what it found exactly as it was: a receiver configuration, a group.
+      - name: Prove the credential groups proof leaves what it finds
+        run: |
+          sudo install -d -o root -g root -m 755 /etc/oats-login
+          printf '{"teams": {}}\n' | sudo tee /etc/oats-login/receiver.json > /dev/null
+          found=$(sudo sha256sum /etc/oats-login/receiver.json)
+          if python3 test/agent-credential-groups-image.py "$AGENT_IMAGE" > "$RUNNER_TEMP/found-config.log" 2>&1; then
+            echo 'The proof ran over an existing receiver configuration' >&2
+            exit 1
+          fi
+          grep -F '/etc/oats-login/receiver.json already exists on this runner' "$RUNNER_TEMP/found-config.log"
+          test "$(sudo sha256sum /etc/oats-login/receiver.json)" = "$found"
+          sudo rm -f /etc/oats-login/receiver.json
+          sudo rmdir /etc/oats-login
+          sudo groupadd -g 20003 oats-found-group
+          if python3 test/agent-credential-groups-image.py "$AGENT_IMAGE" > "$RUNNER_TEMP/found-group.log" 2>&1; then
+            echo 'The proof ran over an existing group' >&2
+            exit 1
+          fi
+          grep -F 'group 20003 already exists on this runner' "$RUNNER_TEMP/found-group.log"
+          test "$(getent group 20003 | cut -d: -f1)" = oats-found-group
+          test ! -e /etc/oats-login
+          test ! -e /srv/oats-team
+          sudo groupdel oats-found-group
+
       # Four container groups on one runner: shared plus three that each hold
       # one credential installed through the receiver. Every ordered pair is
       # proved isolated, then four mutant legs must each fail a named row.
