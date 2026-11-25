@@ -768,8 +768,12 @@ or external diff that the repository's own configuration names runs, and
 with `GIT_NO_LAZY_FETCH=1`: an object the repository lacks (a promisor
 repository's) is a read that fails, never a fetch through the remote, remote
 helper, ssh command or credential helper its configuration names. That
-protection needs Git 2.44 or later; an older Git ignores the variable, so it
-gets none, and nothing else changes. The
+protection needs Git 2.45 or later. Before reading objects, retire (including
+`--plan`) refuses a partial clone on older Git or when its version cannot be
+read, with `E_GIT_UNSUPPORTED`: nothing was done, and the home, worktree,
+branch and recovery are unchanged. A repository is a partial clone when its
+effective configuration sets `extensions.partialClone` or sets a remote
+`promisor` to true. Full clones need no version probe and work as before. The
 caller's repository-local Git variables are not passed: Git's own list
 (`git rev-parse --local-env-vars`: `GIT_DIR`, `GIT_WORK_TREE`,
 `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, the object directories, `GIT_CONFIG`,
