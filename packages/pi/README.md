@@ -54,7 +54,13 @@ from the same release tag). This bridge registers no operational tools. It only:
   reads it for a tmux home whose harness runs, counting only a boundary from
   the home's current start, and shows the row as `activity: "working"` or
   `"idle"` ([the row field](../../docs/desktop-cli-api.md#row-activity)). The
-  file is kernel-private, and read on no session provider's home. Between two
+  file is kernel-private, and read on no session provider's home. Only the
+  home's own pi writes it: a second pi in the home (a nested one, a
+  subagent's or a workflow agent's process) would end its runs while the
+  home's turn goes on, so the recording bridge marks its own process
+  environment (`OATS_PI_TURN_WRITER`, this package's alone), and a pi started
+  below it that finds the mark of a live process for this home writes
+  nothing. Between two
   attempts of a retried turn the row reads idle, for the length of pi's
   backoff;
 - journals compaction summaries and sends resume nudges when the active

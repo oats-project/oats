@@ -1096,7 +1096,10 @@ answer at that read: the optional `activity` key of its `inspect` or
 `inspectMany` result (`"working"`, `"idle"` or `null`), relayed onto the row
 wherever the provider answers the session present on a home OATS started,
 whatever its `running`, and never stored. A provider that sends no key reads
-`null`. A stopped home, a lost one, one being retired and one with
+`null`. A provider sends `activity` only to a kernel that lists
+`status-activity`: an earlier kernel reads an inspect result with the key as
+no answer, and the row as unreachable
+([capabilities.md](capabilities.md#inspect-and-inspectmany)). A stopped home, a lost one, one being retired and one with
 `outsideOats` carry none. The turn file a tmux row reads
 (`<home>/.oats/turn.json`) is never read on a provider home.
 
