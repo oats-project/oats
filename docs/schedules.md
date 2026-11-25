@@ -391,7 +391,9 @@ when the timer cannot reach it.
   `oats trigger status --json` answers `failures`, newest first and at most
   50, and `failuresTotal`, every failed spawn since the trigger was added.
   Both are in the trigger's state, so the total outlives the 50 rows and a
-  restart; removing the trigger and adding it again starts at zero.
+  restart. `oats trigger remove` and adding it again starts at zero; a
+  workspace trigger deleted from Git and declared again keeps its rows and
+  its total, as it keeps its fired keys.
   `lastError` stays what it was, the last failure of any kind.
   - A row is `{attempt, at, key, event, subject, number, code, message}`,
     plus `instance` and `home` when the spawn made a home before it failed

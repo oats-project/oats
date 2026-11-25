@@ -173,6 +173,23 @@ test("a workspace trigger's tick records its qualified id", async (t) => {
   assert.deepEqual([listed.id, listed.qualifiedId], [made.id, made.qualifiedId], "the ids the list gives");
 });
 
+test("a workspace schedule's run records its qualified id, as the list gives it", async (t) => {
+  const schedule = { kind: "oats-schedule", schemaVersion: 1, description: "Nightly work", runsOn: "kb-host", owner: "github.com/kb-bot", cron: "0 3 * * *", tz: "UTC", run: "spawn", agent: "dev", task: "Nightly work." };
+  const ws = v2Deployment({ t, souls: { dev: { soul: {} } }, local: { host: { name: "kb-host" }, automations: { trust: ["ws/nightly"] } }, files: { "oats-schedules/nightly.yaml": { yaml: schedule } } });
+  ws.env.PATH = `${ghBin}:${ws.env.PATH}`;
+  assert.equal(ws.cli(["sync", "--json"]).json().ok, true);
+  const { run } = await ws.inEnv(() => {
+    const path = process.env.PATH;
+    process.env.PATH = ws.env.PATH;
+    try { return S.runNow(ws.dep, "ws/nightly", { now: new Date("2026-09-26T03:00:00Z"), io: { noLaunch: true }, ctx: S.scopeAutomations(ws.dep, {}) }); } finally { process.env.PATH = path; }
+  });
+  assert.ok(run?.home, JSON.stringify(run));
+  const made = { kind: "schedule", id: "ws/nightly", qualifiedId: "ws/nightly" };
+  assert.deepEqual(record(run.home).automation, made);
+  const listed = ws.cli(["schedule", "list", "--json"]).json().result.schedules.find((x) => x.qualifiedId === "ws/nightly");
+  assert.deepEqual([listed.id, listed.qualifiedId], [made.id, made.qualifiedId], "a workspace schedule's id is qualified");
+});
+
 test("a deleted automation's row keeps the ids it was made with", async () => {
   await fx.inEnv(() => S.addSchedule(fx.dep, { id: "weekly", kind: "spawn", agent: "dev", task: "Weekly work.", cron: "0 3 * * 1", tz: "UTC" }));
   const child = spawn("by-weekly", ["--made-by-automation", "schedule:local/weekly"]);

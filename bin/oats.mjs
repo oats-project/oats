@@ -5332,7 +5332,7 @@ Usage:
                                             <home>/.oats/trigger-event.json, exposed through
                                             OATS_TRIGGER_EVENT_FILE and recorded in
                                             instance.json.trigger (docs/schedules.md)
-      --made-by-automation <kind>:<id>       internal, for automations: a schedule's or a trigger's
+      --made-by-automation <kind>:<qualifiedId>  internal, for automations: a schedule's or a trigger's
                                             tick names itself (schedule:<qualifiedId> or
                                             trigger:<qualifiedId>), recorded as
                                             instance.json.automation when this deployment has it.
