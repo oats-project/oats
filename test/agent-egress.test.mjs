@@ -4,7 +4,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { probeProxy } from "../container/agent/egress/health.mjs";
 import { superviseProxy } from "../container/agent/egress/supervisor.mjs";
-import { compilePolicy } from "../container/agent/egress/policy.mjs";
+import { createHash } from "node:crypto";
+import { compilePolicy, policyHash } from "../container/agent/egress/policy.mjs";
 import { assertComposeBoundary } from "../container/agent/egress/boundary.mjs";
 
 // Native Docker-inspect/network-inspect response shapes at the system boundary.
@@ -147,9 +148,9 @@ test("external source and model roles keep DNS at the proxy and use separate own
   assert.match(result.nginx,/server 10\.20\.0\.10:443;/,"internal targets remain pinned");
 });
 
-test("external policy refuses unscoped roles, missing resolvers and unsafe resolver addresses", () => {
+test("external policy refuses invalid roles, missing resolvers and unsafe resolver addresses", () => {
   for (const change of [
-    p=>{p.externalTargets.knowledge={origin:"https://api.github.com"};},
+    p=>{p.externalTargets.Knowledge={origin:"https://api.github.com"};},
     p=>{p.externalTargets.source.origin="https://example.com";},
     p=>{p.externalTargets.source.origin="https://github.com:444";},
     p=>{p.externalTargets.model.addresses=["1.1.1.1"];},
@@ -187,6 +188,184 @@ test("external resolution refuses mixed or deployment answers before opening any
   await assert.rejects(connectExternal(policy,"not-listed.invalid",{
     resolve4:async()=>{throw new Error("undeclared host must not resolve");},
   }),/external hostname refused/);
+});
+
+// Pinned compile digests and policy hashes of policies that name only source
+// and model: deployment-named roles must leave every one of them unchanged.
+test("source/model-only policies compile byte-identically and keep their policy hash", () => {
+  const cases={full:proxyPolicy(),external:externalPolicy()};
+  cases.source=externalPolicy();delete cases.source.externalTargets.model;
+  cases.model=externalPolicy();delete cases.model.externalTargets.source;
+  cases.subset=externalPolicy();cases.subset.roles=["aweb","registry"];delete cases.subset.humanOrigin;
+  for(const role of ["secrets","logs","signer"]) delete cases.subset.targets[role];
+  const pinned={
+    full:["5ea593b96ea1fd0fc17166f59931f8579b6869b77a54c282b2d9b7c97fa322d4","sha256:533fc95b519a74bc8dcf032cafb1f887007efb58e2c7603a1aebdd54f4e615ba"],
+    external:["dbe83cb45cfe8c9b1429eb1bd7643192c2b02e5fe3aa2114869c4f01e0938363","sha256:1dbbdcad725ff2c1844e250a200ede01c42cd12181ab2ceb3b437be7ddc41ab5"],
+    source:["3bde9ea0215203f4be785c29a9b5903ef47f465e4cac397ff45217c72331841f","sha256:77d3c7d90865c5fc15ba1404d6b3802faf698eb1c102a7aec8a834aa14bedab4"],
+    model:["4d5024ce7e46e293a62ec84ccaba5e1b7a3d1952bff0a6a1b970c25a629cca2d","sha256:325b5587fdf298dc29cf391cba9f76ef21fb1f8ee84018ef736dcd1945659e94"],
+    subset:["ef2349ee9e6e0669ec8b31476c3ecd0900ae9dd61a7f3d96850b7fbe83252d1f","sha256:cfcca7ee2b39cb80f4e50dfff3a4296bfa0d547bf1a4b95be32676abb843fe20"],
+  };
+  for(const [name,policy] of Object.entries(cases)) assert.deepEqual(
+    [createHash("sha256").update(JSON.stringify(compilePolicy(policy))).digest("hex"),policyHash(policy)],pinned[name],name);
+});
+
+function namedPolicy() {
+  const policy=externalPolicy();
+  policy.externalTargets["ms-login"]={origin:"https://login.microsoftonline.com"};
+  policy.externalTargets["ms-graph"]={origin:"https://graph.microsoft.com"};
+  return policy;
+}
+
+test("deployment-named external roles get exact SNI routes and ports after the fixed ones, in role order", () => {
+  const result=compilePolicy(namedPolicy());
+  assert.deepEqual(result.external,[
+    {role:"model",host:"api.anthropic.com",port:10444},
+    {role:"ms-graph",host:"graph.microsoft.com",port:10445},
+    {role:"ms-login",host:"login.microsoftonline.com",port:10446},
+    {role:"source",host:"github.com",port:10443},
+  ]);
+  for (const [role,host,port] of [["ms-graph","graph.microsoft.com",10445],["ms-login","login.microsoftonline.com",10446]]) {
+    assert.ok(result.zone.includes(`${host}. 30 IN A 172.30.0.2`));
+    assert.ok(result.nginx.includes(`    "${host}" external_${role};`));
+    assert.ok(result.nginx.includes(`  upstream external_${role} { server 127.0.0.1:${port}; }`));
+  }
+  assert.doesNotMatch(result.nginx,/resolver |proxy_ssl|ssl_certificate/);
+  const named=namedPolicy();delete named.externalTargets.source;delete named.externalTargets.model;
+  assert.deepEqual(compilePolicy(named).external.map(({role,port})=>[role,port]),[["ms-graph",10445],["ms-login",10446]],
+    "named ports do not depend on which fixed roles are present");
+  const sixteen=namedPolicy();
+  for (let index=0;index<12;index++) sixteen.externalTargets[`extra-${String(index).padStart(2,"0")}`]={origin:`https://extra-${index}.example.com`};
+  assert.deepEqual(compilePolicy(sixteen).external.map(route=>route.port).sort(),
+    Array.from({length:16},(_,index)=>10443+index),"sixteen roles use 10443-10458");
+});
+
+test("forge is reserved for exactly https://api.github.com with a named-order port", () => {
+  const policy=namedPolicy();policy.externalTargets.forge={origin:"https://api.github.com"};
+  assert.deepEqual(compilePolicy(policy).external.map(({role,port})=>[role,port]),
+    [["forge",10445],["model",10444],["ms-graph",10446],["ms-login",10447],["source",10443]]);
+  for (const target of [{origin:"https://example.com"},{origin:"https://api.github.com",port:1}]) {
+    const invalid=namedPolicy();invalid.externalTargets.forge=target;
+    assert.throws(()=>compilePolicy(invalid),{message:"egress policy external role origin is fixed"});
+  }
+});
+
+test("each external role refusal has its own stable message", () => {
+  const refused=(change,message)=>{
+    const policy=namedPolicy();change(policy);
+    assert.throws(()=>compilePolicy(policy),{message},JSON.stringify(policy.externalTargets));
+  };
+  // An own key, as JSON.parse creates it, even for "__proto__".
+  const named=(policy,name,target)=>Object.defineProperty(policy.externalTargets,name,{value:target,enumerable:true});
+  for (const name of ["","Ms-graph","1graph","-graph","ms_graph","ms graph","a".repeat(33),"__proto__","ms.graph"])
+    refused(p=>{named(p,name,{origin:"https://named.example.com"});},"egress policy external role names must match ^[a-z][a-z0-9-]{0,31}$");
+  const longest=namedPolicy();named(longest,"a".repeat(32),{origin:"https://named.example.com"});
+  assert.doesNotThrow(()=>compilePolicy(longest),"a 32-character role name is valid");
+  refused(p=>{for (let index=0;index<13;index++) p.externalTargets[`extra-${index}`]={origin:`https://extra-${index}.example.com`};},
+    "egress policy allows at most 16 external roles");
+  for (const targets of [{},[],null,"ms-graph"])
+    refused(p=>{p.externalTargets=targets;},"egress policy external targets must name at least one role");
+  for (const origin of ["https://Graph.microsoft.com","https://graph.microsoft.com/","https://graph.microsoft.com:443",
+    "https://graph.microsoft.com:8443","https://graph.microsoft.com/v1.0","https://user@graph.microsoft.com",
+    "https://user:pass@graph.microsoft.com","https://20.190.1.1","https://[::1]","https://1234","https://*.microsoft.com",
+    "https://graph.microsoft.com.","http://graph.microsoft.com","https://graph.microsoft.com?x","https://graph.microsoft.com#x",
+    " https://graph.microsoft.com","graph.microsoft.com","https://graph..microsoft.com","https://","https://bücher.example",42,null])
+    refused(p=>{p.externalTargets["ms-graph"].origin=origin;},"egress policy external origin must be exactly https://<lowercase DNS name>");
+  for (const target of [{origin:"https://graph.microsoft.com",addresses:["20.190.1.1"]},{},null,"https://graph.microsoft.com",[]])
+    refused(p=>{p.externalTargets["ms-graph"]=target;},"egress policy external target has an invalid field set");
+  refused(p=>{p.externalTargets["ms-graph"].origin="https://login.microsoftonline.com";},"egress policy external hostnames must be distinct");
+  refused(p=>{p.externalTargets.code={origin:"https://github.com"};},"egress policy external hostnames must be distinct");
+  refused(p=>{p.externalTargets["ms-graph"].origin="https://aweb.example.invalid";},"egress policy external hostname overlaps deployment origins");
+  refused(p=>{p.externalTargets["ms-graph"].origin="https://approve.example.invalid";},"egress policy external hostname overlaps deployment origins");
+});
+
+test("adding or removing an external role changes the policy hash", () => {
+  const base=namedPolicy(),without=namedPolicy();delete without.externalTargets["ms-graph"];
+  const added=namedPolicy();added.externalTargets.awid={origin:"https://api.awid.ai"};
+  assert.equal(new Set([base,without,added].map(policyHash)).size,3);
+  assert.equal(policyHash(namedPolicy()),policyHash(base),"the same role list hashes the same");
+});
+
+function hostedPolicy() {
+  return {roles:[],frontAddress:"172.30.0.2",privateIngressAddresses:[],deniedAddresses:["10.20.0.11"],targets:{},
+    authorityRecords:proxyPolicy().authorityRecords,
+    externalTargets:{"aweb-hosted":{origin:"https://app.aweb.ai"},awid:{origin:"https://api.awid.ai"},model:{origin:"https://api.anthropic.com"}},
+    externalResolverAddresses:["1.1.1.1"]};
+}
+
+test("a hosted-services policy routes only external roles and keeps local namespace authority", () => {
+  const result=compilePolicy(hostedPolicy());
+  assert.ok(result.zone.includes(". 30 IN SOA app.aweb.ai. hostmaster.egress.invalid."),"the SOA uses the first external host");
+  assert.ok(result.zone.includes(". 30 IN NS app.aweb.ai."));
+  assert.ok(result.zone.includes('_awid.team.example.invalid. 30 IN TXT "awid=v1;'));
+  assert.deepEqual(result.external.map(({role,port})=>[role,port]),[["aweb-hosted",10445],["awid",10446],["model",10444]]);
+  assert.doesNotMatch(result.nginx,/route_/);
+  const withoutRecords=hostedPolicy();delete withoutRecords.authorityRecords;
+  assert.doesNotThrow(()=>compilePolicy(withoutRecords),"authority records stay optional without registry");
+  const internal=hostedPolicy();internal.roles=["aweb"];internal.targets={aweb:proxyPolicy().targets.aweb};
+  internal.privateIngressAddresses=["10.20.0.10"];
+  assert.ok(compilePolicy(internal).zone.includes("_awid.team.example.invalid."),"external roles admit authority records without registry");
+});
+
+test("hosted-services refusals keep stable messages", () => {
+  const noExternal=hostedPolicy();delete noExternal.externalTargets;delete noExternal.externalResolverAddresses;
+  assert.throws(()=>compilePolicy(noExternal),{message:"egress policy empty roles require an external origin"});
+  const emptyExternal=hostedPolicy();emptyExternal.externalTargets={};
+  assert.throws(()=>compilePolicy(emptyExternal),{message:"egress policy empty roles require an external origin"});
+  const stray=hostedPolicy();stray.targets={aweb:proxyPolicy().targets.aweb};
+  assert.throws(()=>compilePolicy(stray),{message:"egress policy targets must match exactly the declared roles (default: five named services)"});
+  const human=hostedPolicy();human.humanOrigin="https://approve.example.invalid";
+  assert.throws(()=>compilePolicy(human),/egress policy has an invalid field set/);
+  for (const records of [[],null,Array(65).fill(proxyPolicy().authorityRecords[0])]) {
+    const invalid=hostedPolicy();invalid.authorityRecords=records;
+    assert.throws(()=>compilePolicy(invalid),{message:"egress policy requires provisioned namespace authority records"});
+  }
+  const internalOnly=proxyPolicy();internalOnly.roles=["aweb"];internalOnly.targets={aweb:internalOnly.targets.aweb};
+  delete internalOnly.humanOrigin;
+  assert.throws(()=>compilePolicy(internalOnly),/egress policy has an invalid field set/,"no external roles: authority records need registry");
+});
+
+test("health probes the first declared service, or the first external host when roles are empty", async () => {
+  for (const [policy,expected] of [[proxyPolicy(),"aweb.example.invalid"],[hostedPolicy(),"app.aweb.ai"]]) {
+    const asked=[];
+    assert.equal(await probeProxy({policy,connect:async()=>{},resolve4:async host=>{
+      asked.push(host);
+      if (host===expected) return [policy.frontAddress];
+      throw Object.assign(new Error("not found"),{code:"ENOTFOUND"});
+    }}),true);
+    assert.equal(asked[0],expected);
+  }
+});
+
+test("a named role's private, mixed, deployment or malformed DNS answers never reach a socket", async () => {
+  const {connectExternal}=await import("../container/agent/egress/external.mjs");
+  const policy=namedPolicy();policy.targets.aweb.addresses=["9.9.9.9"];
+  let calls=0;
+  for (const answers of [["10.0.0.1","192.168.1.1"],["172.16.0.1"],["127.0.0.1"],["20.190.1.1","10.0.0.1"],
+    ["10.0.0.1","20.190.1.1"],["172.30.0.2"],["9.9.9.9"],["10.20.0.11"],[],Array(9).fill("20.190.1.1")]) {
+    await assert.rejects(connectExternal(policy,"graph.microsoft.com",{
+      resolve4:async host=>{assert.equal(host,"graph.microsoft.com");return answers;},
+      connect:()=>{calls++;throw new Error("must not connect");},
+    }),/external destination refused/,JSON.stringify(answers));
+  }
+  assert.equal(calls,0);
+  const {PassThrough}=await import("node:stream");const stream=new PassThrough();let options;
+  assert.equal(await connectExternal(policy,"graph.microsoft.com",{resolve4:async()=>Array(8).fill("20.190.1.1"),
+    connect:value=>{options=value;queueMicrotask(()=>stream.emit("connect"));return stream;}}),stream);
+  assert.deepEqual(options,{host:"20.190.1.1",port:443,family:4});
+  stream.destroy();
+});
+
+test("a named role's connector listens on its assigned loopback port and resolves its own host", async () => {
+  const {startExternalConnectors}=await import("../container/agent/egress/external.mjs");
+  const {createConnection}=await import("node:net");
+  let asked;const started=new Promise(resolve=>{asked=resolve;});
+  const connectors=await startExternalConnectors(namedPolicy(),{
+    resolve4:host=>{asked(host);return new Promise(()=>{});},
+    connect:()=>{throw new Error("must not connect");},say:()=>{},
+  });
+  const client=createConnection({host:"127.0.0.1",port:10446});client.on("error",()=>client.destroy());
+  try { assert.equal(await started,"login.microsoftonline.com"); }
+  finally { client.destroy();await connectors.close(); }
 });
 
 test("external connector passes only the validated IPv4 literal to the socket boundary", async () => {

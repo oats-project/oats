@@ -1,4 +1,4 @@
-/** Fixed-role TLS byte connectors behind nginx's exact SNI map. The resolver
+/** Per-role TLS byte connectors behind nginx's exact SNI map. The resolver
  * is never agent-facing; only an already validated IP reaches a TCP socket. */
 import { Resolver } from "node:dns/promises";
 import { createConnection, createServer } from "node:net";
