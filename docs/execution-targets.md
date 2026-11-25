@@ -1886,10 +1886,28 @@ oats session attach --home /abs/home --detach-key 'C-\'
   the agent's, still refuse before input. The text goes to the agent's pane
   (`paneId`), even when the person's focus is in another pane of the window.
 
-  Input takes no hold: it types whether or not a claim is set, and its Enter
-  can answer an open dialog, so don't run it from a script or an agent at a
-  session that may show one ([A held wake](schedules.md#a-held-wake) is the
-  scheduled path's).
+  One input is sent at a time per home: an input holds the home's input lock
+  from its paste to the end of its Enter's observation, so two inputs at the
+  same moment are two messages, each with its own Enter. One that waits more
+  than 8 seconds is refused `E_SESSION_INPUT_FAILED`, nothing sent; a lock
+  whose holder died is taken over, and the text that holder pasted and never
+  submitted gets its own Enter before the next input's paste. The lock does
+  not cover keys typed in an attached terminal, another tool typing into the
+  pane, or a session provider's home
+  ([Input](desktop-cli-api.md#input)).
+
+  While the session holds a `permission` claim, input is refused
+  `E_SESSION_PROMPT_OPEN` and nothing is typed (feature
+  `session-input-permission-refusal`): its Enter would answer the prompt.
+  Answer it in the agent's terminal or a client's prompt card. A claim
+  that outlived its dialog (a refused one leaves it) refuses like a live
+  one until the session's next prompt or `oats instance waiting clear`;
+  the refusal says how. Input takes
+  no other hold: it types whatever other claim is set, and its Enter can
+  answer any other open dialog (a question, a startup dialog with no claim,
+  a permission prompt that opens right at the paste), so don't run it from a
+  script or an agent at a session that may show one
+  ([A held wake](schedules.md#a-held-wake) is the scheduled path's).
 
   Before Enter, a size-based floor (200 ms plus 3 ms per KiB) and read-only
   settling polls share one **monotonic 2-second observation budget**, starting

@@ -196,6 +196,7 @@ see the [official catalog](official-catalog.md) for current pins.
 | `provider-outside-oats` | a harness that runs in a provider home an operator stopped is reported: `outsideOats: {code: "running-outside-oats", backend, message}` on that home's `oats status --json` row and its `oats server roster --json` row, present only when it applies: a home an operator stopped ([`outsideOats`](#row-outside-oats)). The row's `running`, `runtimeState` and `sessionEnd` stay what OATS recorded. A home stopped with the host whose harness runs again has no key: it reads running, and the sweep adopts it. The provider's `stop` input carries `reason: "host"` for every stop of a recorded session after which the home stays stopped with the host: the host shutdown's, the stop after a failed resume notice of such a home, and the stop after an input that crossed a stop with the host; never a stop with `endpoint: null`. A row from a kernel or a host without the feature never carries the key, so its absence says nothing there. `oats instance upgrade` refuses such a home (`E_SESSION_RUNNING`). |
 | `launch-model-and-check-warnings` | a session provider's `check` is handed the model of the launch that is planned, `launch.model`, present only when the launch names one; and what a `ready` check warned of is relayed, one string per warning, in the `warnings` of `oats spawn --preview`, `oats launch-config preview --home`, and the answers of `oats spawn`, `oats session start` and `oats session restart` ([Relayed check warnings](#relayed-check-warnings)). The lines are text for a person: show them, never parse them. A kernel without the feature hands no model and drops those warnings; nothing else differs, so a client needs no gate, and a provider gates on it what it can judge only from the model | |
 | `status-activity` | the turn fact: `activity` (`"working"`, `"idle"` or `null`) on `oats status --json` instance rows and `oats server roster --json` rows, present only on a row whose session is there ([`activity`](#row-activity)). A tmux row reads it from the turn boundaries its harness's hooks write (oats.core for Claude Code, `@awebai/oats-pi` for pi; a Codex row reads `null`); a provider row carries its provider's answer, the optional `activity` key of `inspect` and `inspectMany` ([capabilities.md](capabilities.md#inspect-and-inspectmany)). Display only: no act reads it. A row from a kernel or a host without the feature never carries the key, so its absence says nothing there. |
+| `session-input-permission-refusal` | `oats session input` to a tmux home whose session holds a `permission` claim is refused `E_SESSION_PROMPT_OPEN`, with nothing typed, as a session provider refuses it ([Input](#input)). On a kernel without the feature that input is typed and its Enter answers the prompt, so read the code as "a prompt is open, nothing was sent" for a tmux home only where the feature is listed | |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
 `workspaceStatusApi: 1`, `capabilitiesApi: 1`, the `oats souls` document's
@@ -5202,9 +5203,11 @@ permission prompt, a question, an agent asking for an answer) says so through
 a producer's claim. **A claim authorizes nothing; it may only withhold an
 automated keystroke.** A scheduled wake holds while the home has a live
 `permission`, `question` or unknown-reason claim ([A held
-wake](schedules.md#a-held-wake), feature `wake-hold`), and nothing else in the
-kernel acts on a claim. In particular `oats session input` behaves exactly as
-before whether or not a claim is set. `attention` never marks a screen an Enter
+wake](schedules.md#a-held-wake), feature `wake-hold`), and `oats session
+input` is refused while a tmux home has a live `permission` claim
+([Input](#input), feature `session-input-permission-refusal`). Nothing else in
+the kernel acts on a claim: `oats session input` types whatever other claim is
+set. `attention` never marks a screen an Enter
 answers: a producer that wants one uses `question`, and review catches that.
 
 ```text
@@ -7954,10 +7957,99 @@ on the execution host, including when the wake broker invokes it there;
 `--server` is not supported for input. The adapter sends one literal
 bracketed paste and one Enter after the existing input/authority/target checks.
 
-**Session input takes no hold.** It types whether or not a claim is set, and
-its Enter can answer an open dialog, so don't run it from a script or an agent
-at a session that may show one. A person who can see the screen is its intended
-caller.
+**One input at a time per tmux home.** An input holds the home's input lock
+from before its paste to the end of its Enter's observation, so two inputs
+sent at the same moment are two messages, each with its own Enter, in the
+order they took the lock. (Before, the second paste could land ahead of the
+first Enter: the agent got both texts as one message, and both callers read
+`verified: true`.)
+
+- An input that finds another being sent waits for it, at most 8 seconds,
+  and is then refused `E_SESSION_INPUT_FAILED` with a message that ends
+  `nothing was sent`: no paste, no key. Send it again. A scheduled wake
+  keeps such a delivery pending, as for every refused input.
+- The lock frees itself when its holder dies: a holder that was killed is
+  taken over by the next input, never waited for. A lock that cannot be read
+  or taken over refuses at once, the same way, naming the file.
+- The lock, and the kernel's note of a paste with no Enter yet, are files
+  under the kernel's state directory
+  (`$OATS_HOME_DIR/session-resume/session-inputs`, `~/.oats` by default). An
+  input from a process that may not write there (a sandbox that keeps
+  `~/.oats` read-only) is refused `E_SESSION_INPUT_FAILED`, nothing sent.
+- **Text pasted and never submitted.** An input that is killed between its
+  paste and its Enter (or whose Enter fails) leaves its text in the agent's
+  input line. The next input to that home submits that text first, with an
+  Enter of its own, as the message it was, and then pastes its own: the
+  leftover is never run into the new message. **So a crashed sender's text
+  may reach the agent at the next input**, late; its sender got no answer
+  and may send it again. That Enter is an input's Enter like any other:
+  sent only under the lock, and never while a permission prompt is open
+  (below), when the whole input is refused. It is sent only while the text
+  is still taken to be in the line: the agent's pane runs the same process
+  as at the paste, and the paste is less than 2 minutes old. Otherwise no
+  key is sent for it (the session was restarted and the line is gone, tmux
+  names no process for the pane, or a person at the terminal may have sent
+  or deleted the text since), and text still in the line then goes with the
+  next message, as before this lock. The kernel keeps its note of such a
+  paste on a best effort: a note it cannot write or remove never fails an
+  input.
+- **What the lock does not cover:** keys a person types in an attached
+  terminal (`oats session attach`, a client's terminal), another tool that
+  types into the pane itself, without `oats session input`, and a home on a
+  session provider, whose inputs the provider orders itself. It serializes
+  the kernel's `session input` alone: a scheduled wake's delivery, and the
+  aweb host wake broker's, which delivers through this command.
+  Text a person has typed and not sent is submitted by an input's Enter, as
+  before.
+
+**Never over a permission prompt** (feature
+`session-input-permission-refusal`). While a tmux home's session holds a
+claim with reason `permission` ([Waiting on you](#waiting-on-you)), an input
+is refused `E_SESSION_PROMPT_OPEN` and nothing is typed, no paste and no
+Enter, as a session provider refuses it: the Enter would answer the prompt,
+and approve a command nobody saw. There is no override. The person answers
+the prompt where they can see it, in the agent's terminal (`oats session
+attach --home <abs>`) or through their client's own prompt card, and the
+input is sent again.
+
+**A permission claim that outlived its dialog refuses like a live one.** A
+claim has no expiry ([A claim can outlive its dialog](schedules.md#a-held-wake)),
+and a refused dialog is the usual case: Claude Code fires no hook on Esc or
+"No", so the claim stays until the session's next prompt. Every input is
+refused until then. The refusal's message says so and prints the way out:
+send a prompt in the agent's terminal, or `oats instance waiting clear
+--producer <producer> --home <abs>`.
+
+Who meets the refusal: whatever runs `oats session input`. That is an agent
+or a script; a client that sends input through the kernel; and a messaging
+layer that delivers through it, such as the aweb host wake broker, whose
+mail and chat deliveries are refused the same way. What a caller does with
+the refusal (`E_SESSION_PROMPT_OPEN`, or the wait's
+`E_SESSION_INPUT_FAILED`) is its own: both say nothing was sent, so sending
+again later is safe; the kernel does not say what the aweb broker does with
+one (see oats.aweb). A scheduled
+wake already holds while a claim stands and does not reach it; should a
+prompt open right then, its delivery stays pending, as for every refused
+input. A trigger sends no input (it spawns). `--server` does not route
+input, so no server route meets it. The Desktop and the TUI do not call
+`session input`.
+
+**Session input takes no other hold.** It types whatever other claim is set,
+and its Enter can answer an open dialog, so don't run it from a script or an
+agent at a session that may show one:
+
+- a `question` claim: the input is typed. Where the dialog takes text
+  (Claude's AskUserQuestion), the text is the answer; where it takes a key
+  (pi's extension confirm), the Enter picks its default option and the text
+  is lost;
+- an `attention` claim is the agent asking for input: typing is the answer;
+- a dialog that raises no claim (Claude's folder trust at startup) is
+  answered by the Enter;
+- a permission prompt that opens between the kernel's read of the claims and
+  its paste is answered too. The read is made under the home's input lock,
+  right before the paste, which narrows that moment and cannot close it;
+- claims that cannot be read are not treated as a permission: the input is
+  typed.
 
 `submitted` means terminal-operation success, **not model acceptance or
 processing**. `verified` is display observation only: `true` means a bounded
@@ -7973,7 +8065,8 @@ timeouts and sleeps use the remaining budget. Observation failures produce
 command timeouts and `E_SESSION_INPUT_FAILED` errors remain; the observation
 budgets do not bound those commands, failed buffer cleanup or OS scheduling.
 No busy-pane submission or exactly-once guarantee is provided. Generic command
-errors can still be uncertain after partial effects.
+errors can still be uncertain after partial effects; the two refusals above
+(a wait past its bound, a permission prompt) say `nothing was sent`.
 
 The Desktop terminal's authorized PTY writes are a separate stream; they do not
 consume this `verified` field. The Pi bridge does not interpret this result.
