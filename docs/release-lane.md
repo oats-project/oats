@@ -418,8 +418,8 @@ native module fails that leg.
 
 CI launches the packaged window on the Linux leg only: `release.yml` and
 `build-installers.yml` run the smoke once more with its launch phase, under
-xvfb, and a window that does not reach the shell fails the leg. That is the
-unpacked Linux build, not an installed AppImage or DEB. CI does **not** gate
+xvfb, and a window that does not reach the shell fails the leg. The GUI phase
+uses the AppImage's extract-and-run launch. CI does **not** gate
 the macOS launch: ad-hoc-signed, non-notarized Electron apps do not
 have a reliable interactive windowserver in headless CI. The lane does not
 launch the window: see
