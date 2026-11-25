@@ -139,8 +139,8 @@ test("the records' and the answers' rules: an endpoint, a receipt's runtime, an 
   ]) assert.equal(providerRuntimeOf(broken), undefined, what);
 
   const open = { label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_1" };
-  assert.deepEqual(judgeInspect({ present: true, state: "unknown", running: null, open }), { present: true, state: "unknown", running: null, open });
-  assert.deepEqual(judgeInspect({ present: false, state: "stopped", running: false }), { present: false, state: "stopped", running: false, open: null });
+  assert.deepEqual(judgeInspect({ present: true, state: "unknown", running: null, open }), { present: true, state: "unknown", running: null, open, activity: null });
+  assert.deepEqual(judgeInspect({ present: false, state: "stopped", running: false }), { present: false, state: "stopped", running: false, open: null, activity: null });
   for (const [what, answer] of [
     ["a missing key", { present: true, state: "unknown" }], ["present that is no boolean", { present: "yes", state: "unknown", running: true }],
     ["a state outside the words", { present: true, state: "idle", running: null }], ["running that is a string", { present: true, state: "unknown", running: "true" }],
