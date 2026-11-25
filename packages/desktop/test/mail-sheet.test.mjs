@@ -403,3 +403,48 @@ test('an identity with an error AND its own messages shows both; unreadableConve
   one.sheet.open(row, 'ws-1'); await settle();
   assert.equal(one.one('[data-mail-identity="product"] p').textContent, "Mail from product: 1 conversation can't be read");
 });
+
+// #2138, decision 7162099672: an identity entry may carry an empty alias and identity only beside an error. The shape is
+// oats.aweb's (1.48.0 and later, mail-read.mjs identityRows: `alias: s.self?.alias ?? ''`), as the oats-bb plugin's
+// fixture mail-identity-missing.json records it: empty strings, never absent and never null.
+const identityMissing = (edit = () => {}) => fixture(d => {
+  d.identities[1] = { team: 'product', alias: '', identity: '', primary: false, error: 'identity-missing' };
+  d.messages = d.messages.filter(m => m.team === 'default'); d.conversations = [{ id: 'c-1', partial: null }];
+  d.hasMore = false; d.nextCursor = null;
+  edit(d);
+});
+
+test('an identity its provider could not read: an empty alias and identity are admitted only beside an error', () => {
+  const decoded = mailAnswer(identityMissing());
+  assert.ok(decoded, 'the recorded shape decodes');
+  assert.deepEqual(decoded.identities[1], { team: 'product', alias: '', identity: '', primary: false, error: 'identity-missing' });
+  assert.deepEqual(decoded.messages.map(m => m.id), ['m-3'], 'the rest of the mail');
+  // The rule names no provider's codes: any error admits it, and either value alone may be empty.
+  assert.ok(mailAnswer(identityMissing(d => { d.identities[1].error = 'some-new-slug'; })), 'an error the client does not know');
+  assert.ok(mailAnswer(identityMissing(d => { d.identities[1].identity = 'did:aw:dev-1-product'; })), 'an empty alias alone');
+  assert.ok(mailAnswer(identityMissing(d => { d.identities[1].alias = 'dev-1'; })), 'an empty identity alone');
+  for (const [why, edit] of [
+    ['an empty alias with error: null', d => { d.identities[1] = { ...d.identities[1], identity: 'did:aw:dev-1-product', error: null }; }],
+    ['an empty identity with error: null', d => { d.identities[1] = { ...d.identities[1], alias: 'dev-1', error: null }; }],
+    ['both empty with error: null', d => { d.identities[1].error = null; }],
+    ['an empty error is no error', d => { d.identities[1].error = ''; }],
+    ['an empty team, with an error', d => { d.identities[1].team = ''; }],
+    ['an empty team, with no error', d => { d.identities[0].team = ''; }],
+    ['an alias that is null, not empty', d => { d.identities[1].alias = null; }],
+    ['an identity that is null, not empty', d => { d.identities[1].identity = null; }],
+    ['an alias absent', d => { delete d.identities[1].alias; }],
+    ['a message party is unchanged: an empty alias', d => { d.messages[0].from.alias = ''; }],
+    ['a message party is unchanged: an empty identity', d => { d.messages[0].to.identity = ''; }],
+  ]) assert.equal(mailAnswer(identityMissing(edit)), null, why);
+});
+
+test("the sheet says the unreadable identity's team can't be read, from its team and error alone, and shows the rest", async t => {
+  const u = rig(t, { answer: () => identityMissing() });
+  u.sheet.open(row, 'ws-1'); await settle();
+  const box = u.one('[data-mail-identity="product"]');
+  assert.equal(box.textContent, "Mail from product can't be read: identity-missing — its identity is missing from the agent's home");
+  assert.equal(u.all('[data-mail-identity]').length, 1, 'said once');
+  assert.deepEqual(u.all('.mail-item').map(li => JSON.parse(li.dataset.mailKey)), [['default', 'm-3']], 'the rest of the mail');
+  assert.equal(u.one('.mail-sheet-empty').hidden, true);
+  assert.ok(!u.all('.mail-sheet-problem').some(p => p.textContent.includes(MAIL_WORDS.unreadable)), 'never the whole answer unreadable');
+});

@@ -1137,6 +1137,19 @@ Its `result`:
   names the missing ones in `unreadableConversations` (conversation ids,
   present only with that code, the list's tail dropped first if the 256 KiB
   bound needs it, so it may name fewer than failed, or none).
+- **An identity that couldn't be read.** In an `identities[]` entry,
+  `alias` and `identity` may be `""` only where `error` is non-null: the
+  provider couldn't read who that identity is. With `error: null` both are
+  non-empty, and an answer with an empty one is unreadable whole. `team` is
+  non-empty always. The rule names no provider's codes and holds for every
+  messaging provider; `error` stays the provider's opaque word. A client
+  words such an entry from `team` and `error` alone ("Mail from `<team>`
+  can't be read"), shows the rest of the mail, and never addresses, sends
+  from, replies as or matches messages to an empty `alias` or `identity`.
+  Message parties (`from`, `to`) are unchanged: their `alias` and `identity`
+  are non-empty always. `mailApi` stays 1: the rule widens what a reader
+  admits. A Desktop released before the rule refuses the whole answer when an
+  entry has an empty `alias` or `identity`, and upgrading it mends that.
 - **Whole failures.** The operation fails whole, with no answer, in two
   cases: `E_MAIL_UNREADABLE` when no identity can be read
   (`details.identities` holds the rows), and `E_MAIL_TOO_LARGE` when even an
