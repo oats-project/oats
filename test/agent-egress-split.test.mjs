@@ -83,3 +83,45 @@ for (const [label, mode] of [["empty output", { stdout: "" }], ["unexpected outp
   classifyDocker(t, mode);
   assert.throws(() => tcpFromNetwork(classifyOptions), error => { assert.equal(error.receipts.length, 1); return true; });
 });
+
+// The in-container body with doubled kernel/network observations, as in
+// agent-egress.test.mjs; the services-host tuples are outside deniedAddresses.
+function runtimeCase() {
+  const policy = {roles:["aweb"],frontAddress:"172.30.0.2",privateIngressAddresses:[],deniedAddresses:[],
+    targets:{aweb:{origin:"https://aweb.example.invalid",addresses:["93.184.215.14"]}}};
+  const plan = {policy,uid:20001,gid:20001,allowedPaths:{aweb:"/ready"},gateway:{address:"10.20.0.1",port:40000},
+    remoteEndpoints:[{role:"postgres",address:"93.184.215.14",port:5432},{role:"redis",address:"93.184.215.14",port:6379}]};
+  const classified = [];
+  const io = {
+    identity:()=>({uid:20001,gid:20001}),
+    fs:{readdirSync:()=>[],readFileSync:path=>path==="/etc/resolv.conf"?"nameserver 172.30.0.2\n":"CapEff:\t0000000000000000\nNoNewPrivs:\t1\n",existsSync:()=>false},
+    resolver:{setServers:()=>{},resolve4:async host=>{
+      if(host==="aweb.example.invalid")return["172.30.0.2"];
+      throw Object.assign(new Error("NXDOMAIN"),{code:"ENOTFOUND"});
+    }},
+    getStatus:async()=>200,tlsReachable:async()=>false,tcpReachable:async()=>false,
+    tcpClassify:async(address,port)=>{classified.push(address+":"+port);return "DENIED";},
+  };
+  return {plan,io,classified};
+}
+
+test("the runtime body checks schema-2 tuples DENIED without requiring deniedAddresses membership", async () => {
+  const {probeRuntime} = await import("../container/agent/egress/probe-runtime.mjs");
+  const {plan,io,classified} = runtimeCase();
+  assert.equal(await probeRuntime(plan,io),true);
+  assert.deepEqual(classified,["93.184.215.14:5432","93.184.215.14:6379"]);
+  for (const answer of ["CONNECTED","ERROR EACCES","","denied"])
+    await assert.rejects(probeRuntime(plan,{...io,tcpClassify:async()=>answer}),/isolated agent did not get DENIED from a services-host backend/);
+  for (const remoteEndpoints of [[], [plan.remoteEndpoints[0]], [plan.remoteEndpoints[0],{...plan.remoteEndpoints[0]}],
+    [plan.remoteEndpoints[0],{...plan.remoteEndpoints[1],address:"not-ip"}], [plan.remoteEndpoints[0],{...plan.remoteEndpoints[1],port:0}]])
+    await assert.rejects(probeRuntime({...plan,remoteEndpoints},io),/remote backend endpoint inventory is invalid/);
+  await assert.rejects(probeRuntime({...plan,deniedBackends:plan.remoteEndpoints},io),/exactly one backend inventory/);
+});
+
+test("the emitted runtime program carries the classify body for schema-2 tuples", async () => {
+  const {runtimeProgram} = await import("../container/agent/egress/probe-runtime.mjs");
+  const {plan} = runtimeCase();
+  const program = runtimeProgram(plan);
+  assert.match(program,/const tcpClassify=\(async function tcpClassify/);
+  assert.match(program,/remoteEndpoints/);
+});
