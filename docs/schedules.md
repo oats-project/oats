@@ -169,7 +169,10 @@ refuses the key on a trigger.
   one disposable instance of `agent` with the options `oats spawn` takes.
   `agent` is resolved as `oats spawn <agent>` resolves it (a member or
   package soul the workspace offers, see `oats souls`), whether or not this
-  deployment has spawned it before. `add` and `update` refuse a job whose
+  deployment has spawned it before. The instance records the schedule that
+  made it as `automation` on its status row (feature `status-automation`,
+  [Made by an automation](desktop-cli-api.md#made-by-an-automation)): a
+  label, never proof. `add` and `update` refuse a job whose
   `oats spawn <agent> --preview`, with the job's `launchConfig`, `harness`,
   `model`, `yolo`, `backend` and `repo`, fails (`E_SCHEDULE_INVALID`, field `agent`,
   with spawn's own message and its code in `details.code`), or whose preview
@@ -212,8 +215,9 @@ refuses the key on a trigger.
   no shell; `oats schedule` itself is refused) in `cwd`, an existing directory
   inside the deployment. The runner tracks any instance the command's
   envelope names, including an independent worker it reports, until its home
-  is gone. A command's return is not task completion. Command/operation runs and
-  workspace-spawn launches have a five-minute child timeout. The supervisor
+  is gone. A command's return is not task completion. Command/operation runs,
+  workspace-spawn launches and a wake's start of a provider home have a
+  five-minute child timeout. The supervisor
   sends SIGTERM to the child's process group, allows two seconds for cleanup,
   then sends SIGKILL if the group remains. It observes the direct child's exit
   before returning; inherited output pipes cannot hold the tick indefinitely.
@@ -241,16 +245,40 @@ refuses the key on a trigger.
   in a loop. Unobservable or still starting: skipped, delivery kept pending.
   Word wake messages so that receiving one again is harmless.
 
+  **A wake that starts a stopped agent starts a fresh conversation, on both
+  backends.** The start is a plain `session start`: the agent begins again
+  from its `TASK.md`, and then receives the wake's message. The earlier
+  conversation is not carried on; it stays readable (a tmux home's
+  transcript, a provider's archived session).
+
   A home on a [session provider](execution-targets.md#session-providers) has
   no terminal: the message is its session's input, sent once through the
-  provider, and a live claim holds it the same way. **A wake never starts a
-  provider home OATS stopped.** Its input is refused before any provider
-  call: the run is `skipped` with `errorCode: "E_SESSION_NOT_RUNNING"`, and
-  the delivery stays pending until the home is started (`oats session
-  start`). To a session that is lost (gone, and not stopped by OATS) the
+  provider, and a live claim holds it the same way. **A provider home OATS
+  stopped is started by its due wake, by the rule of a stopped tmux home**:
+  at a due minute only, with a launch slot, under the home's lifecycle claim
+  (a retire, a stop or an upgrade of the home refuses it: a skip, started
+  again at the next due minute), whoever stopped it. The start is `oats
+  session start --home`, run by the tick: a new session of the provider, with
+  the provider's own `check` first. A start that is refused is `skipped`
+  with the refusal's `errorCode` (the provider's `E_BACKEND_*` among them),
+  and the delivery stays pending. That start is a child of the tick, with
+  a command job's five-minute timeout: one that times out or is interrupted
+  leaves the start unconfirmed (`whether the session was started is not
+  known`), and the job keeps its slot until the home is observed stopped or
+  gone. Before this rule such a wake was only
+  refused (`E_SESSION_NOT_RUNNING`) until a person started the home.
+
+  A provider home whose session is **lost** is not started by a wake. To a
+  session that is gone and that OATS did not stop, the
   input is a resume, on which the provider restarts the session, counted
   against the home's cap
-  ([lost sessions](execution-targets.md#session-providers)). An input the provider itself refuses
+  ([lost sessions](execution-targets.md#session-providers)). A home stopped
+  with the host (`oats host run`'s shutdown) is OATS's to bring back in its
+  own conversation: until the resume does, the wake's input is refused
+  (`errorCode: "E_SESSION_NOT_RUNNING"`) and the delivery stays pending.
+  This is the one place the two backends differ: a tmux home lost at a
+  reboot is started fresh by its due wake, and a provider home waits for
+  its resume. An input the provider itself refuses
   (`E_SESSION_PROMPT_OPEN` while its session shows a prompt,
   `E_SESSION_INPUT_QUEUED`) is `skipped` with that `errorCode`: nothing was
   sent, and the pending delivery is tried again at every tick, then delivered
@@ -359,6 +387,34 @@ when the timer cannot reach it.
   names that numbered name and its length, not the stem's).
   `oats trigger test <id> --json` shows each would-fire event's `instance` and
   `nameCut`. A failed preview fails the spawn the same way, with its own code.
+- <a id="failed-spawns"></a>**Failed spawns are kept as rows** (feature `trigger-failure-history`).
+  `oats trigger status --json` answers `failures`, newest first and at most
+  50, and `failuresTotal`, every failed spawn since the trigger was added.
+  Both are in the trigger's state, so the total outlives the 50 rows and a
+  restart. Removing it with `oats trigger remove` and adding it again
+  starts at zero; a workspace trigger deleted from Git and declared again
+  keeps its rows and its total, as it keeps its fired keys.
+  `lastError` stays what it was, the last failure of any kind.
+  - A row is `{attempt, at, key, event, subject, number, code, message}`,
+    plus `instance` and `home` when the spawn made a home before it failed
+    (a spawn that could not confirm its launch).
+  - There is one row per attempt: an event that stays pending and fails at
+    each poll has `attempt` 1, 2, and so on, per key.
+  - When a later attempt of that key spawns, its earlier rows gain
+    `resolved: {at, instance}` and stay listed. A row with no `resolved` is
+    still open.
+  - Every text is bounded and has control, separator, bidi, invisible and
+    tag characters replaced by U+FFFD, so a client can show it as text:
+    `message` at most 500 characters, `subject` 200, `event` 40, and `key`
+    whole (at most 512, what a poll accepts). `code` is a kernel code
+    (`E_` and up to 60 capitals, digits and underscores); a failure with
+    any other reads `E_TRIGGER_SPAWN`.
+  - A dry run (`oats trigger test`) and an event held by concurrency record
+    nothing.
+- **The instance records the trigger that made it** as `automation` on its
+  status row (feature `status-automation`,
+  [Made by an automation](desktop-cli-api.md#made-by-an-automation)): a
+  label, never proof.
 - **The event reaches the instance** as `OATS_TRIGGER_EVENT_FILE`
   (`<home>/.oats/trigger-event.json`: `{ trigger, source, repo, number,
   subject, url, event, headSha, labels, observedAt, key }`; a capability
@@ -373,7 +429,7 @@ oats trigger list | show <id> | enable <id> | disable <id> | remove <id>
 oats trigger test <id>      # dry run: gh credentials, repo permissions, the soul, what WOULD fire
 oats trigger test <id> --run-source      # a capability source's trigger: the same, running its source command here
 oats trigger poll <id> --run-source [--max-age <s>]   # a capability source's trigger: run its source once, record nothing
-oats trigger status [<id>]  # last poll, next due, pending and fired events, live vs max, last error
+oats trigger status [<id>]  # last poll, next due, pending and fired events, live vs max, last error, failed spawns
 ```
 
 All take `--dir` and `--json` (`triggerApi: 1`). `remove` leaves the instances
@@ -1151,10 +1207,15 @@ more than that:
   Claude Code 2.1.308), and `pro-trial-expired` opens the same way at startup,
   with no failed turn behind it. A setting that disables Claude's hooks isn't
   seen either.
-- **`oats session input` takes no hold.** Run by a script or an agent at a session
-  showing a dialog, its Enter answers it.
-- **The aweb host wake broker types on its own path,** joined teams included. A
-  hold covers the kernel's wake delivery only, not mail.
+- **`oats session input` holds for a permission prompt only.** It is refused
+  `E_SESSION_PROMPT_OPEN`, nothing typed, while a tmux home has a live
+  `permission` claim
+  ([Input](desktop-cli-api.md#input)). Run by a script or an agent at a
+  session showing any other dialog, its Enter answers it.
+- **The aweb host wake broker delivers on its own path,** joined teams included. A
+  hold covers the kernel's wake delivery only, not mail: the broker's
+  `oats session input` is typed over any claim but a `permission` one, which
+  refuses it like every input.
 
 ## Wake at spawn
 

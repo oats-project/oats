@@ -191,18 +191,20 @@ test("the real pass writes settings.json 0600 with absolute, single-quoted comma
   assert.deepEqual(Object.keys(settings), ["hooks", "tui"]);
   assert.equal(settings.tui, "default");
   assert.deepEqual(Object.keys(settings.hooks), ["Notification", "PermissionRequest", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "StopFailure", "SessionEnd"]);
-  const map = Object.entries(settings.hooks).flatMap(([event, groups]) => groups.map((g) => [event, g.matcher ?? null, g.hooks.map((e) => e.command.match(/claude-waiting\.sh' ((?:set(?:-late)? [\w-]+)|clear(?:-tool)?) /)[1])]));
+  const map = Object.entries(settings.hooks).flatMap(([event, groups]) => groups.map((g) => [event, g.matcher ?? null, g.hooks.map((e) => e.command.match(/claude-waiting\.sh' ((?:set(?:-late)? [\w-]+)|clear(?:-tool)?|turn [\w-]+) /)[1])]));
   assert.deepEqual(map, [
     ["Notification", "permission_prompt", ["set-late permission"]],
     ["Notification", "elicitation_dialog", ["set question"]],
+    ["Notification", "idle_prompt", ["turn turn-end-idle"]],
     ["PermissionRequest", "*", ["set permission"]],
     ["PreToolUse", "AskUserQuestion", ["set question"]],
     ["PreToolUse", "^(?!AskUserQuestion$).*", ["clear-tool"]],
     ["PostToolUse", "*", ["clear-tool"]],
     ["PostToolUseFailure", "*", ["clear-tool"]],
-    ["UserPromptSubmit", null, ["clear"]],
-    ["Stop", null, ["clear"]],
-    ["StopFailure", null, ["set failed-turn"]],
+    // A turn's boundary rides beside the claim's own command for the event (test/oats-core-turn-record.test.mjs).
+    ["UserPromptSubmit", null, ["clear", "turn turn-start"]],
+    ["Stop", null, ["clear", "turn turn-end"]],
+    ["StopFailure", null, ["set failed-turn", "turn turn-end"]],
     ["SessionEnd", null, ["clear"]],
   ]);
   const node = process.execPath;
@@ -261,7 +263,7 @@ test("merge by marker: unrelated keys and hooks stay, in order; a second run is 
   assert.deepEqual(merged.hooks.PreToolUse.slice(0, 2), [{ matcher: "Bash", hooks: [foreign] }, { matcher: "Edit", hooks: [foreign] }]);
   assert.deepEqual(merged.hooks.PostCompact, [], "an event array that was already empty is not ours to drop");
   const ours = allEntries(merged).filter((e) => e.command.includes(SCRIPT));
-  assert.equal(ours.length, 11, "exactly our eleven entries, no stale one left");
+  assert.equal(ours.length, 15, "exactly our fifteen entries, no stale one left");
   assert.ok(!JSON.stringify(merged).includes("/old/node"));
   // Second run: no write at all.
   const before = readFileSync(settingsOf(h), "utf8");
@@ -307,7 +309,7 @@ test("tui survives spawn and launch with hooks added, and the second pass does n
     const settings = readJson(settingsOf(h));
     assert.deepEqual(settings.tui, tui);
     assert.deepEqual(Object.keys(settings), ["model", "tui", "env", "hooks"]);
-    assert.equal(allEntries(settings).length, 11);
+    assert.equal(allEntries(settings).length, 15);
     // An old timestamp makes even a fast accidental rewrite observable.
     const old = new Date(1000000);
     utimesSync(settingsOf(h), old, old);
@@ -398,7 +400,7 @@ test("StopFailure and PermissionRequest are written only for the executable the 
     assert.equal(Object.hasOwn(hooks, "StopFailure"), takes, version);
     assert.equal(Object.hasOwn(hooks, "PermissionRequest"), takes, version);
     assert.match(hooks.Notification[0].hooks[0].command, takes ? /claude-waiting\.sh' set-late permission / : /claude-waiting\.sh' set permission /, version);
-    assert.equal(allEntries({ hooks }).length, takes ? 11 : 9, version);
+    assert.equal(allEntries({ hooks }).length, takes ? 15 : 12, version);
   }
   // No answer from the kernel: no key, whatever `claude` this hook's PATH would find. A relative path is no answer either.
   for (const handed of [undefined, "", "claude", join(base, "no-such-claude")]) {
@@ -415,7 +417,7 @@ test("StopFailure and PermissionRequest are written only for the executable the 
   assert.equal(Object.hasOwn(moved.hooks, "StopFailure"), false);
   assert.equal(Object.hasOwn(moved.hooks, "PermissionRequest"), false);
   assert.match(moved.hooks.Notification[0].hooks[0].command, /claude-waiting\.sh' set permission /);
-  assert.equal(allEntries(moved).length, 9);
+  assert.equal(allEntries(moved).length, 12);
 });
 
 test("one --version per hook run: both keys and the `dialogClaims` answer read the one probe", () => {
@@ -447,17 +449,17 @@ test("a claude that ignores SIGTERM and leaves a child on its stdout holds the h
   assert.ok(Date.now() - began < 7000, `the hook took ${Date.now() - began} ms`);
   const { hooks } = readJson(settingsOf(h));
   assert.equal(Object.hasOwn(hooks, "StopFailure"), false);
-  assert.equal(allEntries({ hooks }).length, 9);
+  assert.equal(allEntries({ hooks }).length, 12);
 });
 
-test("hooks that name an old node path are rewritten by the next launch pass, in place: the new path, eleven entries", () => {
+test("hooks that name an old node path are rewritten by the next launch pass, in place: the new path, fifteen entries", () => {
   const h = home(), keg = "/opt/homebrew/Cellar/node/26.10.0_2/bin/node", opt = "/opt/homebrew/opt/node/bin/node";
   const env = { OATS_HARNESS: "claude", OATS_INSTANCE_HOME: h, OATS_CLI_BIN: FAKE_CLI_ABS };
   runHook("spawn", { ...env, OATS_NODE_BIN: keg });
   assert.deepEqual(nodesOf(h), [keg]);
   assert.deepEqual(runHook("launch", { ...env, OATS_NODE_BIN: opt }), REPORTED);
   assert.deepEqual(nodesOf(h), [opt]);
-  assert.equal(allEntries(readJson(settingsOf(h))).length, 11, "the old entries were replaced, not kept beside the new");
+  assert.equal(allEntries(readJson(settingsOf(h))).length, 15, "the old entries were replaced, not kept beside the new");
   assert.ok(!readFileSync(settingsOf(h), "utf8").includes("Cellar"));
 });
 
@@ -1502,8 +1504,8 @@ test("real script, real CLI: a dialog over a failed turn's claim is the claim sh
   assert.equal(logOf(a), rows);
 });
 
-test("packaging: the capability ships bin/oats-core.mjs, bin/claude-waiting.sh and bin/claude-waiting-message.mjs as regular files, wired as spawn, launch and upgrade hooks", () => {
-  for (const f of ["bin/oats-core.mjs", "bin/claude-waiting.sh", "bin/claude-waiting-message.mjs"]) assert.ok(lstatSync(join(CAP, f)).isFile(), f);
+test("packaging: the capability ships bin/oats-core.mjs, bin/claude-waiting.sh, bin/claude-waiting-message.mjs and bin/claude-turn.mjs as regular files, wired as spawn, launch and upgrade hooks", () => {
+  for (const f of ["bin/oats-core.mjs", "bin/claude-waiting.sh", "bin/claude-waiting-message.mjs", "bin/claude-turn.mjs"]) assert.ok(lstatSync(join(CAP, f)).isFile(), f);
   const manifest = readJson(join(CAP, "oats.json"));
   assert.deepEqual(manifest.hooks, { spawn: "bin/oats-core.mjs spawn", launch: "bin/oats-core.mjs launch", upgrade: "bin/oats-core.mjs upgrade" });
   assert.equal(manifest.launchPreview, true);

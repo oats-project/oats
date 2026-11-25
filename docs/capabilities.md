@@ -882,6 +882,18 @@ resolver accepts it only from the deployment's own `oats-local.yaml`
 Declare it for any key whose value points at something a committed file must
 never be able to choose.
 
+<a id="host-only-settings"></a>
+A host setting is recorded with `oats settings set <capability> <key>
+<value>` (feature `settings-set`,
+[desktop-cli-api.md](desktop-cli-api.md#oats-settings)), which writes
+`settings.<capability>.<key>` in the deployment's `oats-local.yaml` with the
+resolver's own checks, and `oats settings unset` removes it. It is an
+operator's command: an agent's session is refused
+(`E_SETTINGS_OPERATOR_ONLY`), as a guard against an agent changing a host
+setting by accident, not as a security boundary. It never records a secret:
+a credential-shaped key is refused, and belongs in the capability's own
+setup command or the host's secret store.
+
 The mirror is `committedOnly: true`: a key that must be the same for every
 deployment of the workspace, such as which shared list a tasks provider uses.
 The resolver accepts it only from committed, reviewed files, and refuses it in
@@ -1391,9 +1403,10 @@ other producer's claim is touched.
 
 **A pi claim that outlives its dialog.** With no pi left running or starting in
 the home, a dead pi's `question` stays, and it holds every scheduled wake: the hold reads
-claims, not whether the session runs. For a home on a session provider that
-lasts until the claim is cleared, because a wake never starts such a home; a
-tmux home's next start voids it, as a session boundary voids every claim. A
+claims, not whether the session runs. For a home on a session provider whose
+session is lost that lasts until the claim is cleared, because a wake does
+not start such a home (it starts only one OATS stopped); a home's next
+start voids it, as a session boundary voids every claim. A
 hold that runs long is a reason to look: run `oats instance waiting clear
 --producer oats.pi --home <home>` from anywhere. A mark left behind is removed
 by the home's next pi.
@@ -1564,7 +1577,9 @@ waiting clear --producer oats.core --home <home>` from anywhere.
   the hooks that fire on every tool call cost a `/bin/sh` and a few file
   reads. The turn-boundary clears (`UserPromptSubmit`, `Stop`,
   `SessionEnd`) are not debounced: each gets a CLI call (see Order and
-  retry), a node process per prompt and per stop. A symlink is never followed. An
+  retry), a node process per prompt and per stop, and one more for the turn
+  record (oats.core 2.17.0, [below](#oatscore-the-turn-record)). A symlink
+  is never followed. An
   unusable marker (a refused, missing or replaced directory, a state path
   that is not a regular file, a lock path that is not a directory) means no
   debounce: set and clear then always call the (idempotent) CLI. The launch
@@ -1710,6 +1725,50 @@ respawn.
   it is respawned, or when `oats instance upgrade` moves its oats.core to
   2.8.0 or later and it starts again. Its launch hook comes from its
   recorded module copy.
+
+### oats.core: the turn record
+
+From oats.core 2.17.0 the same Claude Code hooks record each turn's start and
+end in `<home>/.oats/turn.json`: `{"event": "turn-start" | "turn-end", "at":
+"<ISO>"}`, the last boundary, replaced whole (a temporary file, then a
+rename). A kernel that lists `status-activity` reads it for a tmux home whose
+harness runs and shows the row as `activity: "working"` or `"idle"`
+([the row field](desktop-cli-api.md#row-activity)); a boundary counts only
+from the home's current start, so the record a killed session left is never
+read as the next one's. The file is kernel-private: nothing else reads it, an
+older kernel ignores it, and it is no work to a retire.
+
+| Claude Code hook | writes |
+|---|---|
+| `UserPromptSubmit` | `turn-start`. It fires for a launch prompt too (`@TASK.md`), so a start's first turn reads working, and for a background task that ends and wakes the model |
+| `Stop` | `turn-end` |
+| `StopFailure` (Claude Code 2.1.78 and later) | `turn-end`: an API error ended the turn |
+| `Notification`, `idle_prompt` | `turn-end`, only over a turn whose end no hook reported. It is Claude's "waiting for your input" notice, a minute after it stopped; after a `Stop` it writes nothing, and the record keeps the turn's own end |
+| `SubagentStop`, a compaction, a session's start or end | nothing: the main turn goes on. A `/compact` a person types is no turn |
+
+The entries run `claude-waiting.sh turn <boundary>`, behind the script's own
+home check: a Claude process that loads these settings under another
+instance's environment writes nothing. An event whose input carries
+`agent_id` (a subagent's, in the same session) writes nothing either; of an
+input over the 64 KiB the script reads, the keys before `hook_event_name`
+decide, as for a tool clear. `bin/claude-turn.mjs` makes the write,
+calls no kernel command and prints nothing, and the script kills it at 2 s: a
+write that fails is dropped, and the row keeps the last boundary written.
+
+**What it cannot see** (Claude Code 2.1.332):
+
+- **A turn a person interrupts** (Esc) fires no hook: neither `Stop` nor,
+  afterwards, the idle notice. The record says `turn-start` until the next
+  prompt, so the kernel reads a Claude Code turn that started more than 30
+  minutes ago with no end as `null`: a long turn reads `null` from then on
+  too, until it ends.
+- **A second Claude Code started inside the home** with the home's
+  environment (a nested `claude -p`) fires its own `UserPromptSubmit` and
+  `Stop`, and its end reads idle while the home's own turn goes on, until
+  the next prompt there.
+- **Codex** gets no record: its notify hook reports turn ends only, which
+  would read idle while it works, so a Codex row reads `null`. pi's record
+  is the pi bridge's ([@awebai/oats-pi](../packages/pi/README.md)).
 
 ## Operations a capability declares
 
@@ -2081,6 +2140,8 @@ claims, the refusals and the JSON answers. What an operator sees is in
 - **`harnesses`** lists the harnesses the provider runs (1 to 16 names). A
   spawn or a start on another one is refused `E_BACKEND_HARNESS`.
 - **`description`** is optional: one line of at most 200 characters.
+- **`launchChoices`** is optional: the choices of one launch that you take,
+  by name ([Launch choices](#launch-choices-launchchoices)).
 - **`wire`** is the version of this wire the provider speaks: `"1.3"`. The
   kernel calls only a provider that declares its own version. One that
   declares another, or none (a provider written before the key: wire 1.2),
@@ -2093,6 +2154,84 @@ claims, the refusals and the JSON answers. What an operator sees is in
   tooling. Every request carries the kernel's version (`"wire"`), so refuse
   a request that carries none or another, with the same code.
 - No other key.
+
+<a id="launch-choices-launchchoices"></a>
+### Launch choices (`launchChoices`)
+
+A kernel that lists the feature `launch-choices` in `oats version --json` has
+this. A launch choice is a choice a person makes for one launch that only
+your provider understands: a reasoning level, a service tier. **The kernel
+knows no choice's meaning and no value's.** It checks that the home's
+provider declares the name, records the value, and hands it to you as data.
+The next such control costs you a manifest line and your own handling, and
+the kernel nothing.
+
+```json
+"sessionProviders": {
+  "bb": {
+    "…": "…",
+    "launchChoices": {
+      "reasoning-level": { "description": "How hard the model thinks before it answers" },
+      "service-tier": { "description": "Which service tier the session asks for" }
+    }
+  }
+}
+```
+
+- **Declared.** At most 8 choices. A name is 1 to 40 lowercase letters,
+  digits and dashes, starting with a letter. Each has a `description` and no
+  other key: one line of at most 200 characters, safe text (no control or
+  bidi character). A client may show it as text; nothing parses it. A
+  declaration outside these rules makes the provider malformed, as any other
+  problem in it does (Containment, below).
+- **Chosen.** `oats spawn`, `oats session start` and `oats session restart`
+  take `--launch-choice <name>=<value>`, any number of times, each name
+  once. A value is 1 to 40 lowercase letters, digits, underscores and
+  dashes. Values are data: they are argv elements wherever a command line
+  is made, never a shell's words.
+- **Handed to you.** The planned launch your `check` is asked about, and
+  your `launch` input, carry `"choices": { "<name>": "<value>" }`, present
+  only when at least one is chosen, in the order you declared the names.
+  You get only names you declared. **Refuse in your `check` a value you do
+  not take**, with an `E_BACKEND_*` code: the kernel does not know your
+  values, and a restart's check runs before its stop.
+- **Recorded.** A spawn's choices are kept in the home's launch record and
+  reused by a later plain start or restart. A flag replaces that name's
+  value. The reserved value `default` clears a recorded choice
+  (`--launch-choice reasoning-level=default`): your own default then
+  applies. `default` is never recorded and never passed to you, so never
+  take a value spelled `default`.
+- **Refused, never dropped.** A choice reaches your launch or the command is
+  refused `E_BAD_ARGS`, before anything is created, stopped or started:
+  - a name the home's provider does not declare (the refusal names the ones
+    it does);
+  - a tmux home: `the tmux backend takes no launch choices yet; for pi, the
+    model's own :level sets its thinking`;
+  - a recorded choice the provider no longer declares (another release of
+    yours dropped the name): a plain start or restart is refused with the
+    way to clear it (`--launch-choice <name>=default`), never started
+    without it;
+  - with `--resume`, which runs the recorded launch as it is.
+
+  A routed spawn or start (`--server`) to a host that does not list the
+  feature is refused `E_REMOTE_INCOMPATIBLE` before anything is sent.
+- **Nowhere else yet.** A launch configuration, a soul, a host default, a
+  schedule's job and a trigger's spawn carry no launch choice: only the
+  three commands' flag does.
+- **An older kernel refuses the declaration.** A kernel from before the
+  feature reads a provider that declares `launchChoices` as malformed
+  (measured on OATS 0.70.5): `--backend <name>` answers `E_BACKEND_UNKNOWN`,
+  `capability <id> declares it malformed: session provider "<name>": unknown
+  key "launchChoices"`, and `oats capabilities show` lists it under
+  `sessionProviderProblems`. The capability itself still loads (a tmux spawn
+  of its soul goes on). So a package that declares
+  `launchChoices` raises its `compatibility.oats` to the release that lists
+  `launch-choices`, and is pinned only once every host runs that kernel.
+- **The downgrade cost.** A kernel moved back below `launch-choices` does
+  not know the record's `choices`: it starts a home that holds recorded
+  choices **without them**, and says nothing. That is the one place a
+  choice can drop, and only by moving a kernel back; the rollout order
+  above is what prevents it.
 
 **Containment.** A malformed `sessionProviders` never refuses the capability:
 it is validated where a provider is used. A problem inside one provider
@@ -2202,6 +2341,10 @@ In:
   `false`, or `null` when nobody chose) and the prompt.
 - `promptFile` is the home's `TASK.md`: the briefing a fresh conversation
   starts on.
+- `choices` (feature `launch-choices`) is the launch's choices,
+  `{ "<name>": "<value>" }`, of names you declared
+  ([Launch choices](#launch-choices-launchchoices)). The key is there only
+  when at least one is chosen.
 - `previous` is the endpoint of the session a start or a restart replaces;
   `null` for the home's first launch. The kernel has asked you to stop it
   just before, always (a restart's stop, once more for a home OATS had
@@ -2257,7 +2400,7 @@ provider runs the harness itself.
 ### inspect and inspectMany
 
 `inspect` in: `{ "home", "endpoint" }`. Out:
-`{ "present": true|false, "state": "unknown"|"shell"|"stopped", "running": true|false|null, "open"?: { "label", "url" } }`,
+`{ "present": true|false, "state": "unknown"|"shell"|"stopped", "running": true|false|null, "open"?: { "label", "url" }, "activity"?: "working"|"idle"|null }`,
 exactly those keys.
 
 | The session | present | state | running |
@@ -2278,6 +2421,39 @@ session whose run ended in error as gone, not as `shell`, when your product
 restarts it on the next input. `open` is what a client may
 show instead of a terminal: a one-line `label` of at most 100 characters and
 an `http` or `https` `url` of at most 2000, without credentials.
+
+`activity` (optional; feature `status-activity`) is the turn fact, read live
+from your product at that call: `"working"` while a turn runs (it is
+starting, running or stopping, or an input waits in its queue), `"idle"`
+when the last turn ended and none has started, `null` when your product
+does not say. The kernel relays it as the row's
+[`activity`](desktop-cli-api.md#row-activity) wherever you answer the
+session present, in a state other than `shell`, on a home OATS started,
+whatever `running` is: answer `"idle"` for an idle session whose harness you
+unloaded (`state: "unknown"`, `running: false`). A `shell` session's harness
+ended, so its row carries no turn. It stores nothing,
+so the value is as fresh as your answer; no act reads it. Without the key
+the row reads `null`. Any other value is outside the contract, as is a
+value other than `null` with `present: false`, and the answer is then read
+as no answer.
+
+**An optional answer key is added without a wire bump only when a kernel
+that accepts it ships first and the provider's floor is raised to that
+kernel.** The kernel reads an answer's keys exactly, and a provider cannot
+tell per call which kernel asks. So the kernel release that accepts the key
+(it lists the key's feature in `oats version --json`) is published first,
+and the provider release that sends the key raises its `compatibility.oats`
+to that kernel release: no provider release below that floor sends it. That
+is how `activity` was added, and the rule for any optional answer key after
+it.
+
+**What it costs.** From the kernel release that lists `status-activity` on,
+wire 1.3 accepts one more optional key. A kernel moved back below that
+release while a provider that sends the key is in the homes (a newer
+oats-bb) reads every row of that provider as unreachable (`running: null`,
+`runtimeState: "unreachable"`): the answer has a key that kernel does not
+know, and is read as no answer. Pins can move back, so move the provider
+package back with the kernel.
 
 `inspectMany` (optional) in:
 `{ "homes": [ { "home", "instance", "endpoint" } ] }`, at most 200. Out:
@@ -2369,11 +2545,22 @@ way. The wire version is unchanged.
 
 The provider's readiness. In: `{ "home": "/abs/home" | null, "soul": "<name>" | null, "settings": { … } }`:
 a home, or, before any home exists, a soul; and, before a launch,
-`"launch": { "harness", "yolo", "args", "sandbox", "trees", "protected" }`, the launch that is
+`"launch": { "harness", "model", "yolo", "args", "choices", "sandbox", "trees", "protected" }`, the launch that is
 planned: the harness, yolo, the allowances, the trees and the protected paths as its launch input will
 carry them, and in `args` the launch configuration's own arguments. **The
 arguments a capability's hooks contribute are not in it**: the check runs
-before any hook, and those reach the launch input only. Out:
+before any hook, and those reach the launch input only. **`choices`**
+(feature `launch-choices`) is the launch's choices, as the launch input will
+carry them, there only when one is chosen
+([Launch choices](#launch-choices-launchchoices)). **`model`** (a kernel
+that lists the feature `launch-model-and-check-warnings` in
+`oats version --json`) is the model the launch input will carry, a non-empty
+string, and is there only when the launch names one: with no key, the
+harness is left to its own default, which the kernel does not know. So
+refuse here a model your harness cannot resolve: a restart's check runs
+before its stop, and a refusal at your `launch` comes after it. A kernel
+without the feature never sends the key: its absence there says nothing
+about the model. Out:
 `{ "status": "ready" | "needs-configuration" | "authorization-required" | "unavailable", "problems": [ { "code", "message" } ], "warnings": [ { "code", "message" } ] }`
 (`warnings` optional; no problem on `ready`). Say where a credential comes
 from, never print it.
@@ -2390,6 +2577,17 @@ from, never print it.
   problems. A refused spawn runs no hook and leaves no home; a refused
   start or restart runs no hook and stops nothing. A check that fails or
   answers outside these words is not ready.
+- **The `warnings` of a `ready` answer reach a person** (feature
+  `launch-model-and-check-warnings`): the kernel relays each in the
+  `warnings` of the spawn's, the start's and the restart's answer and of
+  their previews, as one line that names your capability and the verb, with
+  your code and your message as you gave them (the message made safe to
+  print, at most 500 characters)
+  ([desktop-cli-api.md](desktop-cli-api.md#relayed-check-warnings)). At most
+  32 per launch are relayed, and fewer where the answer's own warnings
+  leave less room (512 entries in all, four of them kept free). No client parses them: write each message as a
+  sentence a person can act on. The warnings beside a status other than
+  `ready` are not relayed: say what refuses the launch in `problems`.
 - **A preview asks it too, with the same planned launch**, so that a launch
   you would refuse does not read clean in its preview. `check` must only
   read, and must answer for a home that is not there:
@@ -2698,9 +2896,15 @@ the feature.
   operator stopped is stopped whatever the provider answers (a live harness
   there is reported beside it, as `outsideOats`, and changes nothing), and
   every input (a
-  person's `oats session input`, a scheduled wake, a client, the messaging
-  broker) is refused `E_SESSION_NOT_RUNNING` before any call. A provider
-  whose product restarts a session on its next input can rely on this.
+  person's `oats session input`, a scheduled wake's delivery, a client, the
+  messaging broker) is refused `E_SESSION_NOT_RUNNING` before any call. A
+  provider whose product restarts a session on its next input can rely on
+  this. A due wake to such a home starts it instead, unattended, as a
+  person's `oats session start` does: your `check`, your `stop` asked once
+  more, the launch hooks, then `launch` with `previous`, a new session
+  ([schedules.md](schedules.md#kinds); a kernel that lists the feature
+  `wake-starts-provider-home`). A home stopped with the host is not started
+  that way.
 - **Hooks first.** The capabilities' spawn hooks (at a spawn) and launch
   hooks (at a start or a restart) run before `launch`, as before a tmux
   window, with `OATS_BACKEND`.

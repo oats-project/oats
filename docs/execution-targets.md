@@ -961,11 +961,24 @@ the spawn is then rolled back.
 
 **What OATS checks for a provider launch, and what it does not.** The launch
 configuration, the harness, the model, yolo, the capabilities' hooks and the
-launch environment are decided as for tmux and handed to the provider. The
+launch environment are decided as for tmux and handed to the provider. So
+are the launch's choices, where the provider declares any (feature
+`launch-choices`): `--launch-choice <name>=<value>` on a spawn, a start or a
+restart gives one, the home records it for its later starts, and the kernel
+checks only that the provider declares the name. A choice it does not
+declare, and any choice on a tmux home, is refused `E_BAD_ARGS` before
+anything is created, stopped or started: never dropped
+([desktop-cli-api.md](desktop-cli-api.md#launch-choices-feature-launch-choices)). The
 checks about a terminal pane are skipped, because no pane runs the harness:
 the harness executable on the pane's `PATH`, folder trust, the Claude login
 credential, the development-channel prompt, the native-record wrapper. The
-provider's readiness covers what they covered. One check stays: a
+provider's readiness covers what they covered: its `check` is asked with
+the launch that is planned, and that launch carries the model when the
+launch names one (`launch.model`, absent otherwise; feature
+`launch-model-and-check-warnings`), so a provider can refuse a model its
+harness cannot resolve before anything is stopped. What a `ready` check
+warns of is relayed in the command's `warnings`, as text for a person
+([desktop-cli-api.md](desktop-cli-api.md#relayed-check-warnings)). One check stays: a
 capability's harness-package requirement (`requires`) is probed for a
 provider launch too, on this host, unless the row says which backends it is
 for (`backends: ["tmux"]` leaves it out of a provider launch;
@@ -1036,7 +1049,7 @@ writes, and what happens when two things cross. In short:
 | `session input` | the provider sends the text. `submitted: true` only when it was dispatched; `E_SESSION_PROMPT_OPEN` (a prompt is open in the session: nothing was sent) and `E_SESSION_INPUT_QUEUED` (the provider queued it and withdrew it) are the provider's refusals; anything else is `E_SESSION_INPUT_FAILED`. An input to a lost session is a resume ([below](#provider-homes-lost-sessions)) |
 | `instance stop` | records the stop, then asks the provider to stop the session (`E_SESSION_STOP_FAILED` when it does not confirm; the home stays recorded as stopped). A stop of a home that is already stopped asks the provider once more: run it again to finish a stop the provider did not confirm |
 | `session start` | launches a new session, a fresh conversation on `TASK.md`, and records its endpoint. Refused when a session is there that OATS did not stop: `E_SESSION_RUNNING` when it reads `running: true`, else `E_SESSION_UNKNOWN`. For a home OATS stopped it first asks the provider to stop once more, and refuses `E_SESSION_STOP_FAILED` when that is not confirmed |
-| `session restart` | stop, then start, under one lifecycle claim |
+| `session restart` | the provider's `check` with the planned launch, then stop, then start, under one lifecycle claim. The check comes before the stop: a provider that refuses there (a model its harness cannot resolve, a launch it would sandbox without what it needs) leaves the running session running, and the refusal says `nothing was stopped or started` |
 | `session start --resume` | sends the resume notice through the provider's input; nothing is launched ([below](#provider-homes-lost-sessions)) |
 | `session attach` | `E_SESSION_NO_TERMINAL`; the message carries inspect's `open` link when there is one |
 | `oats retire` | records the stop, asks the provider to stop, checks that no process works in the home, then runs the retire hooks and removes the home ([souls-and-instances.md](souls-and-instances.md#retiring-a-home-on-a-session-provider)) |
@@ -1046,8 +1059,12 @@ it makes (`oats instance stop`, a restart's stop, a retire, the host's
 shutdown), before it calls the provider, and a start clears it. While it is
 set, inspect answers stopped (`present: false`, `running: false`) without
 calling the provider, and every input is refused `E_SESSION_NOT_RUNNING`
-before any call: `oats session input`, a scheduled wake (which never starts
-a provider home), a client's input, the messaging broker's delivery. A stop
+before any call: `oats session input`, a client's input, the messaging
+broker's delivery, and a scheduled wake's own delivery. A due wake does not
+input to a home OATS stopped: it starts it, as it starts a stopped tmux
+home, in a new session, and delivers its message once that runs
+([schedules.md](schedules.md#kinds)); a home stopped with the host is left
+to its resume. A stop
 that lands while an input is being sent still wins: OATS asks the provider
 to stop the session again and answers the input `E_SESSION_NOT_RUNNING`, so
 a mail stays unread and comes again. A
@@ -1090,6 +1107,20 @@ means it to run, so when its harness runs again its row reads running, with
 no key ([below](#provider-homes-lost-sessions)).
 `waitingOnYou` is the producers' claim, as for tmux, read while the session
 is there and not in error.
+`activity` (feature `status-activity`,
+[desktop-cli-api.md](desktop-cli-api.md#row-activity)) is the provider's own
+answer at that read: the optional `activity` key of its `inspect` or
+`inspectMany` result (`"working"`, `"idle"` or `null`), relayed onto the row
+wherever the provider answers the session present, and not at its `shell`,
+on a home OATS started, whatever its `running`, and never stored. A provider that sends no key reads
+`null`. A provider sends `activity` only to a kernel that lists
+`status-activity`: its package's `compatibility.oats` is raised to that
+kernel release. A kernel moved back below it, with such a provider in the
+homes, reads every row of that provider as unreachable
+([capabilities.md](capabilities.md#inspect-and-inspectmany)). A stopped
+home, a lost one, one whose harness ended (`shell`), one being retired and
+one with `outsideOats` carry none. The turn file a tmux row reads
+(`<home>/.oats/turn.json`) is never read on a provider home.
 
 <a id="provider-homes-lost-sessions"></a>
 
@@ -1866,10 +1897,28 @@ oats session attach --home /abs/home --detach-key 'C-\'
   the agent's, still refuse before input. The text goes to the agent's pane
   (`paneId`), even when the person's focus is in another pane of the window.
 
-  Input takes no hold: it types whether or not a claim is set, and its Enter
-  can answer an open dialog, so don't run it from a script or an agent at a
-  session that may show one ([A held wake](schedules.md#a-held-wake) is the
-  scheduled path's).
+  One input is sent at a time per home: an input holds the home's input lock
+  from its paste to the end of its Enter's observation, so two inputs at the
+  same moment are two messages, each with its own Enter. One that waits more
+  than 8 seconds is refused `E_SESSION_INPUT_FAILED`, nothing sent; a lock
+  whose holder died is taken over, and the text that holder pasted and never
+  submitted gets its own Enter before the next input's paste. The lock does
+  not cover keys typed in an attached terminal, another tool typing into the
+  pane, or a session provider's home
+  ([Input](desktop-cli-api.md#input)).
+
+  While the session holds a `permission` claim, input is refused
+  `E_SESSION_PROMPT_OPEN` and nothing is typed (feature
+  `session-input-permission-refusal`): its Enter would answer the prompt.
+  Answer it in the agent's terminal or a client's prompt card. A claim
+  that outlived its dialog (a refused one leaves it) refuses like a live
+  one until the session's next prompt or `oats instance waiting clear`;
+  the refusal says how. Input takes
+  no other hold: it types whatever other claim is set, and its Enter can
+  answer any other open dialog (a question, a startup dialog with no claim,
+  a permission prompt that opens right at the paste), so don't run it from a
+  script or an agent at a session that may show one
+  ([A held wake](schedules.md#a-held-wake) is the scheduled path's).
 
   Before Enter, a size-based floor (200 ms plus 3 ms per KiB) and read-only
   settling polls share one **monotonic 2-second observation budget**, starting

@@ -91,7 +91,7 @@ async function spawnHome(name, { launchConfig = "probe", ...opts } = {}) {
 /** The node and the CLI every waiting hook of a home names: `… <action> '<node>' '<cli>' '<marker>' '<home>' >/dev/null 2>&1; exit 0`. */
 function baked(home) {
   const commands = Object.values(readJson(join(home, ".claude", "settings.json")).hooks).flatMap((groups) => groups.flatMap((g) => g.hooks.map((e) => e.command)));
-  assert.equal(commands.length, 11, "oats.core's eleven entries, and no second copy of any");
+  assert.equal(commands.length, 15, "oats.core's fifteen entries, and no second copy of any");
   const pairs = commands.map((c) => { const m = / '([^']+)' '([^']+)' '[^']*' '[^']*' >\/dev\/null 2>&1; exit 0$/.exec(c); assert.ok(m, c); return `${m[1]} ${m[2]}`; });
   assert.equal(new Set(pairs).size, 1, `every command names one node and one CLI: ${[...new Set(pairs)].join(" | ")}`);
   const [node, cli] = pairs[0].split(" ");

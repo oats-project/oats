@@ -919,6 +919,18 @@ test("routed spawn --preview --suggest-name (#1421 §3) needs a host that advert
     assert.equal(routed.envelope.result.instance, "fix-login-dev");
     assert.equal(current.spawned().length, 1);
     assert.match(current.spawned()[0], / spawn dev --preview --suggest-name --task-file - --dir \/w --json$/);
+
+    // Feature launch-choices: a routed spawn's `--launch-choice` needs a host that lists it. Refused
+    // before the spawn is sent, never sent without the choice; to a host that lists it, the words travel.
+    const chosen = ["dev", "--preview", "--launch-choice", "reasoning-level=high", "--launch-choice", "service-tier=fast"];
+    const without = remote(["spawn-preview-2"]);
+    assert.throws(() => routeCommand("build", "spawn", chosen, { server, execFileSync: without.exec }),
+      (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.67.0 at h does not advertise launch-choices; upgrade it there; nothing was sent");
+    assert.deepEqual(without.spawned(), []);
+    const lists = remote(["spawn-preview-2", "launch-choices"]);
+    routeCommand("build", "spawn", chosen, { server, execFileSync: lists.exec });
+    assert.equal(lists.spawned().length, 1);
+    assert.match(lists.spawned()[0], / spawn dev --preview --launch-choice reasoning-level=high --launch-choice service-tier=fast --dir \/w --json$/);
   } finally {
     if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
     rmSync(base, { recursive: true, force: true });

@@ -119,6 +119,19 @@ export function checkReferenceClosure(skillRoot) {
   return [...seen].sort();
 }
 
+// The curriculum ships inside oats.framework, so a framework version it names is out of
+// date at the next framework tag, and scripts/check-catalog-references.mjs would make each
+// pin round change oats.knowledge-theory after its tag (#498). Its example uses vX.Y.Z.
+// The pattern covers what that check matches: `oats.framework: vN.N.N`, `oats.framework
+// vN.N.N` and `oats-framework/vN.N.N`.
+export const CONCRETE_FRAMEWORK_VERSION = /\boats\.framework(?::\s*|\s+)v\d+\.\d+\.\d+\b|\boats-framework\/v\d+\.\d+\.\d+\b/;
+export function checkNoFrameworkVersion(root, files = treeFiles(root)) {
+  for (const file of files.filter((f) => f.endsWith(".md"))) {
+    const match = CONCRETE_FRAMEWORK_VERSION.exec(readFileSync(join(root, file), "utf8"));
+    assert.ok(!match, `${file} names a framework version (${match?.[0]}); the curriculum ships inside oats.framework, so write a placeholder such as vX.Y.Z`);
+  }
+}
+
 function referenceSources(repoRoot) {
   const refRoot = join(repoRoot, "docs/knowledge-reference");
   return ["knowledge-capability-authoring.md", ...treeFiles(refRoot).map((f) => join("knowledge-reference", f))];
@@ -141,7 +154,8 @@ export function syncKnowledgeTheoryReferences(repoRoot = REPO_ROOT) {
 // adds exactly two executable surfaces. Its Claude Code waiting emitter: the spawn
 // and launch hooks of bin/oats-core.mjs (preview-aware), the bin/claude-waiting.sh
 // they wire into a Claude instance's settings, and the bin/claude-waiting-message.mjs
-// that script runs for a claim's text (#1502). And the upgrade hook of the same
+// that script runs for a claim's text (#1502), and the bin/claude-turn.mjs it runs to record a
+// turn's start or end for the status row (#2122). And the upgrade hook of the same
 // script, which adopts a home across `oats instance upgrade` (#1549). Any other executable surface, key or
 // file is a boundary change, not unnoticed manifest growth. Use the kernel's actual
 // schema, not a copied validator; files must survive acquiring each own root.
@@ -152,7 +166,7 @@ const OPERATIONAL_CAPABILITIES = [
     // 0.49.0: a kernel before it drops a capability that declares a hook event it does not know, and
     // oats.core declares `upgrade` (#1549), which only 0.68.0's `oats instance upgrade` runs.
     compatibility: ">=0.49.0",
-    executable: { hooks: { spawn: "bin/oats-core.mjs spawn", launch: "bin/oats-core.mjs launch", upgrade: "bin/oats-core.mjs upgrade" }, launchPreview: true, files: ["bin/claude-waiting-message.mjs", "bin/claude-waiting.sh", "bin/oats-core.mjs"] },
+    executable: { hooks: { spawn: "bin/oats-core.mjs spawn", launch: "bin/oats-core.mjs launch", upgrade: "bin/oats-core.mjs upgrade" }, launchPreview: true, files: ["bin/claude-turn.mjs", "bin/claude-waiting-message.mjs", "bin/claude-waiting.sh", "bin/oats-core.mjs"] },
   },
   { slug: "oats-setup", names: ["oats-setup-model", "oats-onboarding", "oats-setup-expert", "oats-host-delivery", "oats-agent-permissions", "oats-git-setup", "oats-workspace-config", "oats-teams", "oats-package-pins", "oats-automations", "oats-upgrade"], injection: "injects/setup.md", compatibility: ">=0.30.0" },
   // 0.40.0: `oats instance attention`, which the skills use to ask the desk's human.
@@ -209,7 +223,7 @@ export function checkKnowledgeTheoryPackage({ repoRoot = REPO_ROOT, packageRoot 
   assert.equal(pkg.package, DISTRIBUTION_PACKAGE_ID);
   assert.equal(cap.capability, "oats.knowledge-theory");
   assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
-  assert.equal(cap.version, "1.1.5");
+  assert.equal(cap.version, "1.1.6");
   assert.deepEqual(cap.compatibility, { oats: ">=0.22.19" });
   assert.deepEqual(pkg.compatibility, { oats: ">=0.24.0" });
   assert.deepEqual(pkg.capabilities, DISTRIBUTION_CAPABILITIES);
@@ -237,8 +251,10 @@ export function checkKnowledgeTheoryPackage({ repoRoot = REPO_ROOT, packageRoot 
   }
   const skill = join(capRoot, SKILL_PATH);
   const closure = checkReferenceClosure(skill);
+  checkNoFrameworkVersion(capRoot);
   if (parity) {
     const expected = referenceSources(repoRoot).sort();
+    checkNoFrameworkVersion(join(repoRoot, "docs"), expected);
     const refs = join(skill, "references");
     assert.deepEqual(treeFiles(refs), expected, "generated reference file set differs from canonical docs");
     for (const file of expected) {
