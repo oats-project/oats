@@ -148,12 +148,14 @@ test("a scheduled spawn with backend fake and yolo: true launches a provider hom
   const fx = fullOnlyProvider(t);
   // Saved: the save's preview asks the provider's check with the job's own yolo, so the job the
   // provider will launch is accepted, and the one it will refuse is refused with the provider's code.
-  answer(addSchedule(fx, "full", { ...SPAWN, yolo: true }));
+  // (`full` also names a model: the planned launch its check is handed carries it, at the save and at the run.)
+  answer(addSchedule(fx, "full", { ...SPAWN, yolo: true, model: "opus" }));
   answer(addSchedule(fx, "default", { ...SPAWN, launchConfig: "full" }));
   const unsaved = addSchedule(fx, "sandboxed", SPAWN).json();
   assert.deepEqual([unsaved.ok, unsaved.error.code, unsaved.error.details], [false, "E_SCHEDULE_INVALID", { code: FULL_ONLY.problems[0].code, field: "agent" }], JSON.stringify(unsaved));
   assert.match(unsaved.error.message, /this provider launches only in full mode/);
   assert.deepEqual(fx.verbs().map((c) => [c.verb, c.request.input.launch.yolo]), [["check", true], ["check", true], ["check", null]], "each save asked the provider once, and launched nothing");
+  assert.deepEqual(fx.verbs().map((c) => [c.request.input.launch.model ?? null, Object.hasOwn(c.request.input.launch, "model")]), [["opus", true], [null, false], [null, false]], "the job's own model, and no model key for a job that names none");
   assert.deepEqual(homesOf(fx), []);
   fx.clearCalls();
 
@@ -163,6 +165,8 @@ test("a scheduled spawn with backend fake and yolo: true launches a provider hom
   assert.deepEqual(homesOf(fx), ["dev-default-202611231000", "dev-full-202611231000"]);
   const { home } = assertProviderHome(fx, "dev-full-202611231000");
   assertProviderHome(fx, "dev-default-202611231000", { launchConfig: "full" });
+  const modelsAsked = (instance) => fx.verbs().filter((c) => c.instance === instance).map((c) => (c.verb === "check" ? c.request.input.launch.model : c.request.input.model) ?? null);
+  assert.deepEqual([modelsAsked("dev-full-202611231000"), modelsAsked("dev-default-202611231000")], [["opus", "opus"], [null, null]], "the scheduled spawn's check is told the model its launch is then handed");
   const launched = lastRun(fx, "full");
   assert.deepEqual([launched.outcome, launched.kind, launched.launched, launched.instance, launched.home, launched.session.delivery], ["launched", "spawn", true, "dev-full-202611231000", home, "launched"], JSON.stringify(launched));
   assert.match(readFileSync(join(home, "TASK.md"), "utf8"), /Do the nightly thing\./);

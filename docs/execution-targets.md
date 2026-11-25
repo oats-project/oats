@@ -965,7 +965,13 @@ launch environment are decided as for tmux and handed to the provider. The
 checks about a terminal pane are skipped, because no pane runs the harness:
 the harness executable on the pane's `PATH`, folder trust, the Claude login
 credential, the development-channel prompt, the native-record wrapper. The
-provider's readiness covers what they covered. One check stays: a
+provider's readiness covers what they covered: its `check` is asked with
+the launch that is planned, and that launch carries the model when the
+launch names one (`launch.model`, absent otherwise; feature
+`launch-model-and-check-warnings`), so a provider can refuse a model its
+harness cannot resolve before anything is stopped. What a `ready` check
+warns of is relayed in the command's `warnings`, as text for a person
+([desktop-cli-api.md](desktop-cli-api.md#relayed-check-warnings)). One check stays: a
 capability's harness-package requirement (`requires`) is probed for a
 provider launch too, on this host, unless the row says which backends it is
 for (`backends: ["tmux"]` leaves it out of a provider launch;
@@ -1036,7 +1042,7 @@ writes, and what happens when two things cross. In short:
 | `session input` | the provider sends the text. `submitted: true` only when it was dispatched; `E_SESSION_PROMPT_OPEN` (a prompt is open in the session: nothing was sent) and `E_SESSION_INPUT_QUEUED` (the provider queued it and withdrew it) are the provider's refusals; anything else is `E_SESSION_INPUT_FAILED`. An input to a lost session is a resume ([below](#provider-homes-lost-sessions)) |
 | `instance stop` | records the stop, then asks the provider to stop the session (`E_SESSION_STOP_FAILED` when it does not confirm; the home stays recorded as stopped). A stop of a home that is already stopped asks the provider once more: run it again to finish a stop the provider did not confirm |
 | `session start` | launches a new session, a fresh conversation on `TASK.md`, and records its endpoint. Refused when a session is there that OATS did not stop: `E_SESSION_RUNNING` when it reads `running: true`, else `E_SESSION_UNKNOWN`. For a home OATS stopped it first asks the provider to stop once more, and refuses `E_SESSION_STOP_FAILED` when that is not confirmed |
-| `session restart` | stop, then start, under one lifecycle claim |
+| `session restart` | the provider's `check` with the planned launch, then stop, then start, under one lifecycle claim. The check comes before the stop: a provider that refuses there (a model its harness cannot resolve, a launch it would sandbox without what it needs) leaves the running session running, and the refusal says `nothing was stopped or started` |
 | `session start --resume` | sends the resume notice through the provider's input; nothing is launched ([below](#provider-homes-lost-sessions)) |
 | `session attach` | `E_SESSION_NO_TERMINAL`; the message carries inspect's `open` link when there is one |
 | `oats retire` | records the stop, asks the provider to stop, checks that no process works in the home, then runs the retire hooks and removes the home ([souls-and-instances.md](souls-and-instances.md#retiring-a-home-on-a-session-provider)) |

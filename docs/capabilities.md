@@ -2369,11 +2369,19 @@ way. The wire version is unchanged.
 
 The provider's readiness. In: `{ "home": "/abs/home" | null, "soul": "<name>" | null, "settings": { … } }`:
 a home, or, before any home exists, a soul; and, before a launch,
-`"launch": { "harness", "yolo", "args", "sandbox", "trees", "protected" }`, the launch that is
+`"launch": { "harness", "model", "yolo", "args", "sandbox", "trees", "protected" }`, the launch that is
 planned: the harness, yolo, the allowances, the trees and the protected paths as its launch input will
 carry them, and in `args` the launch configuration's own arguments. **The
 arguments a capability's hooks contribute are not in it**: the check runs
-before any hook, and those reach the launch input only. Out:
+before any hook, and those reach the launch input only. **`model`** (a kernel
+that lists the feature `launch-model-and-check-warnings` in
+`oats version --json`) is the model the launch input will carry, a non-empty
+string, and is there only when the launch names one: with no key, the
+harness is left to its own default, which the kernel does not know. So
+refuse here a model your harness cannot resolve: a restart's check runs
+before its stop, and a refusal at your `launch` comes after it. A kernel
+without the feature never sends the key: its absence there says nothing
+about the model. Out:
 `{ "status": "ready" | "needs-configuration" | "authorization-required" | "unavailable", "problems": [ { "code", "message" } ], "warnings": [ { "code", "message" } ] }`
 (`warnings` optional; no problem on `ready`). Say where a credential comes
 from, never print it.
@@ -2390,6 +2398,17 @@ from, never print it.
   problems. A refused spawn runs no hook and leaves no home; a refused
   start or restart runs no hook and stops nothing. A check that fails or
   answers outside these words is not ready.
+- **The `warnings` of a `ready` answer reach a person** (feature
+  `launch-model-and-check-warnings`): the kernel relays each in the
+  `warnings` of the spawn's, the start's and the restart's answer and of
+  their previews, as one line that names your capability and the verb, with
+  your code and your message as you gave them (the message made safe to
+  print, at most 500 characters)
+  ([desktop-cli-api.md](desktop-cli-api.md#relayed-check-warnings)). At most
+  32 per launch are relayed, and fewer where the answer's own warnings
+  leave less room (512 entries in all, four of them kept free). No client parses them: write each message as a
+  sentence a person can act on. The warnings beside a status other than
+  `ready` are not relayed: say what refuses the launch in `problems`.
 - **A preview asks it too, with the same planned launch**, so that a launch
   you would refuse does not read clean in its preview. `check` must only
   read, and must answer for a home that is not there:

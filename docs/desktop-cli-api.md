@@ -194,6 +194,7 @@ see the [official catalog](official-catalog.md) for current pins.
 | `spawn-task-stdin` | `oats spawn <soul> --task-file -` reads the task from standard input. A spawn routed with `--server` sends its `--task` or `--task-file` text that way, to the preview and to the apply, to a host that lists this, and not as an argument; a host that does not list it gets the text as an argument, and the answer's `warnings` gains one line that says it was readable in both machines' process lists ([servers.md](servers.md#a-routed-spawns-task)) |
 | `session-providers` | session backends a capability supplies ([Session providers](#session-providers-feature-session-providers)): `--backend <provider>` on `oats spawn` (a schedule's `backend`, a trigger's `spawn.backend`); a provider home's `backend`, `session` and `open` on its status row (the endpoint only on its local inspect, spawn and start answers; nothing of it relayed); `backend: "tmux"` on a tmux home's status row; `sessionProviders` in `oats inspect` and `oats capabilities show`; a provider's readiness in `oats readiness`; `backends` on a capability's `requires` row; the codes `E_BACKEND_UNKNOWN`, `E_BACKEND_AMBIGUOUS`, `E_BACKEND_HARNESS`, `E_BACKEND_LAUNCH_ARG`, `E_BACKEND_NOT_READY`, `E_SESSION_NO_TERMINAL`, `E_SESSION_PROMPT_OPEN`, `E_SESSION_INPUT_QUEUED`; `backend` on the sweep's rows of provider homes; `oats session resume --plan --without-provider-inspect`, which is `oats host run`'s own switch for its shutdown listing, not a client's. A routed `--backend <provider>` is sent only to a host that lists it. |
 | `provider-outside-oats` | a harness that runs in a provider home an operator stopped is reported: `outsideOats: {code: "running-outside-oats", backend, message}` on that home's `oats status --json` row and its `oats server roster --json` row, present only when it applies: a home an operator stopped ([`outsideOats`](#row-outside-oats)). The row's `running`, `runtimeState` and `sessionEnd` stay what OATS recorded. A home stopped with the host whose harness runs again has no key: it reads running, and the sweep adopts it. The provider's `stop` input carries `reason: "host"` for every stop of a recorded session after which the home stays stopped with the host: the host shutdown's, the stop after a failed resume notice of such a home, and the stop after an input that crossed a stop with the host; never a stop with `endpoint: null`. A row from a kernel or a host without the feature never carries the key, so its absence says nothing there. `oats instance upgrade` refuses such a home (`E_SESSION_RUNNING`). |
+| `launch-model-and-check-warnings` | a session provider's `check` is handed the model of the launch that is planned, `launch.model`, present only when the launch names one; and what a `ready` check warned of is relayed, one string per warning, in the `warnings` of `oats spawn --preview`, `oats launch-config preview --home`, and the answers of `oats spawn`, `oats session start` and `oats session restart` ([Relayed check warnings](#relayed-check-warnings)). The lines are text for a person: show them, never parse them. A kernel without the feature hands no model and drops those warnings; nothing else differs, so a client needs no gate, and a provider gates on it what it can judge only from the model | |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
 `workspaceStatusApi: 1`, `capabilitiesApi: 1`, the `oats souls` document's
@@ -2850,6 +2851,10 @@ planned ([check](capabilities.md#check-optional)). No key changes meaning:
   same way. A provider in a **member module** runs only from a spawned home,
   so it is not asked, and `warnings` carries one line that says so; the spawn
   still asks it.
+- The planned launch carries the spawn's model, `launch.model`, when the
+  spawn names one, and what a `ready` check warned of is in `warnings`
+  (feature `launch-model-and-check-warnings`,
+  [Relayed check warnings](#relayed-check-warnings)).
 - A provider that declares no `check`, a tmux launch and a `--no-launch`
   spawn ask nothing.
 
@@ -2906,6 +2911,9 @@ planned ([check](capabilities.md#check-optional)). No key changes meaning:
   `launchPromptAnswers` notice when the host file still has that key, and (0.49.0) the message of each
   [capability warning](#capability-warnings-hook-event-unsupported-oats-0490)
   of the resolved modules. The apply's `warnings` carries the same messages.
+  On a session provider it also carries what the provider's `ready` check
+  warned of ([Relayed check warnings](#relayed-check-warnings)), as the
+  apply's will.
 
 **Launch.**
 - `harness`, `model`, `modelSource`, `launchConfig`, `backend`, `yolo`
@@ -7648,6 +7656,50 @@ Its refusals: `E_RESUME_NOT_LOST` (not a lost session), `E_SESSION_NOT_RUNNING`
 the session cannot be read), `E_SESSION_PROMPT_OPEN` (a claim or a prompt is
 open) and `E_SESSION_INPUT_QUEUED`.
 
+<a id="relayed-check-warnings"></a>
+**The planned launch's model, and relayed check warnings** (feature
+`launch-model-and-check-warnings`). Before a spawn, a start or a restart
+launches on a session provider, and in their previews, the kernel asks the
+provider's `check` with the launch that is planned
+([capabilities.md](capabilities.md#check-optional)):
+
+- **`launch.model`** is the model the launch will pass, a non-empty string,
+  when the launch names one: `--model`, a launch configuration's, the soul's
+  or the host's resolved one, a home's recorded one at a start. It is absent
+  when none is named and the harness is left to its own default: never
+  `null`, never `""`, never that default.
+- **A restart's check runs before its stop.** A provider that refuses in its
+  check (any code, a model its harness cannot resolve included) leaves the
+  running agent running: the refusal says `nothing was stopped or started`,
+  and the home's record does not move.
+- **What a `ready` check warned of is relayed** in `warnings`: of
+  `oats spawn --preview` (`result.warnings`), of `oats launch-config preview
+  --home`, and of the answers of `oats spawn`, `oats session start` and
+  `oats session restart`. One string per warning:
+
+  ```text
+  <capability>'s session provider <name> (check) warns <code>: <message>
+  ```
+
+  The code and the message are the provider's own, the message made safe to
+  print and cut at 500 characters. At most 32 are relayed for one launch;
+  past that, one last line says how many more the check gave
+  (`… (check) gave <n> more warnings, not shown here`). They come after the
+  answer's other warnings and never take `warnings` past 512 entries, the
+  most a client's reader takes: where the answer's own warnings leave room
+  for fewer, the relayed ones are dropped first, that last line counts
+  them, and none of the answer's own is dropped; with no room, none is
+  relayed. Four of the 512 entries stay free of relayed lines, for what a
+  command adds after the kernel's answer (a spawn's unsaved wake, and a
+  routed spawn's three notices, the unsaved route among them). A start and
+  a restart also record each as a `launch-warning` event.
+- **The lines are text for a person. Show them; never parse them**, and take
+  no decision from one: the wording is not a contract. `warnings` holds
+  strings only, here as everywhere: a reader that shows the kernel's own
+  warnings shows these with no change.
+- A refusal is unchanged: its message names the provider's problems, and no
+  warning is relayed beside it. A check with no warning adds no line.
+
 **A launch with no recorded outcome** (the lifecycle's
 [design record](design/2026-11-20-provider-home-lifecycle.md)). From the
 moment a spawn or a start sends the provider's launch until its endpoint is
@@ -7787,8 +7839,9 @@ with the launch that is planned, as the start will before it stops anything:
 a launch the provider would refuse is a failed `backend` item (`code`: the
 start's refusal, `E_BACKEND_*`), and `ok` is false. So is an allowance's path
 the start would refuse to make (`E_BACKEND_SANDBOX_HOST`); `warnings` carries
-the start's `sandbox allowances: …` lines. Nothing is stopped, started or
-created.
+the start's `sandbox allowances: …` lines and what a `ready` check warned of
+([Relayed check warnings](#relayed-check-warnings)). Nothing is stopped,
+started or created.
 
 ### Input
 
