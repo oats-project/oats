@@ -2290,10 +2290,19 @@ session present on a home OATS started, whatever `running` is: answer
 so the value is as fresh as your answer; no act reads it. Without the key
 the row reads `null`. Any other value is outside the contract, as is a
 value other than `null` with `present: false`, and the answer is then read
-as no answer. **Send the key only to a kernel that lists `status-activity`**
-(`compatibility.oats` at the release that first lists it): an earlier
-kernel takes the result's keys as exactly the four above, and reads an
-answer with a fifth as no answer.
+as no answer.
+
+**An optional key goes only to a kernel that lists its feature.** The kernel
+reads a result's keys exactly: the ones this page names for its version, and
+no other. So a provider sends an optional key only to a kernel that lists
+the key's feature in `oats version --json`, and the provider package that
+sends it raises `compatibility.oats` to the kernel release that first lists
+that feature. That holds for `activity` (`status-activity`) and for any
+optional provider key after it. The cost of getting it wrong is a downgrade:
+a provider that sends `activity`, run under a kernel without
+`status-activity`, has every answer read as no answer, and each of its homes
+reads unreachable (`running: null`, `runtimeState: "unreachable"`) until the
+kernel or the provider package is moved to a pair that agrees.
 
 `inspectMany` (optional) in:
 `{ "homes": [ { "home", "instance", "endpoint" } ] }`, at most 200. Out:
