@@ -13,12 +13,9 @@ The sections after the lane's own cover release-notes entries, the
 post-publish Desktop check, mirroring a released `oats.okf` and releasing
 `oats.framework`.
 
-In `release.yml`, test and build jobs inherit `contents: read`. The
-`publish` job declares `contents: write` for the bump-branch push and GitHub
-Release, `pull-requests: write` for the bump PR, and `id-token: write` plus
-`attestations: write` for build-provenance attestations. The separate
-`publish-team-image` job keeps its own `contents: write` and `packages: write`
-permissions; its publication switch remains disabled.
+The GitHub Actions [release workflow](../.github/workflows/release.yml)
+gives test and build jobs read-only repository access. Jobs which publish
+declare their own permissions in the workflow.
 
 ## When to use it
 
