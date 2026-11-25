@@ -182,6 +182,26 @@ test("a subagent's event writes nothing: an input that carries agent_id leaves t
     fire(h, "Stop", input);
     assert.equal(recordOf(h).event, "turn-end", JSON.stringify(input));
   }
+  // An input over the 64 KiB the script reads arrives cut, and no longer parses: a Stop's last
+  // message can be that long. The keys before `hook_event_name` still say whose event it is.
+  const long = "x".repeat(70000);
+  prompt(h);
+  const working = readFileSync(join(h, TURN_FILE), "utf8");
+  fire(h, "Stop", { session_id: "s-1", agent_id: "a-1", hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: long });
+  assert.equal(readFileSync(join(h, TURN_FILE), "utf8"), working, "a subagent's long Stop writes nothing");
+  fire(h, "Stop", { session_id: "s-1", hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: `"agent_id":"a-1" ${long}` });
+  assert.equal(recordOf(h).event, "turn-end", "the main thread's long Stop ends the turn, whatever its message says");
+  const cut = (event) => JSON.stringify(event).slice(0, 65536);
+  assert.equal(fromSubagent(cut({ session_id: "s", agent_id: "a-1", hook_event_name: "Stop", last_assistant_message: long })), true);
+  assert.equal(fromSubagent(cut({ session_id: "s", agent_id: "a-1", agent_type: "x", cwd: "/w", hook_event_name: "Stop", last_assistant_message: long })), true);
+  for (const event of [
+    { session_id: "s", hook_event_name: "Stop", last_assistant_message: long },
+    { session_id: "s", hook_event_name: "Stop", last_assistant_message: `"agent_id":"a-1" ${long}` },
+    // A key order with nothing before hook_event_name to read, and an input cut before it.
+    { hook_event_name: "Stop", agent_id: "a-1", last_assistant_message: long },
+    { prompt: long, agent_id: "a-1", hook_event_name: "UserPromptSubmit" },
+    { session_id: "s", agent_id: "", hook_event_name: "Stop", last_assistant_message: long },
+  ]) assert.equal(fromSubagent(cut(event)), false, JSON.stringify(event).slice(0, 80));
   assert.equal(fromSubagent(JSON.stringify({ agent_id: "a-1", hook_event_name: "Stop" })), true);
   for (const text of ["", "{", "null", "[]", JSON.stringify(INPUT.Stop), JSON.stringify({ agent_id: "" }), JSON.stringify({ agent_id: null })]) assert.equal(fromSubagent(text), false, text);
   assert.equal(boundaryOf(TURN_END, h, JSON.stringify({ agent_id: "a-1" })), null);

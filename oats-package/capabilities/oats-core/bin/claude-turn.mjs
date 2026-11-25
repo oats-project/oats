@@ -75,12 +75,20 @@ export function isIdleNotice(input) {
 }
 
 /** Whether a hook input (Claude's JSON, as text) is a subagent's event: it carries `agent_id`,
- *  which only a subagent's does. One that is no JSON object is the main thread's. */
+ *  which only a subagent's does. An input that does not parse (the script hands at most 64 KiB,
+ *  and a Stop's last message can be longer) is read by the rule claude-waiting.sh has for a tool
+ *  clear (from_subagent): Claude's compact payload puts its top-level keys, `agent_id` among them,
+ *  before `hook_event_name`, and a string value escapes its quotes, so the text before the first
+ *  `"hook_event_name"` holds top-level keys only. No such key there, or no `hook_event_name` in
+ *  what was read, is the main thread's. */
 export function fromSubagent(input) {
   try {
     const event = JSON.parse(input);
     return event !== null && typeof event === "object" && !Array.isArray(event) && typeof event.agent_id === "string" && event.agent_id.length > 0;
-  } catch { return false; }
+  } catch {
+    const text = String(input), end = text.indexOf('"hook_event_name"');
+    return end >= 0 && /"agent_id": ?"[A-Za-z0-9_-]/.test(text.slice(0, end));
+  }
 }
 
 /** The boundary an action writes, or null for none: `input` is the hook's input. A subagent's

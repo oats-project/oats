@@ -1565,7 +1565,8 @@ waiting clear --producer oats.core --home <home>` from anywhere.
   reads. The turn-boundary clears (`UserPromptSubmit`, `Stop`,
   `SessionEnd`) are not debounced: each gets a CLI call (see Order and
   retry), a node process per prompt and per stop, and one more for the turn
-record (oats.core 2.17.0, [below](#oatscore-the-turn-record)). A symlink is never followed. An
+  record (oats.core 2.17.0, [below](#oatscore-the-turn-record)). A symlink
+  is never followed. An
   unusable marker (a refused, missing or replaced directory, a state path
   that is not a regular file, a lock path that is not a directory) means no
   debounce: set and clear then always call the (idempotent) CLI. The launch
@@ -1735,7 +1736,9 @@ older kernel ignores it, and it is no work to a retire.
 The entries run `claude-waiting.sh turn <boundary>`, behind the script's own
 home check: a Claude process that loads these settings under another
 instance's environment writes nothing. An event whose input carries
-`agent_id` (a subagent's, in the same session) writes nothing either. `bin/claude-turn.mjs` makes the write,
+`agent_id` (a subagent's, in the same session) writes nothing either; of an
+input over the 64 KiB the script reads, the keys before `hook_event_name`
+decide, as for a tool clear. `bin/claude-turn.mjs` makes the write,
 calls no kernel command and prints nothing, and the script kills it at 2 s: a
 write that fails is dropped, and the row keeps the last boundary written.
 
