@@ -242,6 +242,10 @@ alias uses its separate account and key. The receiver creates credential
 files root-owned, group-readable and mode 0440; the login directory is mode
 0750, and its parents must be root-owned, not writable by others and not
 symlinks. Neither the caller's command nor stdin chooses a destination path.
+A destination that shares the file or the directory of a personal credential
+([Personal credentials](#personal-credentials)), by any spelling or through
+any symlink that exists, is refused with `configured path is shared with
+another entry`, for `install`, `status` and `remove`.
 
 ### Personal credentials
 
@@ -281,8 +285,8 @@ Each entry is in the optional `credentials` object of the same root-owned
   `TEAM_CREDENTIALS_DIR` binds. Neither the file nor that directory may be
   the path or the directory of another entry or of any `teams` destination,
   by any spelling or through any symlink that exists: each person's key
-  reaches only their own file. Harness mode does not check this: an alias
-  made after an entry's install still lets that harness key reach the file.
+  reaches only their own file. Harness mode makes the same check from its
+  side, at every action, so an alias made after an install is refused too.
 - `access` must be `"read-only"`, the only access this receiver writes.
 
 The person sends the credential with the entry's key:
@@ -293,11 +297,14 @@ ssh -i <entry-key> root@<host> status
 ssh -i <entry-key> root@<host> remove
 ```
 
-`credential-source` supplies the value on stdout, as above. The value is
-opaque: at most 65,536 bytes of strict UTF-8 with no NUL, with surrounding
-whitespace stripped. It may span lines, since a client-credential bundle may
-be JSON, and nothing checks its shape. The receiver refuses a terminal on
-stdin. It writes the file root:group 0440, atomically. It creates a missing
+`credential-source` supplies the value on stdout, as above, so the value
+never passes through a terminal: that pipe is what keeps it off one. Under
+`restrict`, sshd allocates no pty, so the receiver's own check for a terminal
+on stdin never fires on this route; it guards only a direct invocation. The
+value is opaque: at most 65,536 bytes of strict UTF-8 with no NUL, with
+surrounding whitespace stripped. It may span lines, since a client-credential
+bundle may be JSON, and nothing checks its shape. It writes the file
+root:group 0440, atomically. It creates a missing
 `credentials` directory root:group 0750, with missing parents root:root
 0755. It refuses an existing directory with any other owner, group or mode,
 and never changes it. Every existing component must be root-owned, not
@@ -307,7 +314,14 @@ The answer is one JSON line, `{"ok", "entry", "fingerprint", "replacedAt"}`,
 with `"error"` when `ok` is false. It never contains the value. Syslog
 records only the validated action, the entry id, the fingerprint and the
 client address. Removal deletes the delivered file; revoke the credential
-with its provider too. The refusals:
+with its provider too.
+
+The fingerprint is the first 64 bits of an unsalted SHA-256 of the value. It
+reaches the auth log and every `status` answer, so it identifies a
+high-entropy value without revealing it, but it would let anyone who reads
+it confirm a guess of a low-entropy one. An entry must hold a high-entropy
+secret, such as a generated client secret, never a password or a short
+token. The refusals:
 
 | Error | Cause |
 |---|---|

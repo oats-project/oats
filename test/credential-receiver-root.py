@@ -193,6 +193,45 @@ try:
     check("an entry that shares nothing with another entry or a teams destination installs", out.get("ok") is True)
     call("remove")
     shutil.rmtree(base / "srv", ignore_errors=True)
+    # Two-way: harness mode refuses a teams destination that shares a credentials entry's file or directory, so a team's
+    # harness key cannot write, replace or remove a person's credential.
+    run_harness = receiver["run"]
+
+    def harness(action, value=b""):
+        return run_harness(f"{action} codex team-a", io.BytesIO(value), config_path=str(config))
+
+    def harness_refused(label, out, error):
+        check(f"{label}: refused with {error!r} (got {out.get('error')!r})",
+              out == {"ok": False, "harness": "codex", "name": "team-a", "fingerprint": None, "replacedAt": None, "error": error})
+
+    for label, teams_path, alias in [
+        ("a teams destination in a credentials entry's directory", str(team / "credentials" / "{harness}-token"), False),
+        ("a teams destination at a credentials entry's file", path, False),
+        ("a teams destination with two leading slashes into a credentials entry's directory", "/" + str(team / "credentials" / "{harness}-token"), False),
+        ("a teams destination through a symlink to a credentials entry's directory", str(base / "srv" / "harness" / "login" / "{harness}-token"), True),
+    ]:
+        shutil.rmtree(base / "srv", ignore_errors=True)
+        (team / "credentials").mkdir(parents=True)
+        for directory in (base / "srv", team):
+            directory.chmod(0o755)
+        os.chown(team / "credentials", 0, gid)
+        (team / "credentials").chmod(0o750)
+        Path(path).write_bytes(b"installed-credential\n")
+        os.chown(path, 0, gid)
+        os.chmod(path, 0o440)
+        if alias:
+            (base / "srv" / "harness").mkdir(mode=0o755)
+            (base / "srv" / "harness" / "login").symlink_to(team / "credentials")
+        configure({"cred-a": entry()}, {"teams": {"team-a": {"group": group, "harnesses": ["codex"], "path": teams_path}}})
+        for action in ("install", "status", "remove"):
+            harness_refused(f"harness mode, {label} ({action})", harness(action, b"fixture-harness-token" if action == "install" else b""), shared)
+        check(f"harness mode, {label}: the person's credential is untouched", Path(path).read_bytes() == b"installed-credential\n")
+        check(f"harness mode, {label}: no harness token was written", not os.path.lexists(team / "credentials" / "codex-token"))
+    shutil.rmtree(base / "srv", ignore_errors=True)
+    configure({"cred-a": entry()}, {"teams": {"team-a": {"group": group, "harnesses": ["codex"], "path": str(base / "srv" / "{name}" / "login" / "{harness}-token")}}})
+    out = harness("install", b"fixture-harness-token")
+    check("harness mode installs a teams destination that shares nothing with a credentials entry", out.get("ok") is True)
+    shutil.rmtree(base / "srv", ignore_errors=True)
     config.write_text(json.dumps({"teams": {}}))
     refused("a config with no credentials object", call("install", b"fixture-value"), "receiver config has no credentials")
     config.write_text(json.dumps({"credentials": {"cred-a": entry()}}))

@@ -11,6 +11,7 @@ The destination comes from the root-owned config (/etc/oats-login/receiver.json)
   {"teams": {"<name>": {"group": "<group that may read>", "harnesses": ["claude", ...],
                         "path": "/srv/oats-team/{name}/login/{harness}-token"}}}   (path optional; that is the default)
 The file is root:<group> 0440, written atomically; its parent directories are created root-owned (0750 for the login dir).
+A destination that shares the file or directory of a --credential entry (below) is refused.
 
 With --credential <entry-id>, the key decides the destination: one dedicated key per entry,
   restrict,command="/usr/local/sbin/oats-login-receive --credential <entry-id>" <key>
@@ -98,6 +99,12 @@ def destination(cfg, harness, name):
     path = (team.get("path") or DEFAULT_PATH).format(name=name, harness=harness)
     if not os.path.isabs(path) or ".." in path.split("/"):
         raise Refused("configured path is not absolute and normalized")
+    # The other side of credential_destination's check: a team's harness key never reaches a person's credential.
+    credentials = cfg.get("credentials")
+    for spec in (credentials.values() if isinstance(credentials, dict) else ()):
+        if isinstance(spec, dict) and isinstance(spec.get("path"), str) and os.path.isabs(spec["path"]) \
+                and shares_destination(canonical(spec["path"]), path):
+            raise Refused("configured path is shared with another entry")
     return path, gid
 
 
