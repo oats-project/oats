@@ -15,6 +15,8 @@
 //      (the AppImage's runtime and libraries, and ELF entries of app.asar,
 //      included) needs no newer glibc, GLIBCXX or CXXABI than
 //      scripts/linux-floor.json, the floor docs/desktop.md states;
+//   2b. (Rosetta only) the packaged executable starts once as Node, warming
+//      its first x64 translation before the ABI probe, with its own budget;
 //   3. node-pty (the native module) loads INSIDE the packaged app's
 //      Electron ABI (ELECTRON_RUN_AS_NODE against the packaged
 //      resources), catching ABI-mismatch and lost spawn-helper exec bits;
@@ -48,7 +50,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLaunchFixtureSource } from "../test/helpers/launch-fixture.mjs";
 import { createReaper } from "./proc-reaper.mjs";
-import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory, listeningTcpPorts, childPidMatching, unexpectedTcpListeners } from "./smoke-probes.mjs";
+import { runRosettaWarmup, runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory, listeningTcpPorts, childPidMatching, unexpectedTcpListeners } from "./smoke-probes.mjs";
 import { verifyAppSignature } from "./codesign-verify.mjs";
 import { checkLinuxFloor } from "./linux-floor.mjs";
 import { WATCHDOG_MS, PHASE_BUDGET_MS, boundedTail, readDevToolsPort, awaitClose } from "./launch-probe.mjs";
@@ -150,6 +152,16 @@ if (process.platform === "darwin") {
 if (process.platform === "linux") {
   const r = await checkLinuxFloor(reaper, { deb: artifacts.deb, appImage: artifacts.AppImage }, { timeout: PHASE_BUDGET_MS.linuxFloor });
   for (const line of r.lines || []) ok(line);
+  if (!r.ok) fail(r.detail);
+  ok(r.detail);
+}
+
+// ---- 2b. Rosetta's first start, before the ABI probe ------------------------
+{
+  const r = await runRosettaWarmup(reaper, app.exe, {
+    timeout: PHASE_BUDGET_MS.rosettaWarmup,
+    targetArch: process.env.OATS_SMOKE_TARGET_ARCH || process.arch,
+  });
   if (!r.ok) fail(r.detail);
   ok(r.detail);
 }

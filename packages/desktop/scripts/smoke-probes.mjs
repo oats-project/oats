@@ -31,6 +31,26 @@ export function packagedNode(appExe, args, { targetArch, platform = process.plat
     : { exe: appExe, args, rosetta };
 }
 
+/** Warm Rosetta's first translation separately from the node-pty ABI probe. */
+export async function runRosettaWarmup(reaper, appExe, {
+  timeout = 240_000, env = process.env, targetArch,
+  platform = process.platform, hostArch = process.arch, now = Date.now,
+} = {}) {
+  const { exe, args, rosetta } = packagedNode(appExe, ["-e", "process.exit(0)"], { targetArch, platform, hostArch });
+  if (!rosetta) return { ok: true, detail: "Rosetta warm-up skipped (packaged executable runs natively)" };
+  if (typeof reaper?.runTracked !== "function") {
+    return { ok: false, detail: "Rosetta warm-up requires a reaper with runTracked (async group-tracked execution is the contract)" };
+  }
+  const started = now();
+  const r = await reaper.runTracked(exe, args, { timeout, env: { ...env, ELECTRON_RUN_AS_NODE: "1" } });
+  if (r.timedOut) return { ok: false, detail: "Rosetta warm-up timed out (group killed)" };
+  if (r.code !== 0) {
+    const combined = `${String(r.stdout)}\n${String(r.stderr || "")}`.trim().slice(-500);
+    return { ok: false, detail: `Rosetta warm-up failed (exit ${r.code}): ${combined}` };
+  }
+  return { ok: true, detail: `Rosetta x86_64 first start of the packaged app: ${Math.round((now() - started) / 100) / 10} s` };
+}
+
 export function abiProbeSource(asarMainPath) {
   return `
     const { createRequire } = require("node:module");

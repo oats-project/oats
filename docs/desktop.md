@@ -1639,7 +1639,11 @@ and the AppImage read against the version the Install section states, held in
 `packages/desktop/scripts/linux-floor.json` + node-pty ABI + a headless run of
 the bundled backend, of its liveness collector and of every module main
 imports, from `app.asar` and the `client/` directory beside it, no GUI
-launch). The Linux leg then runs the smoke with the launch phase under a
+launch). On the macOS x64 cross-build, a separate, tracked first start of the
+packaged executable as Node warms Rosetta before the node-pty ABI probe.
+It has a 240-second budget and reports elapsed seconds; native runs report
+that the warm-up is skipped. The ABI probe retains its 90-second budget.
+The Linux leg then runs the smoke with the launch phase under a
 virtual display. The installer workflow's macOS legs use build-verify mode.
 On Linux the GUI phase launches the AppImage with `--appimage-extract-and-run`
 and reports the preload's sandbox state and the Electron arguments. It opens
