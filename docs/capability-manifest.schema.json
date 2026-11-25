@@ -275,7 +275,7 @@
             "description": "The provider's verbs, each naming one of this manifest's commands.",
             "properties": {
               "launch": { "type": "string", "minLength": 1, "description": "Starts the instance's session; answers the endpoint the kernel records." },
-              "inspect": { "type": "string", "minLength": 1, "description": "Answers one session's { present, state, running, open? }." },
+              "inspect": { "type": "string", "minLength": 1, "description": "Answers one session's { present, state, running, open?, activity? }." },
               "input": { "type": "string", "minLength": 1, "description": "Sends one text to the session; answers { submitted: true, verified } only when it was dispatched." },
               "stop": { "type": "string", "minLength": 1, "description": "Stops the session; answers { stopped: true }." },
               "inspectMany": { "type": "string", "minLength": 1, "description": "Optional: inspects several homes' sessions in one call (oats status)." },

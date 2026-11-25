@@ -47,6 +47,16 @@ from the same release tag). This bridge registers no operational tools. It only:
   dialog open is cleared when the home's next pi starts; with no pi to start,
   clear it with `oats instance waiting clear --producer oats.pi --home <home>`
   ([whose claim it is](../../docs/capabilities.md#oatscore-needs-input));
+- records each turn's start and end in `<home>/.oats/turn.json` (`{event:
+  "turn-start" | "turn-end", at}`, replaced whole at every boundary): pi's
+  `agent_start` and `agent_end`, an aborted or failed run's end included, and
+  the opening task's run like any other. A kernel that lists `status-activity`
+  reads it for a tmux home whose harness runs, counting only a boundary from
+  the home's current start, and shows the row as `activity: "working"` or
+  `"idle"` ([the row field](../../docs/desktop-cli-api.md#row-activity)). The
+  file is kernel-private, and read on no session provider's home. Between two
+  attempts of a retried turn the row reads idle, for the length of pi's
+  backoff;
 - journals compaction summaries and sends resume nudges when the active
   knowledge capability created `STATE.md`/`log.md`. A startup gets the nudge
   only when pi kept an earlier session of the home (pi files a session once

@@ -2257,7 +2257,7 @@ provider runs the harness itself.
 ### inspect and inspectMany
 
 `inspect` in: `{ "home", "endpoint" }`. Out:
-`{ "present": true|false, "state": "unknown"|"shell"|"stopped", "running": true|false|null, "open"?: { "label", "url" } }`,
+`{ "present": true|false, "state": "unknown"|"shell"|"stopped", "running": true|false|null, "open"?: { "label", "url" }, "activity"?: "working"|"idle"|null }`,
 exactly those keys.
 
 | The session | present | state | running |
@@ -2278,6 +2278,22 @@ session whose run ended in error as gone, not as `shell`, when your product
 restarts it on the next input. `open` is what a client may
 show instead of a terminal: a one-line `label` of at most 100 characters and
 an `http` or `https` `url` of at most 2000, without credentials.
+
+`activity` (optional; feature `status-activity`) is the turn fact, read live
+from your product at that call: `"working"` while a turn runs (it is
+starting, running or stopping, or an input waits in its queue), `"idle"`
+when the last turn ended and none has started, `null` when your product
+does not say. The kernel relays it as the row's
+[`activity`](desktop-cli-api.md#row-activity) wherever you answer the
+session present on a home OATS started, whatever `running` is: answer
+`"idle"` for an idle session whose harness you unloaded. It stores nothing,
+so the value is as fresh as your answer; no act reads it. Without the key
+the row reads `null`. Any other value is outside the contract, as is a
+value other than `null` with `present: false`, and the answer is then read
+as no answer. **Send the key only to a kernel that lists `status-activity`**
+(`compatibility.oats` at the release that first lists it): an earlier
+kernel takes the result's keys as exactly the four above, and reads an
+answer with a fifth as no answer.
 
 `inspectMany` (optional) in:
 `{ "homes": [ { "home", "instance", "endpoint" } ] }`, at most 200. Out:
