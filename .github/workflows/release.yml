@@ -28,15 +28,9 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
 
+# Jobs which publish declare their own permissions.
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
-  # The publish job's last step opens the version-bump PR with github.token.
-  # Without this the step fails at createPullRequest after everything is
-  # published, and the release run ends red. It also needs the repository
-  # setting "Allow GitHub Actions to create and approve pull requests".
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: release
@@ -335,6 +329,15 @@ jobs:
   publish:
     needs: [build-and-test, tests, desktop-build]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write  # Push the bump branch and create/upload the GitHub Release.
+      # The publish job's last step opens the version-bump PR with github.token.
+      # Without this the step fails at createPullRequest after everything is
+      # published, and the release run ends red. It also needs the repository
+      # setting "Allow GitHub Actions to create and approve pull requests".
+      pull-requests: write  # Open the bump PR with gh pr create.
+      id-token: write  # actions/attest-build-provenance requests an OIDC token.
+      attestations: write  # actions/attest-build-provenance records the attestation.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
