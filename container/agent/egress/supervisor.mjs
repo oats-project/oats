@@ -1,14 +1,28 @@
 /** One owner for both proxy children. A partial proxy is an image failure. */
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compilePolicy, loadPolicy } from "./policy.mjs";
+import { compilePolicy, loadPolicy, policyHash } from "./policy.mjs";
 import { startExternalConnectors } from "./external.mjs";
 
 const onSignals = handler => {
   for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, handler);
   return () => { for (const signal of ["SIGTERM", "SIGINT"]) process.off(signal, handler); };
 };
+
+/** Generated DNS/proxy configuration, plus `policy.hash`: the policyHash of the
+ * exact object compiled here, which split-host proofs bind to. Written before
+ * any child starts; a restart replaces the read-only record. */
+export function prepareProxyFiles(policy, directory = "/tmp/egress") {
+  const files = compilePolicy(policy);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  for (const [key, name] of [["zone", "allow.zone"], ["nginx", "nginx.conf"], ["corefile", "Corefile"]]) {
+    writeFileSync(join(directory, name), files[key], { mode: 0o600 });
+  }
+  rmSync(join(directory, "policy.hash"), { force: true });
+  writeFileSync(join(directory, "policy.hash"), policyHash(policy), { mode: 0o400 });
+}
 
 export async function superviseProxy({ spawnChild = spawn, onSignal = onSignals,
   say = line => process.stderr.write(`egress: ${line}\n`), graceMs = 3000, policy } = {}) {
@@ -58,11 +72,7 @@ export async function superviseProxy({ spawnChild = spawn, onSignal = onSignals,
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const policy = loadPolicy();
-    const files = compilePolicy(policy);
-    mkdirSync("/tmp/egress", { recursive: true, mode: 0o700 });
-    for (const [key, name] of [["zone", "allow.zone"], ["nginx", "nginx.conf"], ["corefile", "Corefile"]]) {
-      writeFileSync(`/tmp/egress/${name}`, files[key], { mode: 0o600 });
-    }
+    prepareProxyFiles(policy);
     process.exitCode = await superviseProxy({policy});
   } catch {
     process.stderr.write("egress: startup failed (configuration or process)\n");
