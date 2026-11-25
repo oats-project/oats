@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { diffInstanceFile, observeInstanceGit } from "../lib/instance-git.mjs";
 import { exactTreeDigest, retireInstance, retirementRecoveryRoot } from "../lib/core.mjs";
 import { planRetire } from "../lib/instance-lifecycle.mjs";
+import { BEFORE_EFFECT_CODES } from "../lib/errors.mjs";
 import * as core from "../lib/core.mjs";
 import { git, v2Deployment } from "./helpers/v2-deployment.mjs";
 
@@ -95,11 +96,21 @@ test("the recovery copier refuses a partial source before copying anything", (t)
 });
 
 async function retirement(t) {
-  const f = v2Deployment({
+  // v2Deployment clones its empty local remote once before seeding it. Hold precisely that
+  // expected Git warning; every other diagnostic still reaches stderr.
+  const stderr = process.stderr.write;
+  let emptyCloneWarnings = 0;
+  process.stderr.write = function (chunk, ...args) {
+    if (String(chunk) === "warning: You appear to have cloned an empty repository.\n") { emptyCloneWarnings++; return true; }
+    return stderr.call(this, chunk, ...args);
+  };
+  let f;
+  try { f = v2Deployment({
     souls: { dev: { soul: { work: "worktree", capabilities: { "test.hook": { from: "here" } } }, agents: "# Dev\n" } },
     capabilities: { "test.hook": { manifest: { hooks: { retire: "retire.mjs" } }, files: { "retire.mjs": 'import { writeFileSync } from "node:fs";\nimport { join } from "node:path";\nwriteFileSync(join(process.env.OATS_INSTANCE_HOME, "hook-ran"), "ran\\n");\n' } } },
     files: { "file.txt": "before\n" },
-  });
+  }); } finally { process.stderr.write = stderr; }
+  assert.equal(emptyCloneWarnings, 1, "the fixture's one empty seed clone is expected");
   t.after(() => f.cleanup());
   const spawned = await f.spawn("dev", { purpose: "floor" });
   return { f, spawned, work: join(spawned.home, "work"), recovery: retirementRecoveryRoot(join(spawned.home, "..")) };
@@ -116,7 +127,7 @@ for (const where of ["work", "source", "nested", "extra"]) {
     }
     if (where === "extra") {
       source = join(spawned.home, ".work-extra");
-      git(f.member, "worktree", "add", "--detach", source);
+      git(f.member, "worktree", "add", "--quiet", "--detach", source);
       git(f.member, "config", "extensions.worktreeConfig", "true");
     }
     // The source case gives the copier a repository with no work directory.
@@ -152,4 +163,41 @@ test("full clone retires without probing an old version", async (t) => {
   assert.equal(result.removedDir, true, JSON.stringify(result));
   assert.equal(existsSync(spawned.home), false);
   assert.ok(git(f.member, "rev-parse", `refs/heads/${spawned.branch}`));
+});
+
+test("a full-clone worktree whose repository is gone keeps the existing orphan recovery behavior", async (t) => {
+  const { f, spawned, work } = await retirement(t);
+  rmSync(f.member, { recursive: true });
+  const before = exactTreeDigest(work);
+  await f.inEnv(() => {
+    const gitVersion = () => assert.fail("a missing full clone needs no version probe");
+    assert.doesNotThrow(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }));
+    const result = retireInstance(f.root, spawned.instance, { gitVersion });
+    assert.match(result.rollbackIncomplete.join("\n"), /admin entry is missing/);
+    assert.equal(existsSync(spawned.home), true);
+    assert.equal(readFileSync(join(spawned.home, "hook-ran"), "utf8"), "ran\n");
+    assert.equal(exactTreeDigest(work), before);
+  });
+});
+
+test("a stale nested gitfile keeps the full clone's existing copier refusal", async (t) => {
+  const { f, spawned, work } = await retirement(t);
+  const nested = join(work, "nested");
+  mkdirSync(nested);
+  writeFileSync(join(nested, ".git"), `gitdir: ${join(f.base, "gone")}\n`);
+  writeFileSync(join(nested, "kept.txt"), "kept\n");
+  await f.inEnv(() => {
+    const gitVersion = () => assert.fail("full clones never probe the version");
+    assert.doesNotThrow(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }));
+    assert.throws(() => retireInstance(f.root, spawned.instance, { gitVersion }), (e) => {
+      assert.equal(e.code, "E_WORK_PRESERVATION_FAILED");
+      return true;
+    });
+  });
+  assert.equal(readFileSync(join(nested, "kept.txt"), "utf8"), "kept\n");
+  assert.equal(existsSync(join(spawned.home, "hook-ran")), false);
+});
+
+test("the partial-clone refusal is a before-effect code for retire", () => {
+  assert.ok(BEFORE_EFFECT_CODES.retire.includes("E_GIT_UNSUPPORTED"));
 });

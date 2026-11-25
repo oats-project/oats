@@ -5979,6 +5979,7 @@ had begun.
 | `E_REMOTE_INCOMPATIBLE` | yes | yes |
 | `E_AMBIGUOUS` | yes | yes |
 | `E_SNAPSHOT_UNKNOWN` | yes | yes |
+| `E_GIT_UNSUPPORTED` | | yes |
 
 `E_UNIDENTIFIED_INSTANCE_HOME` includes cleanup-hook admission in both retire
 plan and apply; the refusal returns no work facts when the home cannot be identified.
