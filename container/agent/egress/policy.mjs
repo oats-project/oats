@@ -1,6 +1,7 @@
 /** Compile the wrapper-rendered, non-secret policy for the proxy image. */
 import assert from "node:assert/strict";
 import { readFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 
 /** Keep legacy route indexes stable, regardless of declaration order. */
@@ -149,6 +150,35 @@ export function compilePolicy(policy) {
   return { zone, nginx, corefile, external };
 }
 
+
+/** Canonical JSON (sorted ASCII keys, given array order, no whitespace,
+ * JSON.stringify scalars) restricted to values every language encodes the same
+ * way: safe integers only, ASCII keys, well-formed strings, plain objects. */
+function canonicalJSON(value, seen = new Set()) {
+  const refuse = () => { throw new Error("policyHash: input is not a portable JSON value"); };
+  if (value === null || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number") return Number.isSafeInteger(value) ? JSON.stringify(value) : refuse();
+  if (typeof value === "string") return value.isWellFormed() ? JSON.stringify(value) : refuse();
+  if (typeof value !== "object" || seen.has(value)) refuse();
+  seen.add(value);
+  let text;
+  if (Array.isArray(value)) text = "[" + Array.from(value, item => canonicalJSON(item, seen)).join(",") + "]";
+  else {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) refuse();
+    const keys = Object.keys(value).sort();
+    if (!keys.every(key => /^[\x00-\x7f]*$/.test(key))) refuse();
+    text = "{" + keys.map(key => JSON.stringify(key) + ":" + canonicalJSON(value[key], seen)).join(",") + "}";
+  }
+  seen.delete(value);
+  return text;
+}
+
+/** The run-binding digest the split-host wrapper, boundary adapter and services
+ * witness each compute over the same derived policy object. */
+export function policyHash(policy) {
+  return "sha256:" + createHash("sha256").update(canonicalJSON(policy), "utf8").digest("hex");
+}
 
 export function loadPolicy(path = "/etc/egress/policy.json") {
   try {
