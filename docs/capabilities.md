@@ -882,6 +882,18 @@ resolver accepts it only from the deployment's own `oats-local.yaml`
 Declare it for any key whose value points at something a committed file must
 never be able to choose.
 
+<a id="host-only-settings"></a>
+A host setting is recorded with `oats settings set <capability> <key>
+<value>` (feature `settings-set`,
+[desktop-cli-api.md](desktop-cli-api.md#oats-settings)), which writes
+`settings.<capability>.<key>` in the deployment's `oats-local.yaml` with the
+resolver's own checks, and `oats settings unset` removes it. It is an
+operator's command: an agent's session is refused
+(`E_SETTINGS_OPERATOR_ONLY`), as a guard against an agent changing a host
+setting by accident, not as a security boundary. It never records a secret:
+a credential-shaped key is refused, and belongs in the capability's own
+setup command or the host's secret store.
+
 The mirror is `committedOnly: true`: a key that must be the same for every
 deployment of the workspace, such as which shared list a tasks provider uses.
 The resolver accepts it only from committed, reviewed files, and refuses it in
