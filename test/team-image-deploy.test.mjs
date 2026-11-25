@@ -18,7 +18,7 @@ import * as deployCheck from "../.github/scripts/team-image-deploy-check.mjs";
 
 const source = fileURLToPath(new URL("../container/agent/", import.meta.url));
 const sha = "a".repeat(40);
-const agentFiles = ["accept.mjs", "accept.sh", "compose.agent.inputs.yaml", "compose.agent.mirrors.yaml", "compose.agent.outbox.yaml", "compose.agent.trust.yaml", "compose.agent.work.yaml", "compose.agent.yaml", "supervisor.mjs"];
+const agentFiles = ["accept.mjs", "accept.sh", "compose.agent.credentials.yaml", "compose.agent.inputs.yaml", "compose.agent.mirrors.yaml", "compose.agent.outbox.yaml", "compose.agent.trust.yaml", "compose.agent.work.yaml", "compose.agent.yaml", "supervisor.mjs"];
 const egressFiles = ["accept.mjs", "compose.agent.yaml", "egress/boundary.mjs", "egress/canary.mjs", "egress/compose.egress.yaml", "egress/compose.minimal.yaml", "egress/policy.mjs", "egress/preflight-network.mjs", "egress/probe-compose-boundary.mjs", "egress/probe-runtime.mjs", "egress/probe-services-backends.mjs", "egress/split.mjs", "supervisor.mjs"];
 const installed = { agent: { oats: "0.70.7", aw: "1.36.59", claude: "2.1.322" }, egress: { coredns: "1.15.0", nginx: "1.22.1" } };
 

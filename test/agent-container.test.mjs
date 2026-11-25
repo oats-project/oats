@@ -74,7 +74,7 @@ test("empty optional acceptance inputs behave exactly as absent inputs", async (
   const { env, image, inspected } = acceptanceFixture();
   delete env.AGENT_UID;
   delete env.AGENT_GID;
-  const optional = ["AGENT_UID", "AGENT_GID", "AGENT_CHILD", "TEAM_WORK_DIR", "TEAM_INPUT_DIR", "AGENT_CA_FILE", "AGENT_MIRRORS_DIR", "TEAM_OUTBOX_DIR", "TEAM_OUTBOX_GID"];
+  const optional = ["AGENT_UID", "AGENT_GID", "AGENT_CHILD", "TEAM_WORK_DIR", "TEAM_INPUT_DIR", "AGENT_CA_FILE", "AGENT_MIRRORS_DIR", "TEAM_OUTBOX_DIR", "TEAM_OUTBOX_GID", "TEAM_CREDENTIALS_DIR"];
   const baseline = inspectAgent(inspected, env, image);
   for (const name of optional) assert.deepEqual(inspectAgent(inspected, { ...env, [name]: "" }, image), baseline, name);
   assert.deepEqual(inspectAgent(inspected, { ...env, ...Object.fromEntries(optional.map(name => [name, ""])) }, image), baseline);
@@ -264,6 +264,7 @@ test("Claude auth orchestration uses a scratch cwd and only user settings", asyn
     [program, JSON.stringify({ present: true, evidence: [] })],
     [program, JSON.stringify("inputs: absent without the optional fragment")],
     [program, JSON.stringify("outbox: absent without the optional fragment")],
+    [program, JSON.stringify("credentials: absent without the optional fragment")],
     [["exec", "-i", "--user", "0:0", container, "node"], "root scan fixture"],
     [program, "writable scan fixture"],
     [["exec", container, "sh", "-eu", "-c", null], "EACCES /usr/local"],
@@ -529,7 +530,7 @@ test("acceptance refuses drift in the admitted container settings", async t => {
         mount.Source = settings[name];
       }
       info.HostConfig.Mounts = info.Mounts.map(m => ({Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {}}));
-      let inputsRan = false, outboxRan = false, removed = false, rootScanRan = false, agentScanRan = false;
+      let inputsRan = false, outboxRan = false, credentialsRan = false, removed = false, rootScanRan = false, agentScanRan = false;
       const fs = {
         lstatSync: () => { throw Object.assign(new Error("absent"), {code: "ENOENT"}); },
         statSync(path) {
@@ -582,6 +583,14 @@ test("acceptance refuses drift in the admitted container settings", async t => {
           runInNewContext(source, {process: {pid: 100}, require: () => fs, console: {log: line => { result = line; }}});
           return ok(result);
         }
+        if (source.includes("function credentialsCheck")) {
+          assert.ok(!argv.includes("--user"), "credentials are checked as the runtime UID");
+          assert.match(source, /\)\(false,"20001"\);/, "without TEAM_CREDENTIALS_DIR the probe requires absence");
+          credentialsRan = true;
+          let result;
+          runInNewContext(source, {process: {pid: 100}, require: () => fs, console: {log: line => { result = line; }}});
+          return ok(result);
+        }
         if (source.includes("function credentialScan")) {
           const privileged = argv.includes("--user");
           const visited = [];
@@ -609,11 +618,11 @@ test("acceptance refuses drift in the admitted container settings", async t => {
           }
           return ok(output);
         }
-        assert.ok(inputsRan && outboxRan, "both probes must execute before the remaining acceptance checks");
+        assert.ok(inputsRan && outboxRan && credentialsRan, "the mount probes must execute before the remaining acceptance checks");
         throw new Error("remaining checks boundary");
       };
       assert.throws(() => main(["fixture-agent", "--evidence", "target-amd64"], settings, {spawnSync: run}), /remaining checks boundary/);
-      assert.equal(inputsRan, true); assert.equal(outboxRan, true);
+      assert.equal(inputsRan, true); assert.equal(outboxRan, true); assert.equal(credentialsRan, true);
       assert.equal(removed, enabled);
       assert.equal(rootScanRan, true); assert.equal(agentScanRan, true);
     }
@@ -621,6 +630,7 @@ test("acceptance refuses drift in the admitted container settings", async t => {
     assert.ok(lines.some(line => line.includes("outbox: absent")));
     assert.ok(lines.some(line => line.includes("inputs: readable read-only")));
     assert.ok(lines.some(line => line.includes("outbox: setgid queue writable")));
+    assert.ok(lines.some(line => line.includes("credentials: absent")));
   });
 
 });
@@ -1269,6 +1279,131 @@ test("outbox acceptance checks setgid ownership, write inheritance, private stat
 });
 
 
+test("optional credentials fragment adds only one pre-provisioned read-only directory", () => {
+  const path = new URL("../container/agent/compose.agent.credentials.yaml", import.meta.url);
+  assert.ok(existsSync(path), "the credential group's fragment is required");
+  assert.deepEqual(parse(readFileSync(path, "utf8")), {services: {agent: {volumes: [{
+    type: "bind", source: "${TEAM_CREDENTIALS_DIR:?Set TEAM_CREDENTIALS_DIR}", target: "/etc/agent-credentials", read_only: true, bind: {create_host_path: false},
+  }]}}});
+});
+
+test("credentials acceptance requires a read-only root:runtime-GID 0750 directory of root:runtime-GID 0440 files, and absence without the fragment", async () => {
+  const {credentialsCheck} = await import("../container/agent/accept.mjs");
+  assert.equal(typeof credentialsCheck, "function", "a serialized credentials directory probe is required");
+  const fault = code => Object.assign(new Error("PRIVATE_CREDENTIAL_CONTENTS"), {code});
+  const directory = {uid: 0, gid: 20001, mode: 0o40750, isDirectory: () => true};
+  const file = {uid: 0, gid: 20001, mode: 0o100440, isFile: () => true};
+  const fs = {
+    constants: {W_OK: 2},
+    lstatSync(path) {
+      if (path === "/etc/agent-credentials") return directory;
+      assert.equal(path, "/etc/agent-credentials/PRIVATE_CREDENTIAL_NAME");
+      return file;
+    },
+    readdirSync(path) { assert.equal(path, "/etc/agent-credentials"); return ["PRIVATE_CREDENTIAL_NAME"]; },
+    accessSync(path, mode) { assert.equal(mode, 2); throw fault("EACCES"); },
+    writeFileSync(path, data, options) {
+      assert.match(path, /^\/etc\/agent-credentials\/\.oats-read-only-probe-/);
+      assert.equal(options.flag, "wx");
+      throw fault("EROFS");
+    },
+    unlinkSync: () => assert.fail("no probe was written"),
+    readFileSync: () => assert.fail("acceptance must not read a credential"),
+    openSync: () => assert.fail("acceptance must not open a credential"),
+  };
+  const run = (system, enabled = true) => runInNewContext(`(${credentialsCheck.toString()})(${enabled}, "20001")`, {
+    process: {pid: 100}, require: () => system,
+  });
+  const ok = "credentials: read-only root:20001 0750 directory; 1 root:20001 0440 file(s); names and contents withheld";
+  assert.equal(run(fs), ok);
+  assert.equal(run({...fs, accessSync: () => { throw fault("EROFS"); }}), ok);
+  assert.equal(run({...fs, readdirSync: () => []}), "credentials: read-only root:20001 0750 directory; 0 root:20001 0440 file(s); names and contents withheld");
+  assert.equal(run({...fs, lstatSync: () => { throw fault("ENOENT"); }}, false), "credentials: absent without the optional fragment");
+  const refused = (system, reason, enabled = true) => assert.throws(() => run(system, enabled),
+    error => error.message.startsWith("credentials must be a read-only root:20001 0750 directory of root:20001 0440 files: " + reason)
+      && !error.message.includes("PRIVATE_CREDENTIAL"), reason);
+  const changed = (target, fields) => ({...fs, lstatSync: path => {
+    const stat = fs.lstatSync(path);
+    return stat === target ? {...stat, ...fields} : stat;
+  }});
+  refused({...fs, lstatSync: () => { throw fault("ENOENT"); }}, "absent");
+  refused({...fs, lstatSync: () => { throw fault("EACCES"); }}, "unreadable");
+  refused(fs, "present without the optional fragment", false);
+  refused({...fs, lstatSync: () => { throw fault("EACCES"); }}, "unreadable", false);
+  refused(changed(directory, {isDirectory: () => false}), "not a directory");
+  refused(changed(directory, {uid: 20001}), "directory owner");
+  refused(changed(directory, {gid: 20002}), "directory owner");
+  refused(changed(directory, {gid: 0}), "directory owner");
+  for (const mode of [0o40755, 0o40770, 0o40700, 0o42750]) refused(changed(directory, {mode}), "directory mode");
+  refused({...fs, readdirSync: () => { throw fault("EACCES"); }}, "directory unreadable");
+  refused(changed(file, {isFile: () => false}), "not a regular file");
+  refused(changed(file, {uid: 20001}), "file owner");
+  refused(changed(file, {gid: 0}), "file owner");
+  for (const mode of [0o100640, 0o100460, 0o100444, 0o100400]) refused(changed(file, {mode}), "file mode");
+  refused({...fs, accessSync: () => {}}, "writable file");
+  refused({...fs, accessSync: () => { throw fault("EIO"); }}, "file unreadable");
+  let removed = false;
+  refused({...fs, writeFileSync: () => {}, unlinkSync: () => { removed = true; }}, "writable directory");
+  assert.equal(removed, true, "an unexpected probe write is removed before failure");
+  refused({...fs, writeFileSync: () => { throw fault("EIO"); }}, "write probe failed");
+});
+
+test("acceptance admits the credentials mount only when declared, read-only, and apart from writable sources, inputs and outbox", async () => {
+  const { inspectAgent: inspectOnHost } = await import("../container/agent/accept.mjs");
+  const inspectAgent = (info, env, image) => inspectOnHost(info, env, image, undefined, source => source);
+  const { env, image, inspected } = acceptanceFixture();
+  const mount = (info, source, target, rw) => {
+    info.Mounts.push({Source: source, Destination: target, RW: rw, Type: "bind"});
+    info.HostConfig.Mounts.push({Type: "bind", Source: source, Target: target, ReadOnly: !rw, BindOptions: {}});
+  };
+  const credentials = structuredClone(inspected), credentialsEnv = {...env, TEAM_CREDENTIALS_DIR: "/srv/oats-team/team-a/credentials"};
+  mount(credentials, credentialsEnv.TEAM_CREDENTIALS_DIR, "/etc/agent-credentials", false);
+  assert.doesNotThrow(() => inspectAgent(credentials, credentialsEnv, image));
+  assert.throws(() => inspectAgent(credentials, env, image), /exact approved mounts/, "the base rejects an undeclared credentials mount");
+  assert.throws(() => inspectAgent(inspected, credentialsEnv, image), /exact approved mounts/, "declared credentials must be mounted");
+  for (const mutate of [
+    v => { v.Mounts.at(-1).RW = true; },
+    v => { v.HostConfig.Mounts.at(-1).ReadOnly = false; },
+    v => { v.HostConfig.Mounts.at(-1).BindOptions.CreateMountpoint = true; },
+    v => { v.Mounts.at(-1).Destination = "/etc/agent-login/credentials"; v.HostConfig.Mounts.at(-1).Target = "/etc/agent-login/credentials"; },
+  ]) {
+    const changed = structuredClone(credentials); mutate(changed);
+    assert.throws(() => inspectAgent(changed, credentialsEnv, image));
+  }
+  const at = (info, settings, source) => {
+    const changed = structuredClone(info);
+    const index = changed.Mounts.findIndex(m => m.Destination === "/etc/agent-credentials");
+    changed.Mounts[index].Source = source; changed.HostConfig.Mounts[index].Source = source;
+    return [changed, {...settings, TEAM_CREDENTIALS_DIR: source}];
+  };
+  assert.throws(() => inspectAgent(...at(credentials, credentialsEnv, "relative/credentials"), image), /must be absolute/);
+  for (const source of [env.TEAM_STATE_DIR, env.TEAM_STATE_DIR + "/credentials", "/srv/team"]) {
+    const [changed, settings] = at(credentials, credentialsEnv, source);
+    assert.throws(() => inspectAgent(changed, settings, image), /credentials must stay outside agent-writable sources, \/inputs and \/outbox/, source);
+  }
+  const work = structuredClone(credentials), workEnv = {...credentialsEnv, TEAM_WORK_DIR: "/srv/work"};
+  mount(work, workEnv.TEAM_WORK_DIR, "/work", true);
+  assert.doesNotThrow(() => inspectAgent(work, workEnv, image));
+  for (const source of ["/srv/work", "/srv/work/credentials", "/srv"]) {
+    assert.throws(() => inspectAgent(...at(work, workEnv, source), image), /credentials must stay outside/, source);
+  }
+  const inputs = structuredClone(credentials), inputsEnv = {...credentialsEnv, TEAM_INPUT_DIR: "/srv/inputs"};
+  mount(inputs, inputsEnv.TEAM_INPUT_DIR, "/inputs", false);
+  assert.doesNotThrow(() => inspectAgent(inputs, inputsEnv, image));
+  for (const source of ["/srv/inputs", "/srv/inputs/credentials", "/srv"]) {
+    assert.throws(() => inspectAgent(...at(inputs, inputsEnv, source), image), /credentials must stay outside/, source);
+  }
+  const outbox = structuredClone(credentials), outboxEnv = {...credentialsEnv, TEAM_OUTBOX_DIR: "/srv/outbox", TEAM_OUTBOX_GID: "20002"};
+  mount(outbox, outboxEnv.TEAM_OUTBOX_DIR, "/outbox", true);
+  outbox.HostConfig.GroupAdd = [outboxEnv.TEAM_OUTBOX_GID];
+  assert.doesNotThrow(() => inspectAgent(outbox, outboxEnv, image));
+  for (const source of ["/srv/outbox", "/srv/outbox/credentials", "/srv"]) {
+    assert.throws(() => inspectAgent(...at(outbox, outboxEnv, source), image), /must stay outside/, source);
+  }
+  assert.throws(() => inspectOnHost(credentials, credentialsEnv, image, undefined, () => { throw new Error("VALUE_MUST_BE_WITHHELD"); }),
+    error => /credentials require resolvable Docker-host sources/.test(error.message) && !error.message.includes("VALUE_MUST_BE_WITHHELD"));
+});
+
 const roles = fx => fx.spawned.map(entry => entry.role).filter(role => role !== "status");
 const declarationFile = "/etc/agent-child.json";
 const refusedBeforeAnyChild = async (fx, line, why) => {
@@ -1898,6 +2033,7 @@ test("acceptance with AGENT_CHILD checks the declaration file, the declared list
       ] : []),
       [program, JSON.stringify("inputs: absent without the optional fragment")],
       [program, JSON.stringify("outbox: absent without the optional fragment")],
+      [program, JSON.stringify("credentials: absent without the optional fragment")],
       [["exec", "-i", "--user", "0:0", container, "node"], "root scan fixture"],
       [program, "writable scan fixture"],
       [["exec", container, "sh", "-eu", "-c", null], "EACCES /usr/local"],
@@ -1952,7 +2088,7 @@ test("no file under container/agent names bb", () => {
   const directory = new URL("../container/agent/", import.meta.url);
   const files = readdirSync(directory).filter(name => name === "supervisor.mjs" || name === "accept.mjs" || /^compose\..*\.ya?ml$/.test(name));
   assert.deepEqual(files.filter(name => name.endsWith(".mjs")).sort(), ["accept.mjs", "supervisor.mjs"]);
-  assert.deepEqual(files.filter(name => !name.endsWith(".mjs")).sort(), ["compose.agent.inputs.yaml", "compose.agent.mirrors.yaml", "compose.agent.outbox.yaml", "compose.agent.trust.yaml", "compose.agent.work.yaml", "compose.agent.yaml"], "no fragment of a product's own");
+  assert.deepEqual(files.filter(name => !name.endsWith(".mjs")).sort(), ["compose.agent.credentials.yaml", "compose.agent.inputs.yaml", "compose.agent.mirrors.yaml", "compose.agent.outbox.yaml", "compose.agent.trust.yaml", "compose.agent.work.yaml", "compose.agent.yaml"], "no fragment of a product's own");
   assert.equal(existsSync(new URL("../container/agent-bb", import.meta.url)), false, "the derived image and its relay live in oats-project/oats-bb");
   // The one line each file keeps: the refusal of the removed switch.
   const kept = {

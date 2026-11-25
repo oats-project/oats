@@ -8,6 +8,7 @@
 !liveness.mjs
 !agent-trust.sh
 !compose.agent.yaml
+!compose.agent.credentials.yaml
 !compose.agent.inputs.yaml
 !compose.agent.mirrors.yaml
 !compose.agent.outbox.yaml
