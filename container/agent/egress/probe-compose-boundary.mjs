@@ -4,11 +4,13 @@ import assert from "node:assert/strict";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { isIP } from "node:net";
 import { spawnSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { compilePolicy } from "./policy.mjs";
 import { assertComposeBoundary, assertPublicMountSource, boundaryControls, ipv4Gateway } from "./boundary.mjs";
-import { assertNamePrefix, docker, tcpFromNetwork, withGatewayCanary } from "./canary.mjs";
+import { assertNamePrefix, docker, reportReceipt, tcpFromNetwork, withGatewayCanary } from "./canary.mjs";
 import { runtimeProgram } from "./probe-runtime.mjs";
+import { observeNetworks } from "./preflight-network.mjs";
+import { admitRemoteBackends, admitRun, deploySource } from "./split.mjs";
 import { agentEnvironment } from "../accept.mjs";
 
 function json(args) {
@@ -21,12 +23,12 @@ export async function probeComposeBoundary(plan) {
   const receipts=[];
   let unownedNames=[];
   try {
-    if (plan?.schema !== 1) {
+    if (plan?.schema !== 1 && plan?.schema !== 2) {
       const schema = plan?.schema;
       const found = schema === undefined ? "none" : typeof schema === "number" ? String(schema) : `invalid ${typeof schema}`;
-      throw Object.assign(new Error(`E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1; found ${found}; regenerate the plan with schema: 1`), { code: "E_EGRESS_PLAN_SCHEMA" });
+      throw Object.assign(new Error(`E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1 (local) or 2 (split); found ${found}; regenerate the plan with schema: 1 or schema: 2`), { code: "E_EGRESS_PLAN_SCHEMA" });
     }
-    return await runBoundary(plan,receipts);
+    return await runBoundary(plan,receipts,plan.schema === 2 ? admitSplit(plan) : undefined);
   }
   catch (error) {
     receipts.splice(0,receipts.length,...new Map([...receipts,...(error.receipts || [])].map(receipt=>[receipt.name,receipt])).values());
@@ -38,14 +40,28 @@ export async function probeComposeBoundary(plan) {
     for (const receipt of receipts) reportReceipt(receipt,unownedNames.includes(receipt.name));
   }
 }
-function reportReceipt(receipt, unowned) {
-  process.stderr.write("egress boundary receipt: "+JSON.stringify(receipt)+"\n");
-  if (!receipt.absentVerified) {
-    const classification=receipt.created && !unowned ? "leftover" : "unowned or unverified";
-    process.stderr.write("egress boundary "+classification+": "+receipt.name+"\n");
-  }
+/** Schema 2 (split hosts): the run binding, this deploy copy's source commit
+ * and the services-host tuples, refused before any container is inspected. */
+function admitSplit(plan) {
+  assert.ok(!Object.hasOwn(plan,"deniedBackends"),"plan schema 2 replaces deniedBackends with remoteBackends");
+  compilePolicy(plan.policy);
+  const run=admitRun(plan.run,plan.policy);
+  const sourceCommit=deploySource(fileURLToPath(new URL("..",import.meta.url)),"egress/probe-compose-boundary.mjs");
+  return {run,sourceCommit,...admitRemoteBackends(plan.remoteBackends,plan.policy,observeNetworks())};
 }
-async function runBoundary(plan,receipts) {
+/** Each tuple from the proxy's outward bridge. Every tuple must be DENIED,
+ * except that an external PostgreSQL may also answer CONNECTED there. */
+function outwardBridge(plan,split,receipts) {
+  return split.tuples.map(tuple=>{
+    const {result,receipt}=tcpFromNetwork({image:plan.proxyImage,network:plan.servicesNetwork,address:tuple.address,port:tuple.port,classify:true,namePrefix:plan.namePrefix});
+    receipts.push(receipt);
+    const required=!tuple.external;
+    assert.ok(receipt.absentVerified && (result === "DENIED" || (!required && result === "CONNECTED")),
+      "outward bridge did not get DENIED from a services-host backend");
+    return {role:tuple.role,port:tuple.port,address:tuple.address,vantage:"outward-bridge",result,required};
+  });
+}
+async function runBoundary(plan,receipts,split) {
   assertNamePrefix(plan.namePrefix);
   compilePolicy(plan.policy);
   for(const key of ["probeContainer","proxyContainer","agentsNetwork","servicesNetwork"])assert.ok(safeName(plan[key]),"runtime resource name is invalid");
@@ -86,13 +102,25 @@ async function runBoundary(plan,receipts) {
   assertPublicMountSource(policySource,plan.protectedSources,"proxy");
   const livePolicy=json(["exec",plan.proxyContainer,"node","-e","process.stdout.write(require('node:fs').readFileSync('/etc/egress/policy.json','utf8'))"]);
   assert.deepEqual(livePolicy,plan.policy,"live proxy policy differs from derived policy");
+  if(split) {
+    // The proxy compiled its policy once at startup; the mounted file can have
+    // changed since. Bind the proof to the policy the running proxy loaded.
+    let loaded;
+    try {loaded=docker(["exec",plan.proxyContainer,"node","-e","process.stdout.write(require('node:fs').readFileSync('/tmp/egress/policy.hash','utf8'))"]);}
+    catch {loaded=undefined;}
+    if(loaded!==split.run.policyHash)
+      throw Object.assign(new Error("E_EGRESS_POLICY_STALE: the running proxy loaded a different policy than this plan; recreate the proxy, then prove again"),{code:"E_EGRESS_POLICY_STALE"});
+  }
   const report = boundaryControls(plan);
-  assert.ok(Array.isArray(plan.deniedBackends) && plan.deniedBackends.length===2
-    && plan.deniedBackends.map(item=>item.role).sort().join(",")==="postgres,redis","backend control inventory is incomplete");
   const controls=[];
-  for(const backend of plan.deniedBackends) {
-    assert.ok(plan.policy.deniedAddresses.includes(backend.address),"backend control is absent from denied policy inventory");
-    controls.push({...backend,network:backend.controlNetwork||plan.servicesNetwork});
+  // Split-host backends live on another engine: no live positive control here.
+  if(!split) {
+    assert.ok(Array.isArray(plan.deniedBackends) && plan.deniedBackends.length===2
+      && plan.deniedBackends.map(item=>item.role).sort().join(",")==="postgres,redis","backend control inventory is incomplete");
+    for(const backend of plan.deniedBackends) {
+      assert.ok(plan.policy.deniedAddresses.includes(backend.address),"backend control is absent from denied policy inventory");
+      controls.push({...backend,network:backend.controlNetwork||plan.servicesNetwork});
+    }
   }
   for(const target of Object.values(plan.policy.targets))for(const address of target.addresses)controls.push({address,port:443,network:plan.servicesNetwork});
   for(const control of controls)assert.ok(isIP(control.address)===4 && Number.isInteger(control.port) && control.port>0 && control.port<=65535 && safeName(control.network)
@@ -108,8 +136,10 @@ async function runBoundary(plan,receipts) {
     }
   };
   verifyControls();
+  const outward=split && outwardBridge(plan,split,receipts);
+  const backends=split ? {remoteEndpoints:split.tuples.map(({role,address,port})=>({role,address,port}))} : {deniedBackends:plan.deniedBackends};
   receipts.push(...await withGatewayCanary({image:plan.proxyImage,controlNetwork:plan.servicesNetwork,controlAddress,gatewayAddress:gateway,namePrefix:plan.namePrefix},async endpoint=>{
-    const program=runtimeProgram({policy:plan.policy,allowedPaths:plan.allowedPaths,deniedBackends:plan.deniedBackends,
+    const program=runtimeProgram({policy:plan.policy,allowedPaths:plan.allowedPaths,...backends,
       uid:plan.uid,gid:plan.gid,caFile:plan.caFile,mirrors:approvedMounts.some(mount=>mount.Destination === "/mirrors"),
       protectedPaths:plan.protectedPaths||[],gateway:endpoint});
     const result=spawnSync("docker",["exec","-i",plan.probeContainer,"node","--input-type=module","-"],{input:program,encoding:"utf8",timeout:45000,maxBuffer:1024*1024});
@@ -122,7 +152,12 @@ async function runBoundary(plan,receipts) {
   verifyControls();
   for (const group of ["universal", "declared"]) for (const control of report[group])
     process.stderr.write(`egress boundary ${group}: ${control}\n`);
-  return {passed:true,receipts};
+  if(!split) return {passed:true,receipts};
+  // The runtime body refused anything but DENIED from the isolated agent.
+  const results=split.tuples.flatMap((tuple,index)=>[
+    {role:tuple.role,port:tuple.port,address:tuple.address,vantage:"isolated-agent",result:"DENIED",required:true},outward[index]]);
+  return {passed:true,mode:"split",receipts,run:split.run,sourceCommit:split.sourceCommit,
+    remote:{servicesAddress:split.servicesAddress,vantage:["isolated-agent","outward-bridge"],results}};
 }
 
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {

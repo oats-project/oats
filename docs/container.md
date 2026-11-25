@@ -178,7 +178,10 @@ read-only public JSON policy, regular file at most 64 KiB, readable by UID 10001
 and provisioned by the operator; it contains no service credentials. There is
 no writable state bind. `/tmp` is a writable 16 MiB tmpfs, mode 1777, with
 `nosuid,nodev`; generated DNS/proxy configuration goes into `/tmp/egress`
-(directory 0700, files 0600).
+(directory 0700, files 0600). Before starting any child, the supervisor also
+writes `/tmp/egress/policy.hash` (0400): the canonical `policyHash` of the exact
+policy it compiled, and nothing else. The proxy compiles the policy once, so a
+changed policy file needs the proxy recreated.
 ([Dockerfile](../container/agent/egress/Dockerfile),
 [Compose](../container/agent/egress/compose.egress.yaml),
 [policy loader](../container/agent/egress/policy.mjs),
@@ -245,7 +248,8 @@ Both images' deploy directories are root-owned, directories 0755 and files
 Egress carries `egress/compose.egress.yaml`, the documented deployment input
 `egress/compose.minimal.yaml`, `egress/preflight-network.mjs`, and
 `egress/probe-compose-boundary.mjs` with `boundary.mjs`, `policy.mjs`,
-`canary.mjs`, `probe-runtime.mjs` beside it, plus root `accept.mjs`,
+`canary.mjs`, `probe-runtime.mjs`, `split.mjs` beside it, the services-host
+witness `egress/probe-services-backends.mjs`, plus root `accept.mjs`,
 `supervisor.mjs`, `compose.agent.yaml`. Preserve this hierarchy when extracting;
 the minimal wrapper's `../compose.agent.yaml` stays inside the extracted set.
 ([Agent Dockerfile](../container/agent/Dockerfile),
@@ -330,15 +334,32 @@ JS
 
 From the extracted egress directory, run
 `node egress/probe-compose-boundary.mjs --plan /absolute/runtime.json [--json]`
-on the Linux Docker engine host. Plans require integer `"schema": 1`; the
-remaining fields are the [Compose probe contract](../container/agent/egress/README.md#boundary-probe-on-an-existing-compose-deployment).
+on the Linux Docker engine host. Plans require integer `"schema": 1` (one
+engine) or `"schema": 2` (split agent/services hosts); the remaining fields are
+the [Compose probe contract](../container/agent/egress/README.md#boundary-probe-on-an-existing-compose-deployment).
 Missing schema refuses before engine access with
-`E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1; found none; regenerate the plan with schema: 1`.
+`E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1 (local) or 2 (split); found none; regenerate the plan with schema: 1 or schema: 2`.
 Unknown numeric schema uses its number instead of `none`; other types use
 `invalid <type>`. Exit status is 1; `--json` retains its static error document
 and the named refusal appears on stderr. There is no unversioned fallback.
 ([Probe implementation](../container/agent/egress/probe-compose-boundary.mjs),
 [schema regression](../test/team-image-deploy.test.mjs).)
+
+When the agent host runs no services, the wrapper writes a schema-2 plan and
+runs the probe from the extracted egress directory on the agent host, then
+`node egress/probe-services-backends.mjs --plan /absolute/witness.json --json`
+from the same image's extracted directory on the services host, and the
+unchanged ingress probe there. Both checks refuse outside an extracted copy
+(`E_EGRESS_SOURCE_MANIFEST`) and report the copy's manifest source as
+`sourceCommit`. The wrapper binds the three with one `run`
+(`{id, policyHash, servicesDeployment}`, where `policyHash` is the canonical
+hash of the derived policy) and admits on the JSON documents, never on a PASS
+line: the boundary's `mode:"split"` with every required row of its four
+role-by-vantage results `DENIED`, the witness's selected containers, and the
+same run, policy hash and source commit on all three. Older probes refuse a
+schema-2 plan with their schema-1 text.
+([Split hosts and witness contract](../container/agent/egress/README.md#split-agentservices-hosts),
+[witness](../container/agent/egress/probe-services-backends.mjs).)
 
 From the extracted agent directory, invoke
 `./accept.sh CONTAINER --evidence local|target-amd64|live-lab [--claude INSTANCE_HOME]`.
