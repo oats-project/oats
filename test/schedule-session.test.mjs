@@ -94,7 +94,13 @@ setTimeout(()=>process.exit(0),30000);\n`);
     assert.deepEqual([held.action, held.reason, held.pending, held.held.claimReason], ["skipped", "waiting-on-you", true, "permission"]);
     await new Promise(r => setTimeout(r, 300));
     assert.equal(received(homes[0]), before, "a held wake sends no key");
-    // `oats session input` is unchanged: it types with the claim set.
+    // `oats session input` is refused over a permission claim too (#2125): its Enter would answer the prompt. No byte is typed.
+    assert.throws(() => inputInstanceSession(homes[0].home, "typed by hand"), (e) => e.code === "E_SESSION_PROMPT_OPEN" && /nothing was sent/.test(e.message));
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(received(homes[0]), before, "a refused input sends no key");
+    // Over any other claim it is unchanged: it types with the claim set (a question's, which holds the wake as well).
+    setWaiting(homes[0].home, { producer: "oats.core", waiting: true, reason: "question" });
+    assert.equal(tick("2026-09-07T12:01:05Z").find(r => r.id === "one").held.claimReason, "question");
     assert.equal(inputInstanceSession(homes[0].home, "typed by hand").submitted, true);
     await waitFor(() => received(homes[0]).includes("typed by hand\n"), "session input reaches stdin with a claim set");
     const typed = received(homes[0]);
