@@ -52,9 +52,10 @@ export function interfaceAddresses(links) {
  * always on the services host; PostgreSQL is there too, or external at its
  * own pinned address, which the policy already denies IP-wide. */
 export function admitRemoteBackends(remote, policy, observations) {
-  const addresses = value => Array.isArray(value) && value.length > 1;
-  if (Array.isArray(remote) || addresses(remote?.servicesAddress)
-    || (Array.isArray(remote?.backends) && remote.backends.some(item => isObject(item) && !Object.hasOwn(item, "external") && Object.hasOwn(item, "address"))))
+  // Anything but one string for the services host, or an address on a backend
+  // that is not genuinely external, declares another services-host address.
+  if (Array.isArray(remote) || (isObject(remote) && Object.hasOwn(remote, "servicesAddress") && typeof remote.servicesAddress !== "string")
+    || (Array.isArray(remote?.backends) && remote.backends.some(item => isObject(item) && Object.hasOwn(item, "address") && item.external !== true)))
     throw splitRefusal("E_EGRESS_REMOTE_ADDRESSES", "split mode v1 takes exactly one services-host address");
   assert.ok(hasKeys(remote, ["servicesAddress", "backends"]), "remote backend inventory must be {servicesAddress, backends}");
   const { servicesAddress, backends } = remote;

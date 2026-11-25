@@ -161,7 +161,11 @@ test("split mode v1 takes exactly one services-host address", async () => {
   const { admitRemoteBackends } = await import("../container/agent/egress/split.mjs");
   const policy = splitPolicy();
   for (const value of [[remote(),remote()], {...remote(),servicesAddress:[servicesAddress,"93.184.215.15"]},
-    {...remote(),backends:[{role:"postgres",port:5432},{role:"redis",port:6379,address:"93.184.215.15"}]}])
+    {...remote(),servicesAddress:[servicesAddress]}, {...remote(),servicesAddress:[]}, {...remote(),servicesAddress:42},
+    {...remote(),servicesAddress:null}, {...remote(),servicesAddress:{}},
+    {...remote(),backends:[{role:"postgres",port:5432},{role:"redis",port:6379,address:"93.184.215.15"}]},
+    {...remote(),backends:[{role:"postgres",port:5432,address:"10.20.0.11",external:false},{role:"redis",port:6379}]},
+    {...remote(),backends:[{role:"postgres",port:5432,address:"10.20.0.11",external:"yes"},{role:"redis",port:6379}]}])
     assert.throws(() => admitRemoteBackends(value, policy, observed), codeOf("E_EGRESS_REMOTE_ADDRESSES"));
 });
 
@@ -190,7 +194,6 @@ test("remote backend inventories other than postgres plus redis refuse", async (
   const policy = splitPolicy();
   for (const backends of [[], [{role:"redis",port:6379}], [{role:"redis",port:6379},{role:"redis",port:6380}],
     [{role:"postgres",port:0},{role:"redis",port:6379}], [{role:"postgres",port:5432,extra:1},{role:"redis",port:6379}],
-    [{role:"postgres",port:5432,address:"10.20.0.11",external:"yes"},{role:"redis",port:6379}],
     [{role:"postgres",port:5432},{role:"redis",port:6379,external:true,address:"10.20.0.11"}]])
     assert.throws(() => admitRemoteBackends({servicesAddress,backends}, policy, observed), /remote backend inventory/);
   assert.throws(() => admitRemoteBackends({servicesAddress:"not-ip",backends:remote().backends}, policy, observed), /services-host address must be one IPv4/);
