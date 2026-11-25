@@ -1755,6 +1755,13 @@ leaves `work/` untouched. For each tree:
   `-3`, and so on. A tree whose HEAD cannot be read is re-homed too.
   `work/` is re-homed under the same rule.
 
+  The status is checked again after the hooks. If a hook adds a populated
+  partial submodule that Git cannot read safely, that status is not run and
+  the tree is kept as unreadable. Its `reason` stays a string, including
+  `E_GIT_UNSUPPORTED: <message>`. If Git refuses the move because the tree
+  has submodules, the existing preservation refusal keeps the home and tree
+  in place and includes that reason.
+
   The leaf is one path component, so it is bounded: at most 231 bytes before
   its `-N` (NAME_MAX, 255, less a 16-byte margin and 8 bytes kept for `-N`;
   the leaf is ASCII, so bytes are characters). A leaf that fits is the

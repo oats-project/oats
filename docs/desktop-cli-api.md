@@ -4801,7 +4801,8 @@ that name: `E_AMBIGUOUS_INSTANCE {candidates: [{root, agent, home}]}` (pass
 tree: `E_NO_WORKTREE`.
 
 `E_NO_WORKTREE` is answered when nothing is at `<home>/work`, when it is not
-inside a Git work tree, and (0.53.0, #962) when it is a real directory that
+inside a Git work tree (including when Git is unavailable or times out
+during classification), and (0.53.0, #962) when it is a real directory that
 is not the top level Git names for it. Git answers for any directory inside
 a work tree, so a plain `work/` in a home whose deployment directory is a
 Git checkout was read as that checkout before: its branch and its files,
@@ -4872,7 +4873,8 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
   detects partial clones (`extensions.partialClone` set, or
   `remote.<name>.promisor` true); the version is probed once per observation
   or diff, with no cache across calls. Every populated submodule is checked
-  recursively too. A repository with populated submodules probes the version;
+  recursively too, across the whole top level even when `work/` links into
+  a subdirectory. A repository with populated submodules probes the version;
   below the floor or on an unknown version, the same check reads their configs.
   At or above the floor it reads no submodule config. A refusal names
   `details.submodule`, the path relative to the outer repository with `/`

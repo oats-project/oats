@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { diffInstanceFile, observeInstanceGit } from "../lib/instance-git.mjs";
@@ -550,4 +550,103 @@ test("an invalid empty nested .git does not admit a partial enclosing checkout",
     assert.equal(retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true }).removedDir, true);
   });
   assert.equal(probes, 0);
+});
+
+test("an observer linked into a subdirectory checks partial submodules elsewhere in the top level", (t) => {
+  const f = observer(t), leaf = observer(t), mono = join(f.home, "mono");
+  renameSync(f.work, mono);
+  mkdirSync(join(mono, "deploy"));
+  writeFileSync(join(mono, "deploy", "d"), "deployment\n");
+  git(mono, "-c", "protocol.file.allow=always", "submodule", "add", "--quiet", leaf.work, "other/sub");
+  git(mono, "add", ".");
+  git(mono, "commit", "-qm", "deployment and sibling submodule");
+  symlinkSync(join(mono, "deploy"), f.work);
+  git(join(mono, "other", "sub"), "config", "remote.origin.promisor", "true");
+  let probes = 0;
+  assert.throws(() => observeInstanceGit(f.home, { gitVersion: () => { probes++; return "git version 2.44.9"; } }), (e) => {
+    assert.equal(e.code, "E_GIT_UNSUPPORTED");
+    assert.equal(e.details.submodule, "other/sub");
+    return true;
+  });
+  assert.equal(probes, 1);
+});
+
+test("a nested source with an ancestor work tree checks submodules outside its cwd", async (t) => {
+  const { f, spawned, work, recovery } = await retirement(t);
+  const leaf = observer(t), nested = join(work, "nested"), gitDir = join(nested, ".git");
+  mkdirSync(nested);
+  git(nested, "init", "-q");
+  git(nested, "config", "core.worktree", spawned.home);
+  git(spawned.home, "--git-dir", gitDir, "--work-tree", spawned.home, "-c", "protocol.file.allow=always", "submodule", "add", "--quiet", leaf.work, "other/sub");
+  git(spawned.home, "--git-dir", gitDir, "--work-tree", spawned.home, "commit", "-qm", "ancestor work tree");
+  git(join(spawned.home, "other", "sub"), "config", "remote.origin.promisor", "true");
+  const before = [exactTreeDigest(spawned.home), exactTreeDigest(f.member)];
+  await f.inEnv(() => {
+    const gitVersion = () => "git version 2.44.9";
+    const refused = (e) => {
+      assert.equal(e.code, "E_GIT_UNSUPPORTED");
+      assert.equal(e.details.submodule, "other/sub");
+      assert.match(e.message, /nothing was done/i);
+      return true;
+    };
+    assert.throws(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }), refused);
+    assert.throws(() => retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true }), refused);
+  });
+  assert.deepEqual([exactTreeDigest(spawned.home), exactTreeDigest(f.member)], before);
+  assert.equal(existsSync(recovery), false);
+  assert.equal(existsSync(join(spawned.home, "hook-ran")), false);
+});
+
+test("missing Git keeps the observer's E_NO_WORKTREE while source admission fails closed", (t) => {
+  const f = observer(t), empty = join(f.home, "empty-path");
+  mkdirSync(empty);
+  const prior = process.env.PATH;
+  process.env.PATH = empty;
+  try {
+    assert.throws(() => observeInstanceGit(f.home), { code: "E_NO_WORKTREE" });
+    assert.throws(() => instanceGit.withGitReadSafety(() => "git version 2.44.9", () => instanceGit.assertSafeGitRepository(f.work)), { code: "E_GIT_FAILED" });
+  } finally {
+    if (prior === undefined) delete process.env.PATH;
+    else process.env.PATH = prior;
+  }
+});
+
+test("a hook-created partial submodule in an extra tree is kept without an unchecked status", async (t) => {
+  const { f, spawned } = await retirement(t, { retireScript: `
+import { execFileSync } from "node:child_process";
+import { existsSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+const { exactTreeDigest } = await import(${JSON.stringify(new URL("../lib/core.mjs", import.meta.url).href)});
+const home = process.env.OATS_INSTANCE_HOME, extra = join(home, ".work-extra");
+const common = execFileSync("git", ["-C", extra, "rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8" }).trim();
+const repo = dirname(common), sentinel = join(dirname(dirname(repo)), "extra-status-ran");
+execFileSync("git", ["-C", extra, "-c", "protocol.file.allow=always", "submodule", "add", "--quiet", repo, "modules/late"]);
+const sub = join(extra, "modules", "late");
+execFileSync("git", ["-C", sub, "config", "remote.origin.promisor", "true"]);
+execFileSync("git", ["-C", sub, "config", "filter.fixture.clean", "touch " + JSON.stringify(sentinel) + "; cat"]);
+writeFileSync(join(sub, ".gitattributes"), "file.txt filter=fixture\\n");
+writeFileSync(join(sub, "file.txt"), "after!\\n");
+const later = new Date(Date.now() + 5000);
+utimesSync(join(sub, "file.txt"), later, later);
+// Prove this real fixture's parent status enters the submodule and runs its filter.
+execFileSync("git", ["-C", extra, "status", "--porcelain", "--ignore-submodules=none"]);
+if (!existsSync(sentinel)) throw new Error("the fixture's status did not run the submodule filter");
+unlinkSync(sentinel);
+writeFileSync(join(home, "hook-ran"), "ran");
+writeFileSync(join(dirname(dirname(repo)), "post-hook-snapshot.json"), JSON.stringify({ home: exactTreeDigest(home), extra: exactTreeDigest(extra) }));
+` });
+  const extra = join(spawned.home, ".work-extra");
+  git(f.member, "worktree", "add", "--quiet", "--detach", extra);
+  let failure;
+  await f.inEnv(() => {
+    try { retireInstance(f.root, spawned.instance, { gitVersion: () => "git version 2.44.9", discardWorktree: true }); }
+    catch (e) { failure = e; }
+  });
+  assert.equal(existsSync(join(f.base, "extra-status-ran")), false, "the partial submodule's status never ran its filter");
+  assert.equal(failure?.code, "E_WORK_PRESERVATION_FAILED", failure?.message);
+  assert.match(failure.message, /working trees containing submodules cannot be moved or removed/);
+  assert.match(failure.message, /its status could not be read \(E_GIT_UNSUPPORTED: the submodule modules\/late is a partial clone/);
+  assert.equal(failure.details.reached.phase, "after-hooks");
+  const before = JSON.parse(readFileSync(join(f.base, "post-hook-snapshot.json"), "utf8"));
+  assert.deepEqual({ home: exactTreeDigest(spawned.home), extra: exactTreeDigest(extra) }, before);
 });
