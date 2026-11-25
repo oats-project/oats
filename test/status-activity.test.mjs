@@ -18,7 +18,7 @@ import { retirePendingMarkerPath, storedTreeDigest } from "../lib/core.mjs";
 import { KERNEL_FEATURES, STATUS_ACTIVITY_FEATURE } from "../lib/kernel-features.mjs";
 import { rosterGroups, writeServers } from "../lib/servers.mjs";
 import { judgeInspect } from "../lib/session-providers.mjs";
-import { ACTIVITY, CLAUDE_OPEN_TURN_MAX_MS, RECORD_MAX, TURN_EVENT, TURN_FILE, readActivity, tmuxActivity } from "../lib/turn-activity.mjs";
+import { ACTIVITY, CLAUDE_OPEN_TURN_MAX_MS, RECORD_MAX, START_PENDING_FILE, TURN_EVENT, TURN_FILE, readActivity, tmuxActivity } from "../lib/turn-activity.mjs";
 import { deploymentStatusData } from "../packages/client/deployment-data.mjs";
 import { remotePanel } from "../packages/client/remote-roster.mjs";
 import { endServers, recordLaunch, startServer, tmuxOn, SESSION } from "./helpers/recorded-tmux-server.mjs";
@@ -76,6 +76,42 @@ test("a tmux home's record: counted from startedAt, and anything that is not a r
   // A record's other keys are not read.
   writeFileSync(file, JSON.stringify({ event: "turn-end", at: new Date(started + 5).toISOString(), session: "s-1", activity: "working" }));
   assert.equal(read(), ACTIVITY.IDLE);
+
+  // A start under way: its pending receipt names its instant before the row does (the record is
+  // written once the pane is made and the launch prompt seen), and the new harness already runs. A
+  // record dated between the row's startedAt and the pending start is the previous session's.
+  const pendingFile = join(home, START_PENDING_FILE);
+  const pendingAt = (ms) => writeFileSync(pendingFile, JSON.stringify({ id: "s-2", target: { backend: "tmux" }, command: "pi", model: null, startedAt: new Date(ms).toISOString() }));
+  for (const event of [TURN_EVENT.START, TURN_EVENT.END]) {
+    turn(home, event, started + 30_000);
+    pendingAt(started + 40_000);
+    assert.equal(read(), null, `${event} before a pending start`);
+    // The new start's own boundary counts, at its instant and after.
+    turn(home, event, started + 40_000);
+    assert.equal(read(), event === TURN_EVENT.START ? ACTIVITY.WORKING : ACTIVITY.IDLE);
+  }
+  // Once the start is recorded the receipt stays, with the row's own instant: nothing changes.
+  assert.equal(tmuxActivity(home, { startedAt: new Date(started + 40_000).toISOString(), now: started + 60_000 }), ACTIVITY.IDLE);
+  // An older receipt (an earlier start's) never moves the count back before the row's startedAt.
+  pendingAt(started - 60_000);
+  turn(home, TURN_EVENT.END, started - 1);
+  assert.equal(read(), null);
+  // With no startedAt on the row (a start whose record was never written), the receipt's counts.
+  turn(home, TURN_EVENT.START, started - 30_000);
+  assert.equal(tmuxActivity(home, { startedAt: null }), ACTIVITY.WORKING);
+  turn(home, TURN_EVENT.START, started - 60_001);
+  assert.equal(tmuxActivity(home, { startedAt: null }), null);
+  // A receipt that is none says nothing: bad JSON, no instant, a link.
+  turn(home, TURN_EVENT.END, started + 30_000);
+  for (const bytes of ["{", "null", JSON.stringify({ startedAt: "soon" }), JSON.stringify({ startedAt: started + 40_000 })]) {
+    writeFileSync(pendingFile, bytes);
+    assert.equal(read(), ACTIVITY.IDLE, bytes);
+  }
+  rmSync(pendingFile);
+  writeFileSync(join(home, "later.json"), JSON.stringify({ startedAt: new Date(started + 40_000).toISOString() }));
+  symlinkSync(join(home, "later.json"), pendingFile);
+  assert.equal(read(), ACTIVITY.IDLE, "a linked receipt is not followed");
+  rmSync(pendingFile);
 
   // Bad JSON, a missing field, an unknown event, an `at` that is no instant, no object.
   const at = new Date(started + 1000).toISOString();
@@ -207,6 +243,15 @@ test("tmux rows: the key is on a row that runs and on no other; it reads the rec
   assert.deepEqual([after.startedAt, said(after)], [restarted, null], "the record is from before this start");
   turn(live, TURN_EVENT.START, started + 61_000);
   assert.equal(said(rowOf(fx, "live")), "working", "and this start's own launch prompt counts");
+
+  // A start under way: its pending receipt names a later start than the row does, and the last
+  // session's record, which the row's own startedAt would count, reads null on the row that runs.
+  const pendingFile = join(live, START_PENDING_FILE);
+  writeFileSync(pendingFile, JSON.stringify({ id: "s-2", startedAt: new Date(started + 120_000).toISOString() }));
+  assert.equal(said(rowOf(fx, "live")), null, "the previous session's turn-start, while the next start is under way");
+  turn(live, TURN_EVENT.START, started + 121_000);
+  assert.equal(said(rowOf(fx, "live")), "working", "the new start's launch prompt");
+  rmSync(pendingFile);
 
   // Claude Code: an open turn older than 30 minutes reads null; pi's reads working.
   const old = Date.now() - CLAUDE_OPEN_TURN_MAX_MS - 60_000;
