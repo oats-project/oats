@@ -27,7 +27,7 @@ COPY --chmod=644 sshd_config /etc/agent-sshd_config
 COPY --chmod=644 agent-trust.sh /etc/profile.d/agent-trust.sh
 # Deploy scripts preserve their local imports; the source pin is mandatory.
 ARG TEAM_IMAGE_SOURCE_SHA
-COPY --chmod=644 compose.agent.yaml compose.agent.inputs.yaml compose.agent.mirrors.yaml compose.agent.outbox.yaml compose.agent.trust.yaml compose.agent.work.yaml accept.mjs supervisor.mjs /opt/oats/deploy/
+COPY --chmod=644 compose.agent.yaml compose.agent.credentials.yaml compose.agent.inputs.yaml compose.agent.mirrors.yaml compose.agent.outbox.yaml compose.agent.trust.yaml compose.agent.work.yaml accept.mjs supervisor.mjs /opt/oats/deploy/
 COPY --chmod=755 accept.sh /opt/oats/deploy/accept.sh
 COPY --chmod=644 deploy-manifest.mjs /usr/local/lib/oats-deploy-manifest.mjs
 RUN node /usr/local/lib/oats-deploy-manifest.mjs agent /opt/oats/deploy "$TEAM_IMAGE_SOURCE_SHA" \
