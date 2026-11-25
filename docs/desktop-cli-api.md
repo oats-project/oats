@@ -3964,8 +3964,12 @@ its absence.
     on.
   - **The file is the agent's own home's,** and in full mode its user can
     write any file there: a record written by hand gives a wrong value and
-    nothing else. A second harness started inside the home (a nested
-    `claude -p`, a subagent's own process) writes its own boundaries there.
+    nothing else. A second pi in the home (a nested one, a subagent's
+    process) writes nothing while the home's own pi lives, and a Claude Code
+    subagent writes nothing. A second Claude Code started inside the home
+    with the home's environment (a nested `claude -p`) does write its own
+    boundaries: its end reads `"idle"` while the home's own turn goes on,
+    until the next prompt there.
   - **How it stands beside the row's other session fields:**
 
     | field | means | source | which acts read it |

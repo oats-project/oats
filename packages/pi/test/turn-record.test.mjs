@@ -5,13 +5,16 @@
 // reader. The events are driven by hand here; turn-record-real-pi.test.mjs runs them in pi itself.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { storedTreeDigest } from "../../../lib/core.mjs";
 import { TURN_EVENT, TURN_FILE, tmuxActivity } from "../../../lib/turn-activity.mjs";
 
-import { TURN_END, TURN_START, recordTurns, turnPath, writeTurn } from "../extension/turn-record.mjs";
+import { TURN_END, TURN_START, TURN_WRITER, recordTurns, takeTurnWriter, turnPath, writeTurn } from "../extension/turn-record.mjs";
+import { processStart } from "../extension/waiting-claim.mjs";
 
 /** A home, as spawn leaves one: its record and its `.oats` directory. */
 function homeOf(t, { oats = true } = {}) {
@@ -22,11 +25,13 @@ function homeOf(t, { oats = true } = {}) {
   if (!oats) rmSync(join(home, ".oats"), { recursive: true });
   return home;
 }
-/** The bridge's recorder in `home`, with pi's events driven by hand and a clock the test moves. */
-function session(home, clock) {
+/** The bridge's recorder in `home`, with pi's events driven by hand and a clock the test moves.
+ *  `env`: the process environment it reads and sets its writer's mark in (a fresh one by default:
+ *  a pi with no pi above it). */
+function session(home, clock, env = {}) {
   const handlers = new Map();
   const pi = { on: (event, handler) => { handlers.set(event, [...(handlers.get(event) ?? []), handler]); } };
-  recordTurns(pi, home, { now: () => new Date(clock.at) });
+  recordTurns(pi, home, { now: () => new Date(clock.at), env });
   return async (event, payload = {}) => { for (const handler of handlers.get(event) ?? []) await handler({ type: event, ...payload }); };
 }
 const recordOf = (home) => JSON.parse(readFileSync(turnPath(home), "utf8"));
@@ -133,4 +138,70 @@ test("recording never breaks a session: a home with no .oats directory, or one t
   }
   assert.equal(writeTurn(home, TURN_END, { now: () => new Date(STARTED + 5000) }), true);
   assert.equal(activityOf(home), "idle");
+});
+
+// ---- only the home's own pi writes
+
+const MODULE = fileURLToPath(new URL("../extension/turn-record.mjs", import.meta.url));
+/** A second pi's bridge in `home`, as a process started below this one with `env`: it runs one
+ *  turn (a start, then an end) and prints the mark it leaves in its own environment. */
+const CHILD = `import { recordTurns, TURN_WRITER } from ${JSON.stringify(MODULE)};
+const handlers = new Map();
+recordTurns({ on: (event, handler) => handlers.set(event, handler) }, process.argv[1]);
+handlers.get("agent_start")();
+handlers.get("agent_end")();
+process.stdout.write(process.env[TURN_WRITER]);
+`;
+const childTurn = (home, env) => spawnSync(process.execPath, ["--input-type=module", "-e", CHILD, home], { env: { ...process.env, ...env }, encoding: "utf8", timeout: 30000 });
+
+test("a second pi in the home writes nothing while the home's own pi lives: its run's end never reads idle over the outer turn", async (t) => {
+  const home = homeOf(t), clock = { at: STARTED + 1000 }, env = {};
+  const fire = session(home, clock, env);
+  await fire("agent_start");
+  // The mark names this process, when it started, and the home.
+  assert.equal(env[TURN_WRITER], `${process.pid}:${processStart(process.pid) ?? ""}:${home}`);
+  const outer = readFileSync(turnPath(home), "utf8");
+  // A subagent's pi, started below this one: it inherits the mark, and its whole turn writes nothing.
+  const child = childTurn(home, env);
+  assert.equal(child.status, 0, child.stderr);
+  assert.equal(child.stdout, env[TURN_WRITER], "the mark stays the outer pi's");
+  assert.equal(readFileSync(turnPath(home), "utf8"), outer);
+  assert.equal(activityOf(home), "working", "the outer turn goes on");
+  // A second bridge in this same process (a /reload, a replaced session) is the same writer.
+  clock.at += 1000;
+  await session(home, clock, env)("agent_start");
+  assert.equal(recordOf(home).at, new Date(clock.at).toISOString());
+  await fire("agent_end");
+  assert.equal(activityOf(home), "idle");
+});
+
+test("the mark is the home's and its holder's: one for another home, of a process that is gone, of a reused pid, or that is no mark, is not in the way", async (t) => {
+  const home = homeOf(t);
+  // A process that has exited, and was reaped: its pid names nobody (or, reused, another start).
+  const gone = spawn(process.execPath, ["-e", ""], { stdio: "ignore" });
+  await new Promise((resolve) => gone.on("exit", resolve));
+  const other = homeOf(t);
+  const cases = [
+    ["no mark", undefined], ["an empty mark", ""], ["no pid", `x:1:${home}`], ["a mark with no home", `${process.pid}:1`],
+    ["another home's writer, alive", `${process.pid}:${processStart(process.pid) ?? ""}:${other}`],
+    ["a writer that is gone", `${gone.pid}:1:${home}`],
+    ["a pid that is another process now", `${process.pid}:not-its-start:${home}`],
+  ];
+  for (const [what, mark] of cases) {
+    rmSync(turnPath(home), { force: true });
+    const child = childTurn(home, { [TURN_WRITER]: mark });
+    assert.equal(child.status, 0, `${what}: ${child.stderr}`);
+    assert.equal(recordOf(home).event, "turn-end", what);
+    assert.match(child.stdout, new RegExp(`^\\d+:[^:]*:${home.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`), `${what}: the child took the mark`);
+    assert.notEqual(child.stdout, mark, what);
+  }
+  // In process: the holder is asked when a run starts, so a pi whose writer has gone takes over then.
+  const env = { [TURN_WRITER]: `${process.pid}:${processStart(process.pid) ?? ""}:${home}` };
+  assert.equal(takeTurnWriter(home, env), true, "its own mark");
+  // (Linux reads a start for every pid; elsewhere `ps` does. Where neither does, an unreadable start counts as alive.)
+  const parent = `${process.ppid}:${processStart(process.ppid) ?? ""}:${home}`;
+  assert.equal(takeTurnWriter(home, { [TURN_WRITER]: parent }), false, "a live other process holds it");
+  const after = { [TURN_WRITER]: `${gone.pid}:1:${home}` };
+  assert.equal(takeTurnWriter(home, after), true);
+  assert.equal(after[TURN_WRITER].startsWith(`${process.pid}:`), true);
 });

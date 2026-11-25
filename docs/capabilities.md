@@ -2333,10 +2333,25 @@ session present on a home OATS started, whatever `running` is: answer
 so the value is as fresh as your answer; no act reads it. Without the key
 the row reads `null`. Any other value is outside the contract, as is a
 value other than `null` with `present: false`, and the answer is then read
-as no answer. **Send the key only to a kernel that lists `status-activity`**
-(`compatibility.oats` at the release that first lists it): an earlier
-kernel takes the result's keys as exactly the four above, and reads an
-answer with a fifth as no answer.
+as no answer.
+
+**An optional answer key is added without a wire bump only when a kernel
+that accepts it ships first and the provider's floor is raised to that
+kernel.** The kernel reads an answer's keys exactly, and a provider cannot
+tell per call which kernel asks. So the kernel release that accepts the key
+(it lists the key's feature in `oats version --json`) is published first,
+and the provider release that sends the key raises its `compatibility.oats`
+to that kernel release: no provider release below that floor sends it. That
+is how `activity` was added, and the rule for any optional answer key after
+it.
+
+**What it costs.** From the kernel release that lists `status-activity` on,
+wire 1.3 accepts one more optional key. A kernel moved back below that
+release while a provider that sends the key is in the homes (a newer
+oats-bb) reads every row of that provider as unreachable (`running: null`,
+`runtimeState: "unreachable"`): the answer has a key that kernel does not
+know, and is read as no answer. Pins can move back, so move the provider
+package back with the kernel.
 
 `inspectMany` (optional) in:
 `{ "homes": [ { "home", "instance", "endpoint" } ] }`, at most 200. Out:
