@@ -28,6 +28,7 @@ packages:
   oats.jira: v1.0.1
   oats.linear: v1.0.1
   oats.authoring: v1.0.3
+  oats.bb: git:github.com/oats-project/oats-bb@v0.4.0   # the bb session provider and its plugin (Pepe's yes to a v0.4.0 pin; Joan, 2026-11-25: this workspace in bb); a RELEASE pin, never a commit (the plugin reads its version)
   oats.apps: git:github.com/awebai/oats-apps@v1.0.0   # bare version once every deployment's CLI carries the catalog entry
 
 # Shared teams: the same provider team for everyone.
@@ -48,6 +49,7 @@ souls:
 defaults:
   capabilities:
     oats.core: { from: package }
+    oats.bb: { from: package }   # every soul can be spawned on bb (Joan, 2026-11-25: "surely it should always be all"); a tmux home is untouched by it
   knowledge: { oats.okf: { from: package } }
   messaging: { oats.aweb: { from: package } }
   tasks: none
