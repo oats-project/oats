@@ -141,6 +141,12 @@ test("KP-1: a wake due for a provider home OATS stopped starts it, a plain start
   assert.deepEqual(Object.fromEntries(threads), { [first]: false, [second]: true }, "a new session runs; the stopped one stays stopped");
   let run = lastRun(fx, "nudge");
   assert.deepEqual([run.outcome, run.kind, run.pending, run.home, run.instance, run.target, run.startedHarness, run.session.delivery], ["started", "wake", true, home, "sleeper", null, true, "launched"], JSON.stringify(run));
+  // The job holds its launch slot across the child's start, for the harness it started, as a tmux wake's does.
+  const slot = await fx.inEnv(() => S.jobLockInfo(fx.dep, "nudge"));
+  assert.deepEqual([slot?.home, slot?.wake], [home, true], JSON.stringify(slot));
+  // And the start's own claim and lock are released: nothing is left held on the home.
+  assert.equal(existsSync(retireClaimPath(home)), false, "the child's lifecycle claim is gone");
+  assert.equal(existsSync(join(home, ".oats-start.lock")), false, "and so is its start lock");
 
   // The next tick: the session runs, and the text is delivered to it, once.
   fx.clearCalls();
@@ -151,6 +157,7 @@ test("KP-1: a wake due for a provider home OATS stopped starts it, a plain start
   run = lastRun(fx, "nudge");
   assert.deepEqual([run.outcome, run.pending], ["delivered", false], JSON.stringify(run));
   assert.equal((await fx.inEnv(() => inspectInstanceSession(home))).running, true);
+  assert.equal((await fx.inEnv(() => S.jobLockInfo(fx.dep, "nudge")))?.home, home, "the started harness keeps the slot while it runs");
   // The next due minute, running: a delivery, and nothing is started.
   fx.clearCalls();
   assert.equal(rowIn(await scheduleTick(fx, "2026-11-23T10:01:05Z"), "nudge").action, "delivered");
@@ -192,17 +199,25 @@ test("KP-1: the guards are a tmux wake's: not before the due minute; no launch s
   fx.clearCalls();
   const claimed = rowIn(await scheduleTick(fx, "2026-11-23T12:00:05Z"), late);
   assert.deepEqual([claimed.action, claimed.pending], ["skipped", true], JSON.stringify(claimed));
-  assert.match(claimed.reason, /^start refused before any effect: an? upgrade of the home is running \(E_LIFECYCLE_BUSY\); the session is started again at the next due minute; delivery pending$/);
+  assert.equal(claimed.reason, "start refused before any effect: an upgrade of the home is running (E_LIFECYCLE_BUSY); the session is started again at the next due minute; delivery pending");
   assert.deepEqual([lastRun(fx, late).errorCode, lastRun(fx, late).startedHarness], ["E_LIFECYCLE_BUSY", undefined]);
   assert.deepEqual(askedOf(fx, late), [], "the provider was asked nothing");
   assert.equal(await fx.inEnv(() => S.jobLockInfo(fx.dep, late)), null, "no slot is held for a start that had no effect");
+  // A retire of the home refuses it the same way, by its own code.
+  writeFileSync(claim, `${JSON.stringify({ action: "retire", pid: process.pid, processStart: await fx.inEnv(() => processStartToken(process.pid)), nonce: "d".repeat(32), at: new Date().toISOString() })}\n`);
+  fx.clearCalls();
+  const retiring = rowIn(await scheduleTick(fx, "2026-11-23T13:00:05Z"), late);
+  assert.deepEqual([retiring.action, retiring.pending, lastRun(fx, late).errorCode], ["skipped", true, "E_INSTANCE_RETIRING"], JSON.stringify(retiring));
+  assert.equal(retiring.reason, "start refused before any effect: the home is being retired (E_INSTANCE_RETIRING); the session is started again at the next due minute; delivery pending");
+  assert.deepEqual(askedOf(fx, late), []);
+  assert.equal(await fx.inEnv(() => S.jobLockInfo(fx.dep, late)), null);
   rmSync(claim);
 
   // 4. A start its provider refuses at its check: recorded with the provider's code, pending,
   // nothing launched; the slot is kept until the home is seen stopped, as for a tmux start that failed.
   fx.control({ stateful: true, check: { result: { status: "unavailable", problems: [{ code: "E_BACKEND_SANDBOXED_MODE", message: "this provider launches only in full mode" }] } } });
   fx.clearCalls();
-  const refused = rowIn(await scheduleTick(fx, "2026-11-23T13:00:05Z"), late);
+  const refused = rowIn(await scheduleTick(fx, "2026-11-23T14:00:05Z"), late);
   assert.deepEqual([refused.action, refused.pending], ["skipped", true], JSON.stringify(refused));
   assert.deepEqual([lastRun(fx, late).errorCode, lastRun(fx, late).startedHarness], ["E_BACKEND_SANDBOXED_MODE", "unconfirmed"]);
   assert.match(refused.reason, /^start did not complete \(E_BACKEND_SANDBOXED_MODE\): .*this provider launches only in full mode.*nothing was stopped or started; the slot is kept until the session is observed stopped or absent$/);
@@ -210,7 +225,7 @@ test("KP-1: the guards are a tmux wake's: not before the due minute; no launch s
   // The provider takes it again: the next due minute starts it.
   fx.control({ stateful: true });
   fx.clearCalls();
-  const then = rowIn(await scheduleTick(fx, "2026-11-23T14:00:05Z"), late);
+  const then = rowIn(await scheduleTick(fx, "2026-11-23T15:00:05Z"), late);
   assert.equal(then.action, "started", JSON.stringify(then));
   assert.deepEqual(askedOf(fx, late), ["check", "stop", "launch"]);
 });

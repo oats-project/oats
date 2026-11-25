@@ -267,7 +267,10 @@ refuses the key on a trigger.
   ([lost sessions](execution-targets.md#session-providers)). A home stopped
   with the host (`oats host run`'s shutdown) is OATS's to bring back in its
   own conversation: until the resume does, the wake's input is refused
-  (`errorCode: "E_SESSION_NOT_RUNNING"`) and the delivery stays pending. An input the provider itself refuses
+  (`errorCode: "E_SESSION_NOT_RUNNING"`) and the delivery stays pending.
+  This is the one place the two backends differ: a tmux home lost at a
+  reboot is started fresh by its due wake, and a provider home waits for
+  its resume. An input the provider itself refuses
   (`E_SESSION_PROMPT_OPEN` while its session shows a prompt,
   `E_SESSION_INPUT_QUEUED`) is `skipped` with that `errorCode`: nothing was
   sent, and the pending delivery is tried again at every tick, then delivered
