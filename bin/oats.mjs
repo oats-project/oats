@@ -109,6 +109,7 @@ const { callSession, parseMaxAge, readBudget } = await kernelImport("read-call",
 const { cachedWorkspace, legacyLayoutProblems, statusAnswer, statusView } = await kernelImport("roster-read", () => import("../lib/roster-read.mjs"));
 const { memberLabel, memberRows, packageRows, standaloneCatalogVersion, standalonePackages, workspaceName, workspaceStatusAnswer, workspaceStatusView } = await kernelImport("workspace-read", () => import("../lib/workspace-read.mjs"));
 const { expandInlineValues, flagValue } = await kernelImport("argv", () => import("../lib/argv.mjs"));
+const { launchChoicesOfFlags } = await kernelImport("launch-choices", () => import("../lib/launch-choices.mjs"));
 const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, HOST_RUN_USAGE, RESUME_LOCAL_ONLY, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, BOARD_USAGE, commandArgvProblem, commandFlags, sameWorkDeprecation } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
 
 const rawArgs = process.argv.slice(2);
@@ -124,6 +125,14 @@ const flag = (name) => flagValue(args, inlineValues, name);
 function yoloFlag() {
   if (args.includes("--yolo") && args.includes("--no-yolo")) cmdFail("E_BAD_ARGS", "choose --yolo or --no-yolo, not both");
   return args.includes("--yolo") ? true : args.includes("--no-yolo") ? false : undefined;
+}
+/** `--launch-choice <name>=<value>`, given any number of times (feature launch-choices): the launch's
+ *  choices as `{ <name>: <value> }`, undefined when the flag is not given. A value that is missing or
+ *  malformed, and a name given twice, are refused E_BAD_ARGS (lib/launch-choices.mjs). */
+function launchChoiceFlags() {
+  const values = [];
+  for (let i = 0; i < args.length; i++) if (args[i] === "--launch-choice") values.push(args[i + 1] !== undefined && !args[i + 1].startsWith("--") ? args[++i] : true);
+  try { return launchChoicesOfFlags(values); } catch (e) { cmdFail(e.code, e.message); }
 }
 function valueFlag(name) {
   const value = flag(name);
@@ -3087,6 +3096,7 @@ async function spawnCmd() {
   try {
     if (args.includes("--allow-child-spawns") && args.includes("--no-child-spawns")) bail("E_BAD_ARGS", "--allow-child-spawns and --no-child-spawns contradict");
     if (flag("base") === true) bail("E_BAD_ARGS", "--base needs a ref");
+    const launchChoices = launchChoiceFlags();
     { const spawnOpts = {
       prepared,
       purpose: flag("purpose"), ...(nameFlag !== undefined ? { name: String(nameFlag) } : {}), task: taskText ?? stdinTask, taskFile: stdinTask === undefined ? taskFileFlag : undefined, relation, relativeTo, relativeRoot,
@@ -3102,6 +3112,8 @@ async function spawnCmd() {
         ? repo : repo || defaultRepo(workspaceOf(root)) || defaultRepo(process.cwd()),
       work: requestedWork, workDir, harness: harnessFlag(), backend, yolo, model: flag("model"), branch,
       launchConfig: valueFlag("launch-config"),
+      // Feature launch-choices: what the backend's provider is handed for this launch, or the spawn is refused.
+      ...(launchChoices !== undefined ? { launchChoices } : {}),
       // Feature instance-background: the flag wins over the soul's `background:`.
       ...(args.includes("--background") ? { background: true } : args.includes("--no-background") ? { background: false } : {}),
       launch: !args.includes("--no-launch"),
@@ -3701,7 +3713,7 @@ async function sessionCmd() {
       // refused with a launch choice before anything of the home is read.
       const resume = args.includes("--resume");
       if (resume) {
-        const chosen = ["--launch-config", "--harness", "--model", "--yolo", "--no-yolo", "--reselect-launch"].filter((f) => args.some((a) => a === f || a.startsWith(`${f}=`)));
+        const chosen = ["--launch-config", "--harness", "--model", "--yolo", "--no-yolo", "--reselect-launch", "--launch-choice"].filter((f) => args.some((a) => a === f || a.startsWith(`${f}=`)));
         if (chosen.length) bad(`--resume runs the launch this home recorded; it cannot be combined with ${chosen.join(", ")}; nothing was read or started`);
       }
       // Refuse before launch selection or live-team discovery can prepare this home. Every start
@@ -3709,7 +3721,9 @@ async function sessionCmd() {
       // upgrade that runs (it holds the claim) the start is busy, not a partial upgrade: that one is
       // left to the claim. A resume is always refused under the claim.
       if (!resume && !upgradeHoldsClaim(home)) assertNoPartialUpgrade(home);
-      const opts = { model: model || undefined, launchConfig, harness, yolo: yoloFlag(), ...(resume ? {} : await homeSandboxSourceOf(home)), ...(reselectLaunch ? { reselectLaunch: true, launchOffered: await homeLaunchOffered(home, { named: harness !== undefined }) } : {}), ...(resume ? { resume: true } : {}), env: process.env, ...(await homeLiveTeams(home)) };
+      // Feature launch-choices: this start's own choices, over the ones the home records.
+      const launchChoices = resume ? undefined : launchChoiceFlags();
+      const opts = { model: model || undefined, launchConfig, harness, yolo: yoloFlag(), ...(launchChoices !== undefined ? { launchChoices } : {}), ...(resume ? {} : await homeSandboxSourceOf(home)), ...(reselectLaunch ? { reselectLaunch: true, launchOffered: await homeLaunchOffered(home, { named: harness !== undefined }) } : {}), ...(resume ? { resume: true } : {}), env: process.env, ...(await homeLiveTeams(home)) };
       if (args[1] === "restart") {
         const grace = flag("stop-grace");
         if (grace !== undefined) { if (grace === true || !/^\d+$/.test(String(grace)) || Number(grace) < 1 || Number(grace) > 300) bad("--stop-grace needs a number of seconds (1..300) to wait for the harness after SIGTERM"); opts.stopGraceMs = Number(grace) * 1000; }
@@ -4777,7 +4791,8 @@ async function serverRouteCmd() {
     }
     if (args[1] === "start" || args[1] === "restart") {
       const value = (name) => { const v = flag(name); if (v === true) bail("E_BAD_ARGS", `--${name} needs a value`); return v; };
-      const choices = { ...addr, model: value("model"), launchConfig: value("launch-config"), harness: harnessFlag(value), yolo: yoloFlag() };
+      const launchChoices = launchChoiceFlags();
+      const choices = { ...addr, model: value("model"), launchConfig: value("launch-config"), harness: harnessFlag(value), yolo: yoloFlag(), ...(launchChoices !== undefined ? { launchChoices } : {}) };
       if (flag("stop-grace") !== undefined) bail("E_BAD_ARGS", "--stop-grace is currently supported on the execution host; omit it to use the remote restart's default wait");
       let out;
       try { out = (args[1] === "restart" ? restartRemote : startRemote)(id, choices); } catch (e) { bail(e.code || "E_SSH", e.message, e.details); }
@@ -5234,6 +5249,9 @@ Usage:
       [--reselect-launch]                   applies the launch preferences now (oats-local.yaml
                                             souls.launch, the soul's launch); a changed preference
                                             never reaches an existing home without it or a respawn
+      [--launch-choice <name>=<value>]…     a choice the home's session provider declares, for
+                                            this start and the ones after it; <name>=default
+                                            clears a recorded one; refused on tmux
   oats session start --resume --home <abs>   start a home whose session was LOST (a reboot, a dead
                                             tmux server) in its own last conversation, the
                                             recorded launch as is; fresh on TASK.md when none is
@@ -5287,6 +5305,9 @@ Usage:
       [--model <id>|@native-default]        override the selected model; @native-default
                                             selects the harness's own model default
       [--backend tmux|<provider>] [--yolo|--no-yolo]  session backend (tmux, or a session provider of the soul's capabilities) and launch permission option
+      [--launch-choice <name>=<value>]…     a launch choice the backend's session provider declares
+                                            (a reasoning level, a service tier); refused, never
+                                            dropped, for a name it does not declare and on tmux
       [--background|--no-background]        list the instance under Background (presentation
                                             only); default: the soul's background:, else no
       [--no-launch] [--json]                 scaffold without launching; JSON result envelope
