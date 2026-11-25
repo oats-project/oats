@@ -43,6 +43,7 @@ export function checkExtractedScripts(directory, image) {
     for (const [name, diagnostic] of [
       ["preflight-network.mjs", "egress preflight: run preflight without arguments on the Linux Docker engine host\n"],
       ["probe-runtime.mjs", "egress boundary: cannot emit runtime probe (values withheld)\n"],
+      ["probe-services-backends.mjs", "services witness: pass the derived witness plan with --plan\n"],
     ]) {
       const result = spawnSync(process.execPath, [join(directory, "egress", name), "--help"], { cwd: directory, env, encoding: "utf8", timeout: 10000 });
       assert.equal(result.status, 1, result.stderr);

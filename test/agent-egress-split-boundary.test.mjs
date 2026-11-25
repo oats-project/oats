@@ -2,36 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import childProcess from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { writeDeployManifest } from "../container/agent/deploy-manifest.mjs";
+import { deploySourceCommit as sha, egressSource as source, stageEgressDeploy as stageDeploy } from "./helpers/egress-deploy-copy.mjs";
 import { policyHash } from "../container/agent/egress/policy.mjs";
 import { classifyProgram, tcpProgram } from "../container/agent/egress/canary.mjs";
 
-const source = fileURLToPath(new URL("../container/agent/", import.meta.url));
-const image = "sha256:" + "a".repeat(64), servicesAddress = "93.184.215.14", sha = "b".repeat(40);
-
-/** An extracted egress deploy copy, staged from the Dockerfile's own deploy
- * COPY lines with a source-bound manifest, as the image builds it. */
-function stageDeploy(t) {
-  // A canonical path: the CLI guard compares argv[1] with the module URL.
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), "oats-split-deploy-")));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  for (const line of readFileSync(join(source, "egress/Dockerfile"), "utf8").split("\n")) {
-    if (!line.startsWith("COPY --chmod=") || !line.includes("/opt/oats/deploy/")) continue;
-    const tokens = line.split(/\s+/), destination = tokens.at(-1).slice("/opt/oats/deploy/".length);
-    for (const name of tokens.slice(2, -1)) {
-      const target = join(directory, destination + name.split("/").at(-1));
-      mkdirSync(dirname(target), { recursive: true });
-      copyFileSync(join(source, name), target);
-    }
-  }
-  writeDeployManifest({ directory, image: "egress", source: sha, installed: { coredns: "1.15.0", nginx: "1.22.1" } });
-  return directory;
-}
+const image = "sha256:" + "a".repeat(64), servicesAddress = "93.184.215.14";
 
 function splitPolicy() {
   return {roles:["aweb","logs","secrets"],humanRole:"secrets",humanOrigin:"https://approve.example.invalid",frontAddress:"172.30.0.2",

@@ -15,6 +15,7 @@ egress/**
 !egress/probe-runtime.mjs
 !egress/preflight-network.mjs
 !egress/split.mjs
+!egress/probe-services-backends.mjs
 !accept.mjs
 !supervisor.mjs
 !compose.agent.yaml
