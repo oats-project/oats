@@ -83,6 +83,23 @@ jobs:
           python3 test/agent-egress-ingress-image.py "$EGRESS_IMAGE"
           python3 test/agent-egress-humanrole-ingress-image.py "$EGRESS_IMAGE"
 
+      # The live check depends on public origins' availability, so a PR runs it
+      # only when it changes the egress component or the check itself.
+      - name: Decide whether the live named-origins check runs
+        id: named-origins
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" != pull_request ]; then echo run=true >> "$GITHUB_OUTPUT"; exit 0; fi
+          git fetch --quiet --no-tags --depth=1 origin "$BASE_SHA"
+          changed=$(git diff --name-only "$BASE_SHA" HEAD -- container/agent/egress test/agent-egress-named-origins-image.py)
+          if [ -n "$changed" ]; then echo run=true >> "$GITHUB_OUTPUT"; else echo run=false >> "$GITHUB_OUTPUT"; fi
+
+      - name: Prove deployment-named external origins over real public TLS
+        if: ${{ steps.named-origins.outputs.run == 'true' }}
+        run: python3 test/agent-egress-named-origins-image.py "$EGRESS_IMAGE" "$AGENT_IMAGE"
+
       - name: Prove full and declared-role Compose boundaries
         run: |
           for roles in full aweb,registry aweb,registry,secrets aweb,logs,registry,secrets; do
