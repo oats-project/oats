@@ -20,8 +20,11 @@
  * `turn-end-idle` is Claude's own "waiting for your input" notice, given after a
  * minute at its prompt: a turn-end for a turn whose end no hook reported, and
  * nothing when the record already says the turn ended (its time stays the turn's).
- * Its input is read from stdin (the script passes it, bounded) and must name
- * `notification_type: "idle_prompt"`: Claude can run an entry for a notification
+ * Every hook's input is read from stdin (the script passes it, bounded). One that
+ * carries `agent_id` is a subagent's event (a background or parallel subagent in
+ * the same session): it writes nothing, because the main turn goes on. An input
+ * that cannot be read as JSON is the main thread's, as for a tool clear. The idle
+ * notice's input must also name `notification_type: "idle_prompt"`: Claude can run an entry for a notification
  * its matcher does not name, and no other notice means the turn ended. Claude
  * waits for a prompt's and a stop's hooks before it goes on, so those writes come
  * in the order of the turns; a notice is not waited for, which is why it only ever
@@ -71,9 +74,19 @@ export function isIdleNotice(input) {
   } catch { return false; }
 }
 
-/** The boundary an action writes, or null for none: `input` is the hook's input, read only for
- *  the idle notice, which writes a turn-end only over an open turn. */
+/** Whether a hook input (Claude's JSON, as text) is a subagent's event: it carries `agent_id`,
+ *  which only a subagent's does. One that is no JSON object is the main thread's. */
+export function fromSubagent(input) {
+  try {
+    const event = JSON.parse(input);
+    return event !== null && typeof event === "object" && !Array.isArray(event) && typeof event.agent_id === "string" && event.agent_id.length > 0;
+  } catch { return false; }
+}
+
+/** The boundary an action writes, or null for none: `input` is the hook's input. A subagent's
+ *  event writes none, and the idle notice writes a turn-end only over an open turn. */
 export function boundaryOf(action, home, input = "") {
+  if (fromSubagent(input)) return null;
   if (action === TURN_START || action === TURN_END) return action;
   if (action !== TURN_END_IDLE || !isIdleNotice(input)) return null;
   return recordedEvent(home) === TURN_START ? TURN_END : null;
@@ -101,10 +114,8 @@ export function writeTurn(home, event, { now = () => new Date() } = {}) {
 function main([action, home]) {
   if (typeof home !== "string" || !home.startsWith("/")) return;
   let input = "";
-  if (action === TURN_END_IDLE) {
-    try { input = readFileSync(0).subarray(0, INPUT_MAX).toString("utf8"); }
-    catch { return; /* no input to read: not the idle notice */ }
-  }
+  try { input = readFileSync(0).subarray(0, INPUT_MAX).toString("utf8"); }
+  catch { input = ""; /* no input to read: the main thread's, and not the idle notice */ }
   const event = boundaryOf(action, home, input);
   if (event) writeTurn(home, event);
 }

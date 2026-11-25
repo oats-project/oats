@@ -66,8 +66,9 @@
 # boundary to claude-turn.mjs (beside this script), which replaces <home>/.oats/turn.json, what
 # the kernel reads to show the instance as working or idle. UserPromptSubmit gives turn-start;
 # Stop and StopFailure turn-end; the idle_prompt Notification turn-end-idle, whose input the
-# writer checks. It runs behind the same home check as every other action, reads the input only
-# for the idle notice (at most 64 KiB, for at most 1 s) and is killed at 2 s. An oats.core from
+# writer checks, and nothing for a subagent's event (an input that carries agent_id). It runs
+# behind the same home check as every other action, reads the input once (at most 64 KiB, for at
+# most 1 s) and is killed at 2 s. An oats.core from
 # before it has no such action here, and exits 0 on one.
 exec >/dev/null 2>&1
 # A closed stdin is never redirected from (a failed redirection ends sh itself); without
@@ -168,12 +169,12 @@ read_input() {
 }
 
 # A turn boundary (see "The turn record" above): claude-turn.mjs writes it, under a 2 s
-# watchdog. Only the idle notice's input is read, and handed to the writer on its stdin.
+# watchdog. The hook's input is read once, bounded, and handed to the writer on its stdin: a
+# subagent's event (one that carries agent_id) writes nothing, and the idle notice names its type.
 if [ "$action" = turn ]; then
   writer=${0%/*}/claude-turn.mjs
   [ -f "$writer" ] || exit 0
-  input=
-  [ "$event" = turn-end-idle ] && read_input
+  read_input
   printf '%s' "$input" | "$node" "$writer" "$event" "$home" &
   pid=$!
   start_watchdog "$pid" 2

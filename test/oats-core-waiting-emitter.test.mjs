@@ -1504,8 +1504,8 @@ test("real script, real CLI: a dialog over a failed turn's claim is the claim sh
   assert.equal(logOf(a), rows);
 });
 
-test("packaging: the capability ships bin/oats-core.mjs, bin/claude-waiting.sh and bin/claude-waiting-message.mjs as regular files, wired as spawn, launch and upgrade hooks", () => {
-  for (const f of ["bin/oats-core.mjs", "bin/claude-waiting.sh", "bin/claude-waiting-message.mjs"]) assert.ok(lstatSync(join(CAP, f)).isFile(), f);
+test("packaging: the capability ships bin/oats-core.mjs, bin/claude-waiting.sh, bin/claude-waiting-message.mjs and bin/claude-turn.mjs as regular files, wired as spawn, launch and upgrade hooks", () => {
+  for (const f of ["bin/oats-core.mjs", "bin/claude-waiting.sh", "bin/claude-waiting-message.mjs", "bin/claude-turn.mjs"]) assert.ok(lstatSync(join(CAP, f)).isFile(), f);
   const manifest = readJson(join(CAP, "oats.json"));
   assert.deepEqual(manifest.hooks, { spawn: "bin/oats-core.mjs spawn", launch: "bin/oats-core.mjs launch", upgrade: "bin/oats-core.mjs upgrade" });
   assert.equal(manifest.launchPreview, true);

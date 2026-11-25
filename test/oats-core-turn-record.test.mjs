@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { storedTreeDigest } from "../lib/core.mjs";
 import { CLAUDE_OPEN_TURN_MAX_MS, TURN_EVENT, TURN_FILE, tmuxActivity } from "../lib/turn-activity.mjs";
-import { TURN_END, TURN_END_IDLE, TURN_START, boundaryOf, isIdleNotice, recordedEvent, turnPath, writeTurn } from "../oats-package/capabilities/oats-core/bin/claude-turn.mjs";
+import { TURN_END, TURN_END_IDLE, TURN_START, boundaryOf, fromSubagent, isIdleNotice, recordedEvent, turnPath, writeTurn } from "../oats-package/capabilities/oats-core/bin/claude-turn.mjs";
 import { claudeWaitingSettings } from "../oats-package/capabilities/oats-core/bin/oats-core.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -70,12 +70,12 @@ function fire(h, event, input, options = {}) {
   const groups = (settingsOf(h).hooks[event] ?? []).filter((group) => group.matcher === undefined || group.matcher === "*" || group.matcher === subject);
   const commands = groups.flatMap((group) => group.hooks.map((hook) => hook.command));
   for (const command of commands) {
-    const r = spawnSync("/bin/sh", ["-c", command], { encoding: "utf8", timeout: 30000, input: JSON.stringify(input), cwd: base, env: cleanEnv({ OATS_INSTANCE_HOME: session, ...env }) });
+    const r = spawnSync("/bin/sh", ["-c", command], { encoding: "utf8", timeout: 30000, input: typeof input === "string" ? input : JSON.stringify(input), cwd: base, env: cleanEnv({ OATS_INSTANCE_HOME: session, ...env }) });
     assert.deepEqual([r.status, r.stdout, r.stderr], [0, "", ""], `${event}: a hook never prints and never fails`);
   }
   return commands.length;
 }
-const prompt = (h, options) => fire(h, "UserPromptSubmit", INPUT.UserPromptSubmit, options);
+const prompt = (h, { input = INPUT.UserPromptSubmit, ...options } = {}) => fire(h, "UserPromptSubmit", input, options);
 const stop = (h, options) => fire(h, "Stop", INPUT.Stop, options);
 const idleNotice = (h, options) => fire(h, "Notification", INPUT.idle, { subject: "idle_prompt", ...options });
 const recordOf = (h) => (existsSync(join(h, TURN_FILE)) ? JSON.parse(readFileSync(join(h, TURN_FILE), "utf8")) : null);
@@ -161,6 +161,30 @@ test("only the idle notice ends a turn: a permission prompt's notification, anot
   assert.equal(boundaryOf(TURN_END_IDLE, h, JSON.stringify(INPUT.permission)), null);
   assert.deepEqual([boundaryOf("turn-start", h), boundaryOf("turn-end", h), boundaryOf("turn-pause", h), boundaryOf(undefined, h)], ["turn-start", "turn-end", null, null]);
   assert.equal(recordedEvent(h), "turn-start");
+});
+
+test("a subagent's event writes nothing: an input that carries agent_id leaves the record as the main turn left it, whatever the hook", () => {
+  const h = home();
+  // No record yet: a subagent's prompt starts no turn of the home's.
+  prompt(h, { input: { ...INPUT.UserPromptSubmit, agent_id: "a-1", agent_type: "general-purpose" } });
+  assert.equal(recordOf(h), null);
+  prompt(h);
+  const open = readFileSync(join(h, TURN_FILE), "utf8");
+  // A background subagent stops, fails or sits idle while the main turn goes on.
+  for (const [event, input, subject] of [["Stop", INPUT.Stop], ["StopFailure", INPUT.StopFailure], ["Notification", INPUT.idle, "idle_prompt"], ["UserPromptSubmit", INPUT.UserPromptSubmit]]) {
+    fire(h, event, { agent_id: "a-1", ...input }, { subject });
+    assert.equal(readFileSync(join(h, TURN_FILE), "utf8"), open, event);
+  }
+  assert.equal(activityOf(h), "working");
+  // The main thread's own events carry none, and an input that is no JSON object is the main thread's.
+  for (const input of ["not json", "", [], { ...INPUT.Stop, agent_id: "" }, { ...INPUT.Stop, agent_id: 7 }, { ...INPUT.Stop, message: "\"agent_id\":\"a-1\"" }]) {
+    prompt(h);
+    fire(h, "Stop", input);
+    assert.equal(recordOf(h).event, "turn-end", JSON.stringify(input));
+  }
+  assert.equal(fromSubagent(JSON.stringify({ agent_id: "a-1", hook_event_name: "Stop" })), true);
+  for (const text of ["", "{", "null", "[]", JSON.stringify(INPUT.Stop), JSON.stringify({ agent_id: "" }), JSON.stringify({ agent_id: null })]) assert.equal(fromSubagent(text), false, text);
+  assert.equal(boundaryOf(TURN_END, h, JSON.stringify({ agent_id: "a-1" })), null);
 });
 
 test("a boundary dated before startedAt reads null: a record a killed session left is not the next start's", () => {
