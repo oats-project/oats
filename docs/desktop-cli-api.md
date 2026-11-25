@@ -3928,7 +3928,7 @@ its absence.
 
     | harness | turn start | turn end | reads `null` |
     |---|---|---|---|
-    | Claude Code (oats.core's hooks) | `UserPromptSubmit`, a launch prompt's included | `Stop`; `StopFailure`; the `idle_prompt` notification, 60 s after a turn ended | with an oats.core from before the record; from 30 minutes after a turn start with no end |
+    | Claude Code (oats.core's hooks) | `UserPromptSubmit`, a launch prompt's included | `Stop`; `StopFailure`; the `idle_prompt` notification, for a turn whose end no hook reported | with an oats.core from before the record; from 30 minutes after a turn start with no end |
     | pi (`@awebai/oats-pi`) | the agent's start, a launch prompt's included | the agent's end, an abort included | with a bridge from before the record |
     | Codex | never | never | always: its notify hook reports turn ends only, which would read `"idle"` while it works |
 
