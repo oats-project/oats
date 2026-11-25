@@ -247,7 +247,7 @@ test("the inspect key: optional, one of the three values, and only null for a se
 
 test("provider rows: the provider's answer is relayed on a session that is there and that OATS started, whatever its running; the file is never read", async (t) => {
   const fx = providerDeployment(t);
-  const names = ["turn", "waiting", "unloaded", "untold", "silent", "lost", "badword", "refused"];
+  const names = ["turn", "waiting", "unloaded", "untold", "silent", "shell", "lost", "badword", "refused"];
   const homes = {};
   for (const name of names) homes[name] = (await fx.launch(name)).home;
   // The pi bridge writes the record in every home, a provider's too: it says the opposite of each
@@ -260,7 +260,9 @@ test("provider rows: the provider's answer is relayed on a session that is there
     // An agent waiting on a person: the provider cannot tell a live idle session from a settled one.
     waiting: { inspect: { result: { ...LIVE, running: null, activity: "idle" } } },
     // The provider unloaded an idle harness between turns: the session is still there, and idle.
-    unloaded: { inspect: { result: { present: true, state: "shell", running: false, activity: "idle" } } },
+    unloaded: { inspect: { result: { ...LIVE, running: false, activity: "idle" } } },
+    // The harness ended and something else holds the session: no turn to report, whatever it sends.
+    shell: { inspect: { result: { present: true, state: "shell", running: false, activity: "working" } } },
     untold: { inspect: { result: { ...LIVE, activity: null } } },
     silent: { inspect: { result: LIVE } },
     lost: { inspect: { result: LOST } },
@@ -270,15 +272,15 @@ test("provider rows: the provider's answer is relayed on a session that is there
   const expected = {
     turn: [true, "working"], waiting: [null, "idle"], unloaded: [false, "idle"],
     untold: [true, null], silent: [true, null],
-    // A session that is gone, an answer outside the contract's words and a refusal: no key.
-    lost: [false, "absent"], badword: [null, "absent"], refused: [null, "absent"],
+    // A session left at its shell, one that is gone, an answer outside the contract's words and a refusal: no key.
+    shell: [false, "absent"], lost: [false, "absent"], badword: [null, "absent"], refused: [null, "absent"],
   };
   const read = () => Object.fromEntries(rowsOf(fx).map((row) => [row.instance, [row.running, said(row)]]));
   fx.clearCalls();
   assert.deepEqual(read(), expected, "through inspectMany");
   assert.equal(fx.verbs()[0].verb, "inspectMany");
   const rows = Object.fromEntries(rowsOf(fx).map((row) => [row.instance, row]));
-  assert.deepEqual([rows.lost.sessionEnd, rows.badword.runtimeState, rows.refused.runtimeState], ["lost", "unreachable", "unreachable"]);
+  assert.deepEqual([rows.unloaded.runtimeState, rows.shell.runtimeState, rows.lost.sessionEnd, rows.badword.runtimeState, rows.refused.runtimeState], ["unknown", "shell", "lost", "unreachable", "unreachable"]);
 
   // A home being retired has no key, whatever its provider answers.
   writeFileSync(retirePendingMarkerPath(homes.turn), JSON.stringify({ reason: "retire pending" }));
@@ -341,7 +343,7 @@ test("a remote roster relays the key as its host's status gave it, from a host t
     assert.equal(await far({ ...bbRow, activity: value }), value, `provider: ${value}`);
   }
   // A provider row relays it whatever its running: an idle harness the provider unloaded.
-  assert.equal(await far({ ...bbRow, running: false, runtimeState: "shell", activity: "idle" }), "idle");
+  assert.equal(await far({ ...bbRow, running: false, runtimeState: "unknown", activity: "idle" }), "idle");
   // A host that sends no key says nothing, and nothing is added.
   assert.equal(await far(tmuxRow), "absent");
   // A value that is not one of the three drops the key.
@@ -355,6 +357,8 @@ test("a remote roster relays the key as its host's status gave it, from a host t
     { ...tmuxRow, running: false, sessionEnd: "lost" }, { ...bbRow, running: false, runtimeState: "stopped", sessionEnd: "stopped" },
     { ...bbRow, running: false, runtimeState: "stopped", sessionEnd: "stopped", outsideOats: { code: "running-outside-oats", backend: "bb", message: "x" } },
     { ...tmuxRow, retirePending: true }, { ...tmuxRow, retire: { state: "running" } },
+    // A provider's session left at its shell: its harness ended.
+    { ...bbRow, running: false, runtimeState: "shell" },
     // Neither a tmux row nor a provider's.
     { instance: "far", home: "/srv/far", running: true },
   ]) assert.equal(await far({ ...row, activity: "working" }), "absent", JSON.stringify(row));

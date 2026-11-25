@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { storedTreeDigest } from "../../../lib/core.mjs";
 import { TURN_EVENT, TURN_FILE, tmuxActivity } from "../../../lib/turn-activity.mjs";
 
-import { TURN_END, TURN_START, TURN_WRITER, recordTurns, takeTurnWriter, turnPath, writeTurn } from "../extension/turn-record.mjs";
+import { TURN_END, TURN_START, TURN_WRITER, formatTurnWriter, parseTurnWriter, recordTurns, takeTurnWriter, turnPath, writeTurn } from "../extension/turn-record.mjs";
 import { processStart } from "../extension/waiting-claim.mjs";
 
 /** A home, as spawn leaves one: its record and its `.oats` directory. */
@@ -162,7 +162,7 @@ test("a second pi in the home writes nothing while the home's own pi lives: its 
   const fire = session(home, clock, env);
   await fire("agent_start");
   // The mark names this process, when it started, and the home.
-  assert.equal(env[TURN_WRITER], `${process.pid}:${processStart(process.pid) ?? ""}:${home}`);
+  assert.deepEqual(JSON.parse(env[TURN_WRITER]), { pid: process.pid, start: processStart(process.pid), home });
   const outer = readFileSync(turnPath(home), "utf8");
   // A subagent's pi, started below this one: it inherits the mark, and its whole turn writes nothing.
   const child = childTurn(home, env);
@@ -219,6 +219,8 @@ test("a second session in the same process (a subagent's, a workflow agent's) wr
   await next("session_shutdown");
 });
 
+const markOf = (pid, start, home) => formatTurnWriter({ pid, start, home });
+
 test("the mark is the home's and its holder's: one for another home, of a process that is gone, of a reused pid, or that is no mark, is not in the way", async (t) => {
   const home = homeOf(t);
   // A process that has exited, and was reaped: its pid names nobody (or, reused, another start).
@@ -226,26 +228,44 @@ test("the mark is the home's and its holder's: one for another home, of a proces
   await new Promise((resolve) => gone.on("exit", resolve));
   const other = homeOf(t);
   const cases = [
-    ["no mark", undefined], ["an empty mark", ""], ["no pid", `x:1:${home}`], ["a mark with no home", `${process.pid}:1`],
-    ["another home's writer, alive", `${process.pid}:${processStart(process.pid) ?? ""}:${other}`],
-    ["a writer that is gone", `${gone.pid}:1:${home}`],
-    ["a pid that is another process now", `${process.pid}:not-its-start:${home}`],
+    ["no mark", undefined], ["an empty mark", ""], ["no JSON", `${process.pid}:1:${home}`], ["an array", JSON.stringify([process.pid, null, home])],
+    ["a pid that is text", JSON.stringify({ pid: String(process.pid), start: processStart(process.pid), home })], ["no home", JSON.stringify({ pid: process.pid, start: null })],
+    ["another home's writer, alive", markOf(process.pid, processStart(process.pid), other)],
+    ["a writer that is gone", markOf(gone.pid, "1", home)],
+    ["a pid that is another process now", markOf(process.pid, "not-its-start", home)],
   ];
   for (const [what, mark] of cases) {
     rmSync(turnPath(home), { force: true });
     const child = childTurn(home, { [TURN_WRITER]: mark });
     assert.equal(child.status, 0, `${what}: ${child.stderr}`);
     assert.equal(recordOf(home).event, "turn-end", what);
-    assert.match(child.stdout, new RegExp(`^\\d+:[^:]*:${home.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`), `${what}: the child took the mark`);
-    assert.notEqual(child.stdout, mark, what);
+    const taken = parseTurnWriter(child.stdout);
+    assert.equal(taken?.home, home, `${what}: the child took the mark`);
+    assert.notEqual(taken.pid, process.pid, what);
   }
   // In process: the holder is asked when a run starts, so a pi whose writer has gone takes over then.
-  const env = { [TURN_WRITER]: `${process.pid}:${processStart(process.pid) ?? ""}:${home}` };
+  const env = { [TURN_WRITER]: markOf(process.pid, processStart(process.pid), home) };
   assert.equal(takeTurnWriter(home, env), true, "its own mark");
-  // (Linux reads a start for every pid; elsewhere `ps` does. Where neither does, an unreadable start counts as alive.)
-  const parent = `${process.ppid}:${processStart(process.ppid) ?? ""}:${home}`;
-  assert.equal(takeTurnWriter(home, { [TURN_WRITER]: parent }), false, "a live other process holds it");
-  const after = { [TURN_WRITER]: `${gone.pid}:1:${home}` };
+  assert.equal(takeTurnWriter(home, { [TURN_WRITER]: markOf(process.ppid, processStart(process.ppid), home) }), false, "a live other process holds it");
+  const after = { [TURN_WRITER]: markOf(gone.pid, "1", home) };
   assert.equal(takeTurnWriter(home, after), true);
-  assert.equal(after[TURN_WRITER].startsWith(`${process.pid}:`), true);
+  assert.equal(parseTurnWriter(after[TURN_WRITER]).pid, process.pid);
+});
+
+test("the mark's text never splits a field: a start in ps's words (no /proc), and a home with colons, quotes and spaces, read back whole", (t) => {
+  // What `ps -o lstart=` prints for a process where there is no /proc: the mark's start there.
+  const lstart = "Wed Nov 25 11:12:42 2026";
+  for (const home of [homeOf(t), "/h/x", "/srv/my agents/it's: \"odd\"/dev:1", "/h/a:b:c"]) {
+    const mark = { pid: process.ppid, start: lstart, home };
+    assert.deepEqual(parseTurnWriter(formatTurnWriter(mark)), mark);
+    // A live holder for this home, whose start cannot be compared here (this host reads another
+    // form, or the same): the home is read as this home, never as another's.
+    const held = { pid: process.ppid, start: null, home };
+    assert.equal(takeTurnWriter(home, { [TURN_WRITER]: formatTurnWriter(held) }), false, home);
+    assert.equal(takeTurnWriter(`${home}-other`, { [TURN_WRITER]: formatTurnWriter(held) }), true, "another home's is not in the way");
+  }
+  // With its own start in ps's words, as a host without /proc marks it, the parent still holds it.
+  const real = processStart(process.ppid);
+  assert.equal(takeTurnWriter("/h/x", { [TURN_WRITER]: formatTurnWriter({ pid: process.ppid, start: real, home: "/h/x" }) }), false);
+  for (const value of [undefined, "", "null", "7", "[]", "{}", `{"pid":0,"start":null,"home":"/h"}`, `{"pid":1.5,"start":null,"home":"/h"}`, `{"pid":4,"start":7,"home":"/h"}`, `{"pid":4,"start":null}`, `4:${lstart}:/h/x`]) assert.equal(parseTurnWriter(value), null, String(value));
 });

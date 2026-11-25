@@ -2285,8 +2285,10 @@ starting, running or stopping, or an input waits in its queue), `"idle"`
 when the last turn ended and none has started, `null` when your product
 does not say. The kernel relays it as the row's
 [`activity`](desktop-cli-api.md#row-activity) wherever you answer the
-session present on a home OATS started, whatever `running` is: answer
-`"idle"` for an idle session whose harness you unloaded. It stores nothing,
+session present, in a state other than `shell`, on a home OATS started,
+whatever `running` is: answer `"idle"` for an idle session whose harness you
+unloaded (`state: "unknown"`, `running: false`). A `shell` session's harness
+ended, so its row carries no turn. It stores nothing,
 so the value is as fresh as your answer; no act reads it. Without the key
 the row reads `null`. Any other value is outside the contract, as is a
 value other than `null` with `present: false`, and the answer is then read

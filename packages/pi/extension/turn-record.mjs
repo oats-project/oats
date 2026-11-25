@@ -30,7 +30,7 @@
  *   shuts the holder down, and the bridge that follows takes the writer.
  * - a pi in another process (a nested `pi`, a subagent run as a command): the
  *   writing bridge marks its own process environment,
- *   `OATS_PI_TURN_WRITER=<pid>:<process start>:<home>`, which a pi started
+ *   `OATS_PI_TURN_WRITER={"pid","start","home"}` (JSON), which a pi started
  *   below it inherits: a bridge that finds the mark of another process that
  *   is still alive, for this home, writes nothing. The mark is this package's
  *   alone: no kernel, hook or launch environment reads or sets it. A mark for
@@ -50,7 +50,7 @@
 import { randomUUID } from "node:crypto";
 import { renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { processStart } from "./waiting-claim.mjs";
+import { holderAlive, processStart } from "./waiting-claim.mjs";
 
 /** The two boundaries, as the kernel reads them (lib/turn-activity.mjs TURN_EVENT). A test pins them equal. */
 export const TURN_START = "turn-start";
@@ -78,22 +78,30 @@ export function writeTurn(home, event, { now = () => new Date() } = {}) {
 /** The variable of the writer's mark, in the bridge's own process environment. */
 export const TURN_WRITER = "OATS_PI_TURN_WRITER";
 
-/** Whether the process a mark names is still that process: it is there, and started when the mark
- *  says (a reused pid is another process). One whose start cannot be read counts as alive. */
-function markedAlive(pid, start) {
-  try { process.kill(pid, 0); }
-  catch (error) { if (error?.code !== "EPERM") return false; }
-  const now = processStart(pid);
-  return now === null || start === "" || now === start;
+/** A writer's mark as its variable holds it: JSON, so that no field's text can be read as another's
+ *  (a process start is `ps`'s words where there is no /proc, colons and spaces included, and a home
+ *  is any path). */
+export const formatTurnWriter = ({ pid, start, home }) => JSON.stringify({ pid, start, home });
+/** The mark a variable's value holds → `{ pid, start, home }`, or null for none: no value, no JSON
+ *  object, a pid that is no positive integer, a start that is neither a string nor null, no home. */
+export function parseTurnWriter(value) {
+  try {
+    const mark = JSON.parse(value);
+    const valid = mark !== null && typeof mark === "object" && !Array.isArray(mark) && Number.isInteger(mark.pid) && mark.pid > 0
+      && (mark.start === null || typeof mark.start === "string") && typeof mark.home === "string";
+    return valid ? { pid: mark.pid, start: mark.start, home: mark.home } : null;
+  } catch { return null; }
 }
 
 /** Whether this process is the home's writer, taking the mark when nobody alive holds it for this
- *  home. `env`: the process environment, where the mark is read and set. */
+ *  home. `env`: the process environment, where the mark is read and set. A holder is alive by the
+ *  claim mark's rule (waiting-claim.mjs holderAlive): its pid is there, not a process that has
+ *  exited and waits to be reaped, and started when the mark says; one whose start cannot be read
+ *  counts as alive. */
 export function takeTurnWriter(home, env = process.env) {
-  const [pid, start, ...rest] = String(env[TURN_WRITER] ?? "").split(":");
-  const holder = Number(pid);
-  if (rest.join(":") === home && Number.isInteger(holder) && holder > 0 && holder !== process.pid && markedAlive(holder, start)) return false;
-  env[TURN_WRITER] = `${process.pid}:${processStart(process.pid) ?? ""}:${home}`;
+  const mark = parseTurnWriter(env[TURN_WRITER]);
+  if (mark !== null && mark.home === home && mark.pid !== process.pid && holderAlive(mark)) return false;
+  env[TURN_WRITER] = formatTurnWriter({ pid: process.pid, start: processStart(process.pid), home });
   return true;
 }
 

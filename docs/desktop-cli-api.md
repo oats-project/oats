@@ -3946,15 +3946,16 @@ its absence.
   - **A provider row carries its provider's own answer at that read,** the
     optional `activity` key of its `inspect` or `inspectMany` result
     ([capabilities.md](capabilities.md#inspect-and-inspectmany)), never
-    stored: wherever the provider answers the session present on a home OATS
-    started, whatever its `running`, and `null` where the provider sends
-    none. `<home>/.oats/turn.json` is never read on a provider home.
+    stored: wherever the provider answers the session present, and not at
+    its `shell`, on a home OATS started, whatever its `running`, and `null`
+    where the provider sends none. `<home>/.oats/turn.json` is never read on a provider home.
 
     | a provider row | `activity` |
     |---|---|
     | `running: true` | the provider's answer at this read (`"working"`, `"idle"`, or `null` where it cannot tell) |
     | `running: null` (an agent waiting on a person, or one whose harness the provider cannot see) | the provider's answer at this read; typically `"idle"` for an agent waiting on a person |
-    | `running: false`, the session present (the provider unloaded the harness between turns, or after its own restart) | the provider's answer at this read (`"idle"` for a session it lists as idle) |
+    | `running: false`, `runtimeState: "unknown"`: the session present (the provider unloaded the harness between turns, or after its own restart) | the provider's answer at this read (`"idle"` for a session it lists as idle) |
+    | `runtimeState: "shell"`: the harness ended and something else holds the session | no key: there is no turn to report, whatever the provider sent |
     | stopped, lost (the session is gone), `retirePending` or [`retire`](#row-retire), a provider that failed or answered outside the contract | no key |
     | [`outsideOats`](#row-outside-oats) (a harness OATS did not start) | no key: OATS reports only on the sessions it started |
 
@@ -4412,7 +4413,8 @@ route target:
   (`"working"`, `"idle"` or `null`), as the host's status gave it: its
   meaning is the [local row's](#row-activity). A value that is not one of
   the three drops the key, and so does a row that cannot carry it: a tmux
-  row that does not read `running: true`, a row with `sessionEnd`,
+  row that does not read `running: true`, a provider row that reads
+  `runtimeState: "shell"`, a row with `sessionEnd`,
   `outsideOats`, `retirePending` or `retire`. A host without the feature, a
   saved route the host did not list and a host that was not reached carry
   none: a row this roster did not read says nothing of the turn.
