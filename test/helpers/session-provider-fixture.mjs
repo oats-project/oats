@@ -11,6 +11,9 @@
 //              | { sleepMs } (then the default answer) | { echo: { <header overrides> } }
 //              | { fullOnly: true } (a check's: FULL_ONLY for a planned launch whose `yolo` is not true,
 //                as a provider that launches only in full mode answers; the default answer for any other)
+//              | { refuseModel: "<model>" } (a check's: modelRefusal for a planned launch whose `model`
+//                is that one, as a provider whose harness cannot resolve it answers; the default
+//                answer for any other, and for a planned launch that names no model)
 //   control.stateful: true: the fake has sessions (sessionsOf): launch creates one, stop stops it, an
 //   input restarts a stopped one, inspect answers what is there; each effect is a line of events.log.
 // Defaults: launch answers a new endpoint `{ server, threadId }`; inspect a running session with an
@@ -60,6 +63,10 @@ export function eventsOf(text) {
 /** What a provider that launches only in full mode answers a check of a launch that would be
  *  sandboxed (control `check: { fullOnly: true }`): the refusal the kernel gives the launch. */
 export const FULL_ONLY = Object.freeze({ status: "unavailable", problems: [{ code: "E_BACKEND_SANDBOXED_MODE", message: "this provider launches only in full mode, and this launch would be sandboxed" }] });
+
+/** What a provider whose harness cannot resolve a model answers a check of a launch planned with it
+ *  (control `check: { refuseModel }`): the refusal the kernel gives the launch, before it stops anything. */
+export const modelRefusal = (model) => ({ status: "unavailable", problems: [{ code: "E_BACKEND_LAUNCH_ARG", message: `this provider's harness cannot resolve the model ${model}` }] });
 
 const SESSION_SCRIPT = `import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -118,6 +125,7 @@ if (b.late) appendFileSync(b.late, "late");
 if (b.exit !== undefined) process.exit(b.exit);
 if (b.raw !== undefined) { process.stdout.write(b.raw); process.exit(0); }
 if (b.fullOnly && req.verb === "check" && req.input.launch && req.input.launch.yolo !== true) { process.stdout.write(JSON.stringify({ ...echo, ok: true, result: ${JSON.stringify(FULL_ONLY)} }) + "\\n"); process.exit(0); }
+if (b.refuseModel !== undefined && req.verb === "check" && req.input.launch && req.input.launch.model === b.refuseModel) { process.stdout.write(JSON.stringify({ ...echo, ok: true, result: (${modelRefusal.toString()})(b.refuseModel) }) + "\\n"); process.exit(0); }
 if (b.error) { process.stdout.write(JSON.stringify({ ...echo, ...(b.echo ?? {}), ok: false, error: b.error }) + "\\n"); process.exit(0); }
 let result = b.result;
 if (result === undefined && req.verb === "inspectMany") {
