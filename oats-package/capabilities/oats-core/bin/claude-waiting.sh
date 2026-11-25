@@ -4,6 +4,7 @@
 #   claude-waiting.sh set-late <permission> <node> <cli> <marker> <home>   (a Notification where PermissionRequest is written: a second chance, not a second set)
 #   claude-waiting.sh clear <node> <cli> <marker> <home>        (a turn boundary: UserPromptSubmit, Stop, SessionEnd; not debounced)
 #   claude-waiting.sh clear-tool <node> <cli> <marker> <home>   (a PreToolUse/PostToolUse clear: debounced; skipped for a subagent's tool call)
+#   claude-waiting.sh turn <turn-start|turn-end|turn-end-idle> <node> <cli> <marker> <home>   (a turn boundary for the status row: see "The turn record" below)
 # <marker> is the debounce marker's path, from the launch hook, or '' for none.
 # <home> is the instance home these hooks were written for, as its real path, from the
 # launch hook too: the script acts for that home and no other.
@@ -60,6 +61,15 @@
 # agree. The forced call at every turn boundary bounds that: a wrongly shown claim lasts
 # until the end of the turn, or, if the turn's last hook found a reconciliation out of
 # time, until the next event; a hidden question lasts until the human answers it.
+#
+# The turn record. `turn` is no claim and touches none of the protocol above: it hands the
+# boundary to claude-turn.mjs (beside this script), which replaces <home>/.oats/turn.json, what
+# the kernel reads to show the instance as working or idle. UserPromptSubmit gives turn-start;
+# Stop and StopFailure turn-end; the idle_prompt Notification turn-end-idle, whose input the
+# writer checks, and nothing for a subagent's event (an input that carries agent_id). It runs
+# behind the same home check as every other action, reads the input once (at most 64 KiB, for at
+# most 1 s) and is killed at 2 s. An oats.core from
+# before it has no such action here, and exits 0 on one.
 exec >/dev/null 2>&1
 # A closed stdin is never redirected from (a failed redirection ends sh itself); without
 # /dev/fd the input reads as empty, which means the main thread.
@@ -77,6 +87,10 @@ case "$action" in
     ;;
   clear|clear-tool)
     node=$2; cli=$3; marker=${4:-}; home=${5:-}
+    ;;
+  turn)
+    event=$2; node=$3; cli=$4; marker=${5:-}; home=${6:-}
+    case "$event" in turn-start|turn-end|turn-end-idle) ;; *) exit 0 ;; esac
     ;;
   *) exit 0 ;;
 esac
@@ -153,6 +167,21 @@ read_input() {
     kill "$watchdog"
   )
 }
+
+# A turn boundary (see "The turn record" above): claude-turn.mjs writes it, under a 2 s
+# watchdog. The hook's input is read once, bounded, and handed to the writer on its stdin: a
+# subagent's event (one that carries agent_id) writes nothing, and the idle notice names its type.
+if [ "$action" = turn ]; then
+  writer=${0%/*}/claude-turn.mjs
+  [ -f "$writer" ] || exit 0
+  read_input
+  printf '%s' "$input" | "$node" "$writer" "$event" "$home" &
+  pid=$!
+  start_watchdog "$pid" 2
+  wait "$pid"
+  kill "$watchdog"
+  exit 0
+fi
 
 # The text of a set, from the hook's input, into $message: what claude-waiting-message.mjs
 # prints, under a 1 s watchdog; empty when it prints nothing, fails or is killed. Its output is

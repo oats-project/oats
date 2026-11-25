@@ -141,7 +141,8 @@ export function syncKnowledgeTheoryReferences(repoRoot = REPO_ROOT) {
 // adds exactly two executable surfaces. Its Claude Code waiting emitter: the spawn
 // and launch hooks of bin/oats-core.mjs (preview-aware), the bin/claude-waiting.sh
 // they wire into a Claude instance's settings, and the bin/claude-waiting-message.mjs
-// that script runs for a claim's text (#1502). And the upgrade hook of the same
+// that script runs for a claim's text (#1502), and the bin/claude-turn.mjs it runs to record a
+// turn's start or end for the status row (#2122). And the upgrade hook of the same
 // script, which adopts a home across `oats instance upgrade` (#1549). Any other executable surface, key or
 // file is a boundary change, not unnoticed manifest growth. Use the kernel's actual
 // schema, not a copied validator; files must survive acquiring each own root.
@@ -152,7 +153,7 @@ const OPERATIONAL_CAPABILITIES = [
     // 0.49.0: a kernel before it drops a capability that declares a hook event it does not know, and
     // oats.core declares `upgrade` (#1549), which only 0.68.0's `oats instance upgrade` runs.
     compatibility: ">=0.49.0",
-    executable: { hooks: { spawn: "bin/oats-core.mjs spawn", launch: "bin/oats-core.mjs launch", upgrade: "bin/oats-core.mjs upgrade" }, launchPreview: true, files: ["bin/claude-waiting-message.mjs", "bin/claude-waiting.sh", "bin/oats-core.mjs"] },
+    executable: { hooks: { spawn: "bin/oats-core.mjs spawn", launch: "bin/oats-core.mjs launch", upgrade: "bin/oats-core.mjs upgrade" }, launchPreview: true, files: ["bin/claude-turn.mjs", "bin/claude-waiting-message.mjs", "bin/claude-waiting.sh", "bin/oats-core.mjs"] },
   },
   { slug: "oats-setup", names: ["oats-setup-model", "oats-onboarding", "oats-setup-expert", "oats-host-delivery", "oats-agent-permissions", "oats-git-setup", "oats-workspace-config", "oats-teams", "oats-package-pins", "oats-automations", "oats-upgrade"], injection: "injects/setup.md", compatibility: ">=0.30.0" },
   // 0.40.0: `oats instance attention`, which the skills use to ask the desk's human.

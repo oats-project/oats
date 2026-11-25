@@ -5,7 +5,9 @@
  * For a Claude Code instance it manages oats.core's own entries in the
  * instance's project settings, <home>/.claude/settings.json: Claude Code hooks
  * that report, through `oats instance waiting set|clear --producer oats.core`,
- * when the session waits on a permission prompt or a question for the human.
+ * when the session waits on a permission prompt or a question for the human,
+ * and that record each turn's start and end in <home>/.oats/turn.json, which the
+ * kernel reads to show the instance as working or idle (claude-turn.mjs).
  * Every entry runs claude-waiting.sh (beside this file), which never affects
  * the Claude session: it exits 0, writes nothing to stdout and bounds the CLI.
  * It also adds `tui: "default"` when absent, keeping agent panes on the classic
@@ -146,10 +148,16 @@ export function takesStopFailure(env) {
 export function claudeWaitingSettings({ script, node, cli, marker = "", home = "", stopFailure = false }) {
   const entry = (...args) => ({ type: "command", command: waitingCommand({ script, node, cli, marker, home }, args), timeout: HOOK_TIMEOUT_SECONDS });
   const group = (matcher, ...args) => ({ ...(matcher === undefined ? {} : { matcher }), hooks: [entry(...args)] });
+  // A turn boundary, beside the claim's own entry for the event (one matcher group, two commands):
+  // what the status row reads as working or idle (claude-turn.mjs). No hook is written for a
+  // subagent's stop (SubagentStop): the main turn goes on.
+  const withTurn = (matcher, boundary, ...args) => ({ ...(matcher === undefined ? {} : { matcher }), hooks: [entry(...args), entry("turn", boundary)] });
   return {
     hooks: {
       // Where PermissionRequest is written the Notification is its second chance, seconds later.
-      Notification: [group("permission_prompt", stopFailure ? "set-late" : "set", "permission"), group("elicitation_dialog", "set", "question")],
+      // `idle_prompt` is Claude's "waiting for your input" notice, a minute after it stopped: it
+      // ends a turn whose end no other hook reported.
+      Notification: [group("permission_prompt", stopFailure ? "set-late" : "set", "permission"), group("elicitation_dialog", "set", "question"), group("idle_prompt", "turn", "turn-end-idle")],
       // Fires as a permission dialog opens. Under the check StopFailure takes, so `reported` means
       // the same hooks on every home. No matcher: an AskUserQuestion fires it too, and the
       // script's guard keeps a `permission` from relabelling an open question.
@@ -160,12 +168,14 @@ export function claudeWaitingSettings({ script, node, cli, marker = "", home = "
       // A granted tool that failed: no PostToolUse follows it. (A tool the human refused at the
       // prompt, by Esc or "No", fires no hook at all in Claude Code 2.1.308; the next prompt clears.)
       PostToolUseFailure: [group(ALL_TOOLS, "clear-tool")],
-      UserPromptSubmit: [group(undefined, "clear")],
-      Stop: [group(undefined, "clear")],
+      // A prompt starts a turn (a launch prompt's fires it too, and so does a background task
+      // that ends and wakes the model: Claude Code 2.1.332), and Stop ends it.
+      UserPromptSubmit: [withTurn(undefined, "turn-start", "clear")],
+      Stop: [withTurn(undefined, "turn-end", "clear")],
       // An API error ended the turn, past Claude's own retries: fires instead of Stop, and
       // nothing runs after it, so only this hook can say the session is stuck (#1667). No matcher:
       // Claude 2.1.78 runs every entry for an empty class, so the script reads the class (#1670).
-      ...(stopFailure ? { StopFailure: [group(undefined, "set", "failed-turn")] } : {}),
+      ...(stopFailure ? { StopFailure: [withTurn(undefined, "turn-end", "set", "failed-turn")] } : {}),
       SessionEnd: [group(undefined, "clear")],
     },
   };

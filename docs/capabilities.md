@@ -1564,7 +1564,9 @@ waiting clear --producer oats.core --home <home>` from anywhere.
   the hooks that fire on every tool call cost a `/bin/sh` and a few file
   reads. The turn-boundary clears (`UserPromptSubmit`, `Stop`,
   `SessionEnd`) are not debounced: each gets a CLI call (see Order and
-  retry), a node process per prompt and per stop. A symlink is never followed. An
+  retry), a node process per prompt and per stop, and one more for the turn
+  record (oats.core 2.17.0, [below](#oatscore-the-turn-record)). A symlink
+  is never followed. An
   unusable marker (a refused, missing or replaced directory, a state path
   that is not a regular file, a lock path that is not a directory) means no
   debounce: set and clear then always call the (idempotent) CLI. The launch
@@ -1710,6 +1712,50 @@ respawn.
   it is respawned, or when `oats instance upgrade` moves its oats.core to
   2.8.0 or later and it starts again. Its launch hook comes from its
   recorded module copy.
+
+### oats.core: the turn record
+
+From oats.core 2.17.0 the same Claude Code hooks record each turn's start and
+end in `<home>/.oats/turn.json`: `{"event": "turn-start" | "turn-end", "at":
+"<ISO>"}`, the last boundary, replaced whole (a temporary file, then a
+rename). A kernel that lists `status-activity` reads it for a tmux home whose
+harness runs and shows the row as `activity: "working"` or `"idle"`
+([the row field](desktop-cli-api.md#row-activity)); a boundary counts only
+from the home's current start, so the record a killed session left is never
+read as the next one's. The file is kernel-private: nothing else reads it, an
+older kernel ignores it, and it is no work to a retire.
+
+| Claude Code hook | writes |
+|---|---|
+| `UserPromptSubmit` | `turn-start`. It fires for a launch prompt too (`@TASK.md`), so a start's first turn reads working, and for a background task that ends and wakes the model |
+| `Stop` | `turn-end` |
+| `StopFailure` (Claude Code 2.1.78 and later) | `turn-end`: an API error ended the turn |
+| `Notification`, `idle_prompt` | `turn-end`, only over a turn whose end no hook reported. It is Claude's "waiting for your input" notice, a minute after it stopped; after a `Stop` it writes nothing, and the record keeps the turn's own end |
+| `SubagentStop`, a compaction, a session's start or end | nothing: the main turn goes on. A `/compact` a person types is no turn |
+
+The entries run `claude-waiting.sh turn <boundary>`, behind the script's own
+home check: a Claude process that loads these settings under another
+instance's environment writes nothing. An event whose input carries
+`agent_id` (a subagent's, in the same session) writes nothing either; of an
+input over the 64 KiB the script reads, the keys before `hook_event_name`
+decide, as for a tool clear. `bin/claude-turn.mjs` makes the write,
+calls no kernel command and prints nothing, and the script kills it at 2 s: a
+write that fails is dropped, and the row keeps the last boundary written.
+
+**What it cannot see** (Claude Code 2.1.332):
+
+- **A turn a person interrupts** (Esc) fires no hook: neither `Stop` nor,
+  afterwards, the idle notice. The record says `turn-start` until the next
+  prompt, so the kernel reads a Claude Code turn that started more than 30
+  minutes ago with no end as `null`: a long turn reads `null` from then on
+  too, until it ends.
+- **A second Claude Code started inside the home** with the home's
+  environment (a nested `claude -p`) fires its own `UserPromptSubmit` and
+  `Stop`, and its end reads idle while the home's own turn goes on, until
+  the next prompt there.
+- **Codex** gets no record: its notify hook reports turn ends only, which
+  would read idle while it works, so a Codex row reads `null`. pi's record
+  is the pi bridge's ([@awebai/oats-pi](../packages/pi/README.md)).
 
 ## Operations a capability declares
 
