@@ -272,6 +272,14 @@ test("a spawn's decision binds its launch choices, with no key for them: an appl
   assert.equal(sessionCli(fx, unbound.result.home, "restart", choice("reasoning-level", HIGH)).ok, true);
   assert.equal(plainApply([]).result.replayed, true);
   assert.equal(plainApply(choice("reasoning-level", HIGH)).error.code, "E_IDEMPOTENCY_CONFLICT");
+  // A replay answers the home that exists whatever the provider declares by now: a release of the
+  // provider that dropped the name, taken by this deployment, does not turn the confirmed key's
+  // replay into "nothing was created".
+  fx.commit({ [`capabilities/${FAKE_CAPABILITY}/oats.json`]: { json: { capability: FAKE_CAPABILITY, version: "0.0.0-workspace", description: `${FAKE_CAPABILITY} fixture capability.`, compatibility: { oats: ">=0.24.0" }, ...withChoices({ "service-tier": DECLARED["service-tier"] }) } } });
+  const dropped = fx.cli(["spawn", "dev", "--name", "afterdrop", "--backend", "fake", "--launch-config", "claude", "--json", ...choice("reasoning-level", HIGH)]).json();
+  assert.deepEqual([dropped.ok, dropped.error?.code], [false, "E_BAD_ARGS"], "fixture premise: the deployment's provider no longer declares the name");
+  const stillReplayed = apply(rHigh, choice("reasoning-level", HIGH));
+  assert.deepEqual([stillReplayed.ok, stillReplayed.result?.replayed, stillReplayed.result?.home], [true, true, home], JSON.stringify(stillReplayed).slice(0, 400));
   // A tmux spawn's decision (no provider, no choice) replays too: the recorded decision makes its own revision again.
   const termPreview = fx.cli(["spawn", "dev", "--name", "termkey", "--launch-config", "claude", "--no-launch", "--preview", "--json"]).json();
   const termApply = () => fx.cli(["spawn", "dev", "--name", "termkey", "--launch-config", "claude", "--no-launch", "--expect-decision", termPreview.result.decision.revision, "--idempotency-key", "t".repeat(64), "--json"]).json();
