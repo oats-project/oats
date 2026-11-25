@@ -34,6 +34,7 @@
           "launchDeclared": null,
           "spawnOrigin": "operator",
           "spawnedBy": null,
+          "automation": null,
           "policy": {
             "childSpawns": {
               "allowed": true,
@@ -293,6 +294,7 @@
           "parentInstance": "dev-owner",
           "spawnOrigin": "operator",
           "spawnedBy": null,
+          "automation": null,
           "policy": {
             "childSpawns": {
               "allowed": true,

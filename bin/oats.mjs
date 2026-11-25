@@ -86,7 +86,7 @@ const { attachArgv, checkRemote, connectServer, forgetSnapshot, getServer, inspe
 const { readSessionViewer } = await kernelImport("session-viewer", () => import("../lib/session-viewer.mjs"));
 const { tickTriggers } = await kernelImport("triggers", () => import("../lib/triggers.mjs"));
 const A = await kernelImport("automations", () => import("../lib/automations.mjs"));
-const { parseEnvelopeText, SCHEDULE_SLOT_UNREADABLE, SCHEDULE_SLOT_ORPHANED, unresolvedScheduleAttempts, scheduleScopeOf, listSchedules, describe: describeSchedule, testSchedule, addSchedule, updateSchedule, updateScheduleDescription, setEnabled: setScheduleEnabled, removeSchedule, runNow: runScheduleNow, reconcile: reconcileSchedule, tickHost, tickWorkspace, scopeAutomations, scheduleKind, registerWorkspace, unregisterWorkspace, readRegistry, schedulerStatus, saveWakeForHome, removeWakeForHome, wakeFromFlags, withHostLock, scheduleError, SCHEDULE_API } = await kernelImport("schedule", () => import("../lib/schedule.mjs"));
+const { parseEnvelopeText, SCHEDULE_SLOT_UNREADABLE, SCHEDULE_SLOT_ORPHANED, unresolvedScheduleAttempts, scheduleScopeOf, madeByAutomation, listSchedules, describe: describeSchedule, testSchedule, addSchedule, updateSchedule, updateScheduleDescription, setEnabled: setScheduleEnabled, removeSchedule, runNow: runScheduleNow, reconcile: reconcileSchedule, tickHost, tickWorkspace, scopeAutomations, scheduleKind, registerWorkspace, unregisterWorkspace, readRegistry, schedulerStatus, saveWakeForHome, removeWakeForHome, wakeFromFlags, withHostLock, scheduleError, SCHEDULE_API } = await kernelImport("schedule", () => import("../lib/schedule.mjs"));
 const { hostUnitFiles, hostUnitStatus, installHostUnit, uninstallHostUnit } = await kernelImport("schedule-host", () => import("../lib/schedule-host.mjs"));
 const { kernelNode, stableNode } = await kernelImport("stable-node", () => import("../lib/stable-node.mjs"));
 const { receiveAttachment, uploadAttachment, readStreamBounded, MAX_ATTACHMENT_BYTES } = await kernelImport("attachments", () => import("../lib/attachments.mjs"));
@@ -3024,6 +3024,12 @@ async function spawnCmd() {
     if (process.stdin.isTTY) bail("E_BAD_ARGS", "--task-file - reads the task from stdin");
     try { stdinTask = (await readStreamBounded(process.stdin, MAX_ATTACHMENT_BYTES)).toString("utf8"); } catch (e) { bail("E_BAD_ARGS", `--task-file -: the task could not be read from stdin (${e.message})`); }
   } else if (taskFileFlag && !existsSync(taskFileFlag)) bail("E_BAD_ARGS", `--task-file not found: ${taskFileFlag}`);
+  // --made-by-automation <schedule|trigger>:<qualifiedId> (internal, feature status-automation): the
+  // schedule or trigger whose tick runs this spawn, recorded as instance.json.automation when this
+  // deployment has that automation (lib/schedule.mjs madeByAutomation). A label: nothing reads it to
+  // decide anything, and a value that names no automation is not recorded and refuses nothing.
+  const madeBy = valueFlag("made-by-automation");
+  const automation = madeBy === undefined ? null : madeByAutomation(scheduleScopeOf(workspaceOf(root)), madeBy, {});
   // --trigger-event <file>: the event a trigger spawns this instance for (lib/triggers.mjs). It is
   // copied to <home>/.oats/trigger-event.json (OATS_TRIGGER_EVENT_FILE) and recorded as instance.json.trigger.
   let triggerEvent;
@@ -3118,6 +3124,7 @@ async function spawnCmd() {
       ...(args.includes("--background") ? { background: true } : args.includes("--no-background") ? { background: false } : {}),
       launch: !args.includes("--no-launch"),
       ...(triggerEvent ? { triggerEvent } : {}),
+      ...(automation ? { automation } : {}),
       // K6: --preview decides everything and touches nothing; --base <ref>
       // selects a worktree's start point; --model @native-default is the
       // explicit "harness's own default" (distinct from omitting --model).
@@ -5346,6 +5353,11 @@ Usage:
                                             <home>/.oats/trigger-event.json, exposed through
                                             OATS_TRIGGER_EVENT_FILE and recorded in
                                             instance.json.trigger (docs/schedules.md)
+      --made-by-automation <kind>:<qualifiedId>  internal, for automations: a schedule's or a trigger's
+                                            tick names itself (schedule:<qualifiedId> or
+                                            trigger:<qualifiedId>), recorded as
+                                            instance.json.automation when this deployment has it.
+                                            A label, never proof or permission
       [--help|-h]                            global help switches: show usage and exit
   oats spawn <agent> ... --server <id>        routed spawn on the server's installed oats;
                                             --server is consumed before the local flag scanner
