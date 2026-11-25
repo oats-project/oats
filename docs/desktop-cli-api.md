@@ -3532,9 +3532,10 @@ schedule or trigger whose run made it, `{kind, id, qualifiedId}`, or `null`.
 automation's own, as `oats schedule list` and `oats trigger list` give them
 (a local schedule's `id` is bare, every other one is qualified:
 [shared row fields](#automations-shared-rows)). `instance.json` and the `spawned` event's `data`
-carry it as recorded, and every `oats status --json` row has the key, in
-that shape only: anything else (a hand-edited record, a home spawned before
-the feature) reads `null`.
+carry it as recorded, and every `oats status --json` row of a home whose
+record is read has the key, in that shape only: anything else (a
+hand-edited record, a home spawned before the feature) reads `null`. The
+row of a home with no readable record has no such key.
 
 It is beside `spawnedBy`, for the other kind of maker, and **at most one of
 the two is set**: `spawnedBy` names an instance, `automation` a schedule or

@@ -210,7 +210,11 @@ test("automation on a row is the record's only in its shape; a home spawned befo
   const older = handEdited("older-home", (m) => { delete m.automation; });
   const now = rows();
   assert.deepEqual([now[extra].automation, now[text].automation, now[older].automation], [null, null, null]);
-  assert.ok(Object.hasOwn(now[older], "automation"), "every row of a kernel with the feature has the key");
+  assert.ok(Object.hasOwn(now[older], "automation"), "every row of a home whose record is read has the key");
+  // A home whose record cannot be read keeps the row it had: no automation key.
+  const { home, instance } = spawn("no-record");
+  writeFileSync(join(home, "instance.json"), "{ cut");
+  assert.ok(!Object.hasOwn(rows()[instance], "automation"));
 });
 
 test("the remote roster relays automation only from a host that lists the feature, by the local row's reader", async (t) => {
