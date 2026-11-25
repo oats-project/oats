@@ -128,7 +128,7 @@ def credential_destination(cfg, entry):
     except (KeyError, TypeError):
         raise Refused("configured group absent")
     path = spec.get("path")
-    if not isinstance(path, str) or not os.path.isabs(path) or os.path.normpath(path) != path:
+    if not isinstance(path, str) or not os.path.isabs(path) or canonical(path) != path:
         raise Refused("configured path is not absolute and normalized")
     if os.path.basename(os.path.dirname(path)) != "credentials":
         raise Refused("configured path is not in a credentials directory")
@@ -156,11 +156,16 @@ def other_destinations(cfg, entry):
                 continue  # harness mode cannot write a destination it cannot format
 
 
+def canonical(path):
+    """An absolute path as Linux resolves its spelling: normpath keeps exactly two leading slashes, which name root."""
+    return "/" + os.path.normpath(path).lstrip("/")
+
+
 def shares_destination(path, other):
     """Whether other is path, or a file of its credentials directory, or that directory itself."""
     if not isinstance(other, str) or not os.path.isabs(other):
         return False
-    other = os.path.normpath(other)
+    other = canonical(other)
     return bool({path, os.path.dirname(path)} & {other, os.path.dirname(other)})
 
 

@@ -131,6 +131,7 @@ try:
         ("a path with ..", {"cred-a": entry(path=str(team / "credentials" / ".." / "credentials" / "mail"))}, "configured path is not absolute and normalized"),
         ("a path with //", {"cred-a": entry(path=str(team) + "//credentials/mail")}, "configured path is not absolute and normalized"),
         ("a path with a trailing slash", {"cred-a": entry(path=path + "/")}, "configured path is not absolute and normalized"),
+        ("a path with two leading slashes", {"cred-a": entry(path="/" + path)}, "configured path is not absolute and normalized"),
         ("a path outside a credentials directory", {"cred-a": entry(path=str(team / "login" / "mail"))}, "configured path is not in a credentials directory"),
         ("a path that is the credentials directory", {"cred-a": entry(path=str(team / "credentials"))}, "configured path is not in a credentials directory"),
     ]:
@@ -144,6 +145,10 @@ try:
         ("another entry with the same path", {"cred-b": entry()}, None),
         ("another entry in the same credentials directory", {"cred-b": entry(path=other_path)}, None),
         ("another entry whose path is not normalized but resolves to the same file", {"cred-b": entry(path=str(team) + "//credentials/mail")}, None),
+        # POSIX normpath keeps exactly two leading slashes; Linux resolves them as one.
+        ("another entry with two leading slashes", {"cred-b": entry(path="/" + path)}, None),
+        ("another entry with three leading slashes", {"cred-b": entry(path="//" + path)}, None),
+        ("a teams destination with two leading slashes", {}, {"team-a": {"group": group, "harnesses": ["codex"], "path": "/" + path}}),
         ("a teams destination at the same path", {}, {"team-a": {"group": group, "harnesses": ["codex"], "path": path}}),
         ("a teams destination in the same directory", {}, {"team-a": {"group": group, "harnesses": ["claude", "codex"], "path": str(team / "credentials" / "{harness}-token")}}),
         ("a teams destination whose {name} and {harness} resolve into the same directory", {},
