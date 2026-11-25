@@ -30,6 +30,61 @@ container is one trust group ([trust-model.md](trust-model.md)):
   a member's default branch changes what every deployment of that workspace
   runs ([trust-model.md](trust-model.md#code-from-outside-the-group)).
 
+## Credential groups
+
+A credential group is a trust group that holds one person's credential, such
+as the client credentials of one person's mail application. Every agent of
+the group can read it; no agent outside the group can. On a shared host:
+
+- **One container group per personal credential.** Each credential holder's
+  agents run in a container group of their own, with its own runtime
+  UID:GID (never another group's), its own 0700 `/state` and login
+  directory, and its own internal network, with no route to another
+  group's. The host's other agents form one more group. The groups may all
+  be in one aweb team and message each other as usual: a credential group
+  separates what agents can read, not whom they talk to.
+- **The credential is a read-only bind.** The person installs it from their
+  own machine through `oats-login-receive --credential <entry-id>`
+  ([servers.md](servers.md#personal-credentials)), as a root:group 0440 file
+  in a root:group 0750 directory named `credentials`, the group being the
+  container group's runtime GID. Set `TEAM_CREDENTIALS_DIR` to that directory
+  and append `-f container/agent/compose.agent.credentials.yaml` to both
+  Compose commands: the fragment binds it read-only at
+  `/etc/agent-credentials`, with `create_host_path: false`. Acceptance admits
+  the mount only when `TEAM_CREDENTIALS_DIR` is set, refuses a source that
+  overlaps a writable source, `/inputs` or `/outbox`, and checks, as the
+  runtime user, the directory's root:runtime-GID 0750, each regular file's
+  root:runtime-GID 0440, that no file is writable and that a write is
+  refused. It reads no name and no content. Without the fragment, it requires
+  `/etc/agent-credentials` to be absent.
+- **Every agent runs in a container group, with no host power.** Every agent
+  on the host, including those that hold no credential, runs in a container
+  group, never as the operator's user. No group gets the Docker socket, the
+  docker group or another group's GID: each of them reaches every group's
+  files.
+
+[Team-image CI](#image-ci-and-publication) proves this on one runner with
+four groups: one shared group and three credential groups, each holding a
+marker installed through the receiver. As X's UID, for every ordered pair of
+groups X and Y, it shows that inside X, Y's credential and state are
+neither mounted nor reachable by host path, Y's sshd and listeners are
+unreachable, and X and Y share no network, no network namespace and no
+writable mount. It shows that on the host, reading Y's credential and
+listing Y's state fail with `EACCES`. It also shows that no group has a
+Docker socket or a group beyond its own GID. Each check is
+`CONNECTED`/`READ`, `DENIED` or `ERROR`, and only `DENIED` counts. Positive
+controls must pass first: each group reads its own marker, the operator
+reaches each group over SSH and runs `oats status` there, and each group
+holds its own tmux and wake broker sockets. Four mutant legs must each make
+the proof fail on a named row: a reused UID, one group's credentials mounted
+into another, two groups on one network, and the Docker socket.
+
+What it does not show: root on the host, any member of the docker group and
+anyone who can start a container there can read every group's credential and
+state. The operator is trusted at rest. Nor does it show a provisioned host.
+Making each group, with its UID, network, directories and receiver entry, is
+the deployment's work.
+
 ## Configuration contract
 
 The same inputs apply to a Compose service or a platform's container spec:
@@ -141,15 +196,19 @@ public-key file modes. The resolver must be readable by the runtime user.
 Optional fragments add `/work` (writable runtime-owned work), `/inputs`
 (read-only shared inputs), `/outbox` (writable runtime UID:dedicated non-root
 outbox-GID, mode 2750 with an operator-owned parent), `/mirrors` (read-only bare
-Git mirrors) and `/etc/agent-trust/ca.pem` (read-only public CA only). Outbox adds
+Git mirrors), `/etc/agent-trust/ca.pem` (read-only public CA only) and
+`/etc/agent-credentials` (a credential group's read-only credentials directory,
+[Credential groups](#credential-groups)). Outbox adds
 its supplementary group; trust adds only `SSL_CERT_FILE` and
 `NODE_EXTRA_CA_CERTS` pointing at that CA. Acceptance refuses overlapping optional
-inputs/outbox and writable bind sources. Every bind source must be absolute.
+inputs/outbox and writable bind sources, and a credentials source that overlaps
+a writable source or `/inputs`. Every bind source must be absolute.
 ([Work](../container/agent/compose.agent.work.yaml),
 [inputs](../container/agent/compose.agent.inputs.yaml),
 [outbox](../container/agent/compose.agent.outbox.yaml),
 [mirrors](../container/agent/compose.agent.mirrors.yaml),
 [trust](../container/agent/compose.agent.trust.yaml),
+[credentials](../container/agent/compose.agent.credentials.yaml),
 [acceptance](../container/agent/accept.mjs).)
 
 The agent joins only `AGENTS_NETWORK` at `AGENT_IP`, uses the mounted resolver
@@ -424,6 +483,7 @@ the UID-only form proves startup and SSH support, not token access.
 | `/work` (optional) | Runtime UID:GID, 0700 | Read/write |
 | `/inputs` (optional) | Operator-provisioned directory, readable by runtime UID:GID | Read-only; shared with every agent in the trust group |
 | `/etc/agent-login` | root:runtime-GID, 0750; `claude-token` root:runtime-GID, 0440 | Read-only |
+| `/etc/agent-credentials` (credential group) | root:runtime-GID, 0750; each file root:runtime-GID, 0440, written by the receiver | Read-only; one person's credential, readable by every agent of the group |
 | `/etc/agent-ssh/authorized_keys` | root-owned regular file, 0644 | Read-only |
 | `/etc/resolv.conf` | Operator-provided resolver file | Read-only |
 | `/tmp` | tmpfs, rw,nosuid,nodev,size=AGENT_TMP_SIZE,mode=1777 | Ephemeral; bounded by the configured byte limit |
@@ -458,6 +518,7 @@ Supply these plain variables to the bundle's env file:
 | `TEAM_INPUT_DIR` | Optional absolute host directory for `/inputs`; selects `compose.agent.inputs.yaml`. |
 | `TEAM_OUTBOX_DIR` | Optional absolute host export-queue directory for `/outbox`; selects `compose.agent.outbox.yaml`. |
 | `TEAM_OUTBOX_GID` | Dedicated non-root numeric supplementary group for `/outbox`, distinct from `AGENT_GID`; required with `TEAM_OUTBOX_DIR`. |
+| `TEAM_CREDENTIALS_DIR` | Optional absolute host `credentials` directory for `/etc/agent-credentials`; selects `compose.agent.credentials.yaml` ([Credential groups](#credential-groups)). |
 | `TEAM_LOGIN_DIR` | Absolute host directory containing `claude-token`. |
 | `AUTHORIZED_KEYS_FILE` | Absolute host public-key file. |
 | `RESOLV_CONF_FILE` | Absolute host resolver file; always required. |
@@ -1308,6 +1369,14 @@ same fixture and the same unmodified acceptance once more with
 also requires acceptance without `AGENT_CHILD` to refuse that container.
 The fixture is outside `container/agent`, so it is never in the base
 image's build context, and it is not exported or published.
+
+The job also runs the credential receiver's root-only checks
+(`test/credential-receiver-root.py`, with `sudo -n`, so a runner without sudo
+fails it) and the credential groups proof
+(`test/agent-credential-groups-image.py`, [Credential groups](#credential-groups)).
+The proof creates its unix groups, its `/srv/oats-team` trees and
+`/etc/oats-login/receiver.json` on the runner, and removes them. It never
+replaces a receiver configuration it finds there.
 
 The `publish-team-image` job in
 [Release](../.github/workflows/release.yml) waits for the existing `publish`

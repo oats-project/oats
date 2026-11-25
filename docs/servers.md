@@ -243,6 +243,85 @@ files root-owned, group-readable and mode 0440; the login directory is mode
 0750, and its parents must be root-owned, not writable by others and not
 symlinks. Neither the caller's command nor stdin chooses a destination path.
 
+### Personal credentials
+
+The same receiver installs one person's credential for one credential group
+([container.md](container.md#credential-groups)). The person sends it from
+their own machine, so the operator never handles the value. Each entry has a
+dedicated key, and that key decides the destination. Root's
+`authorized_keys` holds one line per entry:
+
+```text
+restrict,command="/usr/local/sbin/oats-login-receive --credential <entry-id>" <entry-key>
+```
+
+An entry id is lowercase letters, digits and dashes, starting with a letter
+or digit, at most 63 characters. `SSH_ORIGINAL_COMMAND` is only `install`,
+`status` or `remove`, with no name and no path. Without `--credential`, the
+receiver is the harness-credential receiver above, unchanged.
+
+Each entry is in the optional `credentials` object of the same root-owned
+`/etc/oats-login/receiver.json`, beside `teams` or without it:
+
+```json
+{
+  "credentials": {
+    "mail-a": {
+      "group": "oats-cred-a",
+      "path": "/srv/oats-team/cred-a/credentials/mail",
+      "access": "read-only"
+    }
+  }
+}
+```
+
+- `group` is an existing unix group: the credential group's runtime GID.
+- `path` is required, absolute and normalized, and its parent is a
+  directory named `credentials`, the directory the group's
+  `TEAM_CREDENTIALS_DIR` binds.
+- `access` must be `"read-only"`, the only access this receiver writes.
+
+The person sends the credential with the entry's key:
+
+```bash
+credential-source | ssh -i <entry-key> root@<host> install
+ssh -i <entry-key> root@<host> status
+ssh -i <entry-key> root@<host> remove
+```
+
+`credential-source` supplies the value on stdout, as above. The value is
+opaque: at most 65,536 bytes of strict UTF-8 with no NUL, with surrounding
+whitespace stripped. It may span lines, since a client-credential bundle may
+be JSON, and nothing checks its shape. The receiver refuses a terminal on
+stdin. It writes the file root:group 0440, atomically. It creates a missing
+`credentials` directory root:group 0750, with missing parents root:root
+0755. It refuses an existing directory with any other owner, group or mode,
+and never changes it. Every existing component must be root-owned, not
+writable by group or others, and not a symlink.
+
+The answer is one JSON line, `{"ok", "entry", "fingerprint", "replacedAt"}`,
+with `"error"` when `ok` is false. It never contains the value. Syslog
+records only the validated action, the entry id, the fingerprint and the
+client address. Removal deletes the delivered file; revoke the credential
+with its provider too. The refusals:
+
+| Error | Cause |
+|---|---|
+| `bad entry id` | The key's `--credential` id breaks the grammar. |
+| `usage: oats-login-receive [--credential <entry-id>]` | The forced command has other arguments. |
+| `usage: install\|remove\|status` | The command is anything but one action. |
+| `stdin is a terminal` | An install from a terminal. |
+| `receiver config absent`, `receiver config unreadable: <type>` | The configuration is missing or is not JSON. |
+| `<path> is not root-owned or is group/other-writable`, `<path> is a symlink` | The configuration, a directory on the path or an existing file. |
+| `receiver config has no credentials` | The configuration has no `credentials` object. |
+| `entry not configured on this host` | The configuration has no such entry. |
+| `access not supported by this receiver` | `access` is absent or not `"read-only"`. |
+| `configured group absent` | The group does not exist. |
+| `configured path is not absolute and normalized`, `configured path is not in a credentials directory` | The configured `path`. |
+| `credentials directory is not root:<group> 0750` | An existing `credentials` directory. |
+| `credential too large`, `empty credential`, `credential contains NUL`, `credential is not UTF-8` | The value. |
+| `no credential installed` | `status` with no file. |
+
 ## Connect a machine
 
 ```bash
