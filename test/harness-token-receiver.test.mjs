@@ -60,6 +60,7 @@ sys.exit(0 if out["ok"] else 1)
 const credentialCases = [
   ["a malformed entry id", ["--credential", "Bad_Entry"], "install", "pipe", "bad entry id", null],
   ["an entry id that is too long", ["--credential", "a".repeat(64)], "install", "pipe", "bad entry id", null],
+  ["an entry id ending in a newline", ["--credential", "cred-a\n"], "install", "pipe", "bad entry id", null],
   ["--credential without an entry id", ["--credential"], "install", "pipe", "usage: oats-login-receive [--credential <entry-id>]", null],
   ["another argument", ["--harness", "cred-a"], "install", "pipe", "usage: oats-login-receive [--credential <entry-id>]", null],
   ["an extra argument", ["--credential", "cred-a", "extra"], "install", "pipe", "usage: oats-login-receive [--credential <entry-id>]", null],

@@ -104,7 +104,8 @@ def destination(cfg, harness, name):
 def parse_entry(argv):
     if len(argv) != 2 or argv[0] != "--credential":
         raise Refused("usage: oats-login-receive [--credential <entry-id>]")
-    if not NAME_RE.match(argv[1]):
+    # fullmatch: NAME_RE's $ also matches before a final newline.
+    if not NAME_RE.fullmatch(argv[1]):
         raise Refused("bad entry id")
     return argv[1]
 
