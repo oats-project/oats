@@ -4,10 +4,18 @@ import { readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 
-/** Keep legacy route indexes stable, regardless of declaration order. */
+/** Keep legacy route indexes stable, regardless of declaration order. Self-
+ * contained: probe-runtime.mjs serializes it into the in-container program. */
 export function policyRoles(policy) {
   const names = ["aweb", "secrets", "logs", "signer", "registry"];
   if (!Object.hasOwn(policy, "roles")) return names;
+  // Hosted services: every destination is an external role.
+  if (Array.isArray(policy.roles) && policy.roles.length === 0) {
+    const external = policy.externalTargets;
+    assert.ok(external && typeof external === "object" && !Array.isArray(external) && Object.keys(external).length > 0,
+      "egress policy empty roles require an external origin");
+    return [];
+  }
   assert.ok(Array.isArray(policy.roles) && policy.roles.length > 0
     && new Set(policy.roles).size === policy.roles.length
     && Array.from(policy.roles).every(role => names.includes(role)),
@@ -47,26 +55,51 @@ export function externalAddressAllowed(policy, address) {
     && !Object.values(policy.targets).some(target=>target.addresses.includes(address));
 }
 
+const hasExternal = policy => Object.hasOwn(policy,"externalTargets") || Object.hasOwn(policy,"externalResolverAddresses");
+
+/** Roles whose origin the component fixes. source and model also keep their
+ * loopback ports; forge (the sandboxes design's decided GitHub API role,
+ * docs/design/2026-11-19-sandboxes.md) takes its port from the named order. */
+const fixedExternal={source:{origin:"https://github.com",port:10443},model:{origin:"https://api.anthropic.com",port:10444},
+  forge:{origin:"https://api.github.com"}};
+
+/** A deployment-named origin is exactly https://<lowercase DNS name>. */
+function externalOriginHost(origin) {
+  const refused="egress policy external origin must be exactly https://<lowercase DNS name>";
+  let host;
+  try { host=originHost(origin); } catch { throw new Error(refused); }
+  assert.ok(origin === "https://"+host, refused);
+  return host;
+}
+
 function externalRoutes(policy, hosts) {
-  if (!Object.hasOwn(policy,"externalTargets") && !Object.hasOwn(policy,"externalResolverAddresses")) return [];
-  const expected={source:{origin:"https://github.com",port:10443},model:{origin:"https://api.anthropic.com",port:10444}};
+  if (!hasExternal(policy)) return [];
   const targets=policy.externalTargets, resolvers=policy.externalResolverAddresses;
-  assert.ok(targets && typeof targets === "object" && !Array.isArray(targets)
-    && Object.keys(targets).length > 0 && Object.keys(targets).every(role=>Object.hasOwn(expected,role)),
-  "egress policy external targets require only source/model roles");
+  assert.ok(targets && typeof targets === "object" && !Array.isArray(targets) && Object.keys(targets).length > 0,
+    "egress policy external targets must name at least one role");
+  assert.ok(Object.keys(targets).length <= 16, "egress policy allows at most 16 external roles");
+  assert.ok(Object.keys(targets).every(role=>/^[a-z][a-z0-9-]{0,31}$/.test(role)),
+    "egress policy external role names must match ^[a-z][a-z0-9-]{0,31}$");
   assert.ok(Array.isArray(resolvers) && resolvers.length >= 1 && resolvers.length <= 4
     && new Set(resolvers).size === resolvers.length
     && resolvers.every(ip=>externalAddressAllowed(policy,ip)),
   "egress policy external resolver addresses must be distinct approved public IPv4 addresses");
-  return Object.keys(targets).sort().map(role=>{
-    const target=targets[role];
-    assert.ok(target && Object.keys(target).join(",") === "origin" && target.origin === expected[role].origin,
+  // Internal only: the agent always reaches every role on :443 by name.
+  const fixedOf=role=>Object.hasOwn(fixedExternal,role) ? fixedExternal[role] : undefined;
+  const named=Object.keys(targets).filter(role=>!fixedOf(role)?.port).sort();
+  const routes=Object.keys(targets).sort().map(role=>{
+    const target=targets[role], fixed=fixedOf(role);
+    if (fixed) assert.ok(target && Object.keys(target).join(",") === "origin" && target.origin === fixed.origin,
       "egress policy external role origin is fixed");
-    const host=originHost(target.origin);
+    else assert.ok(target && typeof target === "object" && !Array.isArray(target) && Object.keys(target).join(",") === "origin",
+      "egress policy external target has an invalid field set");
+    const host=fixed ? originHost(target.origin) : externalOriginHost(target.origin);
     assert.ok(!hosts.includes(host) && (!policy.humanOrigin || host !== originHost(policy.humanOrigin)),
       "egress policy external hostname overlaps deployment origins");
-    return {role,host,port:expected[role].port};
+    return {role,host,port:fixed?.port ?? 10445+named.indexOf(role)};
   });
+  assert.ok(new Set(routes.map(route=>route.host)).size === routes.length, "egress policy external hostnames must be distinct");
+  return routes;
 }
 
 export function compilePolicy(policy) {
@@ -76,10 +109,11 @@ export function compilePolicy(policy) {
   const fields = ["deniedAddresses", "frontAddress", "privateIngressAddresses", "targets"];
   if (signer || secrets) fields.push("humanOrigin");
   if (hasHumanRole) fields.push("humanRole");
-  if (registry) fields.push("authorityRecords");
+  // With external roles the registry can be one of them, so the agent still
+  // needs its namespace authority locally.
+  if (registry || (hasExternal(policy) && Object.hasOwn(policy, "authorityRecords"))) fields.push("authorityRecords");
   if (Object.hasOwn(policy, "roles")) fields.push("roles");
-  if (Object.hasOwn(policy,"externalTargets") || Object.hasOwn(policy,"externalResolverAddresses"))
-    fields.push("externalTargets", "externalResolverAddresses");
+  if (hasExternal(policy)) fields.push("externalTargets", "externalResolverAddresses");
   assert.ok(Object.keys(policy).sort().join(",") === fields.sort().join(",")
     && (!hasHumanRole || (policy.humanRole === "signer" && signer)
       || (secrets && Object.hasOwn(policy, "roles") && roles.includes("secrets") && !signer)),
@@ -106,7 +140,7 @@ export function compilePolicy(policy) {
   // Registry discovery needs these records even without signer. The wrapper
   // applies the existing AWID parser and registry binding before serialization;
   // here only the DNS owner/data envelope is checked.
-  if (registry) assert.ok(Array.isArray(policy.authorityRecords) && policy.authorityRecords.length > 0
+  if (registry || Object.hasOwn(policy, "authorityRecords")) assert.ok(Array.isArray(policy.authorityRecords) && policy.authorityRecords.length > 0
     && policy.authorityRecords.length <= 64, "egress policy requires provisioned namespace authority records");
   const recordNames = new Set();
   for (const record of policy.authorityRecords ?? []) {
@@ -120,10 +154,12 @@ export function compilePolicy(policy) {
       && record.text.startsWith("awid=v1;") && /^[\x20-\x7e]+$/.test(record.text),
     "egress policy authority record data is invalid");
   }
+  // Hosted services declare no internal role: the first external host names the zone.
+  const zoneHost = hosts[0] ?? external[0].host;
   const zone = [
     "$ORIGIN .", "$TTL 30",
-    `. 30 IN SOA ${hosts[0]}. hostmaster.egress.invalid. 1 60 30 3600 30`,
-    `. 30 IN NS ${hosts[0]}.`,
+    `. 30 IN SOA ${zoneHost}. hostmaster.egress.invalid. 1 60 30 3600 30`,
+    `. 30 IN NS ${zoneHost}.`,
     ...hosts.map(host => `${host}. 30 IN A ${policy.frontAddress}`),
     ...external.map(({host})=>`${host}. 30 IN A ${policy.frontAddress}`),
     ...(policy.authorityRecords ?? []).map(record => `${record.name}. 30 IN TXT ${record.text.match(/.{1,240}/g).map(part => JSON.stringify(part)).join(" ")}`), "",

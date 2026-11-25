@@ -45,7 +45,8 @@ export async function probeRuntime(plan, io = {}) {
     && Object.keys(allowedPaths).sort().join(",") === [...roles].sort().join(","), "control paths must match declared roles exactly");
   expect(roles.includes("registry")
     ? Array.isArray(policy.authorityRecords) && policy.authorityRecords.length > 0 && policy.authorityRecords.length <= 64
-    : !Object.hasOwn(policy,"authorityRecords"), "namespace authority records are required with registry and refused without it");
+    : !Object.hasOwn(policy,"authorityRecords") || Object.hasOwn(policy,"externalTargets"),
+  "namespace authority records are required with registry, and refused without registry or an external role");
   const identity = io.identity ? io.identity() : { uid:process.getuid(), gid:process.getgid() };
   expect(plan.uid > 0 && plan.gid > 0 && identity.uid === plan.uid && identity.gid === plan.gid, "probe identity differs from configured non-root user");
   const status = fs.readFileSync("/proc/self/status","utf8");

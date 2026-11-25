@@ -811,7 +811,11 @@ this login: those credentials take precedence over the setup-token input.
 
 The [egress component](../container/agent/egress/README.md#optional-external-source-and-model-roles)
 defines the two optional source/model routes and their operator-selected DNS
-resolvers. Their boundary is exact SNI and a validated public destination;
+resolvers, and the [external roles a deployment names](../container/agent/egress/README.md#deployment-named-external-roles)
+(up to 16 roles in all, each an exact public origin, such as a mail group's
+`https://graph.microsoft.com`). A policy whose services are all hosted elsewhere
+declares only external roles ([hosted services](../container/agent/egress/README.md#hosted-services)).
+Their boundary is exact SNI and a validated public destination;
 it does not filter repository paths, HTTP authorities or data sent to a provider.
 It limits which services are reachable, not which accounts on them. A credential
 from any source, including an untrusted message, can allow an agent to push data
@@ -1424,7 +1428,8 @@ Without signer or
 an explicit Secrets anchor, `humanOrigin` is refused; it is never routed or
 external. Existing deployments change nothing. A bundle setting `humanRole`
 needs the new egress image, since older images refuse the field. Registry
-`authorityRecords` are required with registry and refused without it, independently
+`authorityRecords` are required with registry and, unless the policy declares
+external roles, refused without it, independently
 of signer: messaging-only namespaces still need exact `_awid` TXT evidence for
 discovery and sender verification. The root-authoritative resolver has no
 forwarding fallback. The proxy permits only the named API and registry routes and serves

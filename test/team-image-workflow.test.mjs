@@ -373,3 +373,58 @@ test("every image build receives its source SHA and CI verifies both extracted d
   assert.match(release.run, /--build-arg "TEAM_IMAGE_SOURCE_SHA=\$TEAM_IMAGE_SOURCE_SHA"/);
   assert.equal(release.env.TEAM_IMAGE_SOURCE_SHA, "${{ github.sha }}");
 });
+
+test("the live named-origins check runs on dispatch and on PRs that change the egress component or its script", () => {
+  const steps = workflow("team-image.yml").jobs.verify.steps;
+  const egress = steps.findIndex((s) => s.name === "Build the reviewed egress image");
+  const scope = steps.findIndex((s) => s.id === "named-origins");
+  const leg = steps.findIndex((s) => s.run?.trim() === 'python3 test/agent-egress-named-origins-image.py "$EGRESS_IMAGE" "$AGENT_IMAGE"');
+  assert.ok(egress >= 0 && scope > egress && leg > scope, "the decision follows the egress build and precedes the live check");
+  assert.equal(steps[leg].if, "${{ steps.named-origins.outputs.run == 'true' }}");
+  assert.deepEqual(steps[scope].env, { EVENT_NAME: "${{ github.event_name }}", BASE_SHA: "${{ github.event.pull_request.base.sha }}" });
+  assert.ok(existsSync(new URL("./agent-egress-named-origins-image.py", import.meta.url)));
+  // The step's own text decides over a disposable repository standing in for the PR checkout.
+  const dir = mkdtempSync(join(tmpdir(), "named-origins-scope-"));
+  const env = { PATH: process.env.PATH, HOME: dir, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1",
+    GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid", GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@example.invalid" };
+  const git = (...args) => {
+    const result = spawnSync("git", args, { cwd: join(dir, "repo"), env, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  try {
+    mkdirSync(join(dir, "repo"));
+    git("init", "-q");
+    writeFileSync(join(dir, "repo", "README.md"), "base\n");
+    git("add", "README.md");
+    git("commit", "-q", "-m", "base");
+    const base = git("rev-parse", "HEAD");
+    git("remote", "add", "origin", join(dir, "repo"));
+    const decide = (event, files) => {
+      git("checkout", "-q", "--detach", base);
+      for (const file of files) {
+        mkdirSync(join(dir, "repo", file, ".."), { recursive: true });
+        writeFileSync(join(dir, "repo", file), "change\n");
+        git("add", file);
+      }
+      if (files.length) git("commit", "-q", "-m", "change");
+      const output = join(dir, "output");
+      writeFileSync(output, "");
+      const result = spawnSync("bash", ["-e", "-c", steps[scope].run], { cwd: join(dir, "repo"), encoding: "utf8",
+        env: { ...env, EVENT_NAME: event, BASE_SHA: event === "pull_request" ? base : "", GITHUB_OUTPUT: output } });
+      assert.equal(result.status, 0, result.stderr);
+      return readFileSync(output, "utf8");
+    };
+    for (const [event, files, expected] of [
+      ["pull_request", ["docs/container.md"], "run=false\n"],
+      ["pull_request", ["container/agent/accept.mjs"], "run=false\n"],
+      ["pull_request", ["test/agent-egress.test.mjs"], "run=false\n"],
+      ["pull_request", ["container/agent/egress/policy.mjs"], "run=true\n"],
+      ["pull_request", ["docs/container.md", "container/agent/egress/README.md"], "run=true\n"],
+      ["pull_request", ["test/agent-egress-named-origins-image.py"], "run=true\n"],
+      ["workflow_dispatch", [], "run=true\n"],
+    ]) assert.equal(decide(event, files), expected, `${event} ${files.join(" ")}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
