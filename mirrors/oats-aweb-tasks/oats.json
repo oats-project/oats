@@ -1,6 +1,6 @@
 {
   "capability": "oats.aweb-tasks",
-  "version": "1.49.1",
+  "version": "1.49.2",
   "compatibility": {
     "oats": ">=0.70.0"
   },
