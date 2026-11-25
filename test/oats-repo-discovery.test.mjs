@@ -78,7 +78,7 @@ test("member discovery over this repository lists its two private member capabil
   const catalog = JSON.parse(readFileSync(join(ROOT, "package-catalog.json"), "utf8"));
   const declared = YAML.parse(readFileSync(join(ROOT, "oats-workspace.yaml"), "utf8")).packages;
   const mirrors = execFileSync("git", ["ls-files", "--", "mirrors/*/oats.json"], { cwd: ROOT, encoding: "utf8" }).split("\n").filter(Boolean);
-  assert.equal(mirrors.length, 10, `the ten official package mirrors, saw ${mirrors.join(", ")}`);
+  assert.equal(mirrors.length, 11, `the eleven official package mirrors, saw ${mirrors.join(", ")}`);
   for (const file of mirrors) {
     const id = JSON.parse(readFileSync(join(ROOT, file), "utf8")).capability;
     const alias = catalog.capabilities[id];
