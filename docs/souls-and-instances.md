@@ -777,7 +777,10 @@ effective configuration sets `extensions.partialClone` or sets a remote
 configs are checked only below that floor or when the version is unknown,
 and a refusal names the submodule's path relative to the outer repository
 in `details.submodule`. At or above the floor no submodule config is read
-for this check. Full clones without populated submodules need no version
+for this check. Only inspected working trees recurse into their submodules;
+object/ref-only sources (the recorded repository, for example) check their
+own config, and do not inspect that checkout's submodules. Full clones
+without populated submodules in an inspected tree need no version
 probe and work as before. The
 caller's repository-local Git variables are not passed: Git's own list
 (`git rev-parse --local-env-vars`: `GIT_DIR`, `GIT_WORK_TREE`,

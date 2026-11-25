@@ -283,6 +283,26 @@ test("a partial submodule at depth two refuses old or unknown Git before observa
     assert.equal(existsSync(recovery), false);
     assert.equal(existsSync(join(spawned.home, "hook-ran")), false);
   }
+  // Depth-two recovery's relative gitfile handling is a separate preservation issue (aweb-adxj).
+  // At the floor the shared admission and plan still accept this same tree without a child config read.
+  const trace = join(f.base, "admission.trace");
+  await f.inEnv(() => {
+    const gitVersion = () => "git version 2.45.0";
+    const prior = process.env.GIT_TRACE2_EVENT;
+    process.env.GIT_TRACE2_EVENT = trace;
+    try {
+      const meta = JSON.parse(readFileSync(join(spawned.home, "instance.json"), "utf8"));
+      instanceGit.withGitReadSafety(gitVersion, () => core.retireInstanceWork(spawned.home, meta));
+    } finally {
+      if (prior === undefined) delete process.env.GIT_TRACE2_EVENT;
+      else process.env.GIT_TRACE2_EVENT = prior;
+    }
+    assert.doesNotThrow(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }));
+  });
+  const commands = readFileSync(trace, "utf8").trim().split("\n").map((line) => JSON.parse(line)).filter((event) => event.event === "start");
+  const configReads = commands.filter((event) => event.argv.includes("config") && event.argv.includes("--list"));
+  assert.ok(configReads.length > 0, "trace records the real root admission config reads");
+  assert.equal(configReads.some((event) => event.argv.some((arg) => arg.startsWith(join(work, "modules", "top")))), false);
 });
 
 test("modern Git observes partial submodules without the guard reading any submodule config", (t) => {
@@ -334,4 +354,42 @@ writeFileSync(join(home, "hook-ran"), "ran");
   });
   assert.equal(readFileSync(join(spawned.home, "hook-ran"), "utf8"), "ran");
   assert.equal(existsSync(work), true);
+});
+
+test("old Git retires a full worktree when only the main checkout has a populated partial submodule", async (t) => {
+  const { f, spawned, work } = await retirement(t);
+  const leaf = observer(t);
+  git(f.member, "-c", "protocol.file.allow=always", "submodule", "add", "--quiet", leaf.work, "vendor/lib");
+  git(f.member, "add", ".");
+  git(f.member, "commit", "-qm", "main checkout submodule");
+  git(work, "merge", "--quiet", "--ff-only", "main");
+  git(join(f.member, "vendor", "lib"), "config", "remote.origin.promisor", "true");
+  assert.equal(existsSync(join(work, "vendor", "lib", ".git")), false, "the instance's submodule is not populated");
+  writeFileSync(join(work, "file.txt"), "authored\n"); // require a copier source read too
+  let probes = 0;
+  const gitVersion = () => { probes++; return "git version 2.44.9"; };
+  await f.inEnv(() => {
+    assert.doesNotThrow(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }));
+    const result = retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true });
+    assert.equal(result.removedDir, true, JSON.stringify(result));
+    assert.equal(readFileSync(join(result.workRecovery.path, "repo", "file.txt"), "utf8"), "authored\n");
+  });
+  assert.equal(probes, 0, "object-only sources do not inspect or probe for their own submodules");
+});
+
+test("Git at the floor plans and retires a tree with a populated partial submodule", async (t) => {
+  const { f, spawned, work } = await retirement(t);
+  const leaf = observer(t);
+  git(work, "-c", "protocol.file.allow=always", "submodule", "add", "--quiet", leaf.work, "vendor/lib");
+  git(work, "add", ".");
+  git(work, "commit", "-qm", "one populated submodule");
+  git(join(work, "vendor", "lib"), "config", "remote.origin.promisor", "true");
+  writeFileSync(join(work, "file.txt"), "authored\n");
+  await f.inEnv(() => {
+    const gitVersion = () => "git version 2.45.0";
+    assert.doesNotThrow(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }));
+    const result = retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true });
+    assert.equal(result.removedDir, true, JSON.stringify(result));
+    assert.equal(readFileSync(join(result.workRecovery.path, "repo", "file.txt"), "utf8"), "authored\n");
+  });
 });
