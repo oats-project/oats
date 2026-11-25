@@ -48,7 +48,7 @@
     },
     "oats.framework": {
       "url": "https://github.com/awebai/oats.git",
-      "ref": "oats-framework/v1.30.0",
+      "ref": "oats-framework/v1.31.0",
       "path": "oats-package"
     }
   },

@@ -1391,9 +1391,10 @@ other producer's claim is touched.
 
 **A pi claim that outlives its dialog.** With no pi left running or starting in
 the home, a dead pi's `question` stays, and it holds every scheduled wake: the hold reads
-claims, not whether the session runs. For a home on a session provider that
-lasts until the claim is cleared, because a wake never starts such a home; a
-tmux home's next start voids it, as a session boundary voids every claim. A
+claims, not whether the session runs. For a home on a session provider whose
+session is lost that lasts until the claim is cleared, because a wake does
+not start such a home (it starts only one OATS stopped); a home's next
+start voids it, as a session boundary voids every claim. A
 hold that runs long is a reason to look: run `oats instance waiting clear
 --producer oats.pi --home <home>` from anywhere. A mark left behind is removed
 by the home's next pi.
@@ -2883,9 +2884,15 @@ the feature.
   operator stopped is stopped whatever the provider answers (a live harness
   there is reported beside it, as `outsideOats`, and changes nothing), and
   every input (a
-  person's `oats session input`, a scheduled wake, a client, the messaging
-  broker) is refused `E_SESSION_NOT_RUNNING` before any call. A provider
-  whose product restarts a session on its next input can rely on this.
+  person's `oats session input`, a scheduled wake's delivery, a client, the
+  messaging broker) is refused `E_SESSION_NOT_RUNNING` before any call. A
+  provider whose product restarts a session on its next input can rely on
+  this. A due wake to such a home starts it instead, unattended, as a
+  person's `oats session start` does: your `check`, your `stop` asked once
+  more, the launch hooks, then `launch` with `previous`, a new session
+  ([schedules.md](schedules.md#kinds); a kernel that lists the feature
+  `wake-starts-provider-home`). A home stopped with the host is not started
+  that way.
 - **Hooks first.** The capabilities' spawn hooks (at a spawn) and launch
   hooks (at a start or a restart) run before `launch`, as before a tmux
   window, with `OATS_BACKEND`.
