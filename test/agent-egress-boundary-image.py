@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import select
 from pathlib import Path
 import shutil
 import subprocess
@@ -165,7 +166,7 @@ def run_split(plan, policy, proxy_image, prefix):
                     ["ip","route","add","default","via",host_end]):
         subprocess.run(["sudo","ip","netns","exec",listener_namespace,*command], check=True)
     listener = subprocess.Popen(["sudo","ip","netns","exec",listener_namespace,"python3","-c",
-        "import socket\ns=socket.create_server(('" + namespace_end + "',5432))\nprint('LISTENING',flush=True)\nwhile True:\n c,_=s.accept()\n c.close()"],
+        "import socket\ns=socket.create_server(('" + namespace_end + "',5432))\nprint('LISTENING',flush=True)\nwhile True:\n c,_=s.accept()\n print('ACCEPTED',flush=True)\n c.close()"],
         stdout=subprocess.PIPE, text=True)
     assert listener.stdout.readline().strip() == "LISTENING"
     plan["remoteBackends"] = {"servicesAddress":namespace_end,"backends":[{"role":"postgres","port":5432},{"role":"redis","port":6379}]}
@@ -173,6 +174,9 @@ def run_split(plan, policy, proxy_image, prefix):
     assert result.returncode == 1, result.stderr
     assert "egress boundary: outward bridge did not get DENIED from a services-host backend" in result.stderr, result.stderr
     assert "E_EGRESS_REMOTE_LOCAL" not in result.stderr
+    # The refusal is for a real connection from the outward bridge, not an error.
+    ready, _, _ = select.select([listener.stdout], [], [], 5)
+    assert ready and listener.stdout.readline().strip() == "ACCEPTED", "the outward bridge never reached the listener"
     refused = json.loads(result.stdout)
     assert refused["passed"] is False and refused["error"] == "boundary probe refused" and refused["receipts"], refused
     print("PASS non-local listener mutant", flush=True)
