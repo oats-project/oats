@@ -7,7 +7,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { CHECK_WARNINGS_RELAYED } from "../lib/session-providers.mjs";
+import { ANSWER_WARNINGS_MAX, CHECK_WARNINGS_RELAYED, relayedCheckWarnings } from "../lib/session-providers.mjs";
 import { KERNEL_FEATURES, LAUNCH_MODEL_CHECK_WARNINGS_FEATURE } from "../lib/kernel-features.mjs";
 import { startInstance } from "../packages/client/session-start.mjs";
 import { clientTerms } from "../packages/client/client-terms.mjs";
@@ -215,4 +215,34 @@ test("a check that warns of more than a client shows relays the first ones and c
   assert.equal(lines[0], "acme.fake's session provider fake (check) warns w-0: a line\uFFFDand \uFFFD[31mmore");
   assert.deepEqual(lines.slice(1, CHECK_WARNINGS_RELAYED), many.slice(1, CHECK_WARNINGS_RELAYED).map(relayed));
   assert.equal(lines.at(-1), "acme.fake's session provider fake (check) gave 3 more warnings, not shown here");
+});
+
+test("THE 512 EDGE: relayed warnings never take an answer's warnings past 512 entries; they are dropped first, counted in the last line, and no warning of the kernel's own gives way", () => {
+  assert.deepEqual([ANSWER_WARNINGS_MAX, CHECK_WARNINGS_RELAYED], [512, 32]);
+  const said = "acme.fake's session provider fake";
+  const warned = (n) => ({ said, lines: Array.from({ length: n }, (_, i) => `${said} (check) warns w-${i}: warning ${i}`) });
+  const more = (n) => `${said} (check) gave ${n} more warning${n === 1 ? "" : "s"}, not shown here`;
+  // None, or no ready check: nothing.
+  assert.deepEqual([relayedCheckWarnings(null), relayedCheckWarnings(null, 600)], [[], []]);
+  // Room for all: each, in order, and no count line.
+  assert.deepEqual(relayedCheckWarnings(warned(3)), warned(3).lines);
+  assert.deepEqual(relayedCheckWarnings(warned(32), 480), warned(32).lines, "32 after 480 of the kernel's: 512 exactly");
+  // More than 32: the first 32, then the count.
+  assert.deepEqual(relayedCheckWarnings(warned(40)), [...warned(40).lines.slice(0, 32), more(8)]);
+  assert.deepEqual(relayedCheckWarnings(warned(33), 479), [...warned(33).lines.slice(0, 32), more(1)], "33 entries after 479: 512 exactly");
+  // Less room than warnings: the relayed ones give way, and the count line, which takes one entry, counts them.
+  assert.deepEqual(relayedCheckWarnings(warned(32), 481), [...warned(32).lines.slice(0, 30), more(2)]);
+  assert.deepEqual(relayedCheckWarnings(warned(40), 480), [...warned(40).lines.slice(0, 31), more(9)]);
+  assert.deepEqual(relayedCheckWarnings(warned(5), 510), [warned(5).lines[0], more(4)]);
+  assert.deepEqual(relayedCheckWarnings(warned(2), 510), warned(2).lines);
+  assert.deepEqual(relayedCheckWarnings(warned(1), 511), warned(1).lines, "the one entry left goes to the one warning");
+  assert.deepEqual(relayedCheckWarnings(warned(2), 511), [more(2)], "or to the count of the ones that do not fit");
+  // No room: nothing is relayed, and nothing of the kernel's is dropped to make some.
+  assert.deepEqual([relayedCheckWarnings(warned(3), 512), relayedCheckWarnings(warned(3), 700)], [[], []]);
+  // Whatever the kernel holds up to the bound, the answer stays within it, and every entry within a client's 4096 characters.
+  for (const held of [0, 1, 479, 480, 481, 500, 510, 511, 512]) for (const n of [1, 2, 31, 32, 33, 100]) {
+    const lines = relayedCheckWarnings(warned(n), held);
+    assert.ok(held + lines.length <= 512, `${n} after ${held}`);
+    assert.ok(lines.every((w) => typeof w === "string" && w.length <= 4096));
+  }
 });

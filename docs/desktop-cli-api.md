@@ -7684,8 +7684,13 @@ provider's `check` with the launch that is planned
   The code and the message are the provider's own, the message made safe to
   print and cut at 500 characters. At most 32 are relayed for one launch;
   past that, one last line says how many more the check gave
-  (`… (check) gave <n> more warnings, not shown here`). A start and a restart
-  also record each as a `launch-warning` event.
+  (`… (check) gave <n> more warnings, not shown here`). They come after the
+  answer's other warnings and never take `warnings` past 512 entries, the
+  most a client's reader takes: where the answer's own warnings leave room
+  for fewer, the relayed ones are dropped first, that last line counts
+  them, and none of the answer's own is dropped; with no room, none is
+  relayed. A start and a restart also record each as a `launch-warning`
+  event.
 - **The lines are text for a person. Show them; never parse them**, and take
   no decision from one: the wording is not a contract. `warnings` holds
   strings only, here as everywhere: a reader that shows the kernel's own

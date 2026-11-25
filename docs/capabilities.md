@@ -2405,7 +2405,8 @@ from, never print it.
   your code and your message as you gave them (the message made safe to
   print, at most 500 characters)
   ([desktop-cli-api.md](desktop-cli-api.md#relayed-check-warnings)). At most
-  32 per launch are relayed. No client parses them: write each message as a
+  32 per launch are relayed, and fewer where the answer's own warnings
+  leave less room (512 entries in all). No client parses them: write each message as a
   sentence a person can act on. The warnings beside a status other than
   `ready` are not relayed: say what refuses the launch in `problems`.
 - **A preview asks it too, with the same planned launch**, so that a launch

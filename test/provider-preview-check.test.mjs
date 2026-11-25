@@ -239,8 +239,19 @@ test("a ready check's warnings are in the spawn preview's warnings, verbatim and
   assert.equal(text.status, 0, text.stderr);
   for (const w of WARNS) assert.ok(`${text.stdout}${text.stderr}`.includes(relayed(w)), text.stdout);
 
+  // The spawn that preview decided, applied as a client applies it (bound to the decision, with a
+  // key): its answer carries the same lines, within what the clients' reader of a creation receipt
+  // takes of `warnings` (packages/client/spawn-apply-contract.mjs spawnCreationReceipt: at most 512
+  // strings of at most 4096 characters). That reader itself cannot be run on this answer: its
+  // decision is a tmux spawn's only (spawn-decision.mjs spawnEffective), so it reads no spawn on a
+  // session provider, with or without a warning.
+  const applied = fx.cli(["spawn", "dev", "--name", "seat", "--backend", "fake", "--launch-config", "claude", "--expect-decision", doc.result.decision.revision, "--idempotency-key", "a".repeat(64), "--json"]).json();
+  assert.equal(applied.ok, true, JSON.stringify(applied).slice(0, 600));
+  assert.deepEqual(applied.result.warnings, WARNS.map(relayed), "the apply's answer");
+  assert.ok(applied.result.warnings.length <= 512 && applied.result.warnings.every((w) => typeof w === "string" && w.length <= 4096));
+  const home = applied.result.home;
+
   // A launch's preview (of a stopped home) says what its start will say.
-  const { home } = await fx.launch("seat");
   await fx.inEnv(() => stopInstanceSession(home, {}));
   const launch = fx.cli(["launch-config", "preview", "--home", home, "--json"]).json();
   assert.deepEqual([launch.ok, launch.result.ok], [true, true], JSON.stringify(launch).slice(0, 600));
