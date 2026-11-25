@@ -13,7 +13,7 @@
 ### What a deployment must change
 
 - Compose boundary plan writers must add integer `"schema": 1`. Missing schema
-  now refuses with `E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1; found none; regenerate the plan with schema: 1`.
+  now refuses with `E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1 (local) or 2 (split); found none; regenerate the plan with schema: 1 or schema: 2`.
   Unknown numeric schemas substitute their value for `none`; other types report
   `invalid <type>`. No missing-schema fallback exists. This refusal occurs before
   engine access, exits 1 and is printed on stderr (including with `--json`).

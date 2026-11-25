@@ -1,10 +1,15 @@
 """CI-only real Compose boundary proof. Own disposable resources, no logins.
 The full/default policy and three declared subsets use the same reviewed wrapper,
-proxy image and probe. Never run against a deployment or a shared Mac daemon.
+proxy image and probe. `split` runs plan schema 2 and the services witness from
+the deploy copy extracted from the egress image, against a second Compose
+project on its own disjoint network. Never run against a deployment or a shared
+Mac daemon.
 """
+import hashlib
 import json
 import os
 import re
+import select
 from pathlib import Path
 import shutil
 import subprocess
@@ -12,15 +17,26 @@ import sys
 import tempfile
 import time
 
-if len(sys.argv) != 4 or sys.argv[3] not in ("full", "aweb,registry", "aweb,registry,secrets", "aweb,logs,registry,secrets"):
-    raise SystemExit("usage: agent-egress-boundary-image.py PROXY_IMAGE AGENT_IMAGE full|aweb,registry|aweb,registry,secrets|aweb,logs,registry,secrets")
+if len(sys.argv) != 4 or sys.argv[3] not in ("full", "aweb,registry", "aweb,registry,secrets", "aweb,logs,registry,secrets", "split"):
+    raise SystemExit("usage: agent-egress-boundary-image.py PROXY_IMAGE AGENT_IMAGE full|aweb,registry|aweb,registry,secrets|aweb,logs,registry,secrets|split")
+split = sys.argv[3] == "split"
 root = Path(__file__).resolve().parents[1]
 scratch = Path(tempfile.mkdtemp(prefix="egress-boundary-"))
 scratch.chmod(0o755)
 project = "egress-boundary-" + str(os.getpid())
+services_project = project + "-services"
 env = dict(os.environ)
 compose = []
+services_compose = []
 created = False
+services_created = False
+# The non-local listener mutant's namespace and listener, removed in finally.
+listener_namespace = "oats-split-" + str(os.getpid())
+listener_link = "osp" + str(os.getpid() % 100000)
+listener = None
+# Unassigned and unrouted: not local to this engine host, and nothing answers.
+services_address = "192.0.2.10"
+external_database = "192.0.2.11"
 
 def run(args, **kwargs):
     return subprocess.check_output(args, text=True, env=env, **kwargs).strip()
@@ -37,6 +53,146 @@ def write(name, text):
 def bind(source, destination, readonly=True):
     return {"type":"bind", "source":str(source), "target":destination, "read_only":readonly, "bind":{"create_host_path":False}}
 
+def policy_hash(policy):
+    """The canonical policy hash, as the spec defines it for other languages."""
+    text = json.dumps(policy, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+def node_json(command):
+    result = subprocess.run(command, env=env, text=True, capture_output=True)
+    print(result.stderr, end="", flush=True)
+    return result.returncode, json.loads(result.stdout)
+
+def run_split(plan, policy, proxy_image, prefix):
+    """Plan schema 2 and the services witness, each from the deploy copy
+    extracted from the reviewed egress image, never from this checkout."""
+    global services_compose, services_created
+    deploy = scratch / "deploy"
+    container = docker("create", proxy_image)
+    try:
+        docker("cp", container + ":/opt/oats/deploy", str(deploy))
+    finally:
+        docker("rm", container)
+    source = json.loads((deploy / "manifest.json").read_text())["source"]
+    assert source == env["TEAM_IMAGE_SOURCE_SHA"], "deploy copy source differs from the reviewed commit"
+    backend_program = scratch / "backend.mjs"
+    healthcheck = "require('node:net').connect(Number(process.argv[1]),'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"
+    services = {"services":{role:{"image":proxy_image,"user":"10001:10001","cap_drop":["ALL"],"security_opt":["no-new-privileges:true"],
+                                  "read_only":True,"entrypoint":["node"],"command":["/backend.mjs",str(port)],"expose":[str(port)],
+                                  "healthcheck":{"test":["CMD","node","-e",healthcheck,str(port)],"interval":"1s","timeout":"2s","retries":30},
+                                  "networks":["backends"],"volumes":[bind(backend_program,"/backend.mjs")]}
+                            for role, port in [("postgres",5432),("redis",6379)]},
+                "networks":{"backends":{"name":services_project + "-backends","ipam":{"config":[{"subnet":"172.27.92.0/24"}]}}}}
+    services_compose = ["docker","compose","-p",services_project,"-f",write("compose.services.json",json.dumps(services))]
+    run([*services_compose,"config","--quiet"])
+    services_created = True
+    run([*services_compose,"up","-d","--wait","--wait-timeout","60"])
+    print("Docker engine:", docker("version","--format","{{.Server.Version}} API {{.Server.APIVersion}}"),
+          "compose:", run(["docker","compose","version","--short"]), flush=True)
+    for service in ("postgres","redis"):
+        container_id = run([*services_compose,"ps","-q","--no-trunc",service])
+        print("fixture ports", service, docker("inspect","--format","{{json .Config.ExposedPorts}} {{json .HostConfig.PortBindings}} {{json .NetworkSettings.Ports}}",container_id), flush=True)
+    redis_id = run([*services_compose,"ps","-q","--no-trunc","redis"])
+    redis_address = json.loads(docker("inspect",redis_id))[0]["NetworkSettings"]["Networks"][services_project + "-backends"]["IPAddress"]
+    # Disjoint projects: the agent project's outward bridge has no route to them.
+    classify = run(["node","--input-type=module","-e","const m=await import(process.argv[1]);process.stdout.write(m.classifyProgram)",
+                    (deploy / "egress/canary.mjs").as_uri()])
+    answer = docker("run","--rm","--network",env["SERVICES_NETWORK"],"--entrypoint","node",proxy_image,"--input-type=module","-e",classify,redis_address,"6379")
+    assert answer == "DENIED", "the agent project reaches the services project"
+    print("PASS disjoint Compose projects", flush=True)
+
+    probe = str(deploy / "egress/probe-compose-boundary.mjs")
+    witness = str(deploy / "egress/probe-services-backends.mjs")
+    run_binding = {"id":project,"policyHash":policy_hash(policy),"servicesDeployment":services_project}
+    plan = {**{key:value for key, value in plan.items() if key != "deniedBackends"},"schema":2,"run":run_binding}
+    for mode in ("bundled","external"):
+        backends = [{"role":"postgres","port":5432},{"role":"redis","port":6379}] if mode == "bundled" \
+            else [{"role":"postgres","port":5432,"address":external_database,"external":True},{"role":"redis","port":6379}]
+        plan["remoteBackends"] = {"servicesAddress":services_address,"backends":backends}
+        code, result = node_json(["node",probe,"--plan",write("split-" + mode + ".json",json.dumps(plan)),"--json"])
+        assert code == 0, "split boundary probe failed: " + mode
+        receipts = result.pop("receipts")
+        assert len(receipts) == 7 and all(r["created"] and r["absentVerified"] and r["name"].startswith(prefix) for r in receipts)
+        postgres_address = external_database if mode == "external" else services_address
+        rows = [{"role":role,"port":port,"address":address,"vantage":vantage,"result":"DENIED","required":not (mode == "external" and role == "postgres" and vantage == "outward-bridge")}
+                for role, port, address in [("postgres",5432,postgres_address),("redis",6379,services_address)] for vantage in ("isolated-agent","outward-bridge")]
+        assert [list(row) for row in result["remote"]["results"]] == [["role","port","address","vantage","result","required"]] * 4
+        assert result == {"passed":True,"mode":"split","run":run_binding,"sourceCommit":source,
+                          "remote":{"servicesAddress":services_address,"vantage":["isolated-agent","outward-bridge"],"results":rows}}, result
+        witness_plan = {"schema":1,"run":run_binding,"servicesAddress":services_address,"composeProject":services_project,"policy":policy,
+                        "backends":([{"role":"postgres","service":"postgres","port":5432}] if mode == "bundled" else []) + [{"role":"redis","service":"redis","port":6379}],
+                        "canaryImage":proxy_image,"namePrefix":prefix}
+        code, result = node_json(["node",witness,"--plan",write("witness-" + mode + ".json",json.dumps(witness_plan)),"--json"])
+        assert code == 0, "services witness failed: " + mode
+        receipts = result.pop("receipts")
+        assert len(receipts) == len(witness_plan["backends"]) and all(r["created"] and r["absentVerified"] for r in receipts)
+        records = result.pop("backends")
+        assert [r["role"] for r in records] == [b["role"] for b in witness_plan["backends"]]
+        for record, declared in zip(records, witness_plan["backends"]):
+            assert record == {"role":declared["role"],"service":declared["service"],"containerId":run([*services_compose,"ps","-q","--no-trunc",declared["service"]]),
+                              "image":proxy_image,"imageId":proxy_image,"networks":[services_project + "-backends"],"port":declared["port"],
+                              "health":"healthy","published":False,"control":"CONNECTED"}, record
+        assert result["observed"]["addressOnHost"] is False and result["observed"]["composeProject"] == services_project
+        assert result["observed"]["engineVersion"] == docker("version","--format","{{.Server.Version}}")
+        del result["observed"]
+        assert result == {"passed":True,"run":run_binding,"sourceCommit":source,"servicesAddress":services_address,"canaryImage":proxy_image}, result
+        print("PASS split boundary and services witness:", mode, flush=True)
+
+    plan["remoteBackends"] = {"servicesAddress":redis_address,"backends":[{"role":"postgres","port":5432},{"role":"redis","port":6379}]}
+    result = subprocess.run(["node",probe,"--plan",write("split-local.json",json.dumps(plan)),"--json"], env=env, text=True, capture_output=True)
+    assert result.returncode == 1 and "E_EGRESS_REMOTE_LOCAL" in result.stderr, result.stderr
+    assert json.loads(result.stdout) == {"passed":False,"receipts":[],"error":"boundary probe refused"}
+    print("PASS local services address mutant", flush=True)
+
+    published = write("compose.published.json", json.dumps({"services":{"redis":{"ports":["127.0.0.1::6379"]}}}))
+    run([*services_compose,"-f",published,"up","-d","--wait","--wait-timeout","60","redis"])
+    result = subprocess.run(["node",witness,"--plan",str(scratch / "witness-external.json"),"--json"], env=env, text=True, capture_output=True)
+    assert result.returncode == 1 and "redis publishes a port on the services host" in result.stderr, result.stderr
+    assert json.loads(result.stdout) == {"passed":False,"receipts":[],"error":"services witness refused"}
+    print("PASS published port mutant", flush=True)
+
+    # A services address that is not local to this host (outside every Docker
+    # subnet, on no host interface) with a live listener on the PostgreSQL port:
+    # a namespace behind a veth pair, routed from the host. E_EGRESS_REMOTE_LOCAL
+    # stays in force; the outward bridge reaches the listener and must refuse.
+    global listener
+    host_end, namespace_end = "10.250.0.1", "10.250.0.2"
+    subprocess.run(["sudo","ip","netns","add",listener_namespace], check=True)
+    subprocess.run(["sudo","ip","link","add",listener_link,"type","veth","peer","name","osn"], check=True)
+    subprocess.run(["sudo","ip","link","set","osn","netns",listener_namespace], check=True)
+    subprocess.run(["sudo","ip","addr","add",host_end + "/30","dev",listener_link], check=True)
+    subprocess.run(["sudo","ip","link","set",listener_link,"up"], check=True)
+    for command in (["ip","addr","add",namespace_end + "/30","dev","osn"], ["ip","link","set","osn","up"], ["ip","link","set","lo","up"],
+                    ["ip","route","add","default","via",host_end]):
+        subprocess.run(["sudo","ip","netns","exec",listener_namespace,*command], check=True)
+    listener = subprocess.Popen(["sudo","ip","netns","exec",listener_namespace,"python3","-c",
+        "import socket\ns=socket.create_server(('" + namespace_end + "',5432))\nprint('LISTENING',flush=True)\nwhile True:\n c,_=s.accept()\n print('ACCEPTED',flush=True)\n c.close()"],
+        stdout=subprocess.PIPE, text=True)
+    assert listener.stdout.readline().strip() == "LISTENING"
+    plan["remoteBackends"] = {"servicesAddress":namespace_end,"backends":[{"role":"postgres","port":5432},{"role":"redis","port":6379}]}
+    result = subprocess.run(["node",probe,"--plan",write("split-listener.json",json.dumps(plan)),"--json"], env=env, text=True, capture_output=True)
+    assert result.returncode == 1, result.stderr
+    assert "egress boundary: outward bridge did not get DENIED from a services-host backend" in result.stderr, result.stderr
+    assert "E_EGRESS_REMOTE_LOCAL" not in result.stderr
+    # The refusal is for a real connection from the outward bridge, not an error.
+    ready, _, _ = select.select([listener.stdout], [], [], 5)
+    assert ready and listener.stdout.readline().strip() == "ACCEPTED", "the outward bridge never reached the listener"
+    refused = json.loads(result.stdout)
+    assert refused["passed"] is False and refused["error"] == "boundary probe refused" and refused["receipts"], refused
+    print("PASS non-local listener mutant", flush=True)
+
+    # The proxy compiled its policy at startup. Rewrite the mounted file in place
+    # (same inode, so the bind mount shows it) and regenerate the plan from it:
+    # the file comparison now agrees, and only the proxy's loaded record refuses.
+    changed = {**policy, "deniedAddresses":[*policy["deniedAddresses"], "192.0.2.12"]}
+    assert write("policy.json", json.dumps(changed)) == policy_file
+    plan.update(policy=changed, run={**run_binding, "policyHash":policy_hash(changed)},
+                remoteBackends={"servicesAddress":services_address,"backends":[{"role":"postgres","port":5432},{"role":"redis","port":6379}]})
+    result = subprocess.run(["node",probe,"--plan",write("split-stale.json",json.dumps(plan)),"--json"], env=env, text=True, capture_output=True)
+    assert result.returncode == 1 and "E_EGRESS_POLICY_STALE" in result.stderr, result.stderr
+    assert json.loads(result.stdout) == {"passed":False,"receipts":[],"error":"boundary probe refused"}
+    print("PASS stale proxy policy mutant", flush=True)
+
 try:
     proxy_image = json.loads(docker("image", "inspect", sys.argv[1]))[0]["Id"]
     agent_image = json.loads(docker("image", "inspect", sys.argv[2]))[0]["Id"]
@@ -48,7 +204,7 @@ try:
         key, value = line.split("=", 1)
         assert env[key] == value
     roles = {"aweb":"aweb", "secrets":"secrets", "logs":"logs", "signer":"prepare", "registry":"registry"}
-    if sys.argv[3] != "full":
+    if sys.argv[3] not in ("full", "split"):
         roles = {role:roles[role] for role in sys.argv[3].split(",")}
     hosts = [name + ".example.invalid" for name in roles.values()]
     human = "approve.example.invalid"
@@ -60,9 +216,9 @@ try:
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     (scratch / "key.pem").chmod(0o444)
     policy = {"frontAddress":env["EGRESS_ADDRESS"], "privateIngressAddresses":["172.27.91.10"],
-              "deniedAddresses":["172.27.91.11", "172.27.91.12"],
+              "deniedAddresses":[external_database] if split else ["172.27.91.11", "172.27.91.12"],
               "targets":{role:{"origin":"https://" + name + ".example.invalid", "addresses":["172.27.91.10"]} for role, name in roles.items()}}
-    if sys.argv[3] != "full":
+    if sys.argv[3] not in ("full", "split"):
         policy["roles"] = list(roles)
     if secrets_anchor:
         policy["humanRole"] = "secrets"
@@ -106,9 +262,9 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
                  "sysctls":{"net.ipv4.ip_unprivileged_port_start":"0"},
                  "networks":{"services":{"ipv4_address":"172.27.91.10"}},
                  "volumes":[bind(front_program,"/front.mjs"),bind(scratch / "key.pem","/key.pem"),bind(scratch / "ca.pem","/ca.pem")]},
-        **{role:{**security,"command":["/backend.mjs",str(port)],
+        **({} if split else {role:{**security,"command":["/backend.mjs",str(port)],
                  "networks":{"services":{"ipv4_address":address}}, "volumes":[bind(backend_program,"/backend.mjs")]}
-           for role,address,port in [("postgres","172.27.91.11",5432),("redis","172.27.91.12",6379)]}}}
+           for role,address,port in [("postgres","172.27.91.11",5432),("redis","172.27.91.12",6379)]})}}
     overlay_file = write("compose.probe.json", json.dumps(overlay))
     compose = ["docker", "compose", "-p", project, "-f", str(root / "container/agent/egress/compose.minimal.yaml"), "-f", overlay_file]
     run([*compose,"config","--quiet"])
@@ -116,8 +272,9 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
     # Scope --wait to the proxy: the inert agent deliberately disables the
     # inherited SSH healthcheck, which Compose may otherwise still wait for.
     run([*compose,"up","-d","--wait","--wait-timeout","60","egress"])
-    run([*compose,"up","-d","agent","front","postgres","redis"])
-    for service, token in [("front","TLS_READY"),("postgres","BACKEND_READY"),("redis","BACKEND_READY")]:
+    fixtures = [("front","TLS_READY")] + ([] if split else [("postgres","BACKEND_READY"),("redis","BACKEND_READY")])
+    run([*compose,"up","-d","agent",*[service for service, _ in fixtures]])
+    for service, token in fixtures:
         container = run([*compose,"ps","-q",service])
         for _ in range(50):
             if token in docker("logs",container):
@@ -138,6 +295,9 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
     custom_prefix = None if sys.argv[3] == "full" else "lab.fixture-" + str(os.getpid()) + "-"
     if custom_prefix:
         plan["namePrefix"] = custom_prefix
+    if split:
+        run_split(plan, policy, proxy_image, custom_prefix)
+        raise SystemExit(0)
     probe = ["node", str(root / "container/agent/egress/probe-compose-boundary.mjs"), "--plan", write("runtime.json",json.dumps(plan))]
     if custom_prefix:
         probe.append("--json")
@@ -179,6 +339,19 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
     docker("network","disconnect",env["SERVICES_NETWORK"],plan["probeContainer"])
     print("PASS alternate-network mutant:",sys.argv[3],flush=True)
 finally:
+    if listener is not None:
+        # sudo relays SIGTERM to the listener; SIGKILL would orphan it.
+        listener.terminate()
+        try:
+            listener.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            listener.kill()
+            listener.wait()
+    if split:
+        subprocess.run(["sudo","ip","netns","delete",listener_namespace], env=env, stderr=subprocess.DEVNULL)
+        subprocess.run(["sudo","ip","link","delete",listener_link], env=env, stderr=subprocess.DEVNULL)
+    if services_created:
+        subprocess.run([*services_compose,"down","--timeout","5"],env=env,check=True)
     if created:
         subprocess.run([*compose,"down","--timeout","5"],env=env,check=True)
     shutil.rmtree(scratch)
