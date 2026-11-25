@@ -224,7 +224,7 @@ test("the credential receiver ships byte-identical and executable in the npm tar
   const files = checkKernelPackFiles(pack);
   assert.ok(files.has("share/oats-login-receive"));
   const bytes = execFileSync("tar", ["-xOf", join(destination, pack.filename), "package/share/oats-login-receive"]);
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "7ad3ac4aea73519a8c69751cf6ea6e978f9259f8a820b7e3a7cfef0e569bce10");
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "a809bc5578d3f2752b06a149a28b7a5a300cb495e5bae3bb5f3b1de83dcfa59f");
   assert.equal(pack.files.find((file) => file.path === "share/oats-login-receive").mode & 0o777, 0o755);
 });
 
