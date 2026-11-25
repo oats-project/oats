@@ -171,10 +171,48 @@ jobs:
       - name: The suites that followed a session variable, with every one poisoned
         run: npm run test:session
 
+  # The lifecycle of a home on a session provider, every schedule (docs/design/
+  # 2026-11-20-provider-home-lifecycle.md; test/session-provider-explorer.test.mjs): for each verb,
+  # the kernel ends at each seam it passes, then another verb runs, then an input, and the page's
+  # invariants are checked. The shards above run a seeded sample of the schedules, in seconds, on
+  # every change. This job runs them ALL (about a quarter of an hour) for a change that touches
+  # the lifecycle (scripts/provider-lifecycle-changed.mjs holds the list of files), and
+  # provider-lifecycle-nightly.yml runs them all on main every night. The job itself always runs
+  # and decides in its own step: a job skipped by a workflow's path filter would leave the gate
+  # below without a result to wait on.
+  provider-lifecycle:
+    name: Node 22 / session-provider lifecycle, every schedule
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Does this change touch the session-provider lifecycle?
+        id: changes
+        run: node scripts/provider-lifecycle-changed.mjs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+
+      # (Only an explicit "false" skips: a decision that wrote nothing runs every schedule.)
+      - name: Install supported-node dependencies
+        if: steps.changes.outputs.run != 'false'
+        run: npm ci
+
+      - name: Every schedule of the session-provider lifecycle
+        if: steps.changes.outputs.run != 'false'
+        run: npm run test:provider-lifecycle
+
   # The one check to wait on (the name reviewers and merge tooling already know).
   gate:
     name: Node 22 / test, validate, pack, smoke
-    needs: [tests, verify, desktop-standalone, session-inheritance, unsupported-node]
+    needs: [tests, verify, desktop-standalone, session-inheritance, unsupported-node, provider-lifecycle]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -185,3 +223,4 @@ jobs:
           test "${{ needs.desktop-standalone.result }}" = success
           test "${{ needs.session-inheritance.result }}" = success
           test "${{ needs.unsupported-node.result }}" = success
+          test "${{ needs.provider-lifecycle.result }}" = success || test "${{ needs.provider-lifecycle.result }}" = skipped

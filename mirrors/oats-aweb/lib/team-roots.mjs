@@ -1,8 +1,8 @@
 // Deployment selection, aweb team names, and current minting authority for
 // explicit wider-team joins.
 // Lifecycle hooks deliberately continue to use their captured provider settings.
-import { readFileSync, realpathSync, statSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
+import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { querySelectedKernel } from './session-readiness.mjs';
 import { teamKeyIn } from './aweb-team-id.mjs';
 
@@ -94,4 +94,43 @@ export function currentJoinRootChoice(team, home, { env = process.env, query = q
   }
   if (!member) noRoot(`current root ${selectedRoot} cannot prove membership in this exact team`);
   return { root: selectedRoot, source };
+}
+
+/** The instance home `dir` lies in: the nearest directory at or above it holding an
+ *  `instance.json`, by realpath (a symlinked root that resolves into a home is in it),
+ *  walking whole segments up from the deepest part that exists. With `within` (a
+ *  deployment's realpath), only a home strictly between `dir` and `within` counts: a
+ *  home of that deployment, never one that contains the deployment. Undefined when
+ *  none. */
+export function instanceHomeHolding(dir, within) {
+  let real = resolve(dir);
+  for (;;) {
+    // The on-disk spelling, as `within` is: on a case-insensitive filesystem (macOS) a root
+    // that spells the deployment in another case is still inside it.
+    try { real = realpathSync.native(real); break; }
+    catch (e) { if (e?.code !== 'ENOENT' && e?.code !== 'ENOTDIR') throw e; const parent = dirname(real); if (parent === real) break; real = parent; }
+  }
+  const inside = (d) => { const rel = relative(within, d); return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel); };
+  for (let d = real; ; d = dirname(d)) {
+    if (within !== undefined && (d === within || !inside(d))) return undefined;
+    try { lstatSync(join(d, 'instance.json')); return d; }
+    catch (e) { if (e?.code !== 'ENOENT' && e?.code !== 'ENOTDIR') throw e; }
+    if (dirname(d) === d) return undefined;
+  }
+}
+
+/** Setup's one admission rule for a root it will accept or mint into (README, "Human
+ *  attribution"; awebai/oats-aweb#311): never inside an instance home of this
+ *  deployment, since retiring that instance removes its home and the root with it. A
+ *  deployment that itself sits inside an agent's home isn't refused for that; when the
+ *  deployment can't be resolved, any home above the root counts, and the message says
+ *  so. Every setup path calls it once it has chosen its root, before any effect.
+ *  Returns the E_ROOT_INSIDE_INSTANCE_HOME error, or undefined. */
+export function rootInsideInstanceHomeError({ root, setting, label, deployment, beside }) {
+  let within;
+  try { within = deployment ? realpathSync.native(deployment) : undefined; } catch { within = undefined; }
+  const owner = instanceHomeHolding(root, within);
+  if (!owner) return undefined;
+  const unresolved = within === undefined ? ` (the deployment${deployment ? ` ${deployment}` : ''} couldn't be resolved, so any instance home above the root counts)` : '';
+  return Object.assign(new Error(`${setting} puts ${label ? `${label}'s ` : 'the '}root at ${root}, inside the instance home ${owner}${unresolved}: retiring that instance would remove the root with its home. Move it beside the deployment's other roots (for example ${beside}) and set ${setting} there; nothing was created, accepted or minted`), { code: 'E_ROOT_INSIDE_INSTANCE_HOME', details: { root, instanceHome: owner, setting } });
 }

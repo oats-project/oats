@@ -56,6 +56,7 @@ From a checkout at the reviewed commit:
 
 ```sh
 env -i PATH="$PATH" docker build --platform linux/arm64 \
+  --build-arg "TEAM_IMAGE_SOURCE_SHA=$(git rev-parse HEAD)" \
   -t oats-agent:reviewed container/agent
 ```
 
@@ -85,12 +86,302 @@ version and regenerate this directory's lock with
 `npm install --package-lock-only --ignore-scripts`; review both files. Do not
 use `--install-oats` or `--install-aw` against a running container.
 
-The committed OATS 0.69.19 pin has `oats host run`, which the entrypoint
+The committed OATS 0.70.7 pin has `oats host run`, which the entrypoint
 runs, and `oats schedule host install --register-only`. It supports
 `env: { fromFile: ... }` and the operator's `oats harness token set` route.
 Provision the token through the
 [harness credential route](servers.md#harness-credentials) and collect live
 acceptance evidence before claiming the two-seat inference milestone.
+
+## Run contract
+
+The digest selects both an image and its deployment files. Extract each image's
+`/opt/oats/deploy` into its own run directory; the shared files must have identical
+hashes when the images come from the same source commit. Agent files are at the
+root; egress files retain the `egress/` subdirectory. The image builds require
+`--build-arg TEAM_IMAGE_SOURCE_SHA=<full 40-character commit SHA>` and refuse a
+missing or malformed value, with no `unknown` fallback.
+([Agent Dockerfile](../container/agent/Dockerfile),
+[egress Dockerfile](../container/agent/egress/Dockerfile),
+[manifest builder](../container/agent/deploy-manifest.mjs),
+[cross-image CI check](../.github/scripts/team-image-deploy-check.mjs).)
+
+### Agent runtime
+
+The entrypoint is `tini -- /usr/local/bin/agent-entrypoint`, which creates the
+runtime NSS database and persistent SSH keys, then executes
+`node /usr/local/lib/agent-supervisor.mjs`. Neither entrypoint script nor
+supervisor consumes positional arguments. The Dockerfile sets no `CMD` override
+of the pinned Node base. Its image user is `agent` (UID assigned by `useradd`,
+not a fixed deployment UID); Compose explicitly selects non-root
+`${AGENT_UID:-20001}:${AGENT_GID:-20001}`. The entrypoint refuses root.
+([Dockerfile](../container/agent/Dockerfile),
+[entrypoint](../container/agent/entrypoint.sh),
+[supervisor](../container/agent/supervisor.mjs),
+[Compose](../container/agent/compose.agent.yaml).)
+
+Compose requires a read-only root, drops all capabilities and sets no new
+privileges. These host binds must exist; Compose never creates a missing source.
+The operator provisions the ownership below. Acceptance checks `/state` and
+its 0700 subdirectories and the target/live login metadata; sshd uses strict
+public-key file modes. The resolver must be readable by the runtime user.
+([Compose](../container/agent/compose.agent.yaml),
+[entrypoint](../container/agent/entrypoint.sh),
+[sshd configuration](../container/agent/sshd_config),
+[acceptance](../container/agent/accept.mjs).)
+
+| Input → container path | Ownership / access |
+| --- | --- |
+| `TEAM_STATE_DIR` → `/state` | Runtime UID:GID; writable persistent state; `home`, `ssh`, `deploy` created 0700 |
+| `TEAM_LOGIN_DIR` → `/etc/agent-login` | Read-only; target/live evidence requires root:runtime-GID 0750; optional `claude-token` root:runtime-GID 0440 |
+| `AUTHORIZED_KEYS_FILE` → `/etc/agent-ssh/authorized_keys` | Read-only root-owned regular file, 0644 |
+| `RESOLV_CONF_FILE` → `/etc/resolv.conf` | Read-only operator-provided resolver; readable and non-empty to the runtime UID |
+| `/tmp` | Writable tmpfs, mode 1777, `nosuid,nodev`, bounded by `AGENT_TMP_SIZE` |
+
+Optional fragments add `/work` (writable runtime-owned work), `/inputs`
+(read-only shared inputs), `/outbox` (writable runtime UID:dedicated non-root
+outbox-GID, mode 2750 with an operator-owned parent), `/mirrors` (read-only bare
+Git mirrors) and `/etc/agent-trust/ca.pem` (read-only public CA only). Outbox adds
+its supplementary group; trust adds only `SSL_CERT_FILE` and
+`NODE_EXTRA_CA_CERTS` pointing at that CA. Acceptance refuses overlapping optional
+inputs/outbox and writable bind sources. Every bind source must be absolute.
+([Work](../container/agent/compose.agent.work.yaml),
+[inputs](../container/agent/compose.agent.inputs.yaml),
+[outbox](../container/agent/compose.agent.outbox.yaml),
+[mirrors](../container/agent/compose.agent.mirrors.yaml),
+[trust](../container/agent/compose.agent.trust.yaml),
+[acceptance](../container/agent/accept.mjs).)
+
+The agent joins only `AGENTS_NETWORK` at `AGENT_IP`, uses the mounted resolver
+and publishes no host ports. Port 2222 is exposed for SSH. Compose health opens
+TCP 127.0.0.1:2222 every 30 seconds (5-second timeout, three retries, 10-second
+start period). Compose sets `restart: unless-stopped`: process exit restarts the
+container unless the operator stopped it; unhealthy alone does not.
+For a separate orchestrator's liveness, `node /usr/local/lib/agent-liveness.mjs`
+checks the supervisor. Readiness and liveness are distinct. The supervisor gates
+sshd and host-run startup on broker readiness. None of these startup checks
+admits a seat or proves platform containment.
+([Compose](../container/agent/compose.agent.yaml),
+[Dockerfile](../container/agent/Dockerfile),
+[liveness](../container/agent/liveness.mjs),
+[supervisor](../container/agent/supervisor.mjs),
+[acceptance limits](../container/agent/accept.mjs).)
+
+### Egress runtime
+
+The entrypoint is `tini -- node /opt/egress/supervisor.mjs`; the Dockerfile sets
+no `CMD` override, and the supervisor consumes no positional arguments. Image
+and Compose both use UID:GID `10001:10001`. Compose requires a read-only root,
+all capabilities dropped, no new privileges and IP forwarding disabled. Its
+only persistent input is `EGRESS_POLICY_FILE` → `/etc/egress/policy.json`, a
+read-only public JSON policy, regular file at most 64 KiB, readable by UID 10001
+and provisioned by the operator; it contains no service credentials. There is
+no writable state bind. `/tmp` is a writable 16 MiB tmpfs, mode 1777, with
+`nosuid,nodev`; generated DNS/proxy configuration goes into `/tmp/egress`
+(directory 0700, files 0600).
+([Dockerfile](../container/agent/egress/Dockerfile),
+[Compose](../container/agent/egress/compose.egress.yaml),
+[policy loader](../container/agent/egress/policy.mjs),
+[supervisor](../container/agent/egress/supervisor.mjs).)
+
+The proxy joins `agents` at `EGRESS_ADDRESS` and `services`. The minimal wrapper
+owns the explicit IPv4 IPAM and isolated internal agents bridge. The agent's
+resolver must select the proxy address; DNS zone answers and permitted TLS SNI
+routes come from the mounted policy, with explicit external resolver addresses
+required for external roles. Exposed ports are 53 UDP/TCP and 443 TCP; neither
+fragment publishes host ports. `/opt/egress` retains exactly `policy.mjs`,
+`supervisor.mjs`, `external.mjs`, `health.mjs`, `probe-ingress.mjs`.
+([Service](../container/agent/egress/compose.egress.yaml),
+[minimal wrapper](../container/agent/egress/compose.minimal.yaml),
+[policy compiler](../container/agent/egress/policy.mjs),
+[Dockerfile](../container/agent/egress/Dockerfile).)
+
+Compose health runs `node /opt/egress/health.mjs` every five seconds (3-second
+timeout, three retries, 5-second start period). It checks a declared DNS answer,
+unlisted DNS refusal and a local TLS listener. The supervisor stops the component
+if either child fails. Compose sets `restart: unless-stopped`: process exit,
+including the supervisor stopping after a child failure, restarts the container
+unless the operator stopped it; unhealthy alone does not.
+Health alone grants no network admission: the wrapper
+must pass the read-only engine-host network preflight before creating networks,
+then the boundary probe and applicable ingress probe before agents start.
+Every deployment that creates its own agents/services networks, including
+wrappers other than `compose.minimal.yaml`, must distinguish creation from a
+rerun. Supply all six planned inputs: `AGENTS_SUBNET`, `AGENTS_GATEWAY`,
+`AGENT_IP`, `EGRESS_ADDRESS`, `SERVICES_SUBNET`, `SERVICES_GATEWAY`.
+
+- Neither network exists: from the extracted egress run directory on the Linux
+  engine host, run `node egress/preflight-network.mjs` immediately before
+  creation. Require exit 0 before sourcing its six assignments or creating
+  anything. Remote contexts and Docker connection overrides are refused.
+- Exactly one network exists: refuse; the operator must clean up the partial
+  pair before retrying.
+- Both networks exist: do not rerun the preflight, whose overlap veto would
+  refuse the project's own networks. The consumer wrapper must require both
+  networks' `com.docker.compose.project` labels to equal its project, and both
+  complete IPAM inventories to match the plan exactly: agents/services subnet
+  and gateway, without extra ranges. Require the agents network to be internal,
+  both networks IPv4-only, and the agents bridge's gateway mode `isolated`.
+  Refuse any difference.
+
+These existence, label and exact-plan checks belong to the consumer wrapper;
+the preflight script remains a creation-time overlap check. Routes or links
+added later are outside that check's promise. Self-owned networks must keep
+only the proxy attached to both agents and services. The boundary probe then
+proves the live shape before admission.
+([Health](../container/agent/egress/health.mjs),
+[supervisor](../container/agent/egress/supervisor.mjs),
+[Compose](../container/agent/egress/compose.egress.yaml),
+[network plan](../container/agent/egress/compose.minimal.yaml),
+[network preflight](../container/agent/egress/preflight-network.mjs),
+[boundary probe](../container/agent/egress/probe-compose-boundary.mjs),
+[ingress probe](../container/agent/egress/probe-ingress.mjs).)
+
+### Deploy inventory and extraction
+
+Both images' deploy directories are root-owned, directories 0755 and files
+0644, except the agent's `accept.sh` at 0755. The agent carries every
+`compose.agent*.yaml`, `accept.sh`, `accept.mjs` and its import `supervisor.mjs`.
+Egress carries `egress/compose.egress.yaml`, the documented deployment input
+`egress/compose.minimal.yaml`, `egress/preflight-network.mjs`, and
+`egress/probe-compose-boundary.mjs` with `boundary.mjs`, `policy.mjs`,
+`canary.mjs`, `probe-runtime.mjs` beside it, plus root `accept.mjs`,
+`supervisor.mjs`, `compose.agent.yaml`. Preserve this hierarchy when extracting;
+the minimal wrapper's `../compose.agent.yaml` stays inside the extracted set.
+([Agent Dockerfile](../container/agent/Dockerfile),
+[egress Dockerfile](../container/agent/egress/Dockerfile),
+[portable-copy tests](../test/team-image-deploy.test.mjs).)
+
+`manifest.json` has exactly `{schema:1,image:"agent"|"egress",source,files,installed}`.
+`source` is the full source commit SHA. `files` maps every other regular file's
+relative path to `sha256:<64 lowercase hex>`; the manifest excludes itself.
+No other file may exist in the directory. `installed` records version strings
+read from the built image: agent `oats`, `aw`, `claude` via `oats version --json`,
+`aw version`, `claude --version`; egress `coredns`, `nginx` via `coredns -version`,
+`nginx -v`. The manifest is an inventory bound by the image digest, not a separate
+signature or another deployment pin.
+([Manifest builder](../container/agent/deploy-manifest.mjs),
+[CI inventory/metadata verification](../.github/scripts/team-image-deploy-check.mjs).)
+
+On the deployment host, extract without starting the image. Run once for each
+pinned digest, using separate run directories (`DEPLOY_KIND=egress` for egress).
+The Node 22 verifier below compares the complete directory with the manifest,
+including hashes. An agent/egress pair from different source commits is never
+valid: the consumer must refuse differing `source` values or differing hashes
+for any shared file (`accept.mjs`, `supervisor.mjs`, `compose.agent.yaml`), even
+when each image verifies independently. The pair check follows the individual
+file verification below.
+`docker cp` gives the host copy the invoking user's ownership; verification
+checks content, not that the extracted files retain the image's root ownership
+or modes.
+([CI extraction and verification](../.github/scripts/team-image-deploy-check.mjs).)
+
+```sh
+export DEPLOY_KIND=agent DEPLOY_IMAGE='registry.example/team-agent@sha256:<digest>'
+mkdir -p "run/$DEPLOY_KIND"
+cid=$(docker create "$DEPLOY_IMAGE")
+docker cp "$cid:/opt/oats/deploy/." "run/$DEPLOY_KIND/"
+docker rm "$cid"
+node --input-type=module - "run/$DEPLOY_KIND" "$DEPLOY_KIND" <<'JS'
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {lstatSync,readdirSync,readFileSync} from 'node:fs';
+import {join} from 'node:path';
+const [root,image]=process.argv.slice(2);
+const manifest=JSON.parse(readFileSync(join(root,'manifest.json')));
+assert.equal(manifest.schema,1); assert.equal(manifest.image,image);
+assert.match(manifest.source,/^[a-f0-9]{40}$/);
+const files={};
+function walk(dir,prefix='') {
+  for(const name of readdirSync(dir)) {
+    if(!prefix && name==='manifest.json') continue;
+    const path=join(dir,name), rel=prefix+name, stat=lstatSync(path);
+    if(stat.isDirectory()) walk(path,rel+'/');
+    else {
+      assert.ok(stat.isFile(),rel);
+      files[rel]='sha256:'+createHash('sha256').update(readFileSync(path)).digest('hex');
+    }
+  }
+}
+walk(root); assert.deepEqual(files,manifest.files);
+console.log(image,manifest.source,manifest.installed);
+JS
+```
+
+After extracting and verifying both sets, refuse a mixed pair before any
+network creation or admission. This also catches missing shared files.
+([CI pair verifier](../.github/scripts/team-image-deploy-check.mjs).)
+
+```sh
+node --input-type=module <<'JS'
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const agent=JSON.parse(readFileSync('run/agent/manifest.json'));
+const egress=JSON.parse(readFileSync('run/egress/manifest.json'));
+assert.equal(agent.source,egress.source,'agent and egress must come from the same source commit');
+for(const file of ['accept.mjs','supervisor.mjs','compose.agent.yaml']) {
+  assert.match(agent.files[file],/^sha256:[a-f0-9]{64}$/);
+  assert.equal(agent.files[file],egress.files[file],'shared deploy file: '+file);
+}
+JS
+```
+
+### Versioned probe and live-lab inputs
+
+From the extracted egress directory, run
+`node egress/probe-compose-boundary.mjs --plan /absolute/runtime.json [--json]`
+on the Linux Docker engine host. Plans require integer `"schema": 1`; the
+remaining fields are the [Compose probe contract](../container/agent/egress/README.md#boundary-probe-on-an-existing-compose-deployment).
+Missing schema refuses before engine access with
+`E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1; found none; regenerate the plan with schema: 1`.
+Unknown numeric schema uses its number instead of `none`; other types use
+`invalid <type>`. Exit status is 1; `--json` retains its static error document
+and the named refusal appears on stderr. There is no unversioned fallback.
+([Probe implementation](../container/agent/egress/probe-compose-boundary.mjs),
+[schema regression](../test/team-image-deploy.test.mjs).)
+
+From the extracted agent directory, invoke
+`./accept.sh CONTAINER --evidence local|target-amd64|live-lab [--claude INSTANCE_HOME]`.
+It needs host Node 22.13+ on 22.x, 23.4+ on 23.x, or a newer major, and Docker
+CLI access to the engine running that container.
+Docker connection settings are inherited by its CLI calls; no host token argument
+or environment input is read. `--help` is the existing usage-only refusal
+(exit 1), not a successful help command. Both argument options are available in
+all three evidence modes. `--claude` requires an instance home under
+`/state/deploy/`; if the mounted setup-token is present, it performs the live
+inference check from a scratch directory with user settings only. Without the
+token or without `--claude`, inference reports `NOT RUN`.
+([Wrapper](../container/agent/accept.sh),
+[acceptance implementation](../container/agent/accept.mjs).)
+
+Acceptance consumes these plain host environment inputs, matching the reviewed
+Compose configuration. Every optional input set to `""` is treated as unset;
+empty UID/GID values select the 20001 defaults via both acceptance and Compose
+`${VAR:-default}`. Include an optional mount fragment only when its source input
+is non-empty; the fragment's `${VAR:?...}` refuses an absent or empty source.
+An outbox directory requires a non-empty outbox GID. Acceptance resolves host
+paths on the Docker engine host.
+`local` permits the builder architecture and its local credential modes;
+`target-amd64` and `live-lab` both require x64 and the target login ownership
+listed above. Mode labels do not broaden the evidence: platform bypass,
+admitted-seat spawn, viewer, sync, mail/chat and governance remain `NOT RUN`.
+It also reads `/etc/resolv.conf` inside the running container as the runtime
+UID and refuses an unreadable or empty file with
+`E_AGENT_RESOLVER: /etc/resolv.conf must be readable and non-empty by the runtime UID`.
+([Input and evidence checks](../container/agent/accept.mjs),
+[empty-input regression](../test/agent-container.test.mjs),
+[resolver regression](../test/team-image-deploy.test.mjs),
+[real root:0600/empty resolver fixture](../.github/scripts/team-image-accept.sh).)
+
+| Inputs | Contract |
+| --- | --- |
+| `AGENT_IMAGE`, `AGENTS_NETWORK`, `AGENT_IP` | Exact reviewed image reference, single network and address |
+| `TEAM_STATE_DIR`, `TEAM_LOGIN_DIR`, `AUTHORIZED_KEYS_FILE`, `RESOLV_CONF_FILE` | Required absolute bind sources |
+| `AGENT_PIDS`, `AGENT_MEMORY`, `AGENT_CPUS`, `AGENT_TMP_SIZE` | Required positive resource limits matching inspect |
+| `AGENT_UID`, `AGENT_GID` | Optional, default `20001` each |
+| `TEAM_WORK_DIR`, `TEAM_INPUT_DIR`, `AGENT_CA_FILE`, `AGENT_MIRRORS_DIR` | Optional absolute bind sources; corresponding fragments required |
+| `TEAM_OUTBOX_DIR`, `TEAM_OUTBOX_GID` | Both together; absolute export queue and its supplementary group |
+| `AGENT_CHILD` | Optional declared child name, 1–20 lowercase letters/digits/dashes; must match the derived image's declaration and fragment |
 
 ## Mounts and UID
 
@@ -932,13 +1223,14 @@ Manual verification offers two additional proofs:
   targets. Image history and IDs may differ; payload differences fail.
 - `packed_kernel` prepares a private context from the selected commit and
   runs the image with that commit's own `npm pack` kernel. This job is
-  manual-only until the image owner's compatible final baseline lands.
+  manual-only; enabling automatic packed-image PR verification is separate work.
   Ordinary PR verification keeps the committed context in the meantime.
   An incompatible baseline fails explicitly, with no registry-kernel fallback
-  and no wider lock allowance. The committed baseline needs final OATS
-  0.69.18+ and aw 1.36.59+ with the compatible exact runtime closure.
-  With the committed baseline, the packed job refuses; its positive real
-  packed-image acceptance is **NOT RUN** until that compatible baseline lands.
+  and no wider lock allowance. The committed baseline pins OATS 0.70.7 and
+  aw 1.36.59, meets the final OATS 0.69.18+/aw 1.36.59+ floor with its exact
+  runtime closure, and passes the strict baseline guards.
+  Positive real packed-image acceptance remains
+  **NOT RUN** until the manual job runs successfully at this head.
 
 Packing disables lifecycle scripts and uses a private npm home/cache, empty
 user/global configs and an explicit public registry. Every packed file must
@@ -953,8 +1245,9 @@ Only the private image manifest changes to the fixed
 provided in the closed context and a private host-side sibling directory,
 so npm lock generation and the build resolve the same bytes. The existing
 `npm ci --ignore-scripts` RUN gets a read-only context mount at
-`/opt/oats-build-inputs`; no tarball COPY, build argument, new lifecycle
-execution or runtime mount is added. The registry release context and its
+`/opt/oats-build-inputs`; packing adds no tarball COPY, kernel-selection build
+argument, lifecycle execution or runtime mount. The deploy inventory separately
+requires the source-SHA build argument. The registry release context and its
 strict metadata checks keep their own path. Both adapters protect every
 unrelated CLI and lock entry, addition, removal and root/metadata field.
 
@@ -1102,7 +1395,14 @@ non-secret runtime policy from the shared deployment configuration and signer
 profile when signer is declared. An optional derived `roles` array selects a
 nonempty subset of aweb, logs, registry, secrets and signer, with exactly matching
 targets and probe paths. Omission retains the five-role policy and output.
-Signer `humanOrigin` is required with signer and refused without it. Registry
+`humanRole` optionally names the human ingress anchor: `"signer"` or `"secrets"`.
+Absent or `"signer"` retains the signer rule, requiring `humanOrigin` with signer.
+`humanRole: "secrets"` requires declared `roles` including secrets and excluding
+signer, plus `humanOrigin`. Selecting Secrets while declaring signer is refused.
+Without signer or
+an explicit Secrets anchor, `humanOrigin` is refused; it is never routed or
+external. Existing deployments change nothing. A bundle setting `humanRole`
+needs the new egress image, since older images refuse the field. Registry
 `authorityRecords` are required with registry and refused without it, independently
 of signer: messaging-only namespaces still need exact `_awid` TXT evidence for
 discovery and sender verification. The root-authoritative resolver has no
@@ -1137,9 +1437,14 @@ compiler/proxy image and probes to one reviewed commit and retain image digests.
 The ingress probe keeps backend non-delivery witnesses for owned routes. A
 wrapper may explicitly mark only the registry as external for verified-TLS 200
 controls, without third-party refusal or backend-log claims. When signer is
-declared, signer and human-surface ingress controls remain required.
-`probeIngress` explicitly refuses a policy without signer before sending controls;
-runtime role controls follow the compiler's canonical order for every declaration.
+declared, signer and human-surface ingress controls remain required. A Secrets
+anchor instead proves the Secrets API and console ingress, even when they share
+one backend and log. `--request-origin` and its pinned address name that anchor;
+the compatible request path/log must match its audit entry. Forbidden tags must
+be absent from every owned backend log, even if a backend returns 421 itself.
+The ingress control report and boundary report name the anchor; runtime role
+controls retain the compiler's canonical order. A policy without signer or an
+explicit Secrets anchor cannot invoke ingress admission.
 Deployment bundles default `team.registryRoute` to `external`; existing bundles serving a local registry
 must select `local` and refuse a URL their service does not serve. See the
 [route-mode contract](../container/agent/egress/README.md#ingress-admission-probe)

@@ -13,17 +13,23 @@ import { liveWaiting, setWaiting, validWaitingMessage } from "../../../lib/insta
 import { REFUSED_TEXT } from "../../../lib/refused-text.mjs";
 
 import { failedTurnMessage, MESSAGE_REFUSED, reportFailedTurn } from "../extension/failed-turn.mjs";
+import { waitingClaim } from "../extension/waiting-claim.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
 const failed = (errorMessage) => ({ messages: [{ role: "user" }, { role: "assistant", stopReason: "error", errorMessage }] });
 const ended = (stopReason) => ({ messages: [{ role: "assistant", stopReason }] });
 
-/** The report in a home, with pi's events driven by hand. */
+/** The report in a home, with pi's events driven by hand. `settled()` on what it returns resolves
+ *  once the bridge has taken every step those events asked for, each kernel call answered. */
 function session(home) {
   const handlers = new Map();
-  reportFailedTurn({ on: (event, handler) => handlers.set(event, handler) }, home);
-  return (event, payload = {}) => handlers.get(event)(payload);
+  const pi = { on: (event, handler) => handlers.set(event, handler) };
+  const claim = waitingClaim(pi, home);
+  reportFailedTurn(pi, claim);
+  const fire = (event, payload = {}) => handlers.get(event)(payload);
+  fire.settled = () => claim.settled();
+  return fire;
 }
 
 const settle = async (done) => { const end = Date.now() + 15000; while (!done()) { if (Date.now() > end) throw new Error("timed out"); await new Promise((r) => setTimeout(r, 10)); } };
@@ -203,10 +209,12 @@ test("real kernel: the claim reads back on the instance, beside the agent's own,
   await fire("agent_start");
   await fire("agent_end", failed("422: cyber_policy"));
   await fire("agent_settled", { aborted: false });
-  await settle(() => liveWaiting(home)?.producer === "oats.pi");
+  await fire.settled();
+  assert.equal(liveWaiting(home)?.producer, "oats.pi");
   assert.deepEqual(liveWaiting(home).message, "Turn failed: 422: cyber_policy");
   assert.equal(liveWaiting(home).reason, "attention");
   await fire("agent_start");
-  await settle(() => liveWaiting(home)?.producer === "agent");
+  await fire.settled();
+  assert.equal(liveWaiting(home)?.producer, "agent");
   assert.equal(liveWaiting(home).message, "my own question", "the agent's own claim stands");
 });

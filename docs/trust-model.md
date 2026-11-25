@@ -74,7 +74,23 @@ Inside one trust group, none of these hold:
   [Trust is the workspace's declaration](capabilities.md#mental-model) of a
   member repo or a package. The kernel then checks that what it is about to
   run is the copy made at spawn. That copy is in the agent's home, so the
-  check is no defence against the agent.
+  check is no defence against the agent. For a home on a session provider
+  the kernel does not run the home's copy at all: it runs its own copy of
+  the home's modules, kept outside the home and made at the spawn, and
+  takes the capability settings and hook commands from the home's receipt,
+  kept there too
+  ([What the kernel trusts in a provider home](capabilities.md#what-the-kernel-trusts-in-a-provider-home)).
+  That holds against an agent that cannot write outside its home, which is
+  the provider's sandbox to ensure, not OATS's.
+- That a start can tell a directory-mode home from another directory that
+  shows the same identity. The start compares the home and its `work/` with
+  the inode, device and birth time their spawn recorded, and where a volume
+  gets a new device number at each mount it accepts an equal inode and birth
+  time. A snapshot of the home's volume, or a filesystem the agent's user
+  mounts at the path and makes report those values, passes
+  ([`directory` work mode](souls-and-instances.md#directory--independent-execution)).
+  The check keeps a renamed or copied directory from being started as the
+  home; it is robustness, like the claims and recovery copies above.
 - That a harness's sandbox is a boundary. OATS counts none as one and relies
   on none. Where a harness restricts what its agent can write, that is the
   harness's property and not a promise of OATS.

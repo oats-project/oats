@@ -72,21 +72,21 @@ function rig(t) {
     return matchEvent(e, { isMac: false });
   };
   return { win, doc, row, nav, item, textarea, pressAt, ran, sidebarKeysLive, wsRow,
-    field, controls: [...doc.querySelectorAll("#sidebar > .side-head > button, #sidebar .ctx-head button, #sidebar-bar > button")], main: doc.getElementById("show-panel") };
+    field, controls: [...doc.querySelectorAll("#sidebar > .side-head > button, #sidebar .ctx-head button, #instance-roster > #sidebar-spawn, #sidebar-bar > button")], main: doc.getElementById("show-panel") };
 }
 
 test("each sidebar key fires on a workspace list row, a roster row, a nav button, the head's control and the foot's buttons, by its real (shifted) keydown", t => {
   const r = rig(t);
   // The sidebar top to bottom (the product owner, 2026-10-26; slice 1): the head (Add local workspace…), the list,
-  // the pinned rows under it, the instances (their heading holds no control), then the foot (its bar: N need you,
-  // New agent and ?).
+  // the pinned rows under it, the instances (their heading holds no control) and New agent after them (slice 3d), then
+  // the foot (its bar: N need you and ?).
   const sidebar = r.doc.getElementById("sidebar");
   assert.equal(r.doc.getElementById("ws-current"), null, "no current-workspace section any more");
   assert.equal(r.doc.getElementById("nav").parentElement, sidebar, "the nav is the sidebar's own");
   assert.equal(r.doc.getElementById("nav").previousElementSibling, r.doc.getElementById("ws-list"), "the nav sits under the list");
   assert.equal(r.doc.getElementById("nav").nextElementSibling, r.doc.getElementById("instance-roster"), "the instances under the nav");
   assert.ok(r.doc.getElementById("nav").contains(r.nav));
-  assert.deepEqual(r.controls.map(b => b.id), ["ws-add-open", "sidebar-need-you", "sidebar-spawn", "sidebar-help"]);
+  assert.deepEqual(r.controls.map(b => b.id), ["ws-add-open", "sidebar-spawn", "sidebar-need-you", "sidebar-help"]);
   // The list is buttons, not a listbox, and the guard names no popup of it: the plain keys stay live there.
   assert.equal(r.doc.querySelector('#ws-list[role], #ws-options[role], .ws-group[role="listbox"]'), null);
   assert.doesNotMatch(shell.match(/function updateActiveContexts\([^]*?\n\}/)[0], /ws-menu/);
@@ -181,8 +181,8 @@ test("a key on a row's tool targets that row, not the active terminal's instance
   assert.equal(leaderTargetId(row), "/h/b");
   assert.equal(leaderTargetId(menuItem), "/h/b", "an item of its context menu");
   assert.equal(leaderTargetId(start), "/h/b", "Check result");
-  const foot = ["sidebar-need-you", "sidebar-spawn", "sidebar-help"];
-  for (const id of foot) assert.equal(leaderTargetId(doc.getElementById(id)), "/h/a", `${id} (a foot control): the active terminal's`);
+  const foot = ["sidebar-need-you", "sidebar-spawn", "sidebar-help"]; // the foot's two and New agent at the roster's end
+  for (const id of foot) assert.equal(leaderTargetId(doc.getElementById(id)), "/h/a", `${id} (not a row): the active terminal's`);
   context.activeTab = null;
   assert.equal(leaderTargetId(menuItem), "/h/b", "with no terminal open too");
   for (const id of foot) assert.equal(leaderTargetId(doc.getElementById(id)), null, id);

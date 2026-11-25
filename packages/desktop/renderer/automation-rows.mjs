@@ -6,6 +6,7 @@
  * file changes. */
 
 import { displayLine, DETAIL_WITHHELD, MAX_DISPLAY_LINE } from '../../client/display-text.mjs';
+import { fullModeProblem } from '../../client/session-backends.mjs';
 
 const text = v => typeof v === 'string' && v ? v : null;
 const list = v => Array.isArray(v) ? v : [];
@@ -447,6 +448,26 @@ export function triggerStatus(json, id, { source = null } = {}) {
     ...(named ? { source: named, refused: refusedEvents(row.invalidEvents), skipped: skippedItems(row.skipped), invalid: sourceCheck(row.invalid) } : {}),
   };
 }
+
+/** The remedy both sentences below end with. */
+const SET_YOLO = 'Set its permissions to YOLO (yolo: true).';
+/** What to say of a spawn on a session provider that launches only in full mode (packages/client/session-backends.mjs
+ * `fullModeProblem`: the provider refuses any other launch, so nothing is created) → `{ tag, reason, sentence }`, or
+ * null when there is nothing to say: `reason` is what is so, `sentence` is it with the remedy (the form ends it its
+ * own way, views/schedules.mjs). `spawn`: `{ backend, yolo }`; a `yolo` that is no boolean is no choice.
+ *   `yolo: false`  every run is refused
+ *   no `yolo`      the run takes its launch configuration's choice (docs/execution-targets.md "Permissions"), so it
+ *                  is refused unless that sets YOLO: said as a condition, never as a certainty. */
+export function fullModeRefusal(spawn) {
+  const problem = fullModeProblem(spawn);
+  if (!problem) return null;
+  const [tag, reason] = problem === 'refused'
+    ? ['Refused at each run', `Every run is refused: ${spawn.backend} launches only in full mode, and this schedule sets the native permission policy.`]
+    : ['Needs YOLO', `${spawn.backend} launches only in full mode, and this schedule makes no permission choice: a run is refused unless its launch configuration sets YOLO.`];
+  return { tag, reason, sentence: `${reason} ${SET_YOLO}` };
+}
+/** `fullModeRefusal` of a list row: a spawn schedule's only (a trigger's spawn is not this page's to judge). */
+export const scheduleRefusal = row => row?.kind === 'schedule' && row.run === 'spawn' ? fullModeRefusal({ backend: row.backend, yolo: row.yolo }) : null;
 
 /** The fields a list row adds to a stored schedule definition (the automations contract). */
 const ROW_ONLY = ['qualifiedId', 'name', 'origin', 'owner', 'runsOn', 'runsHere', 'reason', 'reasonDetail', 'enabledHere', 'soul', 'teams', 'concurrency', 'nextDue', 'invalid'];

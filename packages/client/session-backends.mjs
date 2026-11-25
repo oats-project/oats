@@ -29,3 +29,32 @@ export function sessionBackendNames(cli, inspection = null) {
   const own = Array.isArray(cli?.sessionBackends) ? listedBackends(cli.sessionBackends) : ['tmux'];
   return [...new Set([...own, ...sessionProviderNames(inspection)])];
 }
+
+/** The session providers that launch only in full mode (`yolo: true`): the provider refuses any other launch
+ * at its readiness check (`E_BACKEND_SANDBOXED_MODE`), so a spawn, a schedule's run or a trigger's fire on one
+ * without it creates nothing. bb, today (the bb contract, A8: bb homes run in full mode only).
+ *
+ * THE ONE PLACE a client names them. The kernel does not list this: only the provider knows its mode, and it
+ * says so when asked about a planned launch (`oats spawn --preview`, since 0.70.1). A form does not ask that
+ * way: the Desktop's preview boundary admits `backend: "tmux"` alone (spawn-preview-contract.mjs
+ * `previewChoices`) and a preview may take the provider's whole 20 s, and a soul's readiness asks the check
+ * with no launch, so it reads ready. When a provider lifts the refusal, or another one adds it, change this
+ * list (or replace it with what the kernel then reports) and nothing else. */
+export const FULL_MODE_ONLY_PROVIDERS = Object.freeze(['bb']);
+
+/** Whether `backend` names a provider that launches only in full mode. */
+export const fullModeOnly = (backend) => typeof backend === 'string' && FULL_MODE_ONLY_PROVIDERS.includes(backend);
+
+/** What a spawn definition's permission choice means on its backend (`{ backend, yolo }`, as a schedule or a
+ * trigger's spawn stores them), for a backend that launches only in full mode:
+ *
+ *   'refused'   `yolo: false`: every launch is refused
+ *   'default'   no `yolo`: the launch takes its launch configuration's choice (docs/execution-targets.md
+ *               "Permissions"), so it is refused unless that sets full mode
+ *   null        `yolo: true`, or a backend that takes any mode: nothing to say
+ *
+ * Pure: no I/O, never throws. */
+export function fullModeProblem(spawn) {
+  if (!record(spawn) || !fullModeOnly(spawn.backend) || spawn.yolo === true) return null;
+  return spawn.yolo === false ? 'refused' : 'default';
+}

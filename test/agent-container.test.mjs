@@ -69,6 +69,19 @@ function loginFixture() {
   return { dir, token, fs };
 }
 
+test("empty optional acceptance inputs behave exactly as absent inputs", async () => {
+  const { inspectAgent } = await import("../container/agent/accept.mjs");
+  const { env, image, inspected } = acceptanceFixture();
+  delete env.AGENT_UID;
+  delete env.AGENT_GID;
+  const optional = ["AGENT_UID", "AGENT_GID", "AGENT_CHILD", "TEAM_WORK_DIR", "TEAM_INPUT_DIR", "AGENT_CA_FILE", "AGENT_MIRRORS_DIR", "TEAM_OUTBOX_DIR", "TEAM_OUTBOX_GID"];
+  const baseline = inspectAgent(inspected, env, image);
+  for (const name of optional) assert.deepEqual(inspectAgent(inspected, { ...env, [name]: "" }, image), baseline, name);
+  assert.deepEqual(inspectAgent(inspected, { ...env, ...Object.fromEntries(optional.map(name => [name, ""])) }, image), baseline);
+  const compose = parse(read("compose.agent.yaml")).services.agent;
+  assert.equal(compose.user, "${AGENT_UID:-20001}:${AGENT_GID:-20001}", "Compose also defaults empty IDs");
+});
+
 async function checkToken(fs, strict = true) {
   const { tokenCheck } = await import("../container/agent/accept.mjs");
   assert.equal(typeof tokenCheck, "function", "a separate optional-token probe is required");
@@ -247,6 +260,7 @@ test("Claude auth orchestration uses a scratch cwd and only user settings", asyn
     [["info", "--format", "{{.DefaultRuntime}}"], "runc"],
     [["exec", container, "node", "-p", "process.arch"], "x64"],
     [program, "runtime fixture"],
+    [program, JSON.stringify("resolver readable and non-empty by runtime UID")],
     [program, JSON.stringify({ present: true, evidence: [] })],
     [program, JSON.stringify("inputs: absent without the optional fragment")],
     [program, JSON.stringify("outbox: absent without the optional fragment")],
@@ -555,6 +569,10 @@ test("acceptance refuses drift in the admitted container settings", async t => {
             }
           }
           return ok(output);
+        }
+        if (source.includes("function resolverCheck")) {
+          assert.ok(!argv.includes("--user"), "resolver reads as runtime UID");
+          return ok(JSON.stringify("resolver readable and non-empty by runtime UID"));
         }
         if (source.includes("function tokenCheck")) return ok(JSON.stringify({present: false, evidence: []}));
         if (source.includes("function inputsCheck") || source.includes("function outboxCheck")) {
@@ -1870,6 +1888,7 @@ test("acceptance with AGENT_CHILD checks the declaration file, the declared list
       [["info", "--format", "{{.DefaultRuntime}}"], "runc"],
       [["exec", container, "node", "-p", "process.arch"], "x64"],
       [program, "runtime fixture"],
+      [program, JSON.stringify("resolver readable and non-empty by runtime UID")],
       [program, JSON.stringify({ present: false, evidence: [] })],
       ...(selected ? [
         [program, JSON.stringify(declaration), `(${declarationCheck.toString()})("/etc/agent-child.json",16384)`],

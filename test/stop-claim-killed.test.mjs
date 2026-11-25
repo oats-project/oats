@@ -25,7 +25,7 @@ import { spawn as spawnChild, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import YAML from "yaml";
-import { CLI, v2Deployment } from "./helpers/v2-deployment.mjs";
+import { CLI, v2Deployment, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 import { hostProcessState, waitUntil, zombieSync } from "./helpers/host-fixture.mjs";
 import { startGated } from "./helpers/fs-gate-preload.mjs";
 
@@ -78,13 +78,13 @@ function deployment(t) {
   const fx = v2Deployment({ t, souls: { worker: { soul: { work: "directory" } } } });
   const said = join(fx.base, "harness"), executable = join(fx.base, "harness-stand-in"), localFile = join(fx.dep, "oats-local.yaml");
   mkdirSync(said);
-  writeFileSync(executable, `#!${process.execPath}
+  writeFixtureExecutable(fx.base, executable, `#!${process.execPath}
 const fs = require("node:fs");
 const at = (kind) => ${JSON.stringify(said)} + "/" + process.env.OATS_INSTANCE + "." + kind;
 process.on("SIGTERM", () => { fs.writeFileSync(at("asked"), ""); setInterval(() => { if (fs.existsSync(at("go"))) process.exit(0); }, 10); });
 fs.writeFileSync(at("pid"), String(process.pid)); // last: the handler is installed
 setInterval(() => {}, 1000);
-`, { mode: 0o755 });
+`);
   writeFileSync(localFile, YAML.stringify({ ...YAML.parse(readFileSync(localFile, "utf8")), "launch-configs": { "stand-in": { harness: "pi", executable } } }, { lineWidth: 0 }));
   const applyArgs = (name, revision, key) => [CLI, "instance", "stop", name, "--apply", "--plan-revision", revision, "--idempotency-key", key, "--json"];
   const d = {

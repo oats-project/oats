@@ -73,7 +73,7 @@ test("no classic scrollbar on Linux: a terminal's pane never scrolls, and the ta
   const css = read("renderer/shell.css");
   assert.match(css, /\.term-wrap \{ overflow: hidden; \}\n\.tab-pane:has\(> \.term-wrap\) \{ overflow: hidden; \}/,
     "a pane holding a terminal clips; xterm and tmux scroll");
-  assert.match(css, /#tabbar, \.group-tabbar \{ scrollbar-width: none; \}\n#tabbar::-webkit-scrollbar, \.group-tabbar::-webkit-scrollbar \{ display: none; \}/,
+  assert.match(css, /#tabbar, \.group-tabbar \{[^}]* scrollbar-width: none; \}\n#tabbar::-webkit-scrollbar, \.group-tabbar::-webkit-scrollbar \{ display: none; \}/,
     "the flat strip and every split group's strip hide their scrollbar");
   assert.match(css, /#tabbar \{[^}]*overflow-x: auto;/, "the flat strip still scrolls");
   assert.match(css, /\.group-tabbar \{[^}]*overflow-x: auto;/, "a group strip still scrolls");

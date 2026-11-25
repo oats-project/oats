@@ -274,21 +274,22 @@ test("index.html ships the split buttons and shell wires the group projection th
   const footerDom = new JSDOM(html);
   t.after(() => footerDom.window.close());
   const document = footerDom.window.document;
-  // The foot (slice 1 of the Desktop UI rework): only its bar, N need you, New agent and ?; no OATS mark, no
-  // sidebar toggle (Ctrl+Shift+B, the palette and Show sidebar), no cog.
+  // The foot (slice 1 of the Desktop UI rework): only its bar, N need you and ?; no OATS mark, no sidebar toggle
+  // (Ctrl+Shift+B, the palette and Show sidebar), no cog. New agent ends the roster (slice 3d).
   assert.equal(document.getElementById("sidebar-toggle"), null, "no sidebar toggle in the foot");
-  const spawn = document.querySelector("#nav-foot > #sidebar-bar > button#sidebar-spawn");
+  const spawn = document.querySelector("#instance-roster > button#sidebar-spawn");
   const help = document.querySelector("#nav-foot > #sidebar-bar > button#sidebar-help");
-  assert.ok(spawn && help, "New agent and ? are in the bar");
-  assert.equal(spawn.previousElementSibling.id, "sidebar-need-you", "New agent after the count");
-  assert.equal(spawn.nextElementSibling, help, "then ?");
+  assert.ok(spawn && help, "New agent at the roster's end, ? in the bar");
+  assert.equal(spawn.previousElementSibling.className, "ctx-list", "New agent after the list");
+  assert.equal(help.previousElementSibling.id, "sidebar-need-you", "? after the count");
   assert.equal(spawn.dataset.action, "app.quickOpenSouls", "it runs Quick Open");
   assert.equal(spawn.querySelector("kbd"), null, "no chord hint element: the chord is in its tooltip");
   assert.equal(help.getAttribute("aria-label"), "Keyboard shortcuts", "an icon-like button has an accessible name");
   assert.equal(help.dataset.action, "app.shortcuts");
-  // The foot's controls are wired here (every [data-action] in #nav-foot: New agent and ?), the nav's buttons, under
-  // the list of workspaces, by their own listener (shell.mjs nav rail), so no click runs twice.
-  const wiring = src.match(/for \(const button of document\.querySelectorAll\("#nav-foot \[data-action\]"\)\) \{[^]*?\n\}/)?.[0];
+  // The foot's controls and New agent are wired here (every [data-action] in #nav-foot, ?, and #sidebar-spawn at the
+  // roster's end), the nav's buttons, under the list of workspaces, by their own listener (shell.mjs nav rail), so no
+  // click runs twice.
+  const wiring = src.match(/for \(const button of document\.querySelectorAll\("#nav-foot \[data-action\], #sidebar-spawn"\)\) \{[^]*?\n\}/)?.[0];
   assert.ok(wiring, "exercise shipped foot dispatch");
   // A nav button, as the nav rail adds them before this wiring runs (it carries its stage action too).
   assert.equal(document.querySelector("#nav-foot #nav"), null, "the nav is not in the foot");

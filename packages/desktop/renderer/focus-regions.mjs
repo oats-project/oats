@@ -1,28 +1,31 @@
 // oats desktop — keyboard regions (spec F, Part 4): F6 / Shift+F6 move focus between the
 // window's regions, in the sidebar's order top to bottom, then the main area (2026-10-26):
 // workspaces → views (the nav under the list) → instance roster → main → instance panel → back.
+// The agent view (S2-D) adds two regions around its terminal, in the order they show: its facts (above the
+// terminal, before main) and its questions (under it, after main). Each is in the cycle only while the active tab
+// shows it; from a terminal, Ctrl+Shift+F6 (focus.leaveTerminal) goes on to the questions.
 //
 // A region that is hidden (the sidebar while hidden or in focus mode, the panel while closed or when
 // there is nothing to show) is skipped. Focus lands on the region's current item, never on <body>:
 //   workspaces  the list of workspaces' tab stop (the row last focused, else the current one), else
 //               the heading's Add local workspace…
 //   roster  the roster's tab stop (the selected row), else its first control (Retry after a failed read),
-//           else, for an empty roster, the foot's New agent (its one action; F6 goes on from there as
-//           from the roster)
+//           else, for an empty roster, New agent at its end (its one action, the roster's own control since
+//           slice 3d)
 //   views   the current view's nav item (aria-current), else the first one
 //   main    the active tab's content (a terminal's input) through the shell's hook, else the
 //           stage's first control
 //   panel   its selected tab (or the first control of a stage's content). A closed panel is out
 //           of the cycle (Spec B): from a terminal, panel.toggle's chord opens it.
 // The tab strip, the split controls and Show sidebar / Show instance panel count as main. The head's control
-// (Add local workspace…) counts as workspaces. The sidebar's foot (slice 1 of the Desktop UI rework: N need you,
-// New agent and ?) is not a region: Tab reaches it, and F6 from there moves on as from between the
+// (Add local workspace…) counts as workspaces. New agent, at the roster's end since slice 3d, is the roster's. The
+// sidebar's foot (slice 1 of the Desktop UI rework: N need you and ?) is not a region: Tab reaches it, and F6 from there moves on as from between the
 // roster and main (on to main, Shift+F6 back to the roster). The sidebar's width handle (#sidebar-resizer,
 // sidebar-width.mjs), the Tab stop after the foot, counts as the foot.
 
 import { revealInScrollport } from "./reveal-in-scrollport.mjs";
 
-export const REGIONS = Object.freeze(["workspaces", "views", "roster", "main", "panel"]);
+export const REGIONS = Object.freeze(["workspaces", "views", "roster", "facts", "main", "questions", "panel"]);
 
 const TABBABLE = 'button, [href], input, select, textarea, summary, [tabindex]';
 
@@ -54,8 +57,11 @@ export function firstTabbable(root) {
  *        content (or the focused empty split group) and answer whether focus landed; called
  *        only while the tab layer covers the stage
  * @param {() => boolean} [deps.tabLayerVisible]
+ * @param {{ part: (name: 'facts'|'questions') => HTMLElement | null, focus: (name: 'facts'|'questions') => boolean }} [deps.agentView]
+ *        the active tab's agent view (agent-board-tabs.mjs): its facts strip or question zone while shown, and the
+ *        focus on its current item
  */
-export function createFocusRegions({ doc, focusMainContent = () => false, tabLayerVisible = () => false }) {
+export function createFocusRegions({ doc, focusMainContent = () => false, tabLayerVisible = () => false, agentView = { part: () => null, focus: () => false } }) {
   const app = () => doc.getElementById("app");
   const byId = id => doc.getElementById(id);
   const sidebarShown = () => !app()?.classList.contains("sidebar-hidden") && !app()?.classList.contains("focus-mode") && isShown(byId("sidebar"));
@@ -68,6 +74,7 @@ export function createFocusRegions({ doc, focusMainContent = () => false, tabLay
     if (name === "workspaces") return sidebarShown() && isShown(byId("ws-list"));
     if (name === "views") return sidebarShown() && isShown(byId("nav"));
     if (name === "roster") return sidebarShown() && isShown(byId("instance-roster"));
+    if (name === "facts" || name === "questions") return tabLayerVisible() && isShown(agentView.part(name));
     if (name === "main") return isShown(byId("main"));
     if (name === "panel") return isShown(byId("context-panel"));
     return false;
@@ -106,6 +113,7 @@ export function createFocusRegions({ doc, focusMainContent = () => false, tabLay
   /** Focus a region's current item. True when focus landed on a control (never <body>). */
   function focusRegion(name) {
     if (!visible(name)) return false;
+    if (name === "facts" || name === "questions") return agentView.focus(name) && landed() && agentView.part(name).contains(doc.activeElement);
     if (name === "main" && tabLayerVisible()) {
       if (focusMainContent() && landed() && byId("main").contains(doc.activeElement)) return true;
       // No content to focus (an artifact without controls): its tab in the strip.
@@ -132,6 +140,7 @@ export function createFocusRegions({ doc, focusMainContent = () => false, tabLay
     if (byId("nav")?.contains(active)) return "views";
     if (inFoot(active)) return null; // the foot is not a region (cycle places it)
     if (byId("sidebar")?.contains(active)) return "workspaces"; // anything else the sidebar holds sits above the roster
+    for (const name of ["facts", "questions"]) if (agentView.part(name)?.contains(active)) return name;
     if (byId("main")?.contains(active)) return "main";
     if (byId("context-panel")?.contains(active)) return "panel";
     return null;
@@ -142,11 +151,10 @@ export function createFocusRegions({ doc, focusMainContent = () => false, tabLay
    * keeps its place: F6 from the foot with the roster hidden (no workspace) goes on to main. */
   function cycle(delta) {
     if (!REGIONS.some(visible)) return false;
-    // From the foot (below the roster): F6 goes on as from the roster, Shift+F6 back as from main; from an empty
-    // roster's stop there (Spawn instance), Shift+F6 goes back as from the roster.
+    // From the foot (below the roster): F6 goes on as from the roster, Shift+F6 back as from main. (New agent, an
+    // empty roster's stop, sits in the roster since slice 3d, so it is the roster's own region.)
     const foot = inFoot(doc.activeElement);
-    const rosterStop = foot && visible("roster") && currentItem("roster") === doc.activeElement;
-    const at = REGIONS.indexOf(foot ? (delta > 0 || rosterStop ? "roster" : "main") : regionOfFocus());
+    const at = REGIONS.indexOf(foot ? (delta > 0 ? "roster" : "main") : regionOfFocus());
     const n = REGIONS.length;
     for (let i = 1; i <= n; i++) {
       // Outside every region (body, a dialog): the first region F6 meets, or the last for Shift+F6.

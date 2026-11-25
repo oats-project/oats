@@ -487,9 +487,10 @@ jobs:
           if-no-files-found: error
 
       - name: Build the reviewed image
-        run: docker build --platform linux/amd64 --tag "$AGENT_IMAGE" "$TEAM_IMAGE_BUILD_CONTEXT"
+        run: docker build --platform linux/amd64 --build-arg "TEAM_IMAGE_SOURCE_SHA=$TEAM_IMAGE_SOURCE_SHA" --tag "$AGENT_IMAGE" "$TEAM_IMAGE_BUILD_CONTEXT"
         env:
           TEAM_IMAGE_BUILD_CONTEXT: ${{ steps.context.outputs.context }}
+          TEAM_IMAGE_SOURCE_SHA: ${{ github.sha }}
 
       - name: Accept the real container
         id: accept

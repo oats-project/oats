@@ -7,3 +7,12 @@
 !sshd_config
 !liveness.mjs
 !agent-trust.sh
+!compose.agent.yaml
+!compose.agent.inputs.yaml
+!compose.agent.mirrors.yaml
+!compose.agent.outbox.yaml
+!compose.agent.trust.yaml
+!compose.agent.work.yaml
+!accept.mjs
+!accept.sh
+!deploy-manifest.mjs

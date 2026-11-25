@@ -190,7 +190,7 @@ export function holdTerminalResizes() {
 }
 
 export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap, isActive, ownsFocus = () => false,
-  focusInput = () => term.focus(), fit, observe, interceptKey, onError = () => {}, onLink = () => {},
+  focusInput = () => term.focus(), fit, observe, interceptKey, onError = () => {}, onLink = () => {}, onInput = () => {},
   clock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: t => clearTimeout(t) } }) {
   let offData, offExit, unobserve, detachAttachments, bannerEl, stripEl, liveEl;
   // The current lease's output gate (terminal-sync.mjs): a synchronized redraw reaches xterm whole.
@@ -344,7 +344,7 @@ export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap,
     offExit = desk.onTermExit(h, result => exited(h, result, leaseGate));
     if (!wired) {
       wired = true;
-      subscriptions.push(term.onData(data => write(data)));
+      subscriptions.push(term.onData(data => { write(data); try { onInput(data); } catch (e) { console.error(e); /* the board's observer only: never the typing */ } }));
       term.attachCustomKeyEventHandler?.(event => {
         // While the reconnect strip shows, input is inert: Tab moves focus on to Reconnect now.
         if (stripEl && event.key === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey) return false;
@@ -392,6 +392,22 @@ export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap,
     focus();
   }
   return {
+    /** The agent view's answer (agent-board.mjs): `text` on the input line through this tab's current lease, exactly
+     * where the person's typing goes, never with a line end. Resolves true once main typed it; 'in-mode' when main
+     * refused because the terminal is in its scrollback (tmux copy mode, where q would be read as cancel); 'mode-unknown'
+     * when main could not tell (it types only on a read that says no mode); false when
+     * no lease is ready to take it, or main refused for another reason (said in the tab's banner). */
+    async type(text) {
+      if (typeof text !== 'string' || !text || /[\x00-\x1f\x7f]/.test(text)) return false;
+      const h = life.ptyId();
+      // Never into a terminal off screen (contract D30: the answer is typed only where the person sees it).
+      if (!ready || closed || ended || !h || !isActive()) return false;
+      const result = await desk.termWrite(h, text, { answer: true });
+      if (result?.code === 'E_TERM_IN_MODE') return 'in-mode';
+      if (result?.code === 'E_TERM_MODE_UNKNOWN') return 'mode-unknown';
+      if (result?.ok !== true) { banner(terminalFailure(result?.code ?? 'E_TERM_TRANSPORT').message); return false; }
+      return true;
+    },
     start: () => life.start(connect, error => banner(`could not attach: ${terminalMessage(error?.code, server)}`)),
     focus,
     async close() {

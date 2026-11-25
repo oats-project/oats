@@ -132,6 +132,10 @@ and the rules its tests pin.
 | `session-end.mjs`, `session-resume.mjs`, `session-resume-contract.mjs`, `session-seen.mjs`, `start-env.mjs` | session resume (#1559): what every local listing saw of each home and the pure rule that decides which losses the sweep resumes (`session-seen.mjs`: local listings and the sweep recording homes it started; never in the way of the listing); the contract's names (`sessionEnd`, the start's `resume` object, the sweep's outcomes and reasons, the feature) in one dependency-free module that every producer, test and doc reads (awebai/oats#1567 settles them); how a launched home's last session ended (`sessionEnd`, from the kernel-private exit marker and stop record, both forms of the marker), and the machine sweep `oats session resume` with its lock (a claim taken through `dir-lock.mjs` `acquireDirLock`, its record naming the boot too; `E_RESUME_LOCK_STUCK` for a lock that needs a person, which `oats doctor` reports as `resume-lock-stuck`) and its per-boot note (refusals, and the count behind the bound of 3 sweep starts per home per boot); a resume holds the home's lifecycle claim (`claim.mjs` below), as every start does, the sweep's status-row read of a retire or a claim holder is only its filter, and every stop OATS does writes the stop record through `core.mjs` `recordStop`, a retire's before its window kill; the record of each start's `fromEnv` and `fromFile` values (`start-env.mjs`: a keyed digest per source, never a value) and the one check a resume and `--plan` share, so a resume never starts under a changed value; the conversation a resume continues is `packages/record/lib/last-conversation.mjs` |
 | `stable-node.mjs` | the one rule for a node path written into anything that outlives the process: the host timer's unit and `OATS_NODE_BIN` ([capabilities](capabilities.md#the-node-a-hook-writes-down)). It imports nothing of the kernel |
 | `trigger-sources.mjs` | a capability's `triggerSources`: the use-time validator (per source, never from the manifest contract or discovery) and the source wire's answer and event rules; `triggers.mjs` runs a source with `instance-inspect.mjs`'s `runModuleCommand`, the provider-check runner |
+| `session-providers.mjs` | a capability's `sessionProviders` (feature `session-providers`): the use-time validator (per provider, never from the manifest contract or discovery), `--backend`'s selection among an instance's capabilities, the wire (one call per verb of the kernel's own copy of the home's module, with the hook environment) and the rules of each verb's answer, the receipt's `runtime` for a provider home. A leaf: `session-inspect.mjs` and `instance-listing.mjs` call a provider on the hot reads; `core.mjs` holds the launch, stop, start and retire of a provider home. |
+| `home-integrity.mjs` | what the kernel runs of a provider home ([capabilities](capabilities.md#what-the-kernel-trusts-in-a-provider-home)): its own copies of the home's modules, kept beside the receipt (`session-receipt.mjs`, the receipt's own primitives), the receipt's `composition`, and the capability rows read from it. A leaf: the hot reads load it. |
+| `hook-env.mjs` | the environment a capability's code runs with in an instance home (`lifecycleHookEnv`, `teamEnv`, `stableSoulId`, `instanceSoulDir`, `kernelBin`): every lifecycle hook's and a session provider's commands'. A leaf, re-exported by `core.mjs`. |
+| `provider-resume.mjs` | the resume cap of a home on a session provider: at most `RESUME_LIMIT` resumes of one home in `RESUME_WINDOW_MS`, in one boot, counted before the provider's input is called (the sweep's notice, `session start --resume`, any input to a lost session). One kernel-private file per home under `OATS_HOME_DIR`. A leaf. |
 | `refused-text.mjs` | the one set of characters the kernel never stores or prints in text it did not write (`REFUSED_TEXT`), and `safeText`, which replaces them |
 | `host-run.mjs`, `host-run-work.mjs`, `host-run-child.mjs`, `host-run-admission.mjs`, `host-stop-child.mjs` | `oats host run` (#1789), the foreground entry for a host with no timer (a container): its refusals before any effect (inside an instance session, an active host timer, another host run), its lock (a claim taken through `dir-lock.mjs` `acquireDirLock`, its record naming the boot, as the resume sweep's), the sweep at the start, then the tick and the sweep each minute, every one an owned child group (`host-run-work.mjs`) so that the loop stays free for the signal. On SIGTERM no minute is armed; active work gets 10 s, then the private scratch-file fence is closed and owned groups get 5 s of cancellation. The private bootstrap carries the fence only through kernel child argv, never public flags or environment. A detached kernel group atomically registers its pid/start and waits for the owner to verify it and acknowledge responsibility before importing launch-capable code; cancellation therefore does not depend on an intermediate supervisor remaining responsive. Schedule/trigger loops, resume batches and core launch boundaries read it synchronously, because a synchronous tick cannot service IPC while a command runs. Interrupted attempts remain unknown. The host-run claim stays held until owned work ends. After a final bounded listing, each running home is stopped by a private child of its own (`host-stop-child.mjs`: `core.mjs` `stopInstanceSession` with `withHost`, whose stop record asks for a resume and is written before the signal, read by `session-end.mjs` as `lost`). The clock, the timer, the children and the signal are options, for its tests |
 | `schedule-command.mjs`, `schedule-command-child.mjs` | synchronous scheduler adapter and asynchronous child supervisor: bounded output, TERM/KILL escalation and observed exit; no changes to synchronous tick/lock callbacks |
@@ -558,7 +562,12 @@ differs), `package-manifests` (a package's manifests), `list` (a skill
 listing) and `tree-oids` (the tree ids of a set of directories). An entry is only ever a pure function of those bytes and this kernel's
 code, never local state and never a transient error; it is written
 atomically, a corrupt one is a miss, and `pruneStores` bounds the store
-(`PARSED_LIMITS`, least recently used first). `--max-age` adds the observation
+(`PARSED_LIMITS`, least recently used first). A read session made with
+`offline: true` never reaches a remote: a head is the one this host last
+observed (its record, of any age), a commit and a file are read only when the
+cache holds them, and anything else is `E_REMOTE_UNREADABLE` with reason
+`not-cached`. The sandbox allowances of a session provider's start are
+resolved in one (`lib/instance-resolution.mjs` `homeSandboxSource`). `--max-age` adds the observation
 store `<cache>/.observed/` ([Observation reuse](desktop-cli-api.md#observation-reuse-feature-observe-max-age-oats-0311)):
 one record per (repo key, ref args, url digest), so two spellings of one repo
 keep a record each; the url itself is never written. Beside it,
@@ -968,7 +977,24 @@ inherits it (awebai/oats#816):
   names on the real one and gives the saved one back with
   `setProcessEnvironment` when it ends; everything else goes through
   `fx.inEnv`. `test/fixture-real-environment.test.mjs` refuses an assignment
-  to `process.env` in any test script. The fixture's
+  to `process.env` in any test script. **A test writes an executable only
+  inside its fixture** (#2042): a harness stand-in, or a home's recorded
+  `launch.executable`, is written with
+  `writeFixtureExecutable(fx.base, path, content)`, which refuses a path
+  outside the fixture's base, one reached through a link, and a symbolic or
+  hard link at the path, with nothing written. `fx.inEnv` keeps the PATH of
+  the process that runs the tests, where a machine with the harness
+  installed has the person's own binary. **An in-process spawn (`fx.spawn`)
+  looks for the harness on the fixture's PATH** (#2044): the fixture's inert
+  `pi`, `claude` and `codex` are put before the host's directories
+  (`fixtureSpawnPath`), after anything the test put in front itself, so a
+  test's own fake harness is still the one found and the `launch.executable`
+  such a spawn records is inside the fixture. (That is the lookup on this
+  process's PATH: a spawn that launches looks on the PATH of the fixture's
+  tmux server, and a spawn made without `fx.spawn` keeps the PATH it has.) A test that needs the harness
+  of the machine it runs on says so: `fx.spawn(soul, { hostHarness: true })`.
+  A spawn whose recorded executable a test will rewrite also asserts
+  `insideFixture(fx.base, launch.executable)`. The fixture's
   environment sets `HOME` and the XDG base directories under the base, and
   `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null` and
   `GIT_TERMINAL_PROMPT=0`, so no host git

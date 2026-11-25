@@ -55,7 +55,7 @@ function fixture(t) {
 
 test("the roster list scrolls with no scrollbar on every platform, like the tab strips", () => {
   const css = read("shell.css");
-  assert.match(css, /\.ctx-list \{ flex: 1; min-height: 0; overflow-y: auto;/, "the list still scrolls");
+  assert.match(css, /\.ctx-list \{ flex: 0 1 auto; min-height: 0; overflow-y: auto;/, "the list still scrolls (slice 3d: as tall as its rows, then New agent)");
   assert.match(css, /\.ctx-list \{ scrollbar-width: none; \}\n\.ctx-list::-webkit-scrollbar \{ display: none; \}/,
     "its scrollbar is hidden (Firefox/standard and Chromium)");
 });

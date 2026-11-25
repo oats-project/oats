@@ -26,13 +26,21 @@ successor, with a link to its full text.
   a stopped home's package modules to the locked versions, with plan, apply,
   provider adoption and undo (supersedes workspace model v2 items 10–11 for
   package modules).
+- [The launch state machine of a provider home](2026-11-20-provider-home-lifecycle.md):
+  the records, the states, what each lifecycle verb does in each, and the
+  crossings, for a home on a session provider.
 - [The warm reader](2026-10-29-warm-reader.md): `oats reader --stdio`, a
   child the Desktop and the TUI start, answers `oats status` and `oats
   workspace status` with the kernel's own read code kept loaded: warm code,
   not warm data, the same answers as the CLI, and the CLI as the fallback.
-- [Sandboxes](2026-11-19-sandboxes.md) (contracts decided, not built):
-  boundaries declared in the workspace's `sandboxes:`, started by `oats sync` on
-  the machines that list them.
+- [Sandboxes](2026-11-19-sandboxes.md) (contracts decided, amended in r5, not
+  built): boundaries declared in the workspace's `sandboxes:`, each listing the souls
+  it may run, started by `oats sync` on the machines that list them. Placement no
+  longer follows a team (r5).
+- [Human IDs contract](2026-11-21-human-ids-contract.md): the aweb human-ID
+  primitives OATS relies on, how it calls them, who owns what, and the gates.
+- [Team model 4](2026-11-23-team-model-4.md) (shape agreed, not built): each team
+  names the souls that may join it, and a soul's entry holds only its default.
 
 The Desktop's design brief for designers is in
 [packages/desktop/docs](../../packages/desktop/docs/design-brief.md).

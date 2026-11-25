@@ -171,11 +171,13 @@ refuses the key on a trigger.
   package soul the workspace offers, see `oats souls`), whether or not this
   deployment has spawned it before. `add` and `update` refuse a job whose
   `oats spawn <agent> --preview`, with the job's `launchConfig`, `harness`,
-  `model`, `backend` and `repo`, fails (`E_SCHEDULE_INVALID`, field `agent`,
+  `model`, `yolo`, `backend` and `repo`, fails (`E_SCHEDULE_INVALID`, field `agent`,
   with spawn's own message and its code in `details.code`), or whose preview
   answer cannot be confirmed; a soul this deployment has already spawned is
   accepted without the preview. `agentsRoot`, when given, must be the deployment's `agents/` root; `repo`
-  is the work repository, as `--repo`. `backend` is `tmux`; `backend: herdr`
+  is the work repository, as `--repo`. `backend` is `tmux`, or the name of a
+  [session provider](execution-targets.md#session-providers) of the soul's
+  capabilities; `backend: herdr`
   is refused (`E_HERDR_REMOVED`, naming the file and key: Herdr was removed in
   0.31.0), and a stored job that names it is reported invalid and never runs.
   `model` is a model id (a letter or
@@ -189,6 +191,23 @@ refuses the key on a trigger.
   trailing block naming the job and the minute and ending with `oats retire
   --self`. `wake` (`{cron, tz, message}`) attaches a wake schedule to each
   launched instance.
+
+  **On a session provider** the run's spawn launches through the provider
+  `backend` names. A provider that launches only in full mode (bb's does)
+  refuses every other launch at its
+  [check](capabilities.md#check-optional), `E_BACKEND_SANDBOXED_MODE`. A job
+  on such a provider needs `yolo: true` in its definition, or a launch
+  configuration that sets it: the job's `launchConfig`, or the deployment's
+  [default for the harness](configuration.md#the-harness-default). Without
+  it `add` and `update` refuse the job where they ask the preview
+  (`E_SCHEDULE_INVALID`, with `details.code: "E_BACKEND_SANDBOXED_MODE"`),
+  and `oats schedule test` reports it. A job the save did not ask the
+  provider about (its soul was already spawned here, so `add` and `update`
+  ask no preview; or the provider comes from a member module, which a
+  preview does not ask) fails at each run: the run is recorded
+  `launch-failed` with `errorCode: "E_BACKEND_SANDBOXED_MODE"` and the
+  provider's message, its spawn is undone and no home is left; the job tries
+  again at its next due minute.
 - **command** `{…, cwd, argv}` — runs an oats-only argv (`argv[0]` is `oats`,
   no shell; `oats schedule` itself is refused) in `cwd`, an existing directory
   inside the deployment. The runner tracks any instance the command's
@@ -221,6 +240,21 @@ refuses the key on a trigger.
   again only at due minutes, so a harness that keeps exiting is not restarted
   in a loop. Unobservable or still starting: skipped, delivery kept pending.
   Word wake messages so that receiving one again is harmless.
+
+  A home on a [session provider](execution-targets.md#session-providers) has
+  no terminal: the message is its session's input, sent once through the
+  provider, and a live claim holds it the same way. **A wake never starts a
+  provider home OATS stopped.** Its input is refused before any provider
+  call: the run is `skipped` with `errorCode: "E_SESSION_NOT_RUNNING"`, and
+  the delivery stays pending until the home is started (`oats session
+  start`). To a session that is lost (gone, and not stopped by OATS) the
+  input is a resume, on which the provider restarts the session, counted
+  against the home's cap
+  ([lost sessions](execution-targets.md#session-providers)). An input the provider itself refuses
+  (`E_SESSION_PROMPT_OPEN` while its session shows a prompt,
+  `E_SESSION_INPUT_QUEUED`) is `skipped` with that `errorCode`: nothing was
+  sent, and the pending delivery is tried again at every tick, then delivered
+  once.
 - **operation** `{…, operation, home}` — runs a provider operation
   (`<layer>:<name>`, one the capability filling that layer declares) in the
   instance at `home` through `oats operation run <layer>:<name> --home <home>`. The provider is whatever fills that layer
@@ -299,7 +333,12 @@ when the timer cannot reach it.
   request's title and body are untrusted and never reach the task. `teams` (optional) becomes the messaging capability's `join=`
   setting (`E_TRIGGER_TEAMS` when the soul has no messaging capability).
   `launchConfig`, `harness`, `model`, `yolo` and `backend` are as for
-  schedules.
+  schedules. On a session provider that launches only in full mode (bb's
+  does) the spawn needs `yolo: true`, or a launch configuration that sets
+  it, as [a schedule's spawn](#kinds) does. Without it each event's spawn
+  fails (`spawn-failed`, `E_BACKEND_SANDBOXED_MODE`, kept as the trigger's
+  `lastError`), no home is created, and the event stays pending and is tried
+  again at each poll.
 - **The instance name** is spawn's own: `<stem>-<purpose>`, where the stem is
   the slug of the soul's agent name (a package soul's is
   `<package>--<soul>`, so its stem is long), read from one `oats spawn <soul>
@@ -1092,8 +1131,11 @@ A hold reads claims, so it can only be as good as they are. `on-claims` says no
 more than that:
 
 - **Harnesses with no claims stay exposed.** No claim is ever written there, so
-  every wake types. pi homes read `unknown`: an extension can open its own
-  dialog, and the kernel can't see which load.
+  every wake types. pi homes read `unknown`. A dialog an extension opens there
+  holds a wake, through the pi bridge's `question` claim
+  ([A pi dialog](capabilities.md#oatscore-needs-input), `@awebai/oats-pi` after
+  0.70.1 on pi 0.84.4 or later), but the kernel can't see whether that bridge is
+  loaded, and a screen of pi's own fires no event.
 - **A dialog that opens before the Enter is still answered.** That covers one that
   opens between the read and the Enter, and the lag between a dialog opening and
   its claim being written. A claim lands after its dialog: a `permission` claim

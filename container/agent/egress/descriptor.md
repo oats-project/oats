@@ -7,7 +7,8 @@
 | `secrets.publicOrigin` | derived policy `targets.secrets.origin` | exact HTTPS DNS origin on 443 | none | Agent access to the Secrets broker API, without mounting its keys. |
 | `logs.publicOrigin` | derived policy `targets.logs.origin` | exact HTTPS DNS origin on 443 | none | Agent access to Logs. |
 | `signer.requestOrigin` | derived policy `targets.signer.origin` | exact HTTPS DNS origin on 443; equals validated profile `request_origin` | none | Signed prepare and receipt access, conditional on runtime Host/SNI refusal proof. |
-| `signer.humanOrigin` | derived policy `humanOrigin` | exact HTTPS DNS origin; required with signer, refused without signer | none | Prevent the browser approval surface becoming an agent destination. |
+| derived human anchor | policy `humanRole` | optional `"signer"` or `"secrets"`; signer must be declared for `"signer"`; `"secrets"` requires declared `roles` including secrets and excluding signer, plus `humanOrigin` | signer when absent | One ingress anchor; no inference or third role. A bundle setting the field needs the new image; existing deployments change nothing. |
+| signer human origin or wrapper-derived Secrets console origin | derived policy `humanOrigin` | exact HTTPS DNS origin; required with signer or `humanRole: "secrets"`, otherwise refused; neither routed nor external | none | Prevent the human console becoming an agent destination; Secrets console/API may share backend and log. |
 | `team.registryUrl` | derived policy `targets.registry.origin` | exact HTTPS DNS origin on 443; equals validated profile `registry_origin` | none | Sender verification in the broker's Node channel-core child and Go aw. |
 | `team.registryRoute` | runtime audit `registry` entry: `{path,log}` or `{path,external:true}` | wrapper-owned `local` or `external`; only registry may be external | external in the deployment bundle | Local ownership requires its backend witness; external uses matched verified-TLS 200 only, with no remote refusal/non-delivery claim. Existing local-registry bundles must select `local`. |
 | derived namespace authority inventory | wrapper supplies `authorityRecords` from provisioned public authorities | required with registry, refused without registry; existing AWID parser and registry-origin/profile binding against `team.registryUrl` | none | Exact `_awid` TXT records for registry discovery and sender verification, independently of signer; no invented signer dependency or second namespace/controller input. |
@@ -39,7 +40,8 @@ The probe's `allowedPaths` inventory matches exactly the declared roles. Its
 stderr report distinguishes universal obligations (unlisted DNS/TLS refusal,
 sole isolated network, explicit IPv4 IPAM gateway, live host-gateway refusal,
 backend/direct-upstream denial and protected-path absence) from declared HTTPS
-controls, registry-specific exact authority TXT checks and signer-specific human-host checks. The proxy does not
+controls, registry-specific exact authority TXT checks and anchor-labelled
+human-host checks (signer by default, explicit Secrets otherwise). The proxy does not
 filter encrypted HTTP paths. Stage public sources before credentials, without
 a codeload exception. Keep compiler/proxy image, minimal wrapper and probes at
 one reviewed source commit and retain built image digests. Team-image CI builds

@@ -3,7 +3,7 @@
 
    Top to bottom, in a centred column (slice 2b and its Amendment 1, Pepe, 2026-11-20: slice 2's board repeated the
    sidebar in full, and pushed the workspace off screen):
-   - Needs you: each agent with a live claim (the roster's waitingClaim gate), dot, name, soul · machine and its
+   - Needs you: each agent with a live claim (the roster's waitingClaim gate), dot, name, soul (· machine for another machine's agent) and its
      message, newest claim first, from the roster the sidebar shows (ctx.homeRoster, its paints through
      ctx.subscribeHomeRoster), grouped by the shared packages/client/home-board.mjs. NEEDS_YOU_SHOWN at most, then
      "Show all N", which expands in place. None: one quiet line.
@@ -16,7 +16,7 @@
    - Running, under the tiles: the live agents that don't need you, RUNNING_SHOWN in the roster's order, then "Show
      all N running" (and "Show fewer"). The heading says they run; no row repeats it.
    - Home › Agents: every agent, running or stopped, flat, in the roster's order (pins first where it shows them):
-     name, soul · machine, state, who started it. Esc or Back returns.
+     name, soul (· machine for another machine's agent), state, who started it. Esc or Back returns.
    - First run (no agents): OATS in two lines, three keys, then the tiles.
    Every row is a button: Enter (or a click) opens it as Enter does in the roster (ctx.openAgent). Each read carries
    a latest-intent token, checked on its answer and on its failure. Copy reads its nouns from DESKTOP_NOUNS. */
@@ -113,7 +113,7 @@ export const homeCSS = `
 .home-row-name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .home-row-meta { font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .home-row-side { flex:none; font-size:12px; color:var(--muted); }
-/* Needs you: two lines a row, name and soul · machine on the first, the message on the second. */
+/* Needs you: two lines a row, name and soul (· machine for another machine's agent) on the first, the message on the second. */
 .home-needs .home-row { height:${L.needRow}px; min-height:${L.needRow}px; padding:4px 10px; box-sizing:border-box; }
 .home-row-line { display:flex; align-items:baseline; gap:8px; min-width:0; }
 .home-row-line .home-row-name { flex:none; max-width:60%; }
@@ -132,7 +132,7 @@ export const homeCSS = `
 .home-tile-name { font-size:12px; font-weight:600; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .home-tile-count { font-size:16px; font-weight:650; line-height:20px; color:var(--fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .home-tile-count.pending { font-size:12.5px; font-weight:500; color:var(--muted); }
-/* Automations' failure mark: the sidebar row's --danger dot (shell.css .nav-failed-dot), at the tile's corner. */
+/* Automations' failure mark: a --danger dot at the tile's corner (the sidebar's row says "N failed" since slice 3d). */
 .home-tile-failed { position:absolute; top:9px; right:10px; width:8px; height:8px; border-radius:50%; background:var(--danger); }
 .home-dot { flex:none; width:8px; height:8px; border-radius:50%; background:var(--faint); }
 .home-dot.on { background:var(--live); }
@@ -176,8 +176,8 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
     return n;
   }
 
-  /** One agent's row: its dot, name, soul · machine, and a side note (the state, who started it). A needs-you row
-   * (`claim`) is two lines: name and soul · machine, then the claim's message. */
+  /** One agent's row: its dot, name, soul (· machine for another machine's agent), and a side note (the state, who started it). A needs-you row
+   * (`claim`) is two lines: name and soul (· machine for another machine's agent), then the claim's message. */
   function agentRow(row, { claim = null, side = null, state = runtimeState(row), deployments, here }) {
     const facts = rosterRowFacts(row, DESKTOP_TERMS, { deployments, here });
     const b = node("button", "home-row"); b.type = "button"; b.dataset.homeAgent = instanceId(row); // identity, never the bare name: names repeat across roots and hosts
