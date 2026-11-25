@@ -18,10 +18,11 @@ or workspace membership alone does not make a package official.
 | `oats.jira` | `v1.0.1` | `oats.jira` (tasks) | |
 | `oats.linear` | `v1.0.1` | `oats.linear` (tasks) | |
 | `oats.apps` | `v1.0.0` | `oats.folio`, `oats.library` | |
+| `oats.bb` | `v0.4.0` | `oats.bb` (the bb session provider; needs OATS 0.70.5 or later) | |
 | `oats.machine` | `v0.1.1` | `oats.machine-care` | `steward`, `technician` |
 
-Each package lives in its own `awebai/oats-*` repository except
-`oats.framework`, whose payload root is `oats-package/` here. A capability
+Each package lives in its own `awebai/oats-*` repository, `oats.bb` in
+`oats-project/oats-bb`, except `oats.framework`, whose payload root is `oats-package/` here. A capability
 written `{ from: package }` resolves through the workspace's lock, to the one
 locked package whose capability list holds it: `oats.developer: { from: package }`
 selects `oats.engineering` when that package is pinned and synced. Two locked

@@ -41,6 +41,11 @@
       "ref": "v1.0.0",
       "path": "oats-package"
     },
+    "oats.bb": {
+      "url": "https://github.com/oats-project/oats-bb.git",
+      "ref": "v0.4.0",
+      "path": "oats-package"
+    },
     "oats.machine": {
       "url": "https://github.com/awebai/oats-machine.git",
       "ref": "v0.1.1",

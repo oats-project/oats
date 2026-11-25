@@ -1,0 +1,81 @@
+{
+  "capability": "oats.bb",
+  "command": "bb",
+  "version": "0.4.0",
+  "compatibility": {
+    "oats": ">=0.70.5"
+  },
+  "description": "Session provider bb: runs an instance as one bb thread (Claude Code or pi) through bb's public CLI, at one pinned bb-app version, instead of a tmux session.",
+  "commands": {
+    "session-launch": "bin/oats-bb.mjs session launch",
+    "session-inspect": "bin/oats-bb.mjs session inspect",
+    "session-inspect-many": "bin/oats-bb.mjs session inspectMany",
+    "session-input": "bin/oats-bb.mjs session input",
+    "session-stop": "bin/oats-bb.mjs session stop",
+    "session-check": "bin/oats-bb.mjs session check",
+    "doctor": "bin/oats-bb.mjs doctor"
+  },
+  "sessionProviders": {
+    "bb": {
+      "wire": "1.3",
+      "commands": {
+        "launch": "session-launch",
+        "inspect": "session-inspect",
+        "inspectMany": "session-inspect-many",
+        "input": "session-input",
+        "stop": "session-stop",
+        "check": "session-check"
+      },
+      "harnesses": [
+        "claude",
+        "pi"
+      ],
+      "description": "One bb thread per home, in a bb project rooted at the home. No terminal: open the thread in bb."
+    }
+  },
+  "hooks": {
+    "launch": "bin/oats-bb.mjs launch-hook",
+    "retire": "bin/oats-bb.mjs retire-hook"
+  },
+  "settings": {
+    "server": {
+      "hostOnly": true,
+      "default": "http://127.0.0.1:38886",
+      "description": "The bb server's address on this host. Loopback only (127.0.0.1, ::1 or localhost): bb's API has no login and runs commands. Set it only in oats-local.yaml."
+    },
+    "daemon": {
+      "hostOnly": true,
+      "default": "http://127.0.0.1:38887",
+      "description": "The bb host daemon's address on this host (its /status says when threads can start). Loopback only. Set it only in oats-local.yaml."
+    },
+    "hostDaemonPort": {
+      "hostOnly": true,
+      "description": "The port of this bb's host daemon, a number from 1 to 65535: what bb-app was started with (--host-daemon-port). Set it where the daemon is not on bb's default port (38887), as for a second bb on one host: bb's CLI finds its host daemon by this port alone, and every bb command the provider runs is then told it (BB_HOST_DAEMON_PORT). The daemon setting follows it where that is unset. Unset: no port is told, and bb's CLI uses its default. A BB_HOST_DAEMON_PORT in the environment OATS runs in never reaches bb: the port comes from this setting alone. Set it only in oats-local.yaml."
+    },
+    "version": {
+      "default": "0.50.1",
+      "description": "The bb-app version this deployment runs, exactly as `bb --version` prints it. The default is the version this release of the provider is contract-tested against. Readiness and every launch refuse another version (E_BACKEND_VERSION)."
+    },
+    "trust": {
+      "hostOnly": true,
+      "values": [
+        "single-user",
+        "container"
+      ],
+      "description": "Who can reach bb's loopback port. single-user: this host has one person's user. container: one OATS team container with one bb server. Required (E_BACKEND_TRUST): unlike tmux's socket, the port is open to every local user's processes. Set it only in oats-local.yaml."
+    },
+    "cli": {
+      "hostOnly": true,
+      "default": "bb",
+      "description": "The bb CLI: a command name on PATH, or an absolute path. Set it only in oats-local.yaml."
+    },
+    "dataDir": {
+      "hostOnly": true,
+      "description": "bb's data directory on this host (bb-app's --data-dir), an absolute path. Unset: .bb in the home of the user that runs bb. bb does not say where it is; a launch in bb's sandboxed modes keeps the agent's tools off bb's thread storage there, and is refused where the directory holds no thread-storage. Set it only in oats-local.yaml."
+    },
+    "piAgentDir": {
+      "hostOnly": true,
+      "description": "The pi configuration directory bb's server runs pi with (pi's PI_CODING_AGENT_DIR in the bb server's environment), an absolute path. Unset: .pi/agent in the home of the user that runs bb. bb does not say where it is. A pi launch is refused unless its settings.json lists @awebai/oats-pi (E_BACKEND_NOT_READY) and does not list @awebai/pi (E_BACKEND_PI_LISTENER): the provider reads it and never changes it. Set it only in oats-local.yaml."
+    }
+  }
+}
