@@ -242,3 +242,14 @@ test("split plans refuse a local services address, a second address, a hash mism
   }
   await assert.rejects(probeComposeBoundary({...fixture.plan,deniedBackends:[]}), /plan schema 2 replaces deniedBackends with remoteBackends/);
 });
+
+test("reviewed team-image CI runs the split leg after building the egress image", async () => {
+  const { parse } = await import("yaml");
+  const steps = parse(readFileSync(new URL("../.github/workflows/team-image.yml", import.meta.url), "utf8")).jobs.verify.steps;
+  const build = steps.findIndex(step => step.run?.includes("--file container/agent/egress/Dockerfile"));
+  const leg = steps.findIndex(step => /agent-egress-boundary-image\.py "\$EGRESS_IMAGE" "\$AGENT_IMAGE" split$/.test(step.run?.trim() ?? ""));
+  assert.ok(build >= 0 && leg > build);
+  const script = readFileSync(new URL("./agent-egress-boundary-image.py", import.meta.url), "utf8");
+  assert.match(script, /docker\("cp", container \+ ":\/opt\/oats\/deploy", str\(deploy\)\)/, "the split leg runs the extracted deploy copy");
+  assert.match(script, /json\.dumps\(policy, sort_keys=True, separators=\(",", ":"\), ensure_ascii=False\)/, "the leg hashes the policy as other languages do");
+});
