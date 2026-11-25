@@ -650,3 +650,54 @@ writeFileSync(join(dirname(dirname(repo)), "post-hook-snapshot.json"), JSON.stri
   const before = JSON.parse(readFileSync(join(f.base, "post-hook-snapshot.json"), "utf8"));
   assert.deepEqual({ home: exactTreeDigest(spawned.home), extra: exactTreeDigest(extra) }, before);
 });
+
+for (const flag of ["GIT_LITERAL_PATHSPECS", "GIT_NOGLOB_PATHSPECS"]) {
+  test(`${flag} cannot hide a partial submodule from retire, plan or the copier`, async (t) => {
+    const { f, spawned, work, recovery } = await retirement(t);
+    const nested = populatedSubmodules(t, work);
+    git(nested.work, "config", "remote.origin.promisor", "true");
+    const snapshot = () => [exactTreeDigest(spawned.home), exactTreeDigest(f.member), existsSync(recovery) ? exactTreeDigest(recovery) : null];
+    const before = snapshot();
+    await f.inEnv(() => {
+      const prior = process.env[flag];
+      process.env[flag] = "1";
+      try {
+        const gitVersion = () => "git version 2.44.9";
+        const refused = (e) => {
+          assert.equal(e.code, "E_GIT_UNSUPPORTED");
+          assert.equal(e.details.submodule, nested.path);
+          assert.equal(e.details.found, "2.44.9");
+          assert.equal(e.details.reason, "partial-clone");
+          return true;
+        };
+        assert.throws(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }), refused);
+        assert.throws(() => retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true }), refused);
+        assert.throws(() => core.copyRecoveryWork({ work, branchExists: true }, { work: "worktree", repo: f.member, branch: spawned.branch }, join(f.base, "copy"), { gitVersion }), refused);
+      } finally {
+        if (prior === undefined) delete process.env[flag];
+        else process.env[flag] = prior;
+      }
+    });
+    assert.deepEqual(snapshot(), before);
+    assert.equal(existsSync(join(f.base, "copy")), false);
+    assert.equal(existsSync(join(spawned.home, "hook-ran")), false);
+  });
+
+  test(`${flag} keeps the empty full clone's no-probe retire control`, async (t) => {
+    const { f, spawned } = await retirement(t);
+    let probes = 0;
+    await f.inEnv(() => {
+      const prior = process.env[flag];
+      process.env[flag] = "1";
+      try {
+        const gitVersion = () => { probes++; return "git version 2.44.9"; };
+        assert.doesNotThrow(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }));
+        assert.equal(retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true }).removedDir, true);
+      } finally {
+        if (prior === undefined) delete process.env[flag];
+        else process.env[flag] = prior;
+      }
+    });
+    assert.equal(probes, 0);
+  });
+}
