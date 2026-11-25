@@ -2292,17 +2292,23 @@ the row reads `null`. Any other value is outside the contract, as is a
 value other than `null` with `present: false`, and the answer is then read
 as no answer.
 
-**An optional key goes only to a kernel that lists its feature.** The kernel
-reads a result's keys exactly: the ones this page names for its version, and
-no other. So a provider sends an optional key only to a kernel that lists
-the key's feature in `oats version --json`, and the provider package that
-sends it raises `compatibility.oats` to the kernel release that first lists
-that feature. That holds for `activity` (`status-activity`) and for any
-optional provider key after it. The cost of getting it wrong is a downgrade:
-a provider that sends `activity`, run under a kernel without
-`status-activity`, has every answer read as no answer, and each of its homes
-reads unreachable (`running: null`, `runtimeState: "unreachable"`) until the
-kernel or the provider package is moved to a pair that agrees.
+**An optional answer key is added without a wire bump only when a kernel
+that accepts it ships first and the provider's floor is raised to that
+kernel.** The kernel reads an answer's keys exactly, and a provider cannot
+tell per call which kernel asks. So the kernel release that accepts the key
+(it lists the key's feature in `oats version --json`) is published first,
+and the provider release that sends the key raises its `compatibility.oats`
+to that kernel release: no provider release below that floor sends it. That
+is how `activity` was added, and the rule for any optional answer key after
+it.
+
+**What it costs.** From the kernel release that lists `status-activity` on,
+wire 1.3 accepts one more optional key. A kernel moved back below that
+release while a provider that sends the key is in the homes (a newer
+oats-bb) reads every row of that provider as unreachable (`running: null`,
+`runtimeState: "unreachable"`): the answer has a key that kernel does not
+know, and is read as no answer. Pins can move back, so move the provider
+package back with the kernel.
 
 `inspectMany` (optional) in:
 `{ "homes": [ { "home", "instance", "endpoint" } ] }`, at most 200. Out:

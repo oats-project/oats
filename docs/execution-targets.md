@@ -1097,8 +1097,9 @@ answer at that read: the optional `activity` key of its `inspect` or
 wherever the provider answers the session present on a home OATS started,
 whatever its `running`, and never stored. A provider that sends no key reads
 `null`. A provider sends `activity` only to a kernel that lists
-`status-activity`: an earlier kernel reads an inspect result with the key as
-no answer, and the row as unreachable
+`status-activity`: its package's `compatibility.oats` is raised to that
+kernel release. A kernel moved back below it, with such a provider in the
+homes, reads every row of that provider as unreachable
 ([capabilities.md](capabilities.md#inspect-and-inspectmany)). A stopped home, a lost one, one being retired and one with
 `outsideOats` carry none. The turn file a tmux row reads
 (`<home>/.oats/turn.json`) is never read on a provider home.
