@@ -199,6 +199,7 @@ see the [official catalog](official-catalog.md) for current pins.
 | `session-input-permission-refusal` | `oats session input` to a tmux home whose session holds a `permission` claim is refused `E_SESSION_PROMPT_OPEN`, with nothing typed, as a session provider refuses it ([Input](#input)). On a kernel without the feature that input is typed and its Enter answers the prompt, so read the code as "a prompt is open, nothing was sent" for a tmux home only where the feature is listed | |
 | `wake-starts-provider-home` | a due `wake` starts a home on a session provider that OATS stopped, at its due minute, in a new session, as it starts a stopped tmux home; its message is delivered once the session runs ([schedules.md](schedules.md#kinds)). The run's record is a tmux start's (`action: "started"`, then `delivered`), with no new field. A kernel without the feature never starts such a home: the run stays `skipped`, `errorCode: "E_SESSION_NOT_RUNNING"`, until a person starts it. A client that tells a person what a wake to a provider home will do reads this feature | |
 | `launch-choices` | provider-declared launch choices: `--launch-choice <name>=<value>` (repeatable) on `oats spawn`, `oats session start` and `oats session restart`, for a name the home's session provider declares in its manifest (`sessionProviders.<name>.launchChoices`); refused `E_BAD_ARGS`, never dropped, for any other name, on a tmux home, and for a recorded choice the provider no longer declares ([Launch choices](#launch-choices-feature-launch-choices)). No answer gains a key: a recorded choice is in no row, receipt or inspect answer. A routed command with the flag needs the host's feature (`E_REMOTE_INCOMPATIBLE`, nothing sent). `launchOptions` in the probe is the kernel's own list and is unchanged | |
+| `settings-set` | `oats settings set <capability> <key> <value>` and `oats settings unset <capability> <key>`: one host setting recorded in the deployment's `oats-local.yaml` by the kernel's own writer and the resolver's own checks, answering `{capability, key, previous, value, effective, changed, file}` ([`oats settings`](#oats-settings)). An operator's command: `E_SETTINGS_OPERATOR_ONLY` inside an instance. Absent: no such command (`E_UNKNOWN_COMMAND`), and a host setting is a hand edit | |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
 `workspaceStatusApi: 1`, `capabilitiesApi: 1`, the `oats souls` document's
@@ -379,6 +380,8 @@ for `--no-recursive`) is never ignored.
 | `oats trigger remove` | `<id>` | `--dir` | `--json` | none | none |
 | `oats trigger enable` | `<id>` | `--dir` | `--json` | none | none |
 | `oats trigger disable` | `<id>` | `--dir` | `--json` | none | none |
+| `oats settings set` | `<capability>` `<key>` `<value>` | `--dir` | `--json` | `--server` | none |
+| `oats settings unset` | `<capability>` `<key>` | `--dir` | `--json` | `--server` | none |
 | `oats teams` | none | `--dir`, `--max-age` | `--json` | none | an unknown flag, an argument after the last |
 | `oats teams add` | `<label>` | `--dir`, `--team`, `--description` | `--no-default`, `--json` | none | an unknown flag |
 | `oats teams remove` | `<label>` | `--dir` | `--json` | none | an unknown flag |
@@ -449,6 +452,7 @@ kernel command.
 |---|---|
 | `E_NODE_UNSUPPORTED` | Node.js is older than 22: before every command, exit 1 with `details: {found: "<process.versions.node>", minimum: "22"}` and message `oats needs Node.js 22 or later; this is Node.js <found>`. With `--json` anywhere in argv, stdout is one failure envelope; otherwise the message is on stderr. This includes the `version --json` probe, whose success shape is not the envelope: on unsupported Node it answers this failure envelope with exit 1. Node 18 and 20 get this refusal; a Node too old to parse the entry can fail with a SyntaxError first |
 | `E_UNKNOWN_COMMAND` | No kernel command or capability namespace matches; an unknown capability subcommand; a [removed verb](#removed-verbs-and-flags) (`details: {removed, replacement}`) |
+| `E_SETTINGS_OPERATOR_ONLY` | [`oats settings set\|unset`](#oats-settings) run by a process that carries an instance's identity (an instance variable, or a working directory inside a home): `details: {evidence: "environment" \| "cwd", variable?, home?, instance?}`. Nothing is written. A guard against an agent doing it by accident, not a security boundary |
 | `E_CAPABILITY_INACTIVE` | In a home: the namespace's module is not one of the home's recorded capabilities |
 | `E_CAPABILITY_BLOCKED` | In a home: the manifest claiming the namespace is not a workspace module copy of that home. There is no package trust gate |
 | `E_CAPABILITY_BROKEN` | The manifest command is not a non-empty string, its script is missing or outside the module, or the dispatcher failed |
@@ -2326,6 +2330,143 @@ One closed answer for `set`, `remove` and their plans.
   file; the souls the entry applies to, when more than one; what the next
   spawn of that soul selects; and each key that still names no soul, with
   the command that removes it.
+
+<a id="oats-settings"></a>
+### `oats settings`
+
+Feature `settings-set`. The supported writer of one host setting of a
+capability: `oats-local.yaml` `settings.<capability>.<key>`, the layer the
+resolver reads as the host's ([capabilities.md](capabilities.md#host-only-settings)).
+It records a choice a person made (on a first-time screen, or at a
+terminal) without a hand edit of the file.
+
+```sh
+oats settings set <capability> <key> <value> [--dir <deployment>] [--json]
+oats settings unset <capability> <key>       [--dir <deployment>] [--json]
+```
+
+Both answer `{capability, key, previous, value, effective, changed, file}`:
+
+```json
+{"schemaVersion":1,"ok":true,"result":{"capability":"oats.bb","key":"trust",
+ "previous":null,"value":"single-user","effective":"single-user","changed":true,
+ "file":"/srv/team/oats-local.yaml"}}
+```
+
+- `previous`: the value the FILE held for the key before, or `null` when it
+  set none. Never a manifest default, nor another layer's value.
+- `value`: what the file holds now; `null` after an unset.
+- `effective`: what the resolver now gives for the key in this deployment:
+  the file's value, or the capability's manifest default where the file
+  sets none, or `null`. A client need not guess what an unset falls back to.
+- `changed`: `false` when the file already held that value, and for an unset
+  of a key the file does not set. Nothing is written then, and the command
+  succeeds.
+- `file`: the `oats-local.yaml` that was, or would have been, written.
+- `warnings` (only when there is one): the change was written and its line
+  in the trace was not (below).
+
+**Who may run it: an operator.** It is refused, with nothing written, when
+the process carries an instance's identity, by the evidence the kernel
+already reads: an instance variable (`OATS_INSTANCE`, `OATS_INSTANCE_HOME`,
+`OATS_HOME`, `PI_AGENT_INSTANCE`, `PI_AGENT_HOME`), or a working directory
+inside a home. That is `E_SETTINGS_OPERATOR_ONLY`, for every key, with
+`details: {evidence: "environment" | "cwd", variable?, home?, instance?}`.
+
+- The refusal names the evidence it saw and the way out: run it from a shell
+  outside any home, without the instance's variables, for example
+  `cd <deployment> && oats settings set …`.
+- A person whose shell stands inside a home is refused like an agent: from
+  the outside the kernel cannot tell them apart.
+- `--dir <deployment>` does not lift it: `--dir` says which deployment, not
+  who is asking.
+- **It is a guard against an agent changing a host setting by accident or
+  as a convenience, not a security boundary.** The variables and the working
+  directory are evidence a process can shed (unset them, change directory).
+  A host's protection against its own agents is file permissions and the
+  sandbox, and the safety of a choice like `oats.bb`'s `trust` rests on the
+  person making it, not on this refusal.
+
+**Never a secret.** A credential-shaped key is refused `E_BAD_ARGS`
+(`details.reason: "credential-key"`), for `set` and `unset`, before the file
+or the catalog is read, and its value is never repeated. A secret belongs in
+the capability's own setup command (for example `oats aweb setup`) or in the
+host's secret store, never in `oats-local.yaml`. The key's name is the whole
+rule, because no manifest marks a setting as a secret today: the name is cut
+into words at `-`, `_`, `.` and at a step from a lower-case letter or a
+digit to a capital, and it is refused when a word is `secret`, `token`,
+`password`, `passwd`, `passphrase`, `credential`, `apikey`, `privatekey` or
+`auth` (or its plural), or two words in a row are `api key` or
+`private key`. So `authToken`, `api_key` and `clientSecret` are refused, and
+`author` is not.
+
+**What is checked, before anything is written.** The edited document is
+checked as a spawn would read it, by the resolver's own code, and any
+refusal writes nothing:
+
+- the capability is one of the workspace's catalog (`oats capabilities`),
+  else `E_CAPABILITY_UNKNOWN`;
+- the key is one its manifest declares under `settings`, else `E_BAD_ARGS`
+  naming the declared ones. It is one top-level key: no dotted path;
+- the local schema, as for every command that edits the file
+  (`E_WORKSPACE_SCHEMA`);
+- the host layer's rules: a `committedOnly` key is refused
+  (`E_WORKSPACE_SCHEMA`, reason `committed-only-key`);
+- the manifest's declared `values` (`E_WORKSPACE_SCHEMA`, reason
+  `setting-value`).
+
+When two catalog rows carry the capability's name (a member's and a
+package's), the file's payload reaches whichever one a soul resolves, so
+the edit must pass every row's checks, and `effective` is the default only
+where the rows agree on it.
+
+**The value's type.** The value is one line of text of at most 1024
+characters, stored as a hand edit of the YAML would be read:
+
+1. where the manifest declares `values` for the key, the declared value
+   that matches the text (in its own type);
+2. where the key's manifest default is text, text;
+3. a whole number (`38890`) as a number, and `true` or `false` as a boolean;
+4. anything else as text (`0.50.1` stays text).
+
+The answer's `value` shows what was stored.
+
+**The writer.** The file is rewritten by the kernel's one writer of
+`oats-local.yaml`, under the deployment's local lock, as
+[`oats soul launch`](#oats-soul-launch) does (`E_LOCAL_BUSY`,
+`E_LOCAL_CHANGED`): two writers never drop each other's change.
+
+- A YAML file keeps its comments, its other entries and their order. It is
+  the YAML library's rendering of the edited document, not a byte copy: the
+  spaces before a comment become one, and a comment beside a mapping's own
+  key moves to the line below it.
+- A file that opens with `{` is JSON to the kernel's reader and is written
+  back as JSON: its keys in order, its final newline kept, two-space
+  indentation.
+- A file the kernel cannot decode is refused (`E_WORKSPACE_SCHEMA`).
+- An unset that empties `settings.<capability>`, or `settings`, removes the
+  empty mapping.
+
+**When it takes effect.** At the next read that resolves settings: the next
+spawn, start or restart, and the next readiness or `capabilities show`. A
+running session is not changed.
+
+**The trace.** Each changed write appends one line to
+`<deployment>/.agents/events/settings.jsonl`: `{at, verb: "set" | "unset",
+capability, key, previous, value}`.
+
+- It is private to its user (mode 0600) and bounded: it keeps its last 1000
+  lines, and older ones are dropped.
+- Every text in it is bounded (a value is cut to 500 characters) and has
+  control, bidi, invisible and tag characters replaced. No line carries a
+  secret: a credential-shaped key never gets this far.
+- It is written after the file, best effort: a line that cannot be written
+  is a `warnings` entry in the answer, never a failed set.
+- Nothing reads it yet, and no home's digest covers it (it is in no home).
+  It is in the deployment's events directory, which that user's agents can
+  write, so it is a trace for a person, not an audit record.
+
+The command is local: `--server` is refused (`E_BAD_ARGS`).
 
 ### The messaging provider's teams document
 

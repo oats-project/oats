@@ -61,7 +61,7 @@ const {
   LAYERS, OATS_VERSION, manifestOperations, upgradeHomeMeta,
   capabilityManifests, capabilityTrust, capabilityExecutablePath,
   officialPackageCatalog, officialCatalogFile, officialCapabilityAliases, resolvedFromHome, resolvedFromPrepared, teamEnv, isWorkspaceHome, preWorkspaceHome, isCapturedHome, capturedHomeRefusal, composeInstanceAgentsMd, parseYamlNested, withConfigFile,
-  findInstanceHome, findInstanceHomes, homeLaunchLayers, processScanInformation, enclosingInstanceHome, logicalCwd, readableInstanceHomes, workspaceOf, ensureRoot, findRoot, findAgent, findAgentAt, legacyLocalAgents, legacyCapturedHomes, listAgents, listInstances, servedIdentityLine, spawnInstanceAsync, suggestSpawnName, instanceSoulDir, stableSoulId, preparedSoulIdOf, recordedKernelBin, launchConfigsAt, machineLaunchConfigs, machineLaunchConfigsFile, launchStartNotices, launchReportFor, explicitInstanceName, MAX_INSTANCE_NAME, retireInstance, RETIRE_SELECTED_HOME, RETIRE_UNDER_CLAIM, inspectInstanceSession, inputInstanceSession, attachInstanceSession, startInstanceSession, upgradeHoldsClaim, writeHomeRecord, defaultRepo, RELATIONS, validateLaunchConfig, validateLaunchConfigDefaults, renderLaunchRecipe, describeLaunchCommand, redactLaunchRecipe, withSafeTaskPrompt, LAUNCH_HARNESSES, planLaunch, redactLaunchCommand, restartInstanceSession,
+  findInstanceHome, findInstanceHomes, homeLaunchLayers, processScanInformation, enclosingInstanceHome, logicalCwd, instanceCaller, readableInstanceHomes, workspaceOf, ensureRoot, findRoot, findAgent, findAgentAt, legacyLocalAgents, legacyCapturedHomes, listAgents, listInstances, servedIdentityLine, spawnInstanceAsync, suggestSpawnName, instanceSoulDir, stableSoulId, preparedSoulIdOf, recordedKernelBin, launchConfigsAt, machineLaunchConfigs, machineLaunchConfigsFile, launchStartNotices, launchReportFor, explicitInstanceName, MAX_INSTANCE_NAME, retireInstance, RETIRE_SELECTED_HOME, RETIRE_UNDER_CLAIM, inspectInstanceSession, inputInstanceSession, attachInstanceSession, startInstanceSession, upgradeHoldsClaim, writeHomeRecord, defaultRepo, RELATIONS, validateLaunchConfig, validateLaunchConfigDefaults, renderLaunchRecipe, describeLaunchCommand, redactLaunchRecipe, withSafeTaskPrompt, LAUNCH_HARNESSES, planLaunch, redactLaunchCommand, restartInstanceSession,
   FAILED_SPAWN_BRANCH_LEFT,
 } = await kernelImport("core", () => import("../lib/core.mjs"));
 const {
@@ -116,7 +116,7 @@ const rawArgs = process.argv.slice(2);
 const { argv: args, problem: argvProblem, inline: inlineValues } = expandInlineValues(rawArgs);
 let cmd = args[0];
 const HELP_WORDS = new Set(["help", "--help", "-h"]);
-const KERNEL_COMMANDS = new Set(["harness", "automations", "trigger", "capture", "capabilities", "deployments", "doctor", "inspect", "instance", "operation", "package", "readiness", "souls", "soul", "teams", "launch-config", "experimental", "host", "onboard", "pane", "reader", "recall", "retire", "root", "schedule", "server", "session", "setup", "spawn", "status", "sync", "tui", "update", "version", "workspace", "worktree"]);
+const KERNEL_COMMANDS = new Set(["harness", "automations", "trigger", "capture", "capabilities", "deployments", "doctor", "inspect", "instance", "operation", "package", "readiness", "souls", "soul", "teams", "settings", "launch-config", "experimental", "host", "onboard", "pane", "reader", "recall", "retire", "root", "schedule", "server", "session", "setup", "spawn", "status", "sync", "tui", "update", "version", "workspace", "worktree"]);
 /** Commands whose argv another parser reads (packages/record, packages/experimental and packages/tui parse process.argv). */
 const OWN_ARGV_COMMANDS = new Set(["capture", "recall", "setup", "experimental", "tui"]);
 /** Commands `--server <id>` runs on a registered server. */
@@ -2428,6 +2428,64 @@ async function teamsCmd() {
   const souls = Object.entries(doc.souls).map(([k, e]) => `${k}: ${[e.default ? `default ${e.default}` : null, e.teams === "any" ? "any" : Array.isArray(e.teams) ? `[${e.teams.join(",")}]` : null].filter(Boolean).join(" ") || "default only"}`);
   if (souls.length) console.log(`souls     ${souls.join(" · ")}`);
   for (const p of doc.problems) console.log(`${p.severity === "failure" ? "problem" : "warning"}   ${p.code}  ${p.message} — ${p.fix}`);
+}
+
+/** `oats settings set <capability> <key> <value> | unset <capability> <key> [--dir <deployment>] [--json]`
+ *  (feature settings-set, lib/settings-set.mjs): one host setting of a capability, recorded in this
+ *  deployment's oats-local.yaml. An operator's command: refused inside an instance, before anything is read. */
+async function settingsCmd() {
+  const bail = (code, msg, details) => (JSON_MODE ? jsonFail(code, msg, details) : die(msg));
+  const usage = "usage: oats settings set <capability> <key> <value> | unset <capability> <key>  [--dir <deployment>] [--json]";
+  const verb = positional(1);
+  if (verb !== "set" && verb !== "unset") return bail("E_USAGE", usage);
+  // The words after the verb, a value flag's value set aside (the dispatch checked the flags and their count).
+  const words = [];
+  for (let i = 2; i < args.length; i++) {
+    if (args[i] === "--dir") { i++; continue; }
+    if (!args[i].startsWith("--")) words.push(args[i]);
+  }
+  const [capability, key, text] = words;
+  if (words.length !== (verb === "set" ? 3 : 2)) return bail("E_BAD_ARGS", `oats settings ${verb} needs ${verb === "set" ? "a capability, a key and a value" : "a capability and a key"} — ${usage}`);
+  const S = await import("../lib/settings-set.mjs");
+  const caller = instanceCaller();
+  if (caller) {
+    // Where to run it from: this deployment, when it can be told without acting on anything.
+    let deployment = null, instance = null;
+    try { deployment = dirname(loadLocal(dirFlag()).path); } catch { /* unknown: the sentence says "<deployment>" */ }
+    if (caller.home) { try { instance = JSON.parse(readFileSync(join(caller.home, "instance.json"), "utf8")).instance ?? null; } catch { /* named by its home alone */ } }
+    const e = S.operatorOnly(caller, { verb, deployment, instance: typeof instance === "string" ? instance : null });
+    return bail(e.code, e.message, e.details);
+  }
+  let result;
+  try {
+    // Before anything is read: a credential-shaped key never gets as far as the file or the catalog.
+    S.assertNotCredential(capability, key);
+    const { ctx, discovery, lock, items } = await catalogRows("capabilities", bail);
+    const rows = items.filter((r) => r.name === capability);
+    const C = await import("../lib/capability-show.mjs");
+    if (!rows.length) C.selectCapabilityRow(items, capability); // E_CAPABILITY_UNKNOWN, in the catalog's own words
+    const remote = memoizedRemote(remoteModule);
+    const catalog = (() => { try { return officialPackageCatalog(); } catch { return null; } })();
+    const sources = [];
+    for (const row of rows) {
+      const source = await C.capabilitySource(row, { discovery, lock, catalog, remote, remoteOptions: ctx.remoteOptions });
+      sources.push({ manifest: source.manifest, layer: source.manifest?.layer ?? row.layer ?? null, origin: row.origin });
+    }
+    const value = verb === "set" ? S.settingValueOf(text, sources, key) : undefined;
+    result = S.editSetting({ deployment: ctx.deploymentDir, localPath: ctx.localPath }, { capability, key, value, sources });
+    if (result.changed) {
+      // The trace is best effort: a line that cannot be written is a warning, never a failed set.
+      try { S.appendSettingsTrace(ctx.deploymentDir, { at: new Date().toISOString(), verb, capability, key, previous: result.previous, value: result.value }); }
+      catch (e) { result = { ...result, warnings: [`the change was written, and its line in ${S.settingsTracePath(ctx.deploymentDir)} was not: ${e.message}`] }; }
+    }
+  } catch (e) { if (typeof e?.code === "string" && e.code.startsWith("E_")) return bail(e.code, e.message, e.details ?? e.provenance); throw e; }
+  if (JSON_MODE) { jsonOk(result); return; }
+  const shown = (v) => (v === null ? "(not set)" : JSON.stringify(v));
+  if (!result.changed) console.log(verb === "unset" ? `${shortPath(result.file)} does not set ${capability}.${key}: nothing to change` : `${capability}.${key} is already ${shown(result.value)} in ${shortPath(result.file)}: nothing to change`);
+  else console.log(`${verb === "set" ? `Set ${capability}.${key} to ${shown(result.value)}` : `Unset ${capability}.${key}`} in ${shortPath(result.file)} (was ${shown(result.previous)})`);
+  console.log(`effective  ${shown(result.effective)}${result.value === null && result.effective !== null ? " (the capability's default)" : ""}`);
+  if (result.changed) console.log("It takes effect at the next spawn, start, restart or readiness read; a running session is not changed.");
+  for (const w of result.warnings ?? []) console.error(`warning  ${w}`);
 }
 
 /** The `oats soul teams` edit flags team model 3 removed (0.38.0): a soul's teams are the workspace's `souls:`. */
@@ -5002,7 +5060,7 @@ try {
 // the canonical root when the command resolved one (lib/resolved-deployment.mjs; lib/deployments.mjs
 // listResolved): a listed deployment costs one bounded read of the list. Never on --server (the remote's path is not this computer's), never for
 // help, and silent: no output, no change to the command's answer or exit status.
-const LISTS_ITS_DEPLOYMENT = new Set(["automations", "capabilities", "doctor", "harness", "inspect", "instance", "launch-config", "operation", "package", "pane", "readiness", "retire", "schedule", "session", "soul", "souls", "spawn", "status", "sync", "teams", "trigger", "update", "workspace", "worktree"]);
+const LISTS_ITS_DEPLOYMENT = new Set(["automations", "capabilities", "doctor", "harness", "inspect", "instance", "launch-config", "operation", "package", "pane", "readiness", "retire", "schedule", "session", "settings", "soul", "souls", "spawn", "status", "sync", "teams", "trigger", "update", "workspace", "worktree"]);
 // `instance suggest-name` records nothing (#1490 §2): the oats-local.yaml it reads is not listed.
 // `session resume` reads the list and never writes it (#1559).
 if (LISTS_ITS_DEPLOYMENT.has(cmd) && flag("server") === undefined && !(cmd === "instance" && args[1] === "suggest-name") && !(cmd === "session" && args[1] === "resume") && !args.slice(1).some((a) => a === "--help" || a === "-h")) observeResolvedDeployment(listResolved);
@@ -5047,6 +5105,7 @@ else if (cmd === "package") await packageCmd();
 else if (cmd === "workspace") await workspaceCmd();
 else if (cmd === "capabilities" || cmd === "souls") await itemsCmd(cmd);
 else if (cmd === "teams") await teamsCmd();
+else if (cmd === "settings") await settingsCmd();
 else if (cmd === "soul") await soulCmd();
 else if (cmd === "status") await status();
 else if (cmd === "pane") await paneCmd();
@@ -5425,6 +5484,14 @@ Usage:
       [--max-age <s>]                       (souls have no private mode), with origin
                                             (member <key> @ <commit> | package <id> v<ver>) and its
                                             teams on this deployment
+  oats settings set <capability> <key> <value> | unset <capability> <key>
+      [--dir <d>] [--json]                  record one host setting of a capability in this
+                                            deployment's oats-local.yaml (settings.<capability>),
+                                            checked as a spawn reads it; comments and order kept.
+                                            An operator's command: refused inside an instance
+                                            (E_SETTINGS_OPERATOR_ONLY; a guard against an agent
+                                            doing it by accident, not a security boundary), and
+                                            never for a credential-shaped key. Local only
   oats teams [--json] | add <label> --team <id> [--description <d>] [--no-default] | remove <label>
       | default <label> [--if-absent | --expect <label>]
       [--dir <d>]                           this deployment's teams (shared + local), the
