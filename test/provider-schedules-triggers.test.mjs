@@ -27,10 +27,10 @@ const answer = (r) => { const doc = r.json(); assert.equal(doc.ok, true, r.stdou
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 /** The host's tick of the deployment's schedules at `iso`, in process, with the fixture's PATH (its
  *  inert harnesses): each row it considered. */
-const scheduleTick = (fx, iso, reg = {}) => fx.inEnv(() => {
+const scheduleTick = (fx, iso, reg = {}, io = undefined) => fx.inEnv(() => {
   const path = process.env.PATH;
   process.env.PATH = fx.env.PATH;
-  try { return S.withHostLock(() => S.tickWorkspace(fx.dep, { now: new Date(iso), reg: { ...S.readRegistry(), ...reg }, wsList: [fx.dep] })); } finally { process.env.PATH = path; }
+  try { return S.withHostLock(() => S.tickWorkspace(fx.dep, { now: new Date(iso), reg: { ...S.readRegistry(), ...reg }, wsList: [fx.dep], ...(io ? { io } : {}) })); } finally { process.env.PATH = path; }
 });
 /** The host's tick of the deployment's triggers at `iso`, the same way. */
 const triggerTick = (fx, iso) => fx.inEnv(() => {
@@ -242,6 +242,40 @@ test("KP-1: the guards are a tmux wake's: not before the due minute; no launch s
   const then = rowIn(await scheduleTick(fx, "2026-11-23T15:00:05Z"), late);
   assert.equal(then.action, "started", JSON.stringify(then));
   assert.deepEqual(askedOf(fx, late), ["check", "stop", "launch"]);
+});
+
+test("KP-1: a wake's start whose child times out, or answers nothing, is unconfirmed whatever it printed: skipped, pending, and the job keeps its slot until the home is seen stopped", async (t) => {
+  const fx = providerDeployment(t);
+  fx.control({ stateful: true });
+  const { home } = await fx.launch("slow");
+  addWake(fx, "slow", home, "wake up", "0 * * * *");
+  await fx.inEnv(() => stopInstanceSession(home, {}));
+  // A stand-in for `oats`: it answers a start's success and does not end (a child that hangs
+  // after its work), or it ends with no answer at all.
+  const hangs = join(fx.base, "oats-that-hangs.mjs"), silent = join(fx.base, "oats-that-says-nothing.mjs");
+  writeFileSync(hangs, `process.stdout.write(JSON.stringify({ schemaVersion: 1, ok: true, result: { instance: "slow", target: null, warnings: [] } }) + "\\n");\nsetInterval(() => {}, 1000);\n`);
+  writeFileSync(silent, "process.exit(1);\n");
+  fx.clearCalls();
+  const timedOut = rowIn(await scheduleTick(fx, "2026-11-23T10:00:05Z", {}, { oatsBin: hangs, commandTimeoutMs: 400, commandGraceMs: 100 }), "slow");
+  assert.deepEqual([timedOut.action, timedOut.pending], ["skipped", true], JSON.stringify(timedOut));
+  assert.equal(timedOut.reason, "start did not complete (error): oats session start timed out; whether the session was started is not known; the slot is kept until the session is observed stopped or absent");
+  let run = lastRun(fx, "slow");
+  assert.deepEqual([run.outcome, run.startedHarness, run.errorCode, run.pending], ["skipped", "unconfirmed", undefined, true], JSON.stringify(run));
+  assert.equal((await fx.inEnv(() => S.jobLockInfo(fx.dep, "slow")))?.home, home, "the slot is kept: the start may have happened");
+  assert.deepEqual(askedOf(fx, "slow"), [], "(the stand-in started nothing)");
+  // The next tick sees the home still stopped: the slot is released, and the delivery is still pending.
+  await scheduleTick(fx, "2026-11-23T10:01:05Z");
+  assert.equal(await fx.inEnv(() => S.jobLockInfo(fx.dep, "slow")), null);
+  // A child that answers nothing: the same, by its own words.
+  const nothing = rowIn(await scheduleTick(fx, "2026-11-23T11:00:05Z", {}, { oatsBin: silent }), "slow");
+  assert.deepEqual([nothing.action, nothing.pending], ["skipped", true], JSON.stringify(nothing));
+  assert.equal(nothing.reason, "start did not complete (error): oats session start answered no valid envelope (exit 1); whether the session was started is not known; the slot is kept until the session is observed stopped or absent");
+  assert.equal(lastRun(fx, "slow").startedHarness, "unconfirmed");
+  // With the real command the next due minute starts it, and the message follows.
+  await scheduleTick(fx, "2026-11-23T11:01:05Z");
+  fx.clearCalls();
+  assert.equal(rowIn(await scheduleTick(fx, "2026-11-23T12:00:05Z"), "slow").action, "started");
+  assert.deepEqual(askedOf(fx, "slow"), ["stop", "launch"]);
 });
 
 test("KP-1: a provider home whose session is lost is not started by a wake: one gone without an OATS stop takes the wake as its input (its resume), and one stopped with the host stays pending for the resume", async (t) => {

@@ -262,7 +262,7 @@ refuses the key on a trigger.
   a command job's five-minute timeout: one that times out or is interrupted
   leaves the start unconfirmed (`whether the session was started is not
   known`), and the job keeps its slot until the home is observed stopped or
-  running. Before this rule such a wake was only
+  gone. Before this rule such a wake was only
   refused (`E_SESSION_NOT_RUNNING`) until a person started the home.
 
   A provider home whose session is **lost** is not started by a wake. To a
