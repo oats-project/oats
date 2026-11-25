@@ -685,13 +685,16 @@ controls, the gateway canary and every other universal check are unchanged.
  "run":{"id":"…","policyHash":"sha256:…","servicesDeployment":"…"},
  "sourceCommit":"<40-hex source commit of the deploy copy>",
  "remote":{"servicesAddress":"…","vantage":["isolated-agent","outward-bridge"],
-   "results":[{"role":"postgres","port":5432,"vantage":"isolated-agent","result":"DENIED","required":true}]}}
+   "results":[{"role":"postgres","port":5432,"address":"…","vantage":"isolated-agent","result":"DENIED","required":true}]}}
 ```
 
 `remote.results` always has exactly four rows, in this order: postgres from
 the isolated agent, postgres from the outward bridge, redis from the isolated
 agent, redis from the outward bridge. Each row is
-`{role,port,vantage,result,required}`. Every row is `required:true` and
+`{role,port,address,vantage,result,required}`, where `address` is the IPv4 the
+row tested: `servicesAddress`, or an external PostgreSQL's own pinned
+`address`, so a wrapper binds the external-database rows to its inventory from
+this document alone. Every row is `required:true` and
 `DENIED`, except postgres from the outward bridge in external mode, which is
 `required:false` and `DENIED` or `CONNECTED`. Schema 1's JSON has no `mode`
 field and is unchanged; refusal JSON is the same in both modes. A wrapper admits

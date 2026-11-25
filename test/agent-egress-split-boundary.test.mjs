@@ -109,11 +109,18 @@ function quiet(t) {
   t.after(() => { process.stderr.write = write; });
   return lines;
 }
-const rows = (external, outwardPostgres = "DENIED") => [
-  {role:"postgres",port:5432,vantage:"isolated-agent",result:"DENIED",required:true},
-  {role:"postgres",port:5432,vantage:"outward-bridge",result:outwardPostgres,required:!external},
-  {role:"redis",port:6379,vantage:"isolated-agent",result:"DENIED",required:true},
-  {role:"redis",port:6379,vantage:"outward-bridge",result:"DENIED",required:true}];
+// Each row names the address it tested: the services host, or an external
+// PostgreSQL's own pinned address.
+const rows = (external, outwardPostgres = "DENIED") => {
+  const postgres = external ? "10.20.0.11" : servicesAddress;
+  return [
+    {role:"postgres",port:5432,address:postgres,vantage:"isolated-agent",result:"DENIED",required:true},
+    {role:"postgres",port:5432,address:postgres,vantage:"outward-bridge",result:outwardPostgres,required:!external},
+    {role:"redis",port:6379,address:servicesAddress,vantage:"isolated-agent",result:"DENIED",required:true},
+    {role:"redis",port:6379,address:servicesAddress,vantage:"outward-bridge",result:"DENIED",required:true}];
+};
+const rowKeys = results => results.map(row => Object.keys(row).join(","));
+const expectedRowKeys = Array(4).fill("role,port,address,vantage,result,required");
 
 test("the 0e386f0f probe source refuses a schema-2 plan", t => {
   const fixture = fileURLToPath(new URL("./fixtures/egress-probe-0e386f0f/probe-compose-boundary.mjs", import.meta.url));
@@ -159,6 +166,7 @@ test("shared address: :443 controls succeed while PostgreSQL and Redis at that a
   assert.deepEqual(Object.keys(result), ["passed","mode","receipts","run","sourceCommit","remote"]);
   assert.deepEqual({...result, receipts:undefined}, {passed:true,mode:"split",receipts:undefined,run:fixture.plan.run,sourceCommit:sha,
     remote:{servicesAddress,vantage:["isolated-agent","outward-bridge"],results:rows(false)}});
+  assert.deepEqual(rowKeys(result.remote.results), expectedRowKeys);
   // Two :443 controls (before and after), the gateway canary and its two controls, two outward-bridge classifications.
   assert.equal(result.receipts.length, 7);
   assert.ok(result.receipts.every(r => r.created && r.absentVerified && r.name.startsWith("split-")));
@@ -179,6 +187,7 @@ test("external PostgreSQL passes with the outward bridge CONNECTED, recorded as 
   quiet(t);
   const result = await probeComposeBoundary(fixture.plan);
   assert.deepEqual(result.remote.results, rows(true, "CONNECTED"));
+  assert.deepEqual(rowKeys(result.remote.results), expectedRowKeys);
   const runtimePlan = JSON.parse(JSON.parse(double.programs[0].match(/JSON\.parse\(("(?:[^"\\]|\\.)*")\)/)[1]));
   assert.deepEqual(runtimePlan.remoteEndpoints, [{role:"postgres",address:"10.20.0.11",port:5432},{role:"redis",address:servicesAddress,port:6379}]);
 });

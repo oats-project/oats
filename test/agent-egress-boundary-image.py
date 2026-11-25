@@ -108,8 +108,10 @@ def run_split(plan, policy, proxy_image, prefix):
         assert code == 0, "split boundary probe failed: " + mode
         receipts = result.pop("receipts")
         assert len(receipts) == 7 and all(r["created"] and r["absentVerified"] and r["name"].startswith(prefix) for r in receipts)
-        rows = [{"role":role,"port":port,"vantage":vantage,"result":"DENIED","required":not (mode == "external" and role == "postgres" and vantage == "outward-bridge")}
-                for role, port in [("postgres",5432),("redis",6379)] for vantage in ("isolated-agent","outward-bridge")]
+        postgres_address = external_database if mode == "external" else services_address
+        rows = [{"role":role,"port":port,"address":address,"vantage":vantage,"result":"DENIED","required":not (mode == "external" and role == "postgres" and vantage == "outward-bridge")}
+                for role, port, address in [("postgres",5432,postgres_address),("redis",6379,services_address)] for vantage in ("isolated-agent","outward-bridge")]
+        assert [list(row) for row in result["remote"]["results"]] == [["role","port","address","vantage","result","required"]] * 4
         assert result == {"passed":True,"mode":"split","run":run_binding,"sourceCommit":source,
                           "remote":{"servicesAddress":services_address,"vantage":["isolated-agent","outward-bridge"],"results":rows}}, result
         witness_plan = {"schema":1,"run":run_binding,"servicesAddress":services_address,"composeProject":services_project,"policy":policy,

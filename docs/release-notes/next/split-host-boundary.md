@@ -6,7 +6,7 @@
   TCP on the PostgreSQL and Redis ports (an external PostgreSQL is checked at
   its own pinned, IP-wide denied address), and its `--json` document adds
   `mode:"split"`, the wrapper's `run`, the deploy copy's `sourceCommit` and the
-  four role-by-vantage results. A new services-host witness,
+  four role-by-vantage results, each naming the address it tested. A new services-host witness,
   `egress/probe-services-backends.mjs`, selects the PostgreSQL and Redis
   containers by their Compose labels and proves them running, healthy,
   unpublished and reachable from their own networks. Both run only from a

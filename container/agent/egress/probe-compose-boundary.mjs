@@ -58,7 +58,7 @@ function outwardBridge(plan,split,receipts) {
     const required=!tuple.external;
     assert.ok(receipt.absentVerified && (result === "DENIED" || (!required && result === "CONNECTED")),
       "outward bridge did not get DENIED from a services-host backend");
-    return {role:tuple.role,port:tuple.port,vantage:"outward-bridge",result,required};
+    return {role:tuple.role,port:tuple.port,address:tuple.address,vantage:"outward-bridge",result,required};
   });
 }
 async function runBoundary(plan,receipts,split) {
@@ -146,7 +146,7 @@ async function runBoundary(plan,receipts,split) {
   if(!split) return {passed:true,receipts};
   // The runtime body refused anything but DENIED from the isolated agent.
   const results=split.tuples.flatMap((tuple,index)=>[
-    {role:tuple.role,port:tuple.port,vantage:"isolated-agent",result:"DENIED",required:true},outward[index]]);
+    {role:tuple.role,port:tuple.port,address:tuple.address,vantage:"isolated-agent",result:"DENIED",required:true},outward[index]]);
   return {passed:true,mode:"split",receipts,run:split.run,sourceCommit:split.sourceCommit,
     remote:{servicesAddress:split.servicesAddress,vantage:["isolated-agent","outward-bridge"],results}};
 }
