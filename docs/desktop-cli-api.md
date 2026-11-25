@@ -198,6 +198,7 @@ see the [official catalog](official-catalog.md) for current pins.
 | `status-activity` | the turn fact: `activity` (`"working"`, `"idle"` or `null`) on `oats status --json` instance rows and `oats server roster --json` rows, present only on a row whose session is there ([`activity`](#row-activity)). A tmux row reads it from the turn boundaries its harness's hooks write (oats.core for Claude Code, `@awebai/oats-pi` for pi; a Codex row reads `null`); a provider row carries its provider's answer, the optional `activity` key of `inspect` and `inspectMany` ([capabilities.md](capabilities.md#inspect-and-inspectmany)). Display only: no act reads it. A row from a kernel or a host without the feature never carries the key, so its absence says nothing there. |
 | `session-input-permission-refusal` | `oats session input` to a tmux home whose session holds a `permission` claim is refused `E_SESSION_PROMPT_OPEN`, with nothing typed, as a session provider refuses it ([Input](#input)). On a kernel without the feature that input is typed and its Enter answers the prompt, so read the code as "a prompt is open, nothing was sent" for a tmux home only where the feature is listed | |
 | `wake-starts-provider-home` | a due `wake` starts a home on a session provider that OATS stopped, at its due minute, in a new session, as it starts a stopped tmux home; its message is delivered once the session runs ([schedules.md](schedules.md#kinds)). The run's record is a tmux start's (`action: "started"`, then `delivered`), with no new field. A kernel without the feature never starts such a home: the run stays `skipped`, `errorCode: "E_SESSION_NOT_RUNNING"`, until a person starts it. A client that tells a person what a wake to a provider home will do reads this feature | |
+| `launch-choices` | provider-declared launch choices: `--launch-choice <name>=<value>` (repeatable) on `oats spawn`, `oats session start` and `oats session restart`, for a name the home's session provider declares in its manifest (`sessionProviders.<name>.launchChoices`); refused `E_BAD_ARGS`, never dropped, for any other name, on a tmux home, and for a recorded choice the provider no longer declares ([Launch choices](#launch-choices-feature-launch-choices)). No answer gains a key: a recorded choice is in no row, receipt or inspect answer. A routed command with the flag needs the host's feature (`E_REMOTE_INCOMPATIBLE`, nothing sent). `launchOptions` in the probe is the kernel's own list and is unchanged | |
 | `trigger-failure-history` | a trigger's failed spawns as rows: `failures` (newest first, at most 50, `{attempt, at, key, event, subject, number, code, message, instance?, home?, resolved?}`) and `failuresTotal` on each row of `oats trigger status --json` ([`oats trigger`](#oats-trigger)). Every text is bounded and made safe to show as text; a row gains `resolved: {at, instance}` when a later attempt of its key spawns. Absent: neither key, and `lastError` holds only the last failure | |
 | `status-automation` | the schedule or trigger that made an instance: `automation` (`{kind: "schedule" \| "trigger", id, qualifiedId}` or `null`) in `instance.json`, on the `spawned` event and on `oats status --json` rows; on a remote row only from a host that lists the feature ([Made by an automation](#made-by-an-automation)). A label, never proof. Absent: no `automation` key anywhere | |
 
@@ -338,7 +339,7 @@ for `--no-recursive`) is never ignored.
 | Command | Arguments | Flags that take a value | Switches | Refused in their own words | Its own answers |
 |---|---|---|---|---|---|
 | `oats retire` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir`, `--server` | `--plan`, `--self`, `--discard-worktree`, `--keep-dir`, `--force`, `--json` | `--delete-branch` | none |
-| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-config`, `--made-by-automation`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--related-work`, `--same-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral` | an unknown flag, an argument after the last |
+| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-choice`, `--launch-config`, `--made-by-automation`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--related-work`, `--same-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral` | an unknown flag, an argument after the last |
 | `oats sync` | none | `--dir` | `--plan`, `--json` | `--approve` | none |
 | `oats instance stop` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--grace-ms`, `--home`, `--dir`, `--server` | `--plan`, `--apply`, `--no-recursive`, `--json` | none | none |
 | `oats instance upgrade` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir` | `--undo`, `--plan`, `--json` | `--server` | none |
@@ -356,8 +357,8 @@ for `--no-recursive`) is never ignored.
 | `oats instance suggest-name` | none | `--soul`, `--task`, `--task-file`, `--harness`, `--model`, `--launch-config`, `--dir` | `--json` | `--server` | none |
 | `oats worktree add` | none | `--purpose`, `--branch`, `--base`, `--repo` | `--preview`, `--json` | `--server`, `--dir`, `--home` | none |
 | `oats worktree remove` | none | `--purpose` | `--json` | `--server`, `--dir`, `--home` | none |
-| `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | `--native-record` | none |
-| `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--native-record`, `--resume` | none |
+| `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--launch-choice` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | `--native-record` | none |
+| `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--launch-choice`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--native-record`, `--resume` | none |
 | `oats session resume` | none | `--deployment` | `--plan`, `--without-provider-inspect`, `--json` | `--native-record`, `--server` | none |
 | `oats session input` | none | `--home`, `--text-file` | `--json` | `--native-record` | none |
 | `oats session receive` | none | `--home`, `--name` | `--json` | `--native-record` | none |
@@ -7822,6 +7823,71 @@ Its refusals: `E_RESUME_NOT_LOST` (not a lost session), `E_SESSION_NOT_RUNNING`
 `E_SESSION_UNKNOWN` (a process of the last run still works in the home, or
 the session cannot be read), `E_SESSION_PROMPT_OPEN` (a claim or a prompt is
 open) and `E_SESSION_INPUT_QUEUED`.
+
+<a id="launch-choices-feature-launch-choices"></a>
+**Launch choices** (feature `launch-choices`). A session provider can take
+choices of one launch that only it understands (a reasoning level, a
+service tier). It declares their names in its manifest
+([capabilities.md](capabilities.md#launch-choices-launchchoices)); the
+kernel knows no choice's meaning.
+
+```text
+oats spawn <soul> --backend <provider> --launch-choice <name>=<value> [--launch-choice <name>=<value>]…
+oats session start|restart --home <abs> [--launch-choice <name>=<value>]…
+```
+
+- **The flag** is repeatable, each name once. A name is 1 to 40 lowercase
+  letters, digits and dashes, starting with a letter; a value 1 to 40
+  lowercase letters, digits, underscores and dashes. A client passes a
+  value as it has it and never parses one.
+- **Which names a home takes**: the ones its provider declares, with a
+  one-line `description` each, a client may show as text. Read them from
+  `oats capabilities show <capability> --json`, `sessionProviders.<name>.launchChoices`
+  (the manifest as declared).
+- **Recorded and reused.** A spawn's choices are kept in the home's launch
+  record. A later start or restart with no flag launches with them again. A
+  flag replaces that name's value; the value `default` clears it, so the
+  provider's own default applies (`default` reaches no provider).
+- **Refused, never dropped**: `E_BAD_ARGS`, before anything is created,
+  stopped or started, for
+  - a name the home's provider does not declare (the message lists the ones
+    it declares);
+  - a tmux home: `the tmux backend takes no launch choices yet; for pi, the
+    model's own :level sets its thinking`;
+  - a malformed flag, or a name given twice;
+  - a recorded choice the provider no longer declares, at a plain start or
+    restart: the message names `--launch-choice <name>=default`, which
+    clears it. `oats launch-config preview --home` shows the same as a
+    failed `launch-choices` item of its `preflight`;
+  - `--resume`, which runs the recorded launch as it is.
+
+  A value the provider does not take is the provider's to refuse, in its
+  check, with its own `E_BACKEND_*` code: nothing was stopped or started.
+- **Routed** (`--server`): the flag travels to a host that lists the
+  feature. A host that does not is refused `E_REMOTE_INCOMPATIBLE` before
+  anything is sent, as for every flag a host must know
+  ([decided](https://github.com/oats-project/oats/issues/2122#issuecomment-7163227475)).
+- **No answer gains a key, and a person cannot see a recorded choice in a
+  client yet.** The spawn's, the start's and the restart's answers, their
+  `launch` recipe, the status row, the remote roster row, `oats session
+  inspect`, `oats inspect --home` and the events are the keys they were,
+  with no choice in them. A client that sent a choice knows what it sent.
+  The one place a recorded choice can be read is the home's own
+  `instance.json` on its host, `launch.choices`. Showing it back is a later
+  item.
+- **Nowhere else yet.** A launch configuration, a soul, a host default, a
+  schedule's job and a trigger's spawn carry no launch choice.
+- **A spawn's decision binds its choices.** The preview's
+  `decision.revision` covers the choices the preview was given, with no key
+  for them in `decision`: an apply (`--expect-decision`) with other choices
+  is `E_DECISION_STALE`, and a replay of an idempotency key with other
+  choices than the ones it confirmed is `E_IDEMPOTENCY_CONFLICT`. A replay
+  is held to what the key confirmed, never to the home's choices now, which
+  a later start may have changed. A decision with no choice has the
+  revision it always had.
+- **Moving a kernel back** below the feature starts a home that holds
+  recorded choices without them: the one place a choice can drop
+  ([capabilities.md](capabilities.md#launch-choices-launchchoices)).
 
 <a id="relayed-check-warnings"></a>
 **The planned launch's model, and relayed check warnings** (feature

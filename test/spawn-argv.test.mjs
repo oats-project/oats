@@ -82,7 +82,7 @@ test("the flags spawn accepts are exactly the flags its code path reads", () => 
   const src = readFileSync(new URL("../bin/oats.mjs", import.meta.url), "utf8");
   // spawnCmd and the readers it calls; `--json` is read once, globally (JSON_MODE), and `--max-age`
   // once, at dispatch (maxAgeRefusal, then maxAgeGiven: the preview's read session and observation block).
-  const path = ["spawnCmd", "dirFlag", "harnessFlag", "yoloFlag", "herdrSpawnFlag"].map((f) => functionSource(src, f)).join("\n")
+  const path = ["spawnCmd", "dirFlag", "harnessFlag", "yoloFlag", "herdrSpawnFlag", "launchChoiceFlags"].map((f) => functionSource(src, f)).join("\n")
     .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, ""); // code only: comments name readers too
   // `--server` once, at dispatch too: a spawn given it is sent to that server (serverRouteCmd).
   const read = new Set(["json", "max-age", "server"]);

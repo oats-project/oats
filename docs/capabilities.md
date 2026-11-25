@@ -2128,6 +2128,8 @@ claims, the refusals and the JSON answers. What an operator sees is in
 - **`harnesses`** lists the harnesses the provider runs (1 to 16 names). A
   spawn or a start on another one is refused `E_BACKEND_HARNESS`.
 - **`description`** is optional: one line of at most 200 characters.
+- **`launchChoices`** is optional: the choices of one launch that you take,
+  by name ([Launch choices](#launch-choices-launchchoices)).
 - **`wire`** is the version of this wire the provider speaks: `"1.3"`. The
   kernel calls only a provider that declares its own version. One that
   declares another, or none (a provider written before the key: wire 1.2),
@@ -2140,6 +2142,84 @@ claims, the refusals and the JSON answers. What an operator sees is in
   tooling. Every request carries the kernel's version (`"wire"`), so refuse
   a request that carries none or another, with the same code.
 - No other key.
+
+<a id="launch-choices-launchchoices"></a>
+### Launch choices (`launchChoices`)
+
+A kernel that lists the feature `launch-choices` in `oats version --json` has
+this. A launch choice is a choice a person makes for one launch that only
+your provider understands: a reasoning level, a service tier. **The kernel
+knows no choice's meaning and no value's.** It checks that the home's
+provider declares the name, records the value, and hands it to you as data.
+The next such control costs you a manifest line and your own handling, and
+the kernel nothing.
+
+```json
+"sessionProviders": {
+  "bb": {
+    "…": "…",
+    "launchChoices": {
+      "reasoning-level": { "description": "How hard the model thinks before it answers" },
+      "service-tier": { "description": "Which service tier the session asks for" }
+    }
+  }
+}
+```
+
+- **Declared.** At most 8 choices. A name is 1 to 40 lowercase letters,
+  digits and dashes, starting with a letter. Each has a `description` and no
+  other key: one line of at most 200 characters, safe text (no control or
+  bidi character). A client may show it as text; nothing parses it. A
+  declaration outside these rules makes the provider malformed, as any other
+  problem in it does (Containment, below).
+- **Chosen.** `oats spawn`, `oats session start` and `oats session restart`
+  take `--launch-choice <name>=<value>`, any number of times, each name
+  once. A value is 1 to 40 lowercase letters, digits, underscores and
+  dashes. Values are data: they are argv elements wherever a command line
+  is made, never a shell's words.
+- **Handed to you.** The planned launch your `check` is asked about, and
+  your `launch` input, carry `"choices": { "<name>": "<value>" }`, present
+  only when at least one is chosen, in the order you declared the names.
+  You get only names you declared. **Refuse in your `check` a value you do
+  not take**, with an `E_BACKEND_*` code: the kernel does not know your
+  values, and a restart's check runs before its stop.
+- **Recorded.** A spawn's choices are kept in the home's launch record and
+  reused by a later plain start or restart. A flag replaces that name's
+  value. The reserved value `default` clears a recorded choice
+  (`--launch-choice reasoning-level=default`): your own default then
+  applies. `default` is never recorded and never passed to you, so never
+  take a value spelled `default`.
+- **Refused, never dropped.** A choice reaches your launch or the command is
+  refused `E_BAD_ARGS`, before anything is created, stopped or started:
+  - a name the home's provider does not declare (the refusal names the ones
+    it does);
+  - a tmux home: `the tmux backend takes no launch choices yet; for pi, the
+    model's own :level sets its thinking`;
+  - a recorded choice the provider no longer declares (another release of
+    yours dropped the name): a plain start or restart is refused with the
+    way to clear it (`--launch-choice <name>=default`), never started
+    without it;
+  - with `--resume`, which runs the recorded launch as it is.
+
+  A routed spawn or start (`--server`) to a host that does not list the
+  feature is refused `E_REMOTE_INCOMPATIBLE` before anything is sent.
+- **Nowhere else yet.** A launch configuration, a soul, a host default, a
+  schedule's job and a trigger's spawn carry no launch choice: only the
+  three commands' flag does.
+- **An older kernel refuses the declaration.** A kernel from before the
+  feature reads a provider that declares `launchChoices` as malformed
+  (measured on OATS 0.70.5): `--backend <name>` answers `E_BACKEND_UNKNOWN`,
+  `capability <id> declares it malformed: session provider "<name>": unknown
+  key "launchChoices"`, and `oats capabilities show` lists it under
+  `sessionProviderProblems`. The capability itself still loads (a tmux spawn
+  of its soul goes on). So a package that declares
+  `launchChoices` raises its `compatibility.oats` to the release that lists
+  `launch-choices`, and is pinned only once every host runs that kernel.
+- **The downgrade cost.** A kernel moved back below `launch-choices` does
+  not know the record's `choices`: it starts a home that holds recorded
+  choices **without them**, and says nothing. That is the one place a
+  choice can drop, and only by moving a kernel back; the rollout order
+  above is what prevents it.
 
 **Containment.** A malformed `sessionProviders` never refuses the capability:
 it is validated where a provider is used. A problem inside one provider
@@ -2249,6 +2329,10 @@ In:
   `false`, or `null` when nobody chose) and the prompt.
 - `promptFile` is the home's `TASK.md`: the briefing a fresh conversation
   starts on.
+- `choices` (feature `launch-choices`) is the launch's choices,
+  `{ "<name>": "<value>" }`, of names you declared
+  ([Launch choices](#launch-choices-launchchoices)). The key is there only
+  when at least one is chosen.
 - `previous` is the endpoint of the session a start or a restart replaces;
   `null` for the home's first launch. The kernel has asked you to stop it
   just before, always (a restart's stop, once more for a home OATS had
@@ -2449,11 +2533,14 @@ way. The wire version is unchanged.
 
 The provider's readiness. In: `{ "home": "/abs/home" | null, "soul": "<name>" | null, "settings": { … } }`:
 a home, or, before any home exists, a soul; and, before a launch,
-`"launch": { "harness", "model", "yolo", "args", "sandbox", "trees", "protected" }`, the launch that is
+`"launch": { "harness", "model", "yolo", "args", "choices", "sandbox", "trees", "protected" }`, the launch that is
 planned: the harness, yolo, the allowances, the trees and the protected paths as its launch input will
 carry them, and in `args` the launch configuration's own arguments. **The
 arguments a capability's hooks contribute are not in it**: the check runs
-before any hook, and those reach the launch input only. **`model`** (a kernel
+before any hook, and those reach the launch input only. **`choices`**
+(feature `launch-choices`) is the launch's choices, as the launch input will
+carry them, there only when one is chosen
+([Launch choices](#launch-choices-launchchoices)). **`model`** (a kernel
 that lists the feature `launch-model-and-check-warnings` in
 `oats version --json`) is the model the launch input will carry, a non-empty
 string, and is there only when the launch names one: with no key, the
