@@ -7689,7 +7689,9 @@ provider's `check` with the launch that is planned
   most a client's reader takes: where the answer's own warnings leave room
   for fewer, the relayed ones are dropped first, that last line counts
   them, and none of the answer's own is dropped; with no room, none is
-  relayed. A start and a restart also record each as a `launch-warning`
+  relayed. Four of the 512 entries stay free of relayed lines, for what a
+  command adds after the kernel's answer (a spawn's unsaved wake, a routed
+  spawn's notices). A start and a restart also record each as a `launch-warning`
   event.
 - **The lines are text for a person. Show them; never parse them**, and take
   no decision from one: the wording is not a contract. `warnings` holds
