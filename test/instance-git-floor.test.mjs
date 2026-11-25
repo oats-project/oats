@@ -443,3 +443,55 @@ test("submodule admission refuses a failed real index listing, including output 
   assert.throws(() => instanceGit.withGitReadSafety(() => "git version 2.44.9", () =>
     instanceGit.assertSafeGitSubmodules(f.work)), { code: "E_GIT_FAILED" });
 });
+
+test("a nested partial source with its work tree elsewhere refuses plan and apply before effects", async (t) => {
+  const { f, spawned, work, recovery } = await retirement(t);
+  const nested = join(work, "nested"), foreign = join(f.base, "foreign-work");
+  mkdirSync(nested);
+  mkdirSync(foreign);
+  git(nested, "init", "-q");
+  writeFileSync(join(nested, "kept.txt"), "kept\n");
+  git(nested, "add", ".");
+  git(nested, "commit", "-qm", "nested source");
+  git(nested, "config", "core.worktree", foreign);
+  git(nested, "config", "remote.fixture.promisor", "true");
+  const snapshot = () => [exactTreeDigest(spawned.home), exactTreeDigest(f.member), existsSync(recovery) ? exactTreeDigest(recovery) : null];
+  const before = snapshot();
+  await f.inEnv(() => {
+    const gitVersion = () => "git version 2.44.9";
+    const refused = (e) => {
+      assert.equal(e.code, "E_GIT_UNSUPPORTED");
+      assert.equal(e.details.reason, "partial-clone");
+      assert.equal(e.details.found, "2.44.9");
+      assert.match(e.message, /nothing was done/i);
+      return true;
+    };
+    assert.throws(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }), refused);
+    assert.throws(() => retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true }), refused);
+  });
+  assert.deepEqual(snapshot(), before);
+  assert.equal(existsSync(recovery), false);
+  assert.equal(existsSync(join(spawned.home, "hook-ran")), false);
+});
+
+for (const version of ["git version 2.45.0", "git version 2.44.9", "unknown"]) {
+  test(`failed discovery in a full clone probes once and decides safely at ${version}`, (t) => {
+    const f = observer(t);
+    let probes = 0;
+    const gitVersion = () => { probes++; return version; };
+    instanceGit.withGitReadSafety(gitVersion, () => instanceGit.assertSafeGitRepository(f.work));
+    assert.equal(probes, 0, "a successful empty listing never probes");
+    instanceGit.withGitReadSafety(gitVersion, () => {
+      for (let call = 0; call < 2; call++) {
+        const read = () => instanceGit.assertSafeGitRepository(f.work, { maxBuffer: 1 });
+        if (version === "git version 2.45.0") assert.doesNotThrow(read);
+        else assert.throws(read, (e) => {
+          assert.equal(e.code, "E_GIT_FAILED");
+          assert.match(e.message, /could not list populated submodules.*ENOBUFS/s);
+          return true;
+        });
+      }
+    });
+    assert.equal(probes, 1, "failed discovery shares one probe for the operation");
+  });
+}

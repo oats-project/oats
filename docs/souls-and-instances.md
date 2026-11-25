@@ -779,12 +779,15 @@ and a refusal names the submodule's path relative to the outer repository
 in `details.submodule`. At or above the floor no submodule config is read
 for this check. Only inspected working trees recurse into their submodules;
 object/ref-only sources (the recorded repository, for example) check their
-own config, and do not inspect that checkout's submodules. Full clones
-without populated submodules in an inspected tree need no version
-probe and work as before. A plain work directory does not admit an enclosing
-checkout's config as its own: Git's top-level answer classifies the tree.
-On older or unknown Git, a failed submodule listing refuses inspection,
-rather than treating an incomplete listing as no submodules. The
+own config, and do not inspect that checkout's submodules. A nested source
+with its own `.git` checks that config even if its working tree is elsewhere;
+only the inspected tree's populated submodules are checked recursively. Full
+clones without populated submodules need no version probe when discovery
+succeeds. Failed discovery probes once: a modern Git proceeds under its own
+guard, and older or unknown Git refuses inspection. A plain work directory
+does not admit an enclosing checkout's config as its own: Git's top-level
+answer classifies the tree.
+An incomplete listing never proves that no submodules exist. The
 caller's repository-local Git variables are not passed: Git's own list
 (`git rev-parse --local-env-vars`: `GIT_DIR`, `GIT_WORK_TREE`,
 `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, the object directories, `GIT_CONFIG`,

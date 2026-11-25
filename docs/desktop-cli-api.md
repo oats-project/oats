@@ -4879,9 +4879,10 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
   separators, and uses `the submodule <path> is a partial clone, and reading
   it safely needs Git 2.45 or later; this is Git <found>`. The key is absent
   for a partial clone at the root. Full clones without populated submodules
-  work as before, without a version probe.
-  If the populated-submodule listing fails, older or unknown Git refuses
-  with `E_GIT_FAILED`; an incomplete listing never proves that no submodules exist.
+  work as before, without a version probe when discovery succeeds. If the
+  populated-submodule listing fails, the read probes once: modern Git proceeds
+  under its own guard; older or unknown Git refuses with `E_GIT_FAILED`.
+  An incomplete listing never proves that no submodules exist.
 - **Filter drivers are not run.** Git runs a `filter.<name>.clean` or
   `.process` command when a status or a diff compares a work-tree file that
   carries the `filter` attribute, and it has no switch that turns filters
