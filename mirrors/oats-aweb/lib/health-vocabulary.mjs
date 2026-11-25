@@ -28,6 +28,11 @@ const PROBLEM_ROWS = [
   [['channel-not-connected'], 'no', 'oats.channel_not_loaded', 'operator'],
   [['receive-inspection-unproven', 'wake-status-stale', 'wake-status-timestamp-unknown', 'wake-daemon-version-unknown'], 'unknown', 'oats.receive_unknown', 'unknown'],
 ];
+// `receive-inspection-aged` is not among them. The inspection the broker
+// records is its worker's, made only at startup and before a delivery (its
+// presence heartbeat inspects but records nothing), so an idle home's
+// recorded inspection ages without a fault (#332). Readiness is read only for a home this tick's own
+// session inspect found alive, the same observation, made fresh.
 const RECEIVE_UNPROVEN_WARNINGS = ['receive-ownership-unproven', 'receive-observation-aged', 'receive-observation-unproven'];
 /** Launch prompt outcomes that show the channel was loaded: a confirmed
  *  development prompt, or approved mode, where no prompt is engaged. */

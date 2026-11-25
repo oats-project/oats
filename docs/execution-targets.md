@@ -1096,6 +1096,20 @@ means it to run, so when its harness runs again its row reads running, with
 no key ([below](#provider-homes-lost-sessions)).
 `waitingOnYou` is the producers' claim, as for tmux, read while the session
 is there and not in error.
+`activity` (feature `status-activity`,
+[desktop-cli-api.md](desktop-cli-api.md#row-activity)) is the provider's own
+answer at that read: the optional `activity` key of its `inspect` or
+`inspectMany` result (`"working"`, `"idle"` or `null`), relayed onto the row
+wherever the provider answers the session present, and not at its `shell`,
+on a home OATS started, whatever its `running`, and never stored. A provider that sends no key reads
+`null`. A provider sends `activity` only to a kernel that lists
+`status-activity`: its package's `compatibility.oats` is raised to that
+kernel release. A kernel moved back below it, with such a provider in the
+homes, reads every row of that provider as unreachable
+([capabilities.md](capabilities.md#inspect-and-inspectmany)). A stopped
+home, a lost one, one whose harness ended (`shell`), one being retired and
+one with `outsideOats` carry none. The turn file a tmux row reads
+(`<home>/.oats/turn.json`) is never read on a provider home.
 
 <a id="provider-homes-lost-sessions"></a>
 
