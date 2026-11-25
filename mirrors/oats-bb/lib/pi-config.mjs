@@ -82,6 +82,8 @@ export function readPiPackages(agentDir) {
 }
 
 export const absolutePath = (value) => typeof value === "string" && isAbsolute(value) && !value.includes("\0");
+/** Whether pi's settings narrow the models it offers: an `enabledModels` that names any. */
+const narrowsModels = (doc) => doc.enabledModels !== undefined && doc.enabledModels !== null && !(Array.isArray(doc.enabledModels) && doc.enabledModels.length === 0);
 /** Why bb's list of pi's models may not be all the models a thread in `home` can start on,
  *  or null where nothing says it is not (lib/pi-model.mjs). bb lists only the models pi's
  *  `enabledModels` names (pi 1.5.2, docs/settings.md), and a thread still starts on any
@@ -96,15 +98,31 @@ export const absolutePath = (value) => typeof value === "string" && isAbsolute(v
 export function piListMayBePartial(agentDir, { dataDir, server, home = null } = {}) {
   const { doc, changedMs, unreadable } = readPiSettings(agentDir);
   if (unreadable !== undefined) return "pi's settings could not be read, and they may narrow the list";
-  if (doc !== null && doc.enabledModels !== undefined && doc.enabledModels !== null && !(Array.isArray(doc.enabledModels) && doc.enabledModels.length === 0)) {
-    return "pi's enabledModels setting narrows the list to the models it names";
-  }
+  if (doc !== null && narrowsModels(doc)) return "pi's enabledModels setting narrows the list to the models it names";
   // With no settings.json nothing says when one was removed: never the case of a pi launch
   // that got this far (it lists the bridge), and not taken for a whole list.
   const started = bbStartedMs(dataDir, server);
   if (doc === null || started === null || !(started > changedMs)) return "pi's settings changed after bb started, or when bb started cannot be read, and bb lists by the settings its pi started with";
   if (typeof home === "string" && isAbsolute(home) && existsSync(join(home, ".pi"))) return "the home has a pi configuration of its own (.pi), which bb's list does not read";
   return null;
+}
+
+/** Whether the pi model check is off on this bb until it restarts, and for that alone: the
+ *  pi settings bb's server runs with changed after this bb started (piListMayBePartial's
+ *  third case), so every model that is not listed passes, and one pi does not have fails
+ *  only when its thread starts. True only where all of it can be read: the settings are
+ *  there and list the bridge (a pi launch is possible), they set no `enabledModels` (the
+ *  check is then off by that setting, and a restart does not turn it on), and bb-app's
+ *  record says when this bb started. Where the start cannot be read this is false: the
+ *  check itself warns at a launch it cannot settle. (Not the home's own `.pi`: that is one
+ *  home's, and no restart ends it.) */
+export function piModelCheckOffUntilRestart(agentDir, { dataDir, server } = {}) {
+  if (!absolutePath(agentDir)) return false;
+  const { doc, changedMs, unreadable } = readPiSettings(agentDir);
+  if (unreadable !== undefined || doc === null || narrowsModels(doc)) return false;
+  if (!Array.isArray(doc.packages) || !doc.packages.some((entry) => names(entry, PI_BRIDGE))) return false;
+  const started = bbStartedMs(dataDir, server);
+  return started !== null && !(started > changedMs);
 }
 
 // How long bb's server serves a list of pi's models it has fetched, as it is (bb-app

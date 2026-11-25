@@ -9,7 +9,7 @@ import { checkDataDir, sandboxDeny } from "./deny.mjs";
 import { ProviderError, bounded, isObject, someOf } from "./errors.mjs";
 import { exposedListeners } from "./exposure.mjs";
 import { BB_PROVIDER, harnessRefusal, modeRefusal, permissionMode, sandboxRefusal } from "./mode.mjs";
-import { DELIVERY_VARIABLE, PI_AGENT_DIR_SHAPE, PI_AWEB_EXTENSION, absolutePath, piConfigurationProblems, piListMayBeOld, piListMayBePartial } from "./pi-config.mjs";
+import { DELIVERY_VARIABLE, PI_AGENT_DIR_SHAPE, PI_AWEB_EXTENSION, absolutePath, piConfigurationProblems, piListMayBeOld, piListMayBePartial, piModelCheckOffUntilRestart } from "./pi-config.mjs";
 import { isModelId, piModelFinding } from "./pi-model.mjs";
 import { gapList, missingRemedy, readSandbox, sandboxKeysOf } from "./local-settings.mjs";
 import { DEFAULT_DAEMON_PORT, TRUST_VALUES, isLoopbackHost, loopbackOrigin, portOf } from "./settings.mjs";
@@ -226,18 +226,29 @@ async function piConfiguration(settings, bb) {
   }
 }
 
+/** What a readiness read with no planned launch says where a pi launch would go on and its
+ *  model check is off until bb restarts: bb's pi settings changed after this bb started, so
+ *  no model is refused, and one pi does not have fails only as its thread starts. A
+ *  warning: nothing is refused for it. */
+export const PI_MODEL_CHECK_OFF = Object.freeze({ code: "session-provider-pi-model-check-off", message: "the pi model check is off until bb restarts: bb's pi settings changed after it started (restart bb-app to turn it back on)" });
+
 /** What a readiness read with no planned launch says of pi (it cannot know which harness
- *  a launch would run): nothing where bb has no pi installed, and otherwise, as ONE
- *  warning, what a pi launch would be refused for. A warning here, because a deployment
- *  that runs Claude alone is ready; the launch itself, and the check of a planned pi
- *  launch, refuse. → warnings. */
+ *  a launch would run): nothing where bb has no pi installed, and otherwise ONE warning:
+ *  what a pi launch would be refused for, or, where it would go on, that its model check
+ *  is off (PI_MODEL_CHECK_OFF). A warning here, because a deployment that runs Claude
+ *  alone is ready; the launch itself, and the check of a planned pi launch, refuse.
+ *  → warnings. */
 async function piWarnings(settings, { server, bb, http = getJson, deadline = Date.now() + 16_000 }) {
   if (!server) return [];
   const { problem, provider } = await providerState(server, BB_PROVIDER.pi, http, Math.min(PROVIDER_STATE_TIMEOUT_MS, deadline - Date.now()));
   // No word of bb's on pi, or pi not installed in it: this bb runs no pi, and nothing is said.
   if (provider === null || provider.status === "not_installed") return [];
   const found = [...(problem !== null ? [problem] : []), ...await piConfiguration(settings, bb)];
-  if (found.length === 0) return [];
+  // A pi launch would go on here (the bridge is listed): the one case in which its model
+  // check refuses nothing and nothing says so is said (lib/pi-config.mjs
+  // piModelCheckOffUntilRestart). A planned pi launch is not told: one whose model the
+  // list cannot settle gets its own warning, and one whose model is listed needs none.
+  if (found.length === 0) return piModelCheckOffUntilRestart(settings.piAgentDir, { dataDir: settings.dataDir, server }) ? [{ ...PI_MODEL_CHECK_OFF }] : [];
   // Short, and before the finding's own words: those end with the path that was read, which is what a cut may take.
   return [{ code: "session-provider-pi-not-ready", message: `a pi launch would be refused here (${found.map((entry) => entry.code).join(", ")}); Claude launches are not held up. ${found[0].message}` }];
 }

@@ -18,7 +18,7 @@ or workspace membership alone does not make a package official.
 | `oats.jira` | `v1.0.1` | `oats.jira` (tasks) | |
 | `oats.linear` | `v1.0.1` | `oats.linear` (tasks) | |
 | `oats.apps` | `v1.0.0` | `oats.folio`, `oats.library` | |
-| `oats.bb` | `v0.4.0` | `oats.bb` (the bb session provider; needs OATS 0.70.5 or later) | |
+| `oats.bb` | `v0.5.1` | `oats.bb` (the bb session provider; needs OATS 0.70.5 or later) | |
 | `oats.machine` | `v0.1.1` | `oats.machine-care` | `steward`, `technician` |
 
 Each package lives in its own `awebai/oats-*` repository, `oats.bb` in
