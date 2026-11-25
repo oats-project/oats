@@ -781,7 +781,10 @@ for this check. Only inspected working trees recurse into their submodules;
 object/ref-only sources (the recorded repository, for example) check their
 own config, and do not inspect that checkout's submodules. Full clones
 without populated submodules in an inspected tree need no version
-probe and work as before. The
+probe and work as before. A plain work directory does not admit an enclosing
+checkout's config as its own: Git's top-level answer classifies the tree.
+On older or unknown Git, a failed submodule listing refuses inspection,
+rather than treating an incomplete listing as no submodules. The
 caller's repository-local Git variables are not passed: Git's own list
 (`git rev-parse --local-env-vars`: `GIT_DIR`, `GIT_WORK_TREE`,
 `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, the object directories, `GIT_CONFIG`,

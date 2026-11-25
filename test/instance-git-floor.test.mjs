@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { diffInstanceFile, observeInstanceGit } from "../lib/instance-git.mjs";
@@ -96,7 +96,7 @@ test("the recovery copier refuses a partial source before copying anything", (t)
   assert.equal(exactTreeDigest(f.home), before);
 });
 
-async function retirement(t, { retireScript } = {}) {
+async function retirement(t, { retireScript, workMode = "worktree" } = {}) {
   // v2Deployment clones its empty local remote once before seeding it. Hold precisely that
   // expected Git warning; every other diagnostic still reaches stderr.
   const stderr = process.stderr.write;
@@ -107,7 +107,7 @@ async function retirement(t, { retireScript } = {}) {
   };
   let f;
   try { f = v2Deployment({
-    souls: { dev: { soul: { work: "worktree", capabilities: { "test.hook": { from: "here" } } }, agents: "# Dev\n" } },
+    souls: { dev: { soul: { work: workMode, capabilities: { "test.hook": { from: "here" } } }, agents: "# Dev\n" } },
     capabilities: { "test.hook": { manifest: { hooks: { retire: "retire.mjs" } }, files: { "retire.mjs": retireScript ?? 'import { writeFileSync } from "node:fs";\nimport { join } from "node:path";\nwriteFileSync(join(process.env.OATS_INSTANCE_HOME, "hook-ran"), "ran\\n");\n' } } },
     files: { "file.txt": "before\n" },
   }); } finally { process.stderr.write = stderr; }
@@ -392,4 +392,54 @@ test("Git at the floor plans and retires a tree with a populated partial submodu
     assert.equal(result.removedDir, true, JSON.stringify(result));
     assert.equal(readFileSync(join(result.workRecovery.path, "repo", "file.txt"), "utf8"), "authored\n");
   });
+});
+
+test("an owned tree without work/.git still suppresses filters and refuses an old partial clone", (t) => {
+  const f = observer(t);
+  renameSync(join(f.work, ".git"), join(f.home, ".git"));
+  git(f.home, "config", "core.worktree", f.work);
+  const sentinel = join(f.home, "filter-ran");
+  git(f.work, "config", "filter.fixture.clean", `touch '${sentinel}'; cat`);
+  writeFileSync(join(f.work, ".gitattributes"), "file.txt filter=fixture\n");
+  writeFileSync(join(f.work, "file.txt"), "changed enough to read the working file\n");
+  const seen = observeInstanceGit(f.home, { gitVersion: () => assert.fail("full clone never probes") });
+  assert.ok(seen.files.some((entry) => entry.path === "file.txt"));
+  assert.equal(existsSync(sentinel), false, "the repository's clean filter never ran");
+  git(f.work, "config", "remote.origin.promisor", "true");
+  assert.throws(() => observeInstanceGit(f.home, { gitVersion: () => "git version 2.44.0" }), unsupported("2.44.0"));
+  assert.equal(existsSync(sentinel), false);
+});
+
+test("directory-mode work inside a partial enclosing checkout retires without a version probe", async (t) => {
+  const { f, spawned, work } = await retirement(t, { workMode: "directory" });
+  git(f.base, "init", "-q");
+  git(f.base, "config", "remote.origin.promisor", "true");
+  writeFileSync(join(work, "authored.txt"), "authored\n");
+  let probes = 0;
+  await f.inEnv(() => {
+    const gitVersion = () => { probes++; return "git version 2.44.9"; };
+    assert.doesNotThrow(() => planRetire(f.dep, f.root, spawned.instance, { gitVersion }));
+    const result = retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true });
+    assert.equal(result.removedDir, true, JSON.stringify(result));
+  });
+  assert.equal(probes, 0, "a directory does not read its enclosing checkout's objects");
+});
+
+test("submodule admission refuses a failed real index listing, including output overflow", (t) => {
+  const f = observer(t);
+  const nested = populatedSubmodules(t, f.work);
+  git(nested.work, "config", "remote.origin.promisor", "true");
+  for (const version of ["git version 2.44.9", "unknown"]) {
+    assert.throws(() => instanceGit.withGitReadSafety(() => version, () =>
+      instanceGit.assertSafeGitSubmodules(f.work, { maxBuffer: 1 })), (e) => {
+      assert.equal(e.code, "E_GIT_FAILED");
+      assert.match(e.message, /could not list populated submodules.*ENOBUFS/s);
+      return true;
+    });
+  }
+  assert.doesNotThrow(() => instanceGit.withGitReadSafety(() => "git version 2.45.0", () =>
+    instanceGit.assertSafeGitSubmodules(f.work, { maxBuffer: 1 })));
+  writeFileSync(join(f.work, ".git", "index"), "invalid index\n");
+  assert.throws(() => instanceGit.withGitReadSafety(() => "git version 2.44.9", () =>
+    instanceGit.assertSafeGitSubmodules(f.work)), { code: "E_GIT_FAILED" });
 });

@@ -3704,7 +3704,6 @@ A failed `add` reports the same facts about its rollback in `details`:
 | `E_CLONE_MISMATCH` | the path is a linked worktree, or the clone has no `origin` |
 | `E_BRANCH_EXISTS` | the branch exists in the clone: before the tree is made, or made by another `add` or another git at the same moment, between that check and this add's `git switch -c` (the tree is removed, and that branch kept). Either way `details` carries `branch`, `clone` and `remedy`, which is `<instance>/<branch>`. A racing `add` can end in this code or in `E_GIT_FAILED` (next row) |
 | `E_GIT_FAILED` | a Git step failed on its own (`git worktree add`, or `git switch` while the branch does not exist), with Git's message: `git <sub> failed in <dir>: …`; or a checkout was not run because the repository's configuration defines a filter driver whose name cannot be overridden ([a checkout runs no filter driver](souls-and-instances.md#checkout-filter-drivers)); the tree is removed. A `git switch` that meets the branch's ref lock while another git holds it (`cannot lock ref …`), as a racing `add` can, is this code: the branch does not exist yet, and a lock left by a git that crashed looks the same. A caller that retries once the other git has made the branch gets `E_BRANCH_EXISTS` from the check before the tree is made, with its remedy |
-| `E_GIT_UNSUPPORTED` | `oats instance git`, `oats instance diff` and `oats retire` (including `--plan`) refuse a partial clone when Git is below 2.45 or its version cannot be parsed; `details` carries `found`, `minimum: "2.45"` and `reason: "partial-clone"`. A populated partial-clone submodule is refused the same way, with `details.submodule` naming its path relative to the outer repository. Full clones without populated submodules need no version probe. A retire refused this way changes nothing. |
 | `E_PLACEMENT_TAKEN` | a `ready` record with another clone, branch or base (`details.differ`); `.work-<p>` with no record, or a file or symbolic link there; an unreadable record |
 | `E_LIFECYCLE_BUSY` | an add of that purpose is still running (pid and start time verified); another add or remove of that purpose holds its claim (`details.lock`); a file at the claim's path is no claim this kernel can read or take over (`details.lock`); the claim was taken again, the last time by a process that is gone, each of the five times the command found it without a live holder (`run the command again`); an interrupted add's rollback could not be completed (`details.owed`; the message says what to deal with and to run `oats worktree remove --purpose <purpose>`, which finishes the rollback); or, `add` only (OATS 0.52.0), the home's claim is held by a retire whose liveness cannot be read, or is a file that is no readable claim (`no tree was made`; [Commands that meet on one home](#lifecycle-pairs)). Every one carries [`details.holder`](#busy-holder) |
 | `E_REMOTE_UNREADABLE` | the fetch of `<base>` from `origin` failed; the tree is removed |
@@ -4809,6 +4808,8 @@ Git checkout was read as that checkout before: its branch and its files,
 none of them the instance's. The rule is the path, in every work mode: a
 `directory` instance in such a deployment has no work tree, and one whose
 `work/` is the top level of a repository of its own is observed as before.
+Git's top-level answer decides this even when the gitdir is outside `work/`;
+an owned tree still gets the configuration checks and filter overrides below.
 A `work/` that is a link is read as what it leads to, wherever that is: a
 `workspace` instance's leads to the deployment directory, which is above its
 home, and is observed as before. A [stop plan](#stop)'s and a
@@ -4879,6 +4880,8 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
   it safely needs Git 2.45 or later; this is Git <found>`. The key is absent
   for a partial clone at the root. Full clones without populated submodules
   work as before, without a version probe.
+  If the populated-submodule listing fails, older or unknown Git refuses
+  with `E_GIT_FAILED`; an incomplete listing never proves that no submodules exist.
 - **Filter drivers are not run.** Git runs a `filter.<name>.clean` or
   `.process` command when a status or a diff compares a work-tree file that
   carries the `filter` attribute, and it has no switch that turns filters
