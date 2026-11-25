@@ -124,7 +124,11 @@ def check_shape(harness, data):
 
 
 def install(path, gid, data):
-    login_dir = ensure_parents(path, gid)
+    write_file(ensure_parents(path, gid), path, gid, data)
+
+
+def write_file(login_dir, path, gid, data):
+    """Replace path in login_dir atomically with a root:<gid> 0440 file holding data."""
     if os.path.lexists(path):
         root_owned_not_writable(path, want_dir=False)
     tmp = os.path.join(login_dir, f".{os.path.basename(path)}.{os.getpid()}.new")
