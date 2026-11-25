@@ -241,16 +241,33 @@ refuses the key on a trigger.
   in a loop. Unobservable or still starting: skipped, delivery kept pending.
   Word wake messages so that receiving one again is harmless.
 
+  **A wake that starts a stopped agent starts a fresh conversation, on both
+  backends.** The start is a plain `session start`: the agent begins again
+  from its `TASK.md`, and then receives the wake's message. The earlier
+  conversation is not carried on; it stays readable (a tmux home's
+  transcript, a provider's archived session).
+
   A home on a [session provider](execution-targets.md#session-providers) has
   no terminal: the message is its session's input, sent once through the
-  provider, and a live claim holds it the same way. **A wake never starts a
-  provider home OATS stopped.** Its input is refused before any provider
-  call: the run is `skipped` with `errorCode: "E_SESSION_NOT_RUNNING"`, and
-  the delivery stays pending until the home is started (`oats session
-  start`). To a session that is lost (gone, and not stopped by OATS) the
+  provider, and a live claim holds it the same way. **A provider home OATS
+  stopped is started by its due wake, by the rule of a stopped tmux home**:
+  at a due minute only, with a launch slot, under the home's lifecycle claim
+  (a retire, a stop or an upgrade of the home refuses it: a skip, started
+  again at the next due minute), whoever stopped it. The start is `oats
+  session start --home`, run by the tick: a new session of the provider, with
+  the provider's own `check` first. A start that is refused is `skipped`
+  with the refusal's `errorCode` (the provider's `E_BACKEND_*` among them),
+  and the delivery stays pending. Before this rule such a wake was only
+  refused (`E_SESSION_NOT_RUNNING`) until a person started the home.
+
+  A provider home whose session is **lost** is not started by a wake. To a
+  session that is gone and that OATS did not stop, the
   input is a resume, on which the provider restarts the session, counted
   against the home's cap
-  ([lost sessions](execution-targets.md#session-providers)). An input the provider itself refuses
+  ([lost sessions](execution-targets.md#session-providers)). A home stopped
+  with the host (`oats host run`'s shutdown) is OATS's to bring back in its
+  own conversation: until the resume does, the wake's input is refused
+  (`errorCode: "E_SESSION_NOT_RUNNING"`) and the delivery stays pending. An input the provider itself refuses
   (`E_SESSION_PROMPT_OPEN` while its session shows a prompt,
   `E_SESSION_INPUT_QUEUED`) is `skipped` with that `errorCode`: nothing was
   sent, and the pending delivery is tried again at every tick, then delivered

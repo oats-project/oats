@@ -1052,8 +1052,12 @@ it makes (`oats instance stop`, a restart's stop, a retire, the host's
 shutdown), before it calls the provider, and a start clears it. While it is
 set, inspect answers stopped (`present: false`, `running: false`) without
 calling the provider, and every input is refused `E_SESSION_NOT_RUNNING`
-before any call: `oats session input`, a scheduled wake (which never starts
-a provider home), a client's input, the messaging broker's delivery. A stop
+before any call: `oats session input`, a client's input, the messaging
+broker's delivery, and a scheduled wake's own delivery. A due wake does not
+input to a home OATS stopped: it starts it, as it starts a stopped tmux
+home, in a new session, and delivers its message once that runs
+([schedules.md](schedules.md#kinds)); a home stopped with the host is left
+to its resume. A stop
 that lands while an input is being sent still wins: OATS asks the provider
 to stop the session again and answers the input `E_SESSION_NOT_RUNNING`, so
 a mail stays unread and comes again. A

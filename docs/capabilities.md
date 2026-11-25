@@ -1391,9 +1391,10 @@ other producer's claim is touched.
 
 **A pi claim that outlives its dialog.** With no pi left running or starting in
 the home, a dead pi's `question` stays, and it holds every scheduled wake: the hold reads
-claims, not whether the session runs. For a home on a session provider that
-lasts until the claim is cleared, because a wake never starts such a home; a
-tmux home's next start voids it, as a session boundary voids every claim. A
+claims, not whether the session runs. For a home on a session provider whose
+session is lost that lasts until the claim is cleared, because a wake does
+not start such a home (it starts only one OATS stopped); a home's next
+start voids it, as a session boundary voids every claim. A
 hold that runs long is a reason to look: run `oats instance waiting clear
 --producer oats.pi --home <home>` from anywhere. A mark left behind is removed
 by the home's next pi.
