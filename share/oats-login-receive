@@ -11,12 +11,23 @@ The destination comes from the root-owned config (/etc/oats-login/receiver.json)
   {"teams": {"<name>": {"group": "<group that may read>", "harnesses": ["claude", ...],
                         "path": "/srv/oats-team/{name}/login/{harness}-token"}}}   (path optional; that is the default)
 The file is root:<group> 0440, written atomically; its parent directories are created root-owned (0750 for the login dir).
+
+With --credential <entry-id>, the key decides the destination: one dedicated key per entry,
+  restrict,command="/usr/local/sbin/oats-login-receive --credential <entry-id>" <key>
+SSH_ORIGINAL_COMMAND is only "install", "status" or "remove". The entry comes from the same config:
+  {"credentials": {"<entry-id>": {"group": "<group that may read>", "access": "read-only",
+                                  "path": "/srv/oats-team/<group-dir>/credentials/<file>"}}}
+path is required, absolute and normalized, in a directory named credentials, which is root:<group> 0750
+(created so; an existing one is refused, never changed, when it is anything else). The value is opaque:
+strict UTF-8, no NUL, at most 65,536 bytes, surrounding whitespace stripped. The answer is one JSON line
+{ok, entry, fingerprint, replacedAt} (plus "error"). access "read-only" is the only access this receiver writes.
 """
 import datetime, grp, hashlib, json, os, re, stat, sys, syslog
 
 CONFIG = "/etc/oats-login/receiver.json"
 DEFAULT_PATH = "/srv/oats-team/{name}/login/{harness}-token"
 HARNESSES = {"claude", "codex", "pi", "opencode"}
+ACTIONS = ("install", "remove", "status")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 MAX_BYTES = 65536
 
@@ -43,7 +54,7 @@ def root_owned_not_writable(path, want_dir):
         raise Refused(f"{path} is not root-owned or is group/other-writable")
 
 
-def load_config(path=CONFIG):
+def load_config(path=CONFIG, section="teams"):
     try:
         root_owned_not_writable(path, want_dir=False)
         root_owned_not_writable(os.path.dirname(path), want_dir=True)
@@ -53,8 +64,8 @@ def load_config(path=CONFIG):
         raise Refused("receiver config absent")
     except (ValueError, OSError) as e:
         raise Refused(f"receiver config unreadable: {type(e).__name__}")
-    if not isinstance(cfg.get("teams"), dict):
-        raise Refused("receiver config has no teams")
+    if not isinstance(cfg.get(section), dict):
+        raise Refused(f"receiver config has no {section}")
     return cfg
 
 
@@ -89,6 +100,60 @@ def destination(cfg, harness, name):
     return path, gid
 
 
+def parse_entry(argv):
+    if len(argv) != 2 or argv[0] != "--credential":
+        raise Refused("usage: oats-login-receive [--credential <entry-id>]")
+    if not NAME_RE.match(argv[1]):
+        raise Refused("bad entry id")
+    return argv[1]
+
+
+def parse_action(raw):
+    parts = (raw or "").split()
+    if len(parts) != 1 or parts[0] not in ACTIONS:
+        raise Refused("usage: install|remove|status")
+    return parts[0]
+
+
+def credential_destination(cfg, entry):
+    spec = cfg["credentials"].get(entry)
+    if not isinstance(spec, dict):
+        raise Refused("entry not configured on this host")
+    if spec.get("access") != "read-only":
+        raise Refused("access not supported by this receiver")
+    try:
+        group = spec["group"]
+        gid = grp.getgrnam(group).gr_gid
+    except (KeyError, TypeError):
+        raise Refused("configured group absent")
+    path = spec.get("path")
+    if not isinstance(path, str) or not os.path.isabs(path) or os.path.normpath(path) != path:
+        raise Refused("configured path is not absolute and normalized")
+    if os.path.basename(os.path.dirname(path)) != "credentials":
+        raise Refused("configured path is not in a credentials directory")
+    return path, gid, group
+
+
+def credentials_dir(path, gid, group, create):
+    """The credentials directory: created root:<group> 0750 (parents root 0755) when create is set; every existing
+    component root-owned, not group/other-writable, no symlinks; an existing directory that is not root:<group> 0750 is
+    refused and never chmodded or chowned. Answers None when it is absent and create is not set."""
+    directory = os.path.dirname(path)
+    if create:
+        ensure_parents(path, gid)
+    else:
+        cur = "/"
+        for p in directory.strip("/").split("/"):
+            cur = os.path.join(cur, p)
+            if not os.path.lexists(cur):
+                return None
+            root_owned_not_writable(cur, want_dir=True)
+    st = os.lstat(directory)
+    if st.st_gid != gid or stat.S_IMODE(st.st_mode) != 0o750:
+        raise Refused(f"credentials directory is not root:{group} 0750")
+    return directory
+
+
 def ensure_parents(path, gid):
     """Create missing parents root-owned; the login dir itself root:<group> 0750. Existing ones must be root-owned, not writable by others, no symlinks."""
     login_dir = os.path.dirname(path)
@@ -114,6 +179,15 @@ def read_credential(stream):
         raise Refused("empty credential")
     if b"\0" in data:
         raise Refused("credential contains NUL")
+    return data
+
+
+def read_value(stream):
+    data = read_credential(stream)
+    try:
+        data.decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        raise Refused("credential is not UTF-8")
     return data
 
 
@@ -189,17 +263,64 @@ def run(raw_command, stdin, config_path=CONFIG):
     return out
 
 
+def run_credential(argv, raw_command, stdin, config_path=CONFIG):
+    out = {"ok": False, "entry": None, "fingerprint": None, "replacedAt": None}
+    try:
+        entry = parse_entry(argv)
+        out["entry"] = entry
+        action = parse_action(raw_command)
+        # The client refuses a terminal too: a value typed at a prompt is echoed and kept in scrollback.
+        if action == "install" and stdin.isatty():
+            raise Refused("stdin is a terminal")
+        path, gid, group = credential_destination(load_config(config_path, section="credentials"), entry)
+        if action == "install":
+            data = read_value(stdin)
+            write_file(credentials_dir(path, gid, group, create=True), path, gid, data)
+            out.update(ok=True, fingerprint=fingerprint(data), replacedAt=now())
+        elif action == "remove":
+            if credentials_dir(path, gid, group, create=False) and os.path.lexists(path):
+                root_owned_not_writable(path, want_dir=False)
+                os.unlink(path)
+            out.update(ok=True, replacedAt=now())
+        else:  # status
+            if not credentials_dir(path, gid, group, create=False) or not os.path.lexists(path):
+                raise Refused("no credential installed")
+            root_owned_not_writable(path, want_dir=False)
+            with open(path, "rb") as f:
+                data = f.read().strip()
+            st = os.lstat(path)
+            out.update(ok=True, fingerprint=fingerprint(data),
+                       replacedAt=datetime.datetime.fromtimestamp(st.st_mtime, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    except Refused as e:
+        out["error"] = str(e)
+    except OSError as e:
+        out["error"] = f"io error: {type(e).__name__}"
+    except Exception as e:  # never leave the caller without a JSON line and a syslog record
+        out["error"] = f"internal error: {type(e).__name__}"
+    return out
+
+
 def main():
     os.umask(0o077)
-    out = run(os.environ.get("SSH_ORIGINAL_COMMAND", ""), sys.stdin.buffer)
+    raw = os.environ.get("SSH_ORIGINAL_COMMAND", "")
+    client = (os.environ.get("SSH_CLIENT", "-").split() or ["-"])[0]
     syslog.openlog("oats-login-receive", 0, syslog.LOG_AUTH)
+    if len(sys.argv) > 1:
+        out = run_credential(sys.argv[1:], raw, sys.stdin.buffer)
+        # Only a validated action and the argv entry id (None unless valid), never the raw command.
+        parts = raw.split()
+        action = parts[0] if len(parts) == 1 and parts[0] in ACTIONS else "-"
+        syslog.syslog(syslog.LOG_NOTICE, "ok=%s action=%s entry=%s fingerprint=%s client=%s" % (
+            out["ok"], action, out["entry"], out["fingerprint"], client))
+        print(json.dumps(out))
+        return 0 if out["ok"] else 1
+    out = run(raw, sys.stdin.buffer)
     # Log only the VALIDATED action (never the raw first token: a client that puts the credential in the command
     # line must not write it into the auth log).
-    first = (os.environ.get("SSH_ORIGINAL_COMMAND", "").split() or ["-"])[0]
-    action = first if first in ("install", "remove", "status") else "-"
+    first = (raw.split() or ["-"])[0]
+    action = first if first in ACTIONS else "-"
     syslog.syslog(syslog.LOG_NOTICE, "ok=%s action=%s harness=%s name=%s fingerprint=%s client=%s" % (
-        out["ok"], action, out["harness"], out["name"],
-        out["fingerprint"], (os.environ.get("SSH_CLIENT", "-").split() or ["-"])[0]))
+        out["ok"], action, out["harness"], out["name"], out["fingerprint"], client))
     print(json.dumps(out))
     return 0 if out["ok"] else 1
 

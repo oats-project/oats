@@ -64,6 +64,15 @@ test("team image verification builds the fixture child image from the accepted i
   assert.doesNotMatch(read(".github/workflows/release.yml"), /agent-child|AGENT_CHILD|agent-bb|AGENT_BB/, "publication includes the base image alone");
 });
 
+test("team image verification proves the credential receiver as root, never skipping it", () => {
+  const job = workflow("team-image.yml").jobs.verify;
+  const steps = job.steps.filter((s) => s.run?.includes("test/credential-receiver-root.py"));
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].run, "sudo -n python3 -I test/credential-receiver-root.py");
+  assert.equal(steps[0].if, undefined, "it runs on every pull request");
+  assert.match(read("test/credential-receiver-root.py"), /\nif os\.geteuid\(\) != 0:\n    raise SystemExit\(/, "without root it fails");
+});
+
 test("the shared acceptance fixture runs the image owner's acceptance against Compose", () => {
   const script = read(".github/scripts/team-image-accept.sh");
   assert.match(script, /docker compose/);

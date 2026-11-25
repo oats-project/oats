@@ -41,6 +41,11 @@ jobs:
         with:
           node-version: 22
 
+      # The receiver's --credential mode against a real root-owned tree. sudo -n
+      # fails the step where root is unavailable: it never skips.
+      - name: Prove the credential receiver against a root-owned tree
+        run: sudo -n python3 -I test/credential-receiver-root.py
+
       - name: Check packed inputs and workflow contracts for the manual proof
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.default_payload_proof }}
         run: |
