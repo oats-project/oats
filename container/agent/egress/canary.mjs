@@ -76,6 +76,16 @@ export function docker(args) {
   return result.stdout;
 }
 
+/** One stderr receipt line per attempt, plus a leftover or unowned line when
+ * absence was not verified. `label` names the calling check. */
+export function reportReceipt(receipt, unowned, label = "egress boundary") {
+  process.stderr.write(label+" receipt: "+JSON.stringify(receipt)+"\n");
+  if (!receipt.absentVerified) {
+    const classification=receipt.created && !unowned ? "leftover" : "unowned or unverified";
+    process.stderr.write(label+" "+classification+": "+receipt.name+"\n");
+  }
+}
+
 const safeName = value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value);
 export function assertNamePrefix(prefix) {
   assert.ok(prefix === undefined || (typeof prefix === "string" && prefix.length >= 2 && prefix.length <= 64

@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { compilePolicy } from "./policy.mjs";
 import { assertComposeBoundary, assertPublicMountSource, boundaryControls, ipv4Gateway } from "./boundary.mjs";
-import { assertNamePrefix, docker, tcpFromNetwork, withGatewayCanary } from "./canary.mjs";
+import { assertNamePrefix, docker, reportReceipt, tcpFromNetwork, withGatewayCanary } from "./canary.mjs";
 import { runtimeProgram } from "./probe-runtime.mjs";
 import { observeNetworks } from "./preflight-network.mjs";
 import { admitRemoteBackends, admitRun, deploySource } from "./split.mjs";
@@ -38,13 +38,6 @@ export async function probeComposeBoundary(plan) {
   } finally {
     // Report partial attempts on refusal as well as fully cleaned-up runs.
     for (const receipt of receipts) reportReceipt(receipt,unownedNames.includes(receipt.name));
-  }
-}
-function reportReceipt(receipt, unowned) {
-  process.stderr.write("egress boundary receipt: "+JSON.stringify(receipt)+"\n");
-  if (!receipt.absentVerified) {
-    const classification=receipt.created && !unowned ? "leftover" : "unowned or unverified";
-    process.stderr.write("egress boundary "+classification+": "+receipt.name+"\n");
   }
 }
 /** Schema 2 (split hosts): the run binding, this deploy copy's source commit
