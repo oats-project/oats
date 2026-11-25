@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { diffInstanceFile, observeInstanceGit } from "../lib/instance-git.mjs";
@@ -9,7 +10,7 @@ import { exactTreeDigest, retireInstance, retirementRecoveryRoot } from "../lib/
 import { planRetire } from "../lib/instance-lifecycle.mjs";
 import { BEFORE_EFFECT_CODES } from "../lib/errors.mjs";
 import * as core from "../lib/core.mjs";
-import { git, v2Deployment } from "./helpers/v2-deployment.mjs";
+import { git, v2Deployment, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 
 function observer(t) {
   const home = mkdtempSync(join(tmpdir(), "oats-git-floor-"));
@@ -701,3 +702,40 @@ for (const flag of ["GIT_LITERAL_PATHSPECS", "GIT_NOGLOB_PATHSPECS"]) {
     assert.equal(probes, 0);
   });
 }
+
+test("retire never selects a different submodule Git through inherited GIT_EXEC_PATH", async (t) => {
+  const { f, spawned, work } = await retirement(t);
+  const leaf = observer(t), shim = join(f.base, "git-exec"), log = join(f.base, "exec-path-ran");
+  git(work, "-c", "protocol.file.allow=always", "submodule", "add", "--quiet", leaf.work, "vendor/lib");
+  git(work, "add", ".");
+  git(work, "commit", "-qm", "populated submodule");
+  git(join(work, "vendor", "lib"), "config", "remote.origin.promisor", "true");
+  writeFileSync(join(work, "file.txt"), "authored\n");
+  const realGit = execFileSync("/bin/sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+  const quote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
+  mkdirSync(shim);
+  // Log actual selection, then delegate every argument/result to the real Git unchanged.
+  writeFixtureExecutable(f.base, join(shim, "git"), "#!/bin/sh\nprintf 'called\\n' >> " + quote(log) + "\nexec " + quote(realGit) + ' "$@"\n');
+  let failure, result;
+  await f.inEnv(() => {
+    const prior = process.env.GIT_EXEC_PATH;
+    process.env.GIT_EXEC_PATH = shim;
+    try {
+      execFileSync(realGit, ["-C", work, "status", "--porcelain", "--ignore-submodules=none"], { env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+      assert.equal(existsSync(log), true, "ordinary Git demonstrably selects the logging shim");
+      unlinkSync(log);
+      try {
+        const gitVersion = () => "git version 2.45.0";
+        planRetire(f.dep, f.root, spawned.instance, { gitVersion });
+        result = retireInstance(f.root, spawned.instance, { gitVersion, discardWorktree: true });
+      } catch (e) { failure = e; }
+    } finally {
+      if (prior === undefined) delete process.env.GIT_EXEC_PATH;
+      else process.env.GIT_EXEC_PATH = prior;
+    }
+  });
+  assert.equal(existsSync(log), false, "no retire command selected Git from the inherited exec directory");
+  if (failure) throw failure;
+  assert.equal(result.removedDir, true);
+  assert.equal(readFileSync(join(result.workRecovery.path, "repo", "file.txt"), "utf8"), "authored\n");
+});
