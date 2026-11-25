@@ -7878,10 +7878,19 @@ first Enter: the agent got both texts as one message, and both callers read
   paste and its Enter (or whose Enter fails) leaves its text in the agent's
   input line. The next input to that home submits that text first, with an
   Enter of its own, as the message it was, and then pastes its own: the
-  leftover is never run into the new message. The agent so gets the earlier
-  text late; its sender got no answer and may send it again. Where the
-  agent's pane runs another process since (the session was restarted), the
-  line is gone and no Enter is sent for it.
+  leftover is never run into the new message. **So a crashed sender's text
+  may reach the agent at the next input**, late; its sender got no answer
+  and may send it again. That Enter is an input's Enter like any other:
+  sent only under the lock, and never while a permission prompt is open
+  (below), when the whole input is refused. It is sent only while the text
+  is still taken to be in the line: the agent's pane runs the same process
+  as at the paste, and the paste is less than 2 minutes old. Otherwise no
+  key is sent for it (the session was restarted and the line is gone, tmux
+  names no process for the pane, or a person at the terminal may have sent
+  or deleted the text since), and text still in the line then goes with the
+  next message, as before this lock. The kernel keeps its note of such a
+  paste on a best effort: a note it cannot write or remove never fails an
+  input.
 - **What the lock does not cover:** keys a person types in an attached
   terminal (`oats session attach`, a client's terminal), another tool that
   types into the pane (a messaging broker's own delivery), and a home on a
@@ -7901,8 +7910,11 @@ attach --home <abs>`) or through their client's own prompt card, and the
 input is sent again. Who meets the refusal: whatever runs `oats session
 input`, which is an agent or a script, a messaging layer that delivers
 through it, and a client that sends input through the kernel. A scheduled
-wake already holds while a claim stands and does not reach it. The Desktop
-and the TUI do not call `session input`.
+wake already holds while a claim stands and does not reach it; should a
+prompt open right then, its delivery stays pending, as for every refused
+input. A trigger sends no input (it spawns). `--server` does not route
+input, so no server route meets it. The Desktop and the TUI do not call
+`session input`.
 
 **Session input takes no other hold.** It types whatever other claim is set,
 and its Enter can answer an open dialog, so don't run it from a script or an
@@ -7918,7 +7930,8 @@ agent at a session that may show one:
 - a permission prompt that opens between the kernel's read of the claims and
   its paste is answered too. The read is made under the home's input lock,
   right before the paste, which narrows that moment and cannot close it;
-- claims that cannot be read name no permission: the input is typed.
+- claims that cannot be read are not treated as a permission: the input is
+  typed.
 
 `submitted` means terminal-operation success, **not model acceptance or
 processing**. `verified` is display observation only: `true` means a bounded

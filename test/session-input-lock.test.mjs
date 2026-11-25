@@ -6,12 +6,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setWaiting } from "../lib/instance-events.mjs";
 import { KERNEL_FEATURES, SESSION_INPUT_PERMISSION_REFUSAL_FEATURE } from "../lib/kernel-features.mjs";
+import { UNSUBMITTED_MAX_AGE_MS } from "../lib/session-input-lock.mjs";
 
 const cli = fileURLToPath(new URL("../bin/oats.mjs", import.meta.url));
 const lib = (name) => new URL(`../lib/${name}`, import.meta.url).href;
@@ -40,7 +41,9 @@ if (args[0] !== '-u' || args[1] !== '-S' || args[2] !== ${JSON.stringify(tmux.so
 const command = args[3], log = ${JSON.stringify(log)}, buffers = ${JSON.stringify(join(base, "buffers"))};
 const put = (event) => fs.appendFileSync(log, JSON.stringify(event) + '\\n');
 fs.mkdirSync(buffers, { recursive: true });
-if (command === 'list-panes') process.stdout.write('%12\\t0\\tcodex\\t' + (process.env.PANE_PID || '123') + '\\n');
+// PANE_PID: the pane's process as tmux names it ("none": it names none).
+const pid = process.env.PANE_PID === 'none' ? '' : process.env.PANE_PID || '123';
+if (command === 'list-panes') process.stdout.write('%12\\t0\\tcodex\\t' + pid + '\\n');
 else if (command === 'load-buffer') fs.writeFileSync(buffers + '/' + args[5], fs.readFileSync(0, 'utf8'));
 else if (command === 'paste-buffer') put({ paste: fs.readFileSync(buffers + '/' + args[args.indexOf('-b') + 1], 'utf8') });
 else if (command === 'send-keys') put({ enter: true });
@@ -49,7 +52,6 @@ else if (args.includes('capture-pane')) {
   if (hold && !fs.existsSync(hold)) { fs.writeFileSync(hold, String(process.pid)); setTimeout(() => {}, 4000); }
   else process.stdout.write('80x24\\n' + (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').length : 0) + ' bytes typed\\n80x24\\n');
 }
-else if (command === 'display-message') process.stdout.write((process.env.PANE_PID || '123') + '\\n');
 `);
   chmodSync(join(bin, "tmux"), 0o755);
   const oatsHome = join(base, "oats-home");
@@ -92,6 +94,21 @@ setInterval(() => {}, 1000);`;
       children.push(child);
       await new Promise((held, failed) => { child.stdout.once("data", held); child.once("exit", () => failed(new Error("the lock's holder ended before it held the lock"))); });
       return child;
+    },
+    /** An input that is killed between its paste and its Enter: its text is in the line, noted, with no Enter. */
+    async leaveUnsubmitted(text, extra = {}) {
+      const held = join(base, `held-at-look-${children.length}`);
+      const dying = this.start(text, { ...extra, HOLD_AT_LOOK: held });
+      for (let i = 0; i < 200 && !existsSync(held); i++) await sleep(50);
+      assert.equal(existsSync(held), true, "the input reached its look at the pane");
+      dying.kill("SIGKILL");
+      assert.equal((await dying.done).signal, "SIGKILL");
+    },
+    /** The kernel's note of a paste with no Enter: its path, or null when there is none. */
+    note() {
+      const dir = join(oatsHome, "session-resume", "session-inputs");
+      const name = existsSync(dir) ? readdirSync(dir).find((n) => n.endsWith(".pasted.json")) : undefined;
+      return name ? join(dir, name) : null;
     },
     children };
 }
@@ -158,36 +175,86 @@ test("the lock of a holder that was killed is taken over at once, never waited f
 test("text pasted by an input that died before its Enter is submitted on its own before the next input's text, never run into it (#2124)", async (t) => {
   const fx = fixture(t);
   // The first input is ended between its paste and its Enter: while it looks at the pane.
-  const held = join(fx.base, "held-at-look");
-  const dying = fx.start("LEFT", { HOLD_AT_LOOK: held });
-  for (let i = 0; i < 200 && !existsSync(held); i++) await sleep(50);
-  assert.equal(existsSync(held), true, "the first input reached its look at the pane");
-  dying.kill("SIGKILL");
-  assert.equal((await dying.done).signal, "SIGKILL");
+  await fx.leaveUnsubmitted("LEFT");
   assert.deepEqual([fx.typed(), fx.messages()], [["paste"], []], "its text is in the input line, with no Enter");
+  assert.notEqual(fx.note(), null, "and the kernel noted it");
   // The next input: an Enter for what was left, then its own paste and its own Enter.
   const next = fx.run("NEXT");
   assert.equal(next.status, 0, JSON.stringify(next));
   assert.deepEqual(fx.typed(), ["paste", "enter", "paste", "enter"]);
   assert.deepEqual(fx.messages(), ["LEFT", "NEXT"], "two messages: what was left, as it was, then the new one");
   // Nothing is left noted: a third input sends no Enter of anybody else's.
+  assert.equal(fx.note(), null);
   assert.equal(fx.run("THIRD").status, 0);
   assert.deepEqual(fx.typed().slice(4), ["paste", "enter"]);
 });
 
-test("a paste left in a pane whose process is gone (the session was restarted since) gets no Enter (#2124)", async (t) => {
+test("the Enter for text left unsubmitted is an input's Enter like any other: with a permission claim set nothing is sent at all, the leftover's Enter included (#2124, #2125)", async (t) => {
   const fx = fixture(t);
-  const held = join(fx.base, "held-at-look");
-  const dying = fx.start("LEFT", { HOLD_AT_LOOK: held });
-  for (let i = 0; i < 200 && !existsSync(held); i++) await sleep(50);
-  dying.kill("SIGKILL");
-  await dying.done;
-  // The pane now runs another process: the line that held the text is gone with the old one.
+  await fx.leaveUnsubmitted("LEFT");
+  setWaiting(fx.home, { producer: "oats.core", waiting: true, reason: "permission", message: "Claude needs your permission to use Bash" });
+  const refused = fx.run("NEXT");
+  assert.deepEqual([refused.status, refused.envelope.error.code], [1, "E_SESSION_PROMPT_OPEN"], JSON.stringify(refused));
+  assert.deepEqual(fx.typed(), ["paste"], "no Enter for what was left, no paste, no key of any kind");
+  assert.notEqual(fx.note(), null, "the note stays for the input that is sent once the prompt is answered");
+  // The person answers the prompt; the input is sent again: what was left first, then its own.
+  setWaiting(fx.home, { producer: "oats.core", waiting: false });
+  assert.equal(fx.run("NEXT").status, 0);
+  assert.deepEqual([fx.typed(), fx.messages()], [["paste", "enter", "paste", "enter"], ["LEFT", "NEXT"]]);
+});
+
+test("a note of unsubmitted text gets no Enter where nothing shows the text is still in the line: another pane process, a pane process tmux does not name, a note past its age (#2124)", async (t) => {
+  // The pane now runs another process (the session was restarted since): the line that held the text is gone.
+  let fx = fixture(t);
+  await fx.leaveUnsubmitted("LEFT");
   const next = fx.run("NEXT", { PANE_PID: "456" });
   assert.equal(next.status, 0, JSON.stringify(next));
   assert.deepEqual(fx.typed(), ["paste", "paste", "enter"], "one Enter: its own");
+  assert.equal(fx.note(), null, "and the note is gone");
   assert.equal(fx.run("THIRD", { PANE_PID: "456" }).status, 0);
-  assert.deepEqual(fx.typed().slice(3), ["paste", "enter"], "and the note is gone");
+  assert.deepEqual(fx.typed().slice(3), ["paste", "enter"]);
+
+  // tmux names no process for the pane, at the paste and at the next input: two empty names prove no same process.
+  fx = fixture(t);
+  await fx.leaveUnsubmitted("LEFT", { PANE_PID: "none" });
+  assert.equal(fx.run("NEXT", { PANE_PID: "none" }).status, 0);
+  assert.deepEqual(fx.typed(), ["paste", "paste", "enter"]);
+
+  // A note older than its bound: a person may have sent or deleted the text since, so an Enter
+  // for it would answer whatever the pane shows now.
+  fx = fixture(t);
+  await fx.leaveUnsubmitted("LEFT");
+  const note = fx.note(), doc = JSON.parse(readFileSync(note, "utf8"));
+  assert.deepEqual(Object.keys(doc).sort(), ["at", "home", "paneId", "panePid"]);
+  writeFileSync(note, JSON.stringify({ ...doc, at: new Date(Date.now() - UNSUBMITTED_MAX_AGE_MS - 1000).toISOString() }));
+  assert.equal(fx.run("NEXT").status, 0);
+  assert.deepEqual(fx.typed(), ["paste", "paste", "enter"], "no Enter for the old text");
+  assert.equal(fx.note(), null);
+  // And one whose time is in the future, or is no time, is believed no more than an old one.
+  for (const at of [new Date(Date.now() + 3600_000).toISOString(), "yesterday", 7]) {
+    fx = fixture(t);
+    await fx.leaveUnsubmitted("LEFT");
+    writeFileSync(fx.note(), JSON.stringify({ ...JSON.parse(readFileSync(fx.note(), "utf8")), at }));
+    assert.equal(fx.run("NEXT").status, 0);
+    assert.deepEqual(fx.typed(), ["paste", "paste", "enter"], JSON.stringify(at));
+  }
+});
+
+test("a note the system will not keep never stops an input: its Enter is still sent, and a sent input is never answered as failed (#2124)", async (t) => {
+  const fx = fixture(t);
+  // Where the note goes (the name a real one takes) there is a directory that is not empty: it
+  // can be neither written nor removed.
+  await fx.leaveUnsubmitted("first");
+  const note = fx.note();
+  rmSync(note);
+  mkdirSync(join(note, "in-the-way"), { recursive: true });
+  assert.deepEqual(fx.typed(), ["paste"]);
+  // (The directory is no note: no Enter is sent for "first", whose text stays in the line.)
+  const sent = fx.run("second");
+  assert.equal(sent.status, 0, JSON.stringify(sent));
+  assert.equal(sent.envelope.result.submitted, true);
+  assert.deepEqual(fx.typed(), ["paste", "paste", "enter"], "pasted, and its Enter sent, with no note written or removed");
+  assert.equal(existsSync(join(note, "in-the-way")), true);
 });
 
 test("an input to a home whose session holds a permission claim is refused E_SESSION_PROMPT_OPEN with nothing typed; a question or an attention claim is typed to as before (#2125)", (t) => {
