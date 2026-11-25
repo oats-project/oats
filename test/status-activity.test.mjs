@@ -8,7 +8,8 @@
 //   session that is there and that OATS started; the file is never read there.
 // The tmux homes are real spawns recorded on a private tmux server; the provider homes are real
 // spawns on the fake provider (test/helpers/session-provider-fixture.mjs). Who writes the record is
-// each harness's own test: packages/pi/test/turn-record.test.mjs, test/oats-core-turn-record.test.mjs.
+// each harness's own test: packages/pi/test/turn-record.test.mjs for pi; oats.core's Claude Code
+// hooks bring theirs with them.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
