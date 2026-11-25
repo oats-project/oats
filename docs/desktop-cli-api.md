@@ -198,6 +198,8 @@ see the [official catalog](official-catalog.md) for current pins.
 | `status-activity` | the turn fact: `activity` (`"working"`, `"idle"` or `null`) on `oats status --json` instance rows and `oats server roster --json` rows, present only on a row whose session is there ([`activity`](#row-activity)). A tmux row reads it from the turn boundaries its harness's hooks write (oats.core for Claude Code, `@awebai/oats-pi` for pi; a Codex row reads `null`); a provider row carries its provider's answer, the optional `activity` key of `inspect` and `inspectMany` ([capabilities.md](capabilities.md#inspect-and-inspectmany)). Display only: no act reads it. A row from a kernel or a host without the feature never carries the key, so its absence says nothing there. |
 | `session-input-permission-refusal` | `oats session input` to a tmux home whose session holds a `permission` claim is refused `E_SESSION_PROMPT_OPEN`, with nothing typed, as a session provider refuses it ([Input](#input)). On a kernel without the feature that input is typed and its Enter answers the prompt, so read the code as "a prompt is open, nothing was sent" for a tmux home only where the feature is listed | |
 | `wake-starts-provider-home` | a due `wake` starts a home on a session provider that OATS stopped, at its due minute, in a new session, as it starts a stopped tmux home; its message is delivered once the session runs ([schedules.md](schedules.md#kinds)). The run's record is a tmux start's (`action: "started"`, then `delivered`), with no new field. A kernel without the feature never starts such a home: the run stays `skipped`, `errorCode: "E_SESSION_NOT_RUNNING"`, until a person starts it. A client that tells a person what a wake to a provider home will do reads this feature | |
+| `trigger-failure-history` | a trigger's failed spawns as rows: `failures` (newest first, at most 50, `{attempt, at, key, event, subject, number, code, message, instance?, home?, resolved?}`) and `failuresTotal` on each row of `oats trigger status --json` ([`oats trigger`](#oats-trigger)). Every text is bounded and made safe to show as text; a row gains `resolved: {at, instance}` when a later attempt of its key spawns. Absent: neither key, and `lastError` holds only the last failure | |
+| `status-automation` | the schedule or trigger that made an instance: `automation` (`{kind: "schedule" \| "trigger", id, qualifiedId}` or `null`) in `instance.json`, on the `spawned` event and on `oats status --json` rows; on a remote row only from a host that lists the feature ([Made by an automation](#made-by-an-automation)). A label, never proof. Absent: no `automation` key anywhere | |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
 `workspaceStatusApi: 1`, `capabilitiesApi: 1`, the `oats souls` document's
@@ -336,7 +338,7 @@ for `--no-recursive`) is never ignored.
 | Command | Arguments | Flags that take a value | Switches | Refused in their own words | Its own answers |
 |---|---|---|---|---|---|
 | `oats retire` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir`, `--server` | `--plan`, `--self`, `--discard-worktree`, `--keep-dir`, `--force`, `--json` | `--delete-branch` | none |
-| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-config`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--related-work`, `--same-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral` | an unknown flag, an argument after the last |
+| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-config`, `--made-by-automation`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--related-work`, `--same-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral` | an unknown flag, an argument after the last |
 | `oats sync` | none | `--dir` | `--plan`, `--json` | `--approve` | none |
 | `oats instance stop` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--grace-ms`, `--home`, `--dir`, `--server` | `--plan`, `--apply`, `--no-recursive`, `--json` | none | none |
 | `oats instance upgrade` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir` | `--undo`, `--plan`, `--json` | `--server` | none |
@@ -3520,6 +3522,48 @@ Limits:
 Spawn hooks get it as `OATS_SPAWNER_HOME` when it is not `null`
 ([capabilities.md](capabilities.md#commands-and-hooks)).
 
+<a id="made-by-an-automation"></a>
+### Made by an automation
+
+From feature `status-automation`, every new home records `automation`: the
+schedule or trigger whose run made it, `{kind, id, qualifiedId}`, or `null`.
+`kind` is `schedule` or `trigger`; `id` and `qualifiedId` are that
+automation's own, as `oats schedule list` and `oats trigger list` give them
+(a local schedule's `id` is bare, every other one is qualified:
+[shared row fields](#automations-shared-rows)). `instance.json` and the `spawned` event's `data`
+carry it as recorded, and every `oats status --json` row has the key, in
+that shape only: anything else (a hand-edited record, a home spawned before
+the feature) reads `null`.
+
+It is beside `spawnedBy`, for the other kind of maker, and **at most one of
+the two is set**: `spawnedBy` names an instance, `automation` a schedule or
+a trigger, and a person's spawn has both `null`.
+
+- A schedule's spawn job and a trigger's spawn name themselves to their
+  `oats spawn` child with `--made-by-automation <schedule|trigger>:<qualifiedId>`,
+  an **internal flag, for automations** (it is in spawn's usage as that).
+  `oats schedule run` records the schedule the same way.
+- It is recorded only when this deployment has that schedule or trigger: a
+  local one in `oats-schedules.json`, a workspace one in the automations
+  snapshot. A value that names none, one of the other kind or a malformed
+  one is not recorded, and never refuses the spawn.
+- A spawn that an instance runs (`spawnedBy` non-null) records
+  `automation: null`, whatever flag it is given.
+- A tick or a run started from inside an instance (an agent that runs
+  `oats schedule tick` or `oats schedule run`) still records the
+  automation, with `spawnedBy: null` and `spawnOrigin: "operator"`: the
+  automation's child is started without the caller's instance environment,
+  so no instance is its spawner.
+- It is written once, at spawn. Removing the schedule or the trigger doesn't
+  clear it: the row keeps the ids it was made with, and a client that finds
+  the id in neither list shows it as removed.
+
+**It is a label, never proof**, as `spawnedBy` is informational attribution:
+any process of the same OS user can pass the flag, it is not hook
+environment, and no kernel decision reads it (no permission, lifecycle act,
+retire, wake or schedule decision). A client shows it as a label ("started
+by schedule X").
+
 <a id="spawn-errors"></a>
 ### Spawn errors
 
@@ -4378,6 +4422,12 @@ route target:
   the [local row's](#attributed-human) label rule again on this side, and
   `spawnedBy` the [local row's](#spawned-by) shape rule: a value either
   refuses is `null`.
+- **`automation`** (feature `status-automation`,
+  [Made by an automation](#made-by-an-automation)) is on a row only when
+  the host's kernel lists the feature and its row has the key: a row from a
+  host without it, and a saved route the host did not list, have no such
+  key. When present it passes the local row's shape rule again on this
+  side, and a value that rule refuses is `null`.
 - **`waitingOnYou`** (0.40.2, [Waiting on you](#waiting-on-you)) is on a row
   only when the host's kernel reports it: a row from a host before 0.40.0,
   and a saved route the host did not list, have no such key. Absent means
@@ -5091,6 +5141,9 @@ oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--
   is dated at the receipt's launch time. The boundary is complete per log: a
   log that missed it gets a copy of the same row (same time and data), never
   a second one.
+- `spawned` carries `automation` in its `data` (feature `status-automation`,
+  [Made by an automation](#made-by-an-automation)): the home's record, or
+  `null`.
 - `spawned` carries `worktreeHooks` (the receipt `[{capability, ok,
   required, log, exitCode, …}]`) in its `data` only when the spawn ran
   `worktree` hooks (0.49.0).
@@ -8866,7 +8919,12 @@ capability declares ([schedules.md](schedules.md#capability-sources)).
   {at, ok: true, prs, matching} | {at, ok: false, error} | null, nextPollAt,
   nextDue, pending: [{key, event, number, subject, url, observedAt}], fired:
   [{key, at, instance, home, event, number, subject}] (newest 50), firedTotal,
-  lastError: {at, code, message, key?} | null}]}`. It writes nothing.
+  lastError: {at, code, message, key?} | null, failures: [{attempt, at, key,
+  event, subject, number, code, message, instance?, home?, resolved?: {at,
+  instance}}] (newest 50), failuresTotal}]}`. It writes nothing.
+  `failures` and `failuresTotal` (feature `trigger-failure-history`) are
+  the trigger's failed spawns, [one row per attempt](schedules.md#failed-spawns);
+  `lastError` is unchanged.
   `subject` (0.49.0) is the event's subject, the thing `perKey` counts: a
   PR's number, as a string. A record written before 0.49.0 has none, and
   its number is reported.

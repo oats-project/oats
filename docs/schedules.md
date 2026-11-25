@@ -169,7 +169,10 @@ refuses the key on a trigger.
   one disposable instance of `agent` with the options `oats spawn` takes.
   `agent` is resolved as `oats spawn <agent>` resolves it (a member or
   package soul the workspace offers, see `oats souls`), whether or not this
-  deployment has spawned it before. `add` and `update` refuse a job whose
+  deployment has spawned it before. The instance records the schedule that
+  made it as `automation` on its status row (feature `status-automation`,
+  [Made by an automation](desktop-cli-api.md#made-by-an-automation)): a
+  label, never proof. `add` and `update` refuse a job whose
   `oats spawn <agent> --preview`, with the job's `launchConfig`, `harness`,
   `model`, `yolo`, `backend` and `repo`, fails (`E_SCHEDULE_INVALID`, field `agent`,
   with spawn's own message and its code in `details.code`), or whose preview
@@ -384,6 +387,32 @@ when the timer cannot reach it.
   names that numbered name and its length, not the stem's).
   `oats trigger test <id> --json` shows each would-fire event's `instance` and
   `nameCut`. A failed preview fails the spawn the same way, with its own code.
+- <a id="failed-spawns"></a>**Failed spawns are kept as rows** (feature `trigger-failure-history`).
+  `oats trigger status --json` answers `failures`, newest first and at most
+  50, and `failuresTotal`, every failed spawn since the trigger was added.
+  Both are in the trigger's state, so the total outlives the 50 rows and a
+  restart; removing the trigger and adding it again starts at zero.
+  `lastError` stays what it was, the last failure of any kind.
+  - A row is `{attempt, at, key, event, subject, number, code, message}`,
+    plus `instance` and `home` when the spawn made a home before it failed
+    (a spawn that could not confirm its launch).
+  - There is one row per attempt: an event that stays pending and fails at
+    each poll has `attempt` 1, 2, and so on, per key.
+  - When a later attempt of that key spawns, its earlier rows gain
+    `resolved: {at, instance}` and stay listed. A row with no `resolved` is
+    still open.
+  - Every text is bounded and has control, separator, bidi, invisible and
+    tag characters replaced by U+FFFD, so a client can show it as text:
+    `message` at most 500 characters, `subject` 200, `event` 40, and `key`
+    whole (at most 512, what a poll accepts). `code` is a kernel code
+    (`E_` and up to 60 capitals, digits and underscores); a failure with
+    any other reads `E_TRIGGER_SPAWN`.
+  - A dry run (`oats trigger test`) and an event held by concurrency record
+    nothing.
+- **The instance records the trigger that made it** as `automation` on its
+  status row (feature `status-automation`,
+  [Made by an automation](desktop-cli-api.md#made-by-an-automation)): a
+  label, never proof.
 - **The event reaches the instance** as `OATS_TRIGGER_EVENT_FILE`
   (`<home>/.oats/trigger-event.json`: `{ trigger, source, repo, number,
   subject, url, event, headSha, labels, observedAt, key }`; a capability
@@ -398,7 +427,7 @@ oats trigger list | show <id> | enable <id> | disable <id> | remove <id>
 oats trigger test <id>      # dry run: gh credentials, repo permissions, the soul, what WOULD fire
 oats trigger test <id> --run-source      # a capability source's trigger: the same, running its source command here
 oats trigger poll <id> --run-source [--max-age <s>]   # a capability source's trigger: run its source once, record nothing
-oats trigger status [<id>]  # last poll, next due, pending and fired events, live vs max, last error
+oats trigger status [<id>]  # last poll, next due, pending and fired events, live vs max, last error, failed spawns
 ```
 
 All take `--dir` and `--json` (`triggerApi: 1`). `remove` leaves the instances
