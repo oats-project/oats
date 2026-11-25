@@ -55,7 +55,9 @@ function witnessBackend(plan,backend,receipts) {
   assert.ok(info.NetworkMode !== "host",`${backend.role} uses host network mode`);
   const bindings=Object.values(info.PortBindings ?? {}).flat(), live=Object.values(info.Ports ?? {}).flat();
   assert.ok(bindings.filter(Boolean).length === 0 && live.filter(Boolean).length === 0,`${backend.role} publishes a port on the services host`);
-  assert.ok(Object.hasOwn(info.ExposedPorts ?? {},`${backend.port}/tcp`),`${backend.role} does not expose its declared port`);
+  // Docker reads a port without a protocol as TCP; Compose records expose that way.
+  const exposed=info.ExposedPorts ?? {};
+  assert.ok(Object.hasOwn(exposed,`${backend.port}/tcp`) || Object.hasOwn(exposed,String(backend.port)),`${backend.role} does not expose its declared port`);
   const networks=Object.entries(info.Networks ?? {});
   assert.ok(!info.NetworkMode.startsWith("container:") && networks.length > 0
     && networks.every(([name,endpoint])=>safeName(name) && isIP(endpoint?.IPAddress) === 4),

@@ -107,6 +107,16 @@ test("a backend on several networks needs CONNECTED from each of them", async t 
   assert.deepEqual(calls.filter(call => call[1] === "run").map(call => call.slice(-2)), [["172.40.0.3","5432"],["172.40.0.4","6379"],["172.41.0.4","6379"]]);
 });
 
+test("a port Compose records without a protocol is exposed as TCP, as Docker reads it", async t => {
+  const {probeServicesBackends} = await stagedWitness(t);
+  // Compose 2.38 writes expose: ["6379"] as ExposedPorts {"6379":{}}; the engine maps it to 6379/tcp.
+  const containers = clean(); containers.cache.ExposedPorts = {"6379":{}};
+  witnessDocker(t, {containers});
+  assert.equal((await probeServicesBackends(witnessPlan())).passed, true);
+  containers.cache.ExposedPorts = {"6379/udp":{}};
+  await assert.rejects(probeServicesBackends(witnessPlan()), /does not expose its declared port/);
+});
+
 const refusals = [
   ["no container matching a role's project and service", {matches:{cache:[]}}, /exactly one running container/],
   ["more than one matching container", {matches:{cache:["a".repeat(64),"b".repeat(64)]}}, /exactly one running container/],

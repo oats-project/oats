@@ -749,7 +749,9 @@ name: for each role exactly one running container labelled
 `com.docker.compose.service=<service>`; none or several refuses. For each it
 requires running and healthy, a network mode other than `host` or
 `container:`, no `HostConfig.PortBindings` and no host binding in
-`NetworkSettings.Ports`, the declared port in `Config.ExposedPorts`, and a
+`NetworkSettings.Ports`, the declared port in `Config.ExposedPorts` (as
+`<port>/tcp`, or a bare `<port>`, which Docker reads as TCP and Compose writes
+for `expose`), and a
 classify-mode control returning `CONNECTED` from a canary on every network the
 container joins, aimed at its address there, with cleanup confirmed. It reads
 containers through an inspect template that selects only those fields: no
