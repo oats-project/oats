@@ -382,8 +382,9 @@ On Linux x64, also check the Desktop's system libraries, ALSA and FUSE 2
 for l in libasound.so.2 libfuse.so.2; do PATH="$PATH:/sbin:/usr/sbin" ldconfig -p | grep -q "$l" || echo "MISSING $l"; done
 ```
 
-- **Versions:** Node 22.5 or later; Git 2.45 or later recommended (partial
-  caches; older Git works with whole-tree fetches); `gh` 2.49 or later
+- **Versions:** Node 22.13+ on 22.x, 23.4+ on 23.x, or a newer major; Git
+  2.45 or later recommended (partial caches; older Git works with whole-tree
+  fetches); `gh` 2.49 or later
   (step 3 uses `gh attestation`).
 - **The harness** they chose must be installed and logged in (`claude
   --version`, `codex --version` or `pi --version`).

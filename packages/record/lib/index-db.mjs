@@ -19,8 +19,7 @@ import { ensurePrivateFile, makePrivateDir } from "./private-files.mjs";
 import { DerivedState, fileVersion, sameVersion } from "./derived-state.mjs";
 import { validJournalCheckpoint } from "./store.mjs";
 import { INDEX_SCHEMA_VERSION as SCHEMA_VERSION, TEXT_SCHEMA, resetIndexTables } from "./index-reset.mjs";
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
+import { loadSqlite } from "./node-sqlite.mjs";
 
 import { extractCcText, extractSessionTextFor } from "./formats.mjs";
 import { parseOutfit, parseTag } from "./tags.mjs";
@@ -108,7 +107,7 @@ ${TEXT_SCHEMA}
 
 export class RecordIndex {
   constructor(store) {
-    const { DatabaseSync } = require("node:sqlite");
+    const { DatabaseSync } = loadSqlite();
     this.store = store;
     const dir = join(store.root, "index");
     makePrivateDir(dir);

@@ -53,6 +53,11 @@ part of this package.
 
 ## Install and run
 
+The turn record needs Node 22.13+ on 22.x, 23.4+ on 23.x, or a newer
+major (`engines.node: "^22.13.0 || >=23.4.0"`). Its derived databases load
+`node:sqlite` through `lib/node-sqlite.mjs`, which names that requirement
+and preserves the cause when the built-in module is unavailable.
+
 One shipped bin, `turn-record`, with three subcommands. From a checkout use
 `node bin/turn-record.mjs ...`; from an npm install (the package has zero
 dependencies and packs clean — `test/packaging.test.mjs` proves the tarball
