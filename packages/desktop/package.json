@@ -6,10 +6,12 @@
   "type": "module",
   "main": "main.mjs",
   "scripts": {
+    "prestart": "node build-vendor.mjs && node build-preload.mjs",
     "start": "electron .",
     "test": "node --test test/*.test.mjs",
     "rebuild": "electron-rebuild -f -w node-pty",
-    "postinstall": "node build-vendor.mjs",
+    "postinstall": "node build-vendor.mjs && node build-preload.mjs",
+    "predist": "node build-preload.mjs",
     "dist": "electron-builder --config electron-builder.config.cjs",
     "postdist": "node scripts/clean-dist.mjs",
     "dist:smoke": "node scripts/dist-smoke.mjs",
