@@ -476,8 +476,8 @@ record's bytes and timestamp, even when the parser has already scanned that
 line. A single larger record remains supported by public library calls and can
 exceed the batch target. SQLite connections use a 2 MiB page-cache target
 and disk-backed temporary tables. Metadata query pages hold at most 128 rows;
-keyset queries support the declared Node 22.5 SQLite API without rescanning
-prior pages. Content-processing memory therefore depends on fixed buffers,
+keyset queries use bounded SQLite reads without rescanning prior pages.
+Content-processing memory therefore depends on fixed buffers,
 bounded batches/caches and the largest processable individual record, rather
 than total source bytes or all historical IDs. These
 are algorithm settings, **not** a memory/deadline policy or record-size limit.
