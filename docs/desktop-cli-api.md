@@ -7691,8 +7691,8 @@ provider's `check` with the launch that is planned
   them, and none of the answer's own is dropped; with no room, none is
   relayed. Four of the 512 entries stay free of relayed lines, for what a
   command adds after the kernel's answer (a spawn's unsaved wake, and a
-  routed spawn's three notices, the unsaved route among them). A start and a restart also record each as a `launch-warning`
-  event.
+  routed spawn's three notices, the unsaved route among them). A start and
+  a restart also record each as a `launch-warning` event.
 - **The lines are text for a person. Show them; never parse them**, and take
   no decision from one: the wording is not a contract. `warnings` holds
   strings only, here as everywhere: a reader that shows the kernel's own
