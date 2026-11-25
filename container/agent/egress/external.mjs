@@ -1,4 +1,4 @@
-/** Fixed-role TLS byte connectors behind nginx's exact SNI map. The resolver
+/** Per-role TLS byte connectors behind nginx's exact SNI map. The resolver
  * is never agent-facing; only an already validated IP reaches a TCP socket. */
 import { Resolver } from "node:dns/promises";
 import { createConnection, createServer } from "node:net";
@@ -27,7 +27,9 @@ export async function connectExternal(policy, host, {resolve4,connect=createConn
     Promise.resolve().then(()=>resolve4(host)).then(answers=>{
       if (settled) return;
       // A mixed answer is a refusal, never an invitation to try its safe subset.
-      if (!Array.isArray(answers) || answers.length<1 || answers.length>8
+      // Up to 16 addresses: login.microsoftonline.com and graph.microsoft.com
+      // answer with 8 A records, so a lower bound leaves them no margin.
+      if (!Array.isArray(answers) || answers.length<1 || answers.length>16
         || !answers.every(address=>externalAddressAllowed(policy,address))) {fail();return;}
       socket=connect({host:answers[0],port:443,family:4});
       socket.once("error",fail);
