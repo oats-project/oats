@@ -210,9 +210,21 @@ test("an unset that empties a mapping keeps a person's comments: the mapping sta
   assert.match(inside, /# a note inside\n/);
   assert.deepEqual({ ...loadLocal(fx.dep).local.settings["acme.other"] }, { z: 1 });
   assert.deepEqual({ ...loadLocal(fx.dep).local.settings[CAP] }, {}, "the commented mapping stays, empty");
-  // A later set fills the mapping that stayed.
+  assert.equal(inside, `settings:\n  # above the capability\n  ${CAP}:\n    {}\n    # a note inside\n  acme.other:\n    z: 1\n`);
+  // A later set fills the mapping that stayed, as a block: one key a line, the comments where they were.
   assert.equal(fx.ok(["set", CAP, "trust", "single-user"]).changed, true);
-  assert.match(fx.text(), /# a note inside\n/);
+  assert.equal(fx.text().slice(head.length), `settings:\n  # above the capability\n  ${CAP}:\n    trust: single-user\n    # a note inside\n  acme.other:\n    z: 1\n`);
+  // The same for a settings mapping that stayed empty, and for one a person wrote as {}.
+  unset(`# Host settings: hand-written notes\nsettings:\n  ${CAP}:\n    trust: container\n`);
+  fx.ok(["set", CAP, "trust", "single-user"]);
+  assert.equal(fx.text().slice(head.length), `# Host settings: hand-written notes\nsettings:\n  ${CAP}:\n    trust: single-user\n`);
+  writeFileSync(fx.local, `${head}settings: {}\n`);
+  fx.ok(["set", CAP, "trust", "single-user"]);
+  assert.equal(fx.text().slice(head.length), `settings:\n  ${CAP}:\n    trust: single-user\n`);
+  // A mapping a person wrote in flow style, with entries, stays in flow style.
+  writeFileSync(fx.local, `${head}settings: { acme.other: { z: 1 } }\n`);
+  fx.ok(["set", CAP, "trust", "single-user"]);
+  assert.equal(fx.text().slice(head.length), `settings: { acme.other: { z: 1 }, ${CAP}: { trust: single-user } }\n`);
   // No comment anywhere: the emptied mappings go, and a comment on the removed key's own line goes with it.
   assert.equal(unset(`settings:\n  ${CAP}:\n    trust: container # beside the key\n`), "");
 });

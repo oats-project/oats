@@ -2360,9 +2360,9 @@ Both answer `{capability, key, previous, value, effective, changed, file}`:
   or the capability's manifest default where the file sets none, or `null`.
   For a `hostOnly` key that is what every soul resolves, so a client need
   not guess what an unset falls back to. A committed payload (the
-  workspace's `messaging:` or `tasks:`, a soul's slot payload) is not
-  counted: where one sets a key that is not `hostOnly`, a soul resolves
-  that value while the file sets none.
+  workspace's `messaging:` or `tasks:`, a soul's slot payload) and a
+  spawn's `--provider` flag are not counted: where one sets a key that is
+  not `hostOnly`, a soul resolves that value while the file sets none.
 - `changed`: `false` when the file already held that value, and for an unset
   of a key the file does not set. Nothing is written then, and the command
   succeeds.
@@ -2453,7 +2453,9 @@ number cannot be given, and no declared setting needs one today.
 - An unset that empties `settings.<capability>`, or `settings`, removes the
   empty mapping, unless a comment is attached to it (above its key, beside
   it or inside it): that one stays, as an empty mapping with its comments.
-  A comment on the removed key's own line goes with the key.
+  A comment beside the removed key, or on the line above it, goes with the
+  key (above a mapping's first key it belongs to the mapping, and stays).
+  A later set fills such a mapping as a block, one key a line.
 - A set to the value the file already holds, and an unset of a key it does
   not set, leave the file untouched: nothing is rendered, written or
   renamed, and no trace line is added.
