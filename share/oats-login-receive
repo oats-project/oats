@@ -17,7 +17,8 @@ With --credential <entry-id>, the key decides the destination: one dedicated key
 SSH_ORIGINAL_COMMAND is only "install", "status" or "remove". The entry comes from the same config:
   {"credentials": {"<entry-id>": {"group": "<group that may read>", "access": "read-only",
                                   "path": "/srv/oats-team/<group-dir>/credentials/<file>"}}}
-path is required, absolute and normalized, in a directory named credentials, which is root:<group> 0750
+path is required, absolute and normalized, in a directory named credentials that no other entry and no teams destination
+shares, which is root:<group> 0750
 (created so; an existing one is refused, never changed, when it is anything else). The value is opaque:
 strict UTF-8, no NUL, at most 65,536 bytes, surrounding whitespace stripped. The answer is one JSON line
 {ok, entry, fingerprint, replacedAt} (plus "error"). access "read-only" is the only access this receiver writes.
@@ -131,7 +132,36 @@ def credential_destination(cfg, entry):
         raise Refused("configured path is not absolute and normalized")
     if os.path.basename(os.path.dirname(path)) != "credentials":
         raise Refused("configured path is not in a credentials directory")
+    # The key decides the entry, so a destination shared with another entry would let one person's key overwrite or
+    # remove another person's credential.
+    if any(shares_destination(path, other) for other in other_destinations(cfg, entry)):
+        raise Refused("configured path is shared with another entry")
     return path, gid, group
+
+
+def other_destinations(cfg, entry):
+    """Every file another credentials entry or any teams destination names: never written for this entry."""
+    for other_id, other in cfg["credentials"].items():
+        if other_id != entry and isinstance(other, dict) and isinstance(other.get("path"), str):
+            yield other["path"]
+    teams = cfg.get("teams")
+    for name, team in (teams.items() if isinstance(teams, dict) else ()):
+        if not isinstance(team, dict) or not isinstance(team.get("harnesses"), list):
+            continue
+        template = team.get("path") or DEFAULT_PATH
+        for harness in team["harnesses"]:
+            try:
+                yield template.format(name=name, harness=harness)
+            except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+                continue  # harness mode cannot write a destination it cannot format
+
+
+def shares_destination(path, other):
+    """Whether other is path, or a file of its credentials directory, or that directory itself."""
+    if not isinstance(other, str) or not os.path.isabs(other):
+        return False
+    other = os.path.normpath(other)
+    return bool({path, os.path.dirname(path)} & {other, os.path.dirname(other)})
 
 
 def credentials_dir(path, gid, group, create):

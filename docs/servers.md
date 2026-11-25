@@ -278,7 +278,9 @@ Each entry is in the optional `credentials` object of the same root-owned
 - `group` is an existing unix group: the credential group's runtime GID.
 - `path` is required, absolute and normalized, and its parent is a
   directory named `credentials`, the directory the group's
-  `TEAM_CREDENTIALS_DIR` binds.
+  `TEAM_CREDENTIALS_DIR` binds. Neither the file nor that directory may be
+  the path or the directory of another entry or of any `teams` destination:
+  each person's key reaches only their own file.
 - `access` must be `"read-only"`, the only access this receiver writes.
 
 The person sends the credential with the entry's key:
@@ -318,6 +320,7 @@ with its provider too. The refusals:
 | `access not supported by this receiver` | `access` is absent or not `"read-only"`. |
 | `configured group absent` | The group does not exist. |
 | `configured path is not absolute and normalized`, `configured path is not in a credentials directory` | The configured `path`. |
+| `configured path is shared with another entry` | The `path`, or its directory, is the path or directory of another entry or of a `teams` destination. |
 | `credentials directory is not root:<group> 0750` | An existing `credentials` directory. |
 | `credential too large`, `empty credential`, `credential contains NUL`, `credential is not UTF-8` | The value. |
 | `no credential installed` | `status` with no file. |

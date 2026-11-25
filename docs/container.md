@@ -56,7 +56,9 @@ the group can read it; no agent outside the group can. On a shared host:
   runtime user, the directory's root:runtime-GID 0750, each regular file's
   root:runtime-GID 0440, that no file is writable and that a write is
   refused. It reads no name and no content. Without the fragment, it requires
-  `/etc/agent-credentials` to be absent.
+  `/etc/agent-credentials` to be absent. Never name a credential file
+  `.credentials.json`: acceptance refuses that name anywhere in the
+  container, as a `/login` credential.
 - **Every agent runs in a container group, with no host power.** Every agent
   on the host, including those that hold no credential, runs in a container
   group, never as the operator's user. No group gets the Docker socket, the

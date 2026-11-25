@@ -6,7 +6,8 @@
   destination: the entry's `group`, `path` and `access: "read-only"` in the
   new optional `credentials` object of `/etc/oats-login/receiver.json`. The
   file is root:group 0440 in a root:group 0750 `credentials` directory, and
-  the value is opaque, at most 65,536 bytes. Without `--credential` the
+  the value is opaque, at most 65,536 bytes. An entry whose path or
+  directory another entry or a `teams` destination also names is refused. Without `--credential` the
   receiver is unchanged; a host that wants the mode reinstalls it
   ([servers.md](../servers.md#personal-credentials)). The team image ships
   `compose.agent.credentials.yaml`, which binds `TEAM_CREDENTIALS_DIR`

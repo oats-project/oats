@@ -137,6 +137,28 @@ try:
         configure(entries)
         refused(label, call("install", b"fixture-value"), error, b"fixture-value")
     check("nothing was written by a refused config", not os.path.lexists(path))
+    # A destination shared with another entry would let one person's key overwrite or remove another's credential.
+    other_path = str(team / "credentials" / "other")
+    shared = "configured path is shared with another entry"
+    for label, extra_entries, teams in [
+        ("another entry with the same path", {"cred-b": entry()}, None),
+        ("another entry in the same credentials directory", {"cred-b": entry(path=other_path)}, None),
+        ("another entry whose path is not normalized but resolves to the same file", {"cred-b": entry(path=str(team) + "//credentials/mail")}, None),
+        ("a teams destination at the same path", {}, {"team-a": {"group": group, "harnesses": ["codex"], "path": path}}),
+        ("a teams destination in the same directory", {}, {"team-a": {"group": group, "harnesses": ["claude", "codex"], "path": str(team / "credentials" / "{harness}-token")}}),
+        ("a teams destination whose {name} and {harness} resolve into the same directory", {},
+         {"team-a": {"group": group, "harnesses": ["pi"], "path": str(base / "srv" / "{name}" / "credentials" / "{harness}-token")}}),
+    ]:
+        configure({"cred-a": entry(), **extra_entries}, {"teams": teams} if teams else None)
+        for action in ("install", "status", "remove"):
+            refused(f"{label} ({action})", call(action, b"fixture-value" if action == "install" else b""), shared, b"fixture-value")
+        check(f"{label}: nothing was written", not os.path.lexists(path) and not os.path.lexists(other_path))
+    configure({"cred-a": entry(), "cred-b": entry(path=str(base / "srv" / "team-b" / "credentials" / "mail"))},
+              {"teams": {"team-a": {"group": group, "harnesses": ["codex"]}}})
+    out = call("install", b"fixture-value")
+    check("an entry that shares nothing with another entry or a teams destination installs", out.get("ok") is True)
+    call("remove")
+    shutil.rmtree(base / "srv", ignore_errors=True)
     config.write_text(json.dumps({"teams": {}}))
     refused("a config with no credentials object", call("install", b"fixture-value"), "receiver config has no credentials")
     config.write_text(json.dumps({"credentials": {"cred-a": entry()}}))
