@@ -73,6 +73,25 @@ test("team image verification proves the credential receiver as root, never skip
   assert.match(read("test/credential-receiver-root.py"), /\nif os\.geteuid\(\) != 0:\n    raise SystemExit\(/, "without root it fails");
 });
 
+test("team image verification proves credential groups isolated, with every mutant leg caught", () => {
+  const job = workflow("team-image.yml").jobs.verify;
+  const at = job.steps.findIndex((s) => s.run === 'python3 test/agent-credential-groups-image.py "$AGENT_IMAGE"');
+  assert.ok(at > 0, "the proof runs in the verify job");
+  assert.equal(job.steps[at].if, undefined, "it runs on every pull request");
+  assert.ok(job.steps.findIndex((s) => s.run === "bash .github/scripts/team-image-accept.sh") < at, "after the image is built and accepted");
+  const script = read("test/agent-credential-groups-image.py");
+  assert.match(script, /OATS_CREDENTIAL_GROUPS_PASS groups=\{len\(GROUPS\)\} pairs=\{len\(pairs\)\}/);
+  assert.match(script, /len\(pairs\) != 12/, "all twelve ordered pairs");
+  assert.match(script, /GROUPS = \[Group\("shared", 20001, 101, False\), Group\("cred-a", 20002, 102, True\),\n\s+Group\("cred-b", 20003, 103, True\), Group\("cred-c", 20004, 104, True\)\]/);
+  for (const [mutant, row] of [["uid", "cred-a -> cred-b host list state"], ["mount", "cred-a -> cred-b credential mount"],
+    ["network", "cred-a -> cred-b sshd"], ["docker", "shared docker socket"]]) {
+    assert.ok(script.includes(`"${mutant}": (`) && script.includes(`"${row}"),`), mutant);
+  }
+  assert.match(script, /OATS_CREDENTIAL_GROUPS_MUTANTS_CAUGHT/);
+  assert.match(script, /container\/agent\/compose\.agent\.credentials\.yaml/, "the real Compose fragment");
+  assert.match(script, /"--credential", group\.team/, "markers go through the receiver's credential mode");
+});
+
 test("the shared acceptance fixture runs the image owner's acceptance against Compose", () => {
   const script = read(".github/scripts/team-image-accept.sh");
   assert.match(script, /docker compose/);

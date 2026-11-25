@@ -116,6 +116,12 @@ jobs:
       - name: Prove the split agent/services boundary and services witness
         run: python3 test/agent-egress-boundary-image.py "$EGRESS_IMAGE" "$AGENT_IMAGE" split
 
+      # Four container groups on one runner: shared plus three that each hold
+      # one credential installed through the receiver. Every ordered pair is
+      # proved isolated, then four mutant legs must each fail a named row.
+      - name: Prove credential groups isolate each other
+        run: python3 test/agent-credential-groups-image.py "$AGENT_IMAGE"
+
       - name: Compare the default installed payload across the mount seam
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.default_payload_proof }}
         run: bash .github/scripts/team-image-default-proof.sh
