@@ -523,7 +523,11 @@ When the diff is not empty:
    (`ref`) and `oats-workspace.yaml`; update current documentation and skill
    recommendations to match the catalog, then run
    `node scripts/check-mirrors.mjs --verify` and `npm run validate`. Tests
-   read the catalog instead of carrying another release literal.
+   read the catalog instead of carrying another release literal. The
+   `oats.knowledge-theory` curriculum names no framework version (its
+   example writes `vX.Y.Z`, and `scripts/check-knowledge-theory-package.mjs`
+   refuses a concrete one), so the pin leaves that capability as its tag
+   has it.
    The pin does not ride the first PR:
    the tag needs the bumped manifest on `main` first, and CI reads the
    catalog's ref from the remote. Two tests in
