@@ -212,8 +212,9 @@ refuses the key on a trigger.
   no shell; `oats schedule` itself is refused) in `cwd`, an existing directory
   inside the deployment. The runner tracks any instance the command's
   envelope names, including an independent worker it reports, until its home
-  is gone. A command's return is not task completion. Command/operation runs and
-  workspace-spawn launches have a five-minute child timeout. The supervisor
+  is gone. A command's return is not task completion. Command/operation runs,
+  workspace-spawn launches and a wake's start of a provider home have a
+  five-minute child timeout. The supervisor
   sends SIGTERM to the child's process group, allows two seconds for cleanup,
   then sends SIGKILL if the group remains. It observes the direct child's exit
   before returning; inherited output pipes cannot hold the tick indefinitely.
@@ -241,16 +242,40 @@ refuses the key on a trigger.
   in a loop. Unobservable or still starting: skipped, delivery kept pending.
   Word wake messages so that receiving one again is harmless.
 
+  **A wake that starts a stopped agent starts a fresh conversation, on both
+  backends.** The start is a plain `session start`: the agent begins again
+  from its `TASK.md`, and then receives the wake's message. The earlier
+  conversation is not carried on; it stays readable (a tmux home's
+  transcript, a provider's archived session).
+
   A home on a [session provider](execution-targets.md#session-providers) has
   no terminal: the message is its session's input, sent once through the
-  provider, and a live claim holds it the same way. **A wake never starts a
-  provider home OATS stopped.** Its input is refused before any provider
-  call: the run is `skipped` with `errorCode: "E_SESSION_NOT_RUNNING"`, and
-  the delivery stays pending until the home is started (`oats session
-  start`). To a session that is lost (gone, and not stopped by OATS) the
+  provider, and a live claim holds it the same way. **A provider home OATS
+  stopped is started by its due wake, by the rule of a stopped tmux home**:
+  at a due minute only, with a launch slot, under the home's lifecycle claim
+  (a retire, a stop or an upgrade of the home refuses it: a skip, started
+  again at the next due minute), whoever stopped it. The start is `oats
+  session start --home`, run by the tick: a new session of the provider, with
+  the provider's own `check` first. A start that is refused is `skipped`
+  with the refusal's `errorCode` (the provider's `E_BACKEND_*` among them),
+  and the delivery stays pending. That start is a child of the tick, with
+  a command job's five-minute timeout: one that times out or is interrupted
+  leaves the start unconfirmed (`whether the session was started is not
+  known`), and the job keeps its slot until the home is observed stopped or
+  gone. Before this rule such a wake was only
+  refused (`E_SESSION_NOT_RUNNING`) until a person started the home.
+
+  A provider home whose session is **lost** is not started by a wake. To a
+  session that is gone and that OATS did not stop, the
   input is a resume, on which the provider restarts the session, counted
   against the home's cap
-  ([lost sessions](execution-targets.md#session-providers)). An input the provider itself refuses
+  ([lost sessions](execution-targets.md#session-providers)). A home stopped
+  with the host (`oats host run`'s shutdown) is OATS's to bring back in its
+  own conversation: until the resume does, the wake's input is refused
+  (`errorCode: "E_SESSION_NOT_RUNNING"`) and the delivery stays pending.
+  This is the one place the two backends differ: a tmux home lost at a
+  reboot is started fresh by its due wake, and a provider home waits for
+  its resume. An input the provider itself refuses
   (`E_SESSION_PROMPT_OPEN` while its session shows a prompt,
   `E_SESSION_INPUT_QUEUED`) is `skipped` with that `errorCode`: nothing was
   sent, and the pending delivery is tried again at every tick, then delivered
