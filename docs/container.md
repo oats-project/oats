@@ -38,8 +38,8 @@ the group can read it; no agent outside the group can. On a shared host:
 
 - **One container group per personal credential.** Each credential holder's
   agents run in a container group of their own, with its own runtime
-  UID:GID (never another group's), its own 0700 `/state` and login
-  directory, and its own internal network, with no route to another
+  UID:GID (never another group's), its own 0700 `/state` directory and
+  root:runtime-GID 0750 login directory, and its own internal network, with no route to another
   group's. The host's other agents form one more group. The groups may all
   be in one aweb team and message each other as usual: a credential group
   separates what agents can read, not whom they talk to.

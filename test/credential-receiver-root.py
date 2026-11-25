@@ -158,6 +158,35 @@ try:
         for action in ("install", "status", "remove"):
             refused(f"{label} ({action})", call(action, b"fixture-value" if action == "install" else b""), shared, b"fixture-value")
         check(f"{label}: nothing was written", not os.path.lexists(path) and not os.path.lexists(other_path))
+    # A destination that reaches this entry's file through a symlinked parent the operator made is shared too.
+    def aliased(alias_target_is_directory):
+        shutil.rmtree(base / "srv", ignore_errors=True)
+        (team / "credentials").mkdir(parents=True)
+        for directory in (base / "srv", team):
+            directory.chmod(0o755)
+        os.chown(team / "credentials", 0, gid)
+        (team / "credentials").chmod(0o750)
+        Path(path).write_bytes(b"installed-before-the-alias\n")
+        os.chown(path, 0, gid)
+        os.chmod(path, 0o440)
+        harness_dir = base / "srv" / "harness"
+        harness_dir.mkdir(mode=0o755)
+        alias = harness_dir / "login"
+        alias.symlink_to(team / "credentials" if alias_target_is_directory else team)
+        return str(alias / "mail") if alias_target_is_directory else str(alias / "credentials" / "mail")
+
+    for label, directory_alias in [("a teams destination whose parent is a symlink to the credentials directory", True),
+                                   ("a teams destination below a symlink to the group directory", False)]:
+        other = aliased(directory_alias)
+        configure({"cred-a": entry()}, {"teams": {"team-a": {"group": group, "harnesses": ["codex"], "path": other}}})
+        for action in ("install", "status", "remove"):
+            refused(f"{label} ({action})", call(action, b"fixture-value" if action == "install" else b""), shared, b"fixture-value")
+        check(f"{label}: the installed file is untouched", Path(path).read_bytes() == b"installed-before-the-alias\n")
+        other_entry = aliased(directory_alias)
+        configure({"cred-a": entry(), "cred-b": entry(path=other_entry)})
+        refused(f"{label}, as another credentials entry (remove)", call("remove"), shared)
+        check(f"{label}, as another credentials entry: the installed file is untouched", Path(path).read_bytes() == b"installed-before-the-alias\n")
+    shutil.rmtree(base / "srv", ignore_errors=True)
     configure({"cred-a": entry(), "cred-b": entry(path=str(base / "srv" / "team-b" / "credentials" / "mail"))},
               {"teams": {"team-a": {"group": group, "harnesses": ["codex"]}}})
     out = call("install", b"fixture-value")

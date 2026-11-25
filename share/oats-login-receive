@@ -161,12 +161,19 @@ def canonical(path):
     return "/" + os.path.normpath(path).lstrip("/")
 
 
+def destination_names(path):
+    """The file and its directory, as spelled and as resolved through the symlinks that exist now. Reads only."""
+    names = set()
+    for name in (path, os.path.dirname(path)):
+        names.update((canonical(name), canonical(os.path.realpath(name))))
+    return names
+
+
 def shares_destination(path, other):
-    """Whether other is path, or a file of its credentials directory, or that directory itself."""
+    """Whether other is path, or a file of its credentials directory, or that directory itself, by any spelling."""
     if not isinstance(other, str) or not os.path.isabs(other):
         return False
-    other = canonical(other)
-    return bool({path, os.path.dirname(path)} & {other, os.path.dirname(other)})
+    return bool(destination_names(path) & destination_names(canonical(other)))
 
 
 def credentials_dir(path, gid, group, create):

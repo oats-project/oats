@@ -279,8 +279,10 @@ Each entry is in the optional `credentials` object of the same root-owned
 - `path` is required, absolute and normalized, and its parent is a
   directory named `credentials`, the directory the group's
   `TEAM_CREDENTIALS_DIR` binds. Neither the file nor that directory may be
-  the path or the directory of another entry or of any `teams` destination:
-  each person's key reaches only their own file.
+  the path or the directory of another entry or of any `teams` destination,
+  by any spelling or through any symlink that exists: each person's key
+  reaches only their own file. Harness mode does not check this: an alias
+  made after an entry's install still lets that harness key reach the file.
 - `access` must be `"read-only"`, the only access this receiver writes.
 
 The person sends the credential with the entry's key:
