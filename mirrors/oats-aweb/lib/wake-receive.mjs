@@ -603,9 +603,15 @@ export function targetReceiveAssessment(status, {home, runtimeDelivery, runtime,
     const detail = core.last_error.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').slice(0, 160);
     warnings.push(problem('wake-worker-error-retained', `broker worker retained error of unproven currency alongside completed nonfailure observation (no error/inspection ordering evidence): ${detail}`));
   }
-  for (const [name, at] of [['snapshot', updated], ['inspection', inspected]]) {
-    if (at !== undefined && now - at > RECEIVE_OBSERVATION_WARN_AGE_MS) warnings.push(problem('receive-observation-aged', `broker ${name} observation is ${Math.floor((now - at) / 1000)} seconds old (30-second advisory threshold); readiness does not certify recent observation`));
-  }
+  // The two ages answer different questions, so each has its own code. The
+  // broker rewrites its snapshot every 2 s (PollInterval, wake/broker.go:32 at
+  // aw v1.36.59), so an aged snapshot means the broker is not reporting. Its
+  // worker inspects the session at startup, until it sees the receiver, and
+  // then only before a delivery (channel_core_runner_entry.ts:131-143), so a
+  // quiet home's inspection ages without any fault.
+  const age = (at) => Math.floor((now - at) / 1000);
+  if (updated !== undefined && now - updated > RECEIVE_OBSERVATION_WARN_AGE_MS) warnings.push(problem('receive-observation-aged', `broker snapshot observation is ${age(updated)} seconds old (30-second advisory threshold); readiness does not certify recent observation`));
+  if (inspected !== undefined && now - inspected > RECEIVE_OBSERVATION_WARN_AGE_MS) warnings.push(problem('receive-inspection-aged', `broker inspection is ${age(inspected)} seconds old (30-second advisory threshold); the inspection the broker records is its worker's, made at startup and before each delivery, so a quiet home's recorded inspection ages without a fault; readiness does not certify recent observation`));
   if (updated === undefined || inspected === undefined || states.some(state => !state) || !core.readiness_waiting) warnings.push(problem('receive-observation-unproven', 'optional broker observation evidence is absent; no completed inspection or successful history is established'));
   if (core.readiness_waiting === 'inspect_start') warnings.push(problem('receive-inspection-pending', 'broker inspection is in progress; retained state is not evidence of completion or current endpoint presence'));
   return {problems: [], warnings};
