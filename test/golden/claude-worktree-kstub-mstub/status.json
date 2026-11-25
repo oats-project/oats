@@ -37,6 +37,7 @@
           "launchDeclared": null,
           "spawnOrigin": "operator",
           "spawnedBy": null,
+          "automation": null,
           "policy": {
             "childSpawns": {
               "allowed": true,
