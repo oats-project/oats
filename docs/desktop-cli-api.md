@@ -66,9 +66,12 @@ see the [official catalog](official-catalog.md) for current pins.
   with against that kernel's own version, so never finds it above. A
   `desktopApi` other than 1 is refused (`newerApi` on the candidate when it is
   a higher one).
-- `harnesses` is what `--harness` accepts; `sessionBackends` what `--backend`
-  accepts: `["tmux"]` since 0.31.0, when Herdr was removed (`--backend herdr`
-  is refused with `E_HERDR_REMOVED`). A host without the `harness` feature
+- `harnesses` is what `--harness` accepts; `sessionBackends` the kernel's own
+  session backends: `["tmux"]` since 0.31.0, when Herdr was removed (`--backend
+  herdr` is refused with `E_HERDR_REMOVED`). With the feature
+  `session-providers`, `--backend` also takes a session provider's name: a
+  backend a capability supplies, never listed here
+  ([Session providers](#session-providers-feature-session-providers)). A host without the `harness` feature
   lists `runtimes` instead.
 - `remote` is the routed surface: the commands `--server <id>` sends to a
   registered server, plus `roster`. The Desktop checks the execution host's
@@ -189,6 +192,8 @@ see the [official catalog](official-catalog.md) for current pins.
 | `schedule-host-register-only` | `oats schedule host install --register-only`: the scope is recorded in the host schedule registry and no timer is installed ([`oats schedule`](#oats-schedule)). Routed with `--server`, the option is sent only to a host that lists this and `schedule`; otherwise it is refused here with `E_REMOTE_INCOMPATIBLE` before anything is sent, since a host without it ignores the option and installs a timer | |
 | `instance-board` | the agent's board: `oats instance board set\|unset\|ask\|ask --clear`, run by the agent in its own home; `board` on `oats status --json` instance rows and `oats server roster --json` rows; `oats inspect --home <h> --board` for each fact's history and each question's context; the `oats.board` needs-input claim, reason `attention` ([The agent's board](#the-agents-board-oats-instance-board)). Gate on the probe, locally or in the host's `probe.features`: an older kernel refuses `oats instance board` (`E_BAD_ARGS`) and its rows have no `board` | `boardApi: 1` |
 | `spawn-task-stdin` | `oats spawn <soul> --task-file -` reads the task from standard input. A spawn routed with `--server` sends its `--task` or `--task-file` text that way, to the preview and to the apply, to a host that lists this, and not as an argument; a host that does not list it gets the text as an argument, and the answer's `warnings` gains one line that says it was readable in both machines' process lists ([servers.md](servers.md#a-routed-spawns-task)) |
+| `session-providers` | session backends a capability supplies ([Session providers](#session-providers-feature-session-providers)): `--backend <provider>` on `oats spawn` (a schedule's `backend`, a trigger's `spawn.backend`); a provider home's `backend`, `session` and `open` on its status row (the endpoint only on its local inspect, spawn and start answers; nothing of it relayed); `backend: "tmux"` on a tmux home's status row; `sessionProviders` in `oats inspect` and `oats capabilities show`; a provider's readiness in `oats readiness`; `backends` on a capability's `requires` row; the codes `E_BACKEND_UNKNOWN`, `E_BACKEND_AMBIGUOUS`, `E_BACKEND_HARNESS`, `E_BACKEND_LAUNCH_ARG`, `E_BACKEND_NOT_READY`, `E_SESSION_NO_TERMINAL`, `E_SESSION_PROMPT_OPEN`, `E_SESSION_INPUT_QUEUED`; `backend` on the sweep's rows of provider homes; `oats session resume --plan --without-provider-inspect`, which is `oats host run`'s own switch for its shutdown listing, not a client's. A routed `--backend <provider>` is sent only to a host that lists it. |
+| `provider-outside-oats` | a harness that runs in a provider home an operator stopped is reported: `outsideOats: {code: "running-outside-oats", backend, message}` on that home's `oats status --json` row and its `oats server roster --json` row, present only when it applies: a home an operator stopped ([`outsideOats`](#row-outside-oats)). The row's `running`, `runtimeState` and `sessionEnd` stay what OATS recorded. A home stopped with the host whose harness runs again has no key: it reads running, and the sweep adopts it. The provider's `stop` input carries `reason: "host"` for every stop of a recorded session after which the home stays stopped with the host: the host shutdown's, the stop after a failed resume notice of such a home, and the stop after an input that crossed a stop with the host; never a stop with `endpoint: null`. A row from a kernel or a host without the feature never carries the key, so its absence says nothing there. `oats instance upgrade` refuses such a home (`E_SESSION_RUNNING`). |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
 `workspaceStatusApi: 1`, `capabilitiesApi: 1`, the `oats souls` document's
@@ -347,7 +352,7 @@ for `--no-recursive`) is never ignored.
 | `oats worktree remove` | none | `--purpose` | `--json` | `--server`, `--dir`, `--home` | none |
 | `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | `--native-record` | none |
 | `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--native-record`, `--resume` | none |
-| `oats session resume` | none | `--deployment` | `--plan`, `--json` | `--native-record`, `--server` | none |
+| `oats session resume` | none | `--deployment` | `--plan`, `--without-provider-inspect`, `--json` | `--native-record`, `--server` | none |
 | `oats session input` | none | `--home`, `--text-file` | `--json` | `--native-record` | none |
 | `oats session receive` | none | `--home`, `--name` | `--json` | `--native-record` | none |
 | `oats session upload` | none | `--file`, `--home`, `--instance`, `--server` | `--json` | `--native-record` | none |
@@ -437,6 +442,7 @@ kernel command.
 
 | Code | When |
 |---|---|
+| `E_NODE_UNSUPPORTED` | Node.js is older than 22: before every command, exit 1 with `details: {found: "<process.versions.node>", minimum: "22"}` and message `oats needs Node.js 22 or later; this is Node.js <found>`. With `--json` anywhere in argv, stdout is one failure envelope; otherwise the message is on stderr. This includes the `version --json` probe, whose success shape is not the envelope: on unsupported Node it answers this failure envelope with exit 1. Node 18 and 20 get this refusal; a Node too old to parse the entry can fail with a SyntaxError first |
 | `E_UNKNOWN_COMMAND` | No kernel command or capability namespace matches; an unknown capability subcommand; a [removed verb](#removed-verbs-and-flags) (`details: {removed, replacement}`) |
 | `E_CAPABILITY_INACTIVE` | In a home: the namespace's module is not one of the home's recorded capabilities |
 | `E_CAPABILITY_BLOCKED` | In a home: the manifest claiming the namespace is not a workspace module copy of that home. There is no package trust gate |
@@ -1851,6 +1857,14 @@ capabilities | package <id>'s capabilities> were not checked …`, never an
 empty list read as "no warning". Older kernels answer no such `warnings` key
 (inspect, readiness, show, doctor) and refuse the capability instead.
 
+`oats doctor --json` reports the Git version and whether it supports partial
+caches in an existing `information[]` line starting `git-version:` (text:
+`INFO: git-version: …`). Git before 2.45 uses the whole-tree fallback; this
+is information, never a warning or a refusal. A failed version probe reports
+unknown support. A newer Git supports partial caches, but a remote can
+require whole-tree fetches and an existing whole-tree cache keeps its mode
+([Git version failures](workspaces.md#membership-and-trust)).
+
 `oats doctor --json` also lists what retires left behind in `information[]`:
 one `retained-recovery:` and one `retained-worktree:` line per item, after a
 line that gives each kind's total, and at most 50 items per kind
@@ -2807,9 +2821,37 @@ oats spawn <soul> [the flags of a real spawn] --preview [--max-age <s>] --json
 ```
 
 Feature `spawn-preview-2`, `spawnPreviewApi: 2`. The preview runs every
-preflight a spawn runs and writes nothing, on success or refusal. It reads the
+preflight a spawn runs and writes nothing of the deployment's state, on
+success or refusal (one cache may be filled: a session provider's package
+tree, below). It reads the
 soul from the per-commit cache (`agents/<soul>/souls/<commit12>/`) or fetches
 it to a temporary copy (`soulFetched: true`).
+
+**A preview on a session provider asks the provider** what the spawn will ask
+it before any hook runs: its readiness `check`, with the launch that is
+planned ([check](capabilities.md#check-optional)). No key changes meaning:
+
+- A launch the provider would refuse **fails the preview** with the code the
+  spawn would be refused with (`E_BACKEND_SANDBOXED_MODE` for a provider that
+  launches only in full mode, `E_BACKEND_NOT_READY` for one that cannot be
+  asked or answers outside the rules), exit 1, as every other refusal of a
+  backend fails it. Nothing is created: not the home, nor the kernel's
+  directory beside it.
+- The check runs within the preview's one preflight budget. A provider that
+  does not answer in what is left of it leaves `preflight.status: "timeout"`.
+  It is never given longer than a spawn gives its check (20 s). That limit
+  is also the preview's whole budget, so today a check that does not answer
+  in time always reads as `timeout`; were the budget longer than the limit,
+  a check that reached the limit would fail the preview
+  `E_BACKEND_NOT_READY`, as it fails the spawn.
+- The provider's script runs from its package's tree in the deployment's
+  module store, which the preview fetches there, verified, when it is absent:
+  the one thing a preview may write, a cache `oats readiness --soul` fills the
+  same way. A provider in a **member module** runs only from a spawned home,
+  so it is not asked, and `warnings` carries one line that says so; the spawn
+  still asks it.
+- A provider that declares no `check`, a tmux launch and a `--no-launch`
+  spawn ask nothing.
 
 ```json
 {"modules":[
@@ -3222,7 +3264,9 @@ with `--expect-decision` records the key and decision in `instance.json`.
 
 - Always present: `instance, agent, home, work, branch, base ({ref, oid}
   the new branch started at; `null` without one), launched, warnings
-  (array), tmux ({session, window, socket?} | null), backend ("tmux"), repo, harness,
+  (array), tmux ({session, window, socket?} | null), backend ("tmux", or a
+  session provider's name with `session: {provider, endpoint}` after it and
+  `tmux: null`, `attach: null`: [Session providers](#session-providers-feature-session-providers)), repo, harness,
   model, parent,
   sibling, relation, spawnOrigin (operator | instance), attach, launchConfig,
   launch` (the redacted recipe).
@@ -4274,6 +4318,13 @@ route target:
   for example), and a saved route the host did not list carry none. Its
   meaning and when the host sends it are the [local row's](#row-session-end).
   A value that is not `lost`, `stopped` or `exited` drops the key.
+- **`outsideOats`** (feature `provider-outside-oats`) is on a row only when
+  the host lists the feature, its row has the key, and the value is the
+  [local row's](#row-outside-oats) exact shape (the three keys, the one
+  code, a one-line `message` of at most 500 characters) on a provider row
+  that reads `running: false`, `runtimeState: "stopped"` with that
+  `backend`. Anything else drops the key, and nothing is added to the row of
+  a host without the feature.
 - **`addressable`** (0.31): `true` for every row the host reports. Routed
   session and lifecycle commands reach it by `--home`, or by name when the
   name is unique on the host ([addressing](servers.md#run-there); a shared
@@ -5132,9 +5183,10 @@ oats instance attention [--message=<text>] [--clear] --json
     on a turn an API error ended, or `question` for an error class that can
     open a menu, cleared when the session moves on). See
     [capabilities.md](capabilities.md), "oats.core: needs input".
-  - `oats.pi`: the `@awebai/oats-pi` bridge (`attention` on a turn a provider
-    error ended, once pi has stopped retrying, cleared by the next run). See
-    the same section, "A failed turn".
+  - `oats.pi`: the `@awebai/oats-pi` bridge (`question` while a dialog an
+    extension opened is open, its title as the message; `attention` on a turn
+    a provider error ended, once pi has stopped retrying, cleared by the next
+    run). See the same section, "A pi dialog" and "A failed turn".
   - `agent`: the instance itself, through `oats instance attention`, and
     only through it: `oats instance waiting --producer agent` is
     `E_BAD_ARGS`. **Agent claims are cleared only by the agent (`--clear`)
@@ -5175,7 +5227,14 @@ oats instance upgrade <instance> --undo --plan-revision <revision> --idempotency
 This local act resolves an instance like `oats retire`, from its deployment
 or a parent's home. It uses the lifecycle claim and requires a stopped,
 readable session. A running or unreadable session is `E_SESSION_RUNNING`,
-naming `oats instance stop <instance>`, upgrade, then session start. It does
+naming `oats instance stop <instance>`, upgrade, then session start. So is a
+provider home OATS recorded stopped whose provider answers a live harness
+(there, with `running: true`; feature `provider-outside-oats`, [`outsideOats`](#row-outside-oats)): the
+plan and the apply each ask the provider once (`inspect`), and nothing is
+upgraded under a harness that runs. It holds for a home stopped with the
+host too. An upgrade whose provider cannot be asked, does not answer or
+cannot tell (`running: null`) goes on, since the home is as OATS recorded
+it: stopped. It does
 not support `--server` or several homes in one call.
 
 A read-only plan stages package copies outside the home, verifies the locked
@@ -5335,7 +5394,12 @@ oats instance stop <instance> --plan [--no-recursive] [--home <abs>] [--dir <d>]
   `E_GIT_FAILED` for an error that has none; `E_WORK_INSPECTION_FAILED` for
   a home the kernel cannot look into, where whether it has a `work/` cannot
   be told; OATS 0.52.0).
-- `midTask`: `true`, `false` or `"unknown"`.
+- `midTask`: `true`, `false` or `"unknown"`. A home on a
+  [session provider](execution-targets.md#session-providers) whose session
+  is there reads what its provider reports of it (the `running` of
+  `oats session inspect`, see [Session providers](#session-providers-feature-session-providers)): `true` when it runs a turn,
+  and `"unknown"` when the provider reports no activity (`running: null`),
+  unless its work has changes, which is `true`.
 - `retiring` and `stopPending`, booleans on every target, say who holds the
   target's home when the plan is read (OATS 0.52.0, feature
   `lifecycle-claim-stop`). `retiring`: a self-retire is scheduled for it
@@ -7404,6 +7468,328 @@ relayed).
 
 ## Sessions and launch configurations
 
+### Session providers (feature `session-providers`)
+
+A capability can supply a session backend beside the kernel's tmux
+([execution-targets.md](execution-targets.md#session-providers); the
+capability's side is
+[capabilities.md](capabilities.md#session-providers-sessionproviders)). A
+home on one is a **provider home**. Everything below is added by the
+feature; a tmux home's answers are as they were, except its status row's
+`backend`.
+
+**Reading the offer.** `oats inspect --soul <soul> --json` and `oats inspect
+--home <abs> --json` carry `sessionProviders: [{name, capability}]`, the
+backends `--backend` takes there beside `tmux`, sorted by name (`[]` when the
+soul has none; a malformed declaration is none). `oats capabilities show
+<name> --json` carries `sessionProviders` (the manifest's key, exactly as
+declared) and, only when there is one, `sessionProviderProblems: [{provider,
+pointer, message}]`.
+
+**Spawn.** `oats spawn <soul> --backend <name>` (after `--preview`, as for
+tmux). A preview carries `backend: "<name>"`, `backendStatus: {name,
+installed: true, started: false}` and `executable: null`. A launched spawn's
+answer carries `backend: "<name>"`, `session: {provider, endpoint}`, `tmux:
+null`, `attach: null`, and its `launch.executable` is `null`. While the
+provider launches, the spawn holds the new home's lifecycle claim: a stop's
+apply, a start and a retire of it are refused as busy (`E_LIFECYCLE_BUSY`,
+`E_SESSION_START_BUSY`) until the launch is recorded or undone. Refusals,
+before anything is created (a preview answers them too):
+
+| Code | `details` |
+|---|---|
+| `E_BACKEND_UNKNOWN` | `{backend, available}`: the names `--backend` takes for this instance, `tmux` first |
+| `E_BACKEND_AMBIGUOUS` | `{backend, capabilities}`; also from a start or a restart |
+| `E_BACKEND_HARNESS` | `{backend, capability, harness, harnesses}` |
+| `E_BACKEND_LAUNCH_ARG` | `{backend, launchConfig, field: "executable"}` |
+| `E_BACKEND_WIRE` | `{backend, capability, wire: {provider, kernel}}`: the provider's declared wire version (null: none) and this kernel's. Also from a start, a restart, a `--resume`, a stop (an operator's and the host's) and an input, before anything is read or stopped |
+| `E_BACKEND_SANDBOX_HOST` | `{capability, setting, host, team?, path?}`: a capability's `sandboxDomains` line that may not add a host; `setting` and `host` are null where there is none to name. With `path` (and `capability: null`): a path the kernel itself would allow the session to write that is reached through a symbolic link, or is no directory. Also from a start or a restart, before anything is stopped |
+| `E_BACKEND_NOT_READY`, any other `E_BACKEND_*` | the provider's readiness, or its own refusal of the launch: `{backend, capability}`; the spawn is rolled back |
+
+A launch that fails otherwise is `E_SESSION_START_FAILED`.
+
+**A status row** (`oats status --json`) of a provider home:
+
+```json
+{ "instance": "dev-a", "home": "/abs/home", "launched": true,
+  "backend": "bb",
+  "session": { "provider": "oats.bb", "threadId": "thr_1" },
+  "tmux": null,
+  "open": { "label": "Open in bb", "url": "https://…" },
+  "running": true, "runtimeState": "unknown", "waitingOnYou": null }
+```
+
+- `backend` is the provider's name. A tmux home's row carries `backend:
+  "tmux"`. **A row with no `backend` key reads as tmux**: it comes from a
+  kernel or a routed host without the feature (or is a home whose record
+  cannot be read), never from a provider home.
+- `session.provider` is the capability. **`session.threadId` is on a local
+  row only**: the thread id of the provider's endpoint, when the endpoint
+  names one, on the host where the home lives, so a tool there can match a
+  session to its instance. It is replaced at a start and a restart, and a
+  home OATS stopped keeps its last. **A relayed row never has it** (`oats
+  server roster`, `oats status --server`): a relayed row's `session` is
+  `{provider}`. A client must not depend on `threadId` beyond the local
+  host.
+- **The endpoint is never on a row.** `session.endpoint` (the provider's own
+  locator) is on `oats session inspect --home`, a launched spawn's answer
+  and a start's answer, on the host where the home lives; the same answers
+  through `--server` carry `session: {provider}`. Neither the endpoint nor
+  `open` holds a token or a secret.
+- `tmux` is `null`; `open` is `{label, url}` or `null`: a link a viewer may
+  open instead of a terminal. It is relayed.
+- `running` is `true`, `false`, or `null` where the provider cannot tell a
+  live idle session from a settled one. `runtimeState` is always set:
+  `unknown` (there), `shell`, `stopped` (OATS stopped it, it was never
+  launched, or it is gone) or `unreachable`, with `runtimeError`, when the
+  provider failed, was slow or answered outside its contract. An unreachable
+  row is never read as stopped.
+- `sessionEnd` is `stopped` for a home an operator stopped, and `lost` for
+  one stopped with the host or whose session is gone while OATS did not
+  stop it: the sweep resumes a lost one. Absent otherwise. **A home stopped
+  with the host whose harness runs again** (a person's message reached its
+  session before the sweep, or the harness came back) is one OATS means to
+  run: when the provider answers it there with `running: true`, its row
+  reads running from that answer (`running: true`, `runtimeState`, `open`),
+  with no `sessionEnd` and no `outsideOats`. With `running: null` (the
+  provider cannot tell) the row stays `lost`, and the sweep resumes it by
+  its notice. The status read writes nothing; the next sweep adopts the
+  home ([the sweep](#provider-sweep)). **Until a sweep has adopted it the
+  home is still recorded stopped**: an input and a wake to it are refused
+  (`E_SESSION_NOT_RUNNING`), and its row, which no longer reads `lost`, is
+  not one a client's "a home was lost" check starts a sweep for. `oats host
+  run` sweeps each minute; without it, the next sweep is the next one a
+  client or a person runs. It is read in the same call as
+  `outsideOats`, below, by every listing that asks providers.
+- <a id="row-outside-oats"></a>**`outsideOats`** (feature
+  `provider-outside-oats`) is on the row of a home an operator stopped
+  (`sessionEnd: "stopped"`) whose provider answers a live harness there, and
+  only then (never `null`, never `false`):
+
+  ```json
+  { "running": false, "runtimeState": "stopped", "sessionEnd": "stopped",
+    "outsideOats": { "code": "running-outside-oats", "backend": "bb",
+      "message": "a harness runs in dev-a on bb, and OATS recorded this instance stopped: stop it with `oats instance stop dev-a`, or start it from OATS" } }
+  ```
+
+  A provider's own product can start a stopped session's harness again
+  without OATS, for example when a person types a message there. **The key
+  is a report and nothing else. `running`, `runtimeState`, `sessionEnd`,
+  `open` and `waitingOnYou` stay what OATS recorded** (`false`, `stopped`,
+  the stop's `sessionEnd`, `null`, `null`): a client shows the row as
+  stopped, with the warning. An input and a wake to the home stay refused
+  (`E_SESSION_NOT_RUNNING`), the sweep does what the stop's record says, and
+  the read writes nothing: no record of the home is changed, and no
+  `problems` entry is added. `code` is always `running-outside-oats`;
+  `backend` is the row's; `message` is one line that names the remedy: `oats
+  instance stop <name>` asks the provider to stop the session again, and a
+  start from OATS stops it and launches a new one. "A live harness" is a
+  session the provider answers as there with `running: true`. One that is
+  gone, one left at its shell, and one the provider cannot tell live from
+  settled (`running: null`) have no key: an answer that does not know
+  leaves the home as OATS recorded it.
+
+  How it is read: a stopped home rides in the `inspectMany` call status
+  makes for the running homes of its group (the homes that share the
+  provider, its module copy and its settings), as far as the call has room:
+  200 homes. Where no home of the provider runs at all, status makes one
+  call for the provider's stopped homes, for the group that holds the most
+  of them, after every running home was asked and under the same timeout
+  and the same 30 s as every provider read: a stopped home never costs a
+  running home its answer. No other call is made: status never asks
+  `inspect` per stopped home, so a provider that declares no `inspectMany`
+  has no such key, and neither has a stopped home with no running home in
+  its group while the provider runs one elsewhere, or one in a second
+  group of stopped homes. A home that a lifecycle command holds (a stop, a
+  start, a retire or an upgrade in progress) is not asked about: a stop
+  records the home stopped before the provider stops its session. A provider that fails, refuses, answers
+  outside its contract or does not answer in time leaves the row plain
+  `stopped`, without the key and never `unreachable`: **absence does not
+  say that nothing runs there.** Only `oats status` reads it: `oats session
+  inspect` answers a stopped home without asking the provider, as before.
+  `oats status` (text) prints the message on a line of its own under the
+  row, after `!`.
+- `waitingOnYou` is the producers' claim, read while the session is there
+  and not in error (`runtimeState: "unknown"`, `running` true or null).
+
+**Inspect.** `oats session inspect --home <abs> --json` answers `{home,
+backend, present, state, running, waitingOnYou, wakeHold, session: {provider,
+endpoint}, open}`: no `paneId`, no `size`. `state` is `unknown`, `shell`,
+`stopped` or, before the first launch, `not-launched`. For a home OATS
+stopped it answers `present: false, state: "stopped", running: false, open:
+null` without asking the provider. A provider that cannot be asked is
+`E_SESSION_UNAVAILABLE`.
+
+**Input.** `oats session input --home <abs>` answers `{home, backend,
+submitted: true, verified}` (no `session`: the endpoint is inspect's, a
+spawn's and a start's). `E_SESSION_NOT_RUNNING` for a home OATS
+stopped (nothing was sent, the provider was not called), and for a lost
+session at its resume cap or with a process of its last run still in the
+home; `E_SESSION_PROMPT_OPEN` and `E_SESSION_INPUT_QUEUED` from the provider
+(nothing was sent); `E_BACKEND_WIRE` for a home whose provider speaks
+another wire than this kernel (nothing was sent, the provider was not
+called); `E_SESSION_INPUT_FAILED` for anything else. A stop or a
+restart that lands while an input is being sent wins, whatever the provider
+answered to it: `E_SESSION_NOT_RUNNING`, the input not delivered. A delivery
+is accepted only on `ok: true` with `submitted: true`.
+
+**Start and restart.** The result has every key a tmux start answers, with
+`backend: "<name>"`, `session: {provider, endpoint}` and `target: null`:
+`{instance, agent, home, harness, backend, model, launchConfig, yolo, target,
+session, startedAt, restartCount, reused: "new", warnings}`, and `stop:
+{stopped: true, waitedMs}` on a restart. A start of a home whose session is
+there and that OATS did not stop is `E_SESSION_RUNNING` (it reads `running:
+true`) or `E_SESSION_UNKNOWN`. `--resume` answers the same keys with `reused:
+"session"`, `startedAt: null` and `resume: {resumed: true, harness}`: the
+resume notice went through the provider's input and nothing was launched.
+Its refusals: `E_RESUME_NOT_LOST` (not a lost session), `E_SESSION_NOT_RUNNING`
+(the resume cap; `details.resumeCap: {limit, windowMs, nextAttemptAt}`),
+`E_SESSION_UNKNOWN` (a process of the last run still works in the home, or
+the session cannot be read), `E_SESSION_PROMPT_OPEN` (a claim or a prompt is
+open) and `E_SESSION_INPUT_QUEUED`.
+
+**A launch with no recorded outcome** (the lifecycle's
+[design record](design/2026-11-20-provider-home-lifecycle.md)). From the
+moment a spawn or a start sends the provider's launch until its endpoint is
+recorded, and for good when that command died first, the home's receipt
+carries `launchSent` and the home is unknown, whether it was launched before
+or not: `oats session inspect` answers `E_SESSION_UNAVAILABLE`, its status
+row reads `running: null`, `runtimeState: "unreachable"` with the reason, a
+`--resume` is `E_SESSION_UNKNOWN`, and `oats session input` is refused with
+nothing sent (`E_SESSION_NOT_RUNNING` for a home never launched or recorded
+as stopped, else `E_SESSION_INPUT_FAILED`). A stop, a start, a restart and a
+retire settle it first, by asking the provider to stop whatever session that
+launch started: a stop then answers `stopped: true` (never `alreadyIdle`),
+or `E_SESSION_STOP_FAILED` when the provider does not confirm; a home
+launched before is left stopped. The row of a never-launched home reads
+`launched: true` meanwhile.
+
+**Stop and retire.** The stop's row is `{ok: true, stopped, alreadyIdle,
+state: "stopped"}`; `E_SESSION_STOP_FAILED` when the provider does not confirm
+(the home stays recorded as stopped; a second stop asks the provider again);
+`E_BACKEND_WIRE` for a home whose provider speaks another wire than this
+kernel (nothing is recorded or stopped; a retire of it goes on by the rule
+below, with its warning). A retire goes on
+only when no process works in the home after the provider's stop, confirmed
+or not: otherwise `E_RUNTIME_QUIESCE_FAILED`, naming the processes. When the
+provider could not confirm the stop, the retire's answer carries a warning.
+
+**Attach.** `E_SESSION_NO_TERMINAL`, `details: {backend, open}`; its message
+carries the `open` link when there is one. A client shows that link instead
+of a terminal.
+
+**The authority check.** `E_RUNTIME_AUTHORITY_MISMATCH`'s `details.fields`
+for a provider home are `backend`, `session.provider` and `session.endpoint`
+(after `launched`).
+
+**Readiness.** `oats readiness` carries a provider's own readiness, where it
+declares one, as a `providers` item: `subject: "<capability> session backend
+<name>"`, `producer: "session provider check"`, `result: {status, problems,
+warnings}` relayed as given, or `result: null` with `problems` when the
+provider could not be asked. Required for a home on that backend; not
+required for a soul.
+
+**Sandbox allowances.** What a session provider may widen its harness's
+sandbox by for an instance ([capabilities.md](capabilities.md#sandbox-allowances-sandboxdomains-the-launch-inputs-sandbox)),
+as the kernel computes it from the deployment's configuration. One key,
+`sandbox`, only where the launch is a provider's (never for tmux):
+
+- a spawn preview (`oats spawn … --backend <name> --preview --json`):
+  `sandbox: {domains: [{host, capability, setting, team?}], write: [{path, reason}],
+  missing: [{capability, setting, team, defaultTeam, optional?}], unread?: [{capability,
+  setting, reason}]}`. `domains`: each host with the capability and the
+  setting that asked for it, and `team` (a team id) on a host taken from a
+  map: a team the instance may join, not one it is known to have joined. `write`: each path with its reason (the
+  kernel's own). `missing`: what a capability's line names and the
+  deployment does not hold (`team`: a team id, or null for a setting with no
+  value; `defaultTeam`: true for the soul's default team's row and for a row
+  with no team; `optional: true` only on a row of an optional line). `unread`, only
+  when there is one: a `settingFile` line's file that gave no host, or
+  values in it that were skipped.
+- a start's and a restart's answer: the same object, with `skipped?:
+  [{capability, reason}]` (a slot's provider of the deployment that is not
+  one of the home's modules: it added no host), or `sandbox: {unavailable:
+  "<why>"}` when the deployment's configuration could not be resolved for
+  the home's soul (a repository this host's cache does not hold, a soul the
+  workspace no longer offers, or two souls that share the home's agent
+  directory). That resolution reaches no remote: it reads the
+  workspace as this host last read it and `oats-local.yaml` as it is now, so
+  a repository this host's cache does not hold is such a cause, by name. Each `skipped` row is also a `warnings` line.
+- `oats readiness --home <abs> --json` of a provider home: the same, as a
+  start would compute it now, or `sandbox: {refused: {code:
+  "E_BACKEND_SANDBOX_HOST", message, details}}` when a start would be
+  refused for it.
+
+- **`moduleCopy`**, on a status row, a remote roster row and a start's or a
+  restart's answer, of a provider home only (never for tmux), a top-level
+  key beside `modules`:
+  `moduleCopy: {runs: "kernel-copy", homeCopy: "same" | "differs", differs: [<module id>]}`.
+  `runs` says which copy of the home's modules the kernel runs: its own,
+  kept outside the home
+  ([capabilities.md](capabilities.md#what-the-kernel-trusts-in-a-provider-home)).
+  **`homeCopy` covers records only**: it compares the home's own record of
+  each module (`instance.json`, its source and commit) with the kernel's
+  record of the copy it runs, and reads no file of either copy. `differs`
+  names the modules whose records disagree (capability ids only, at most
+  200; a name in the home's record that is no capability id counts in
+  `homeCopy` and is not named), `[]` when `homeCopy` is `same`.
+  It says `differs` after an upgrade that was interrupted between moving
+  the home's copies and the kernel's, and when the home's record was
+  rewritten. Whether the FILES of a home copy are the kernel's is reported
+  by `oats readiness --home`, in `kernelCopies` (next). The key is new and
+  optional; `modules` is unchanged, an array of drift rows on a provider
+  home as on any other, with no key added to a row.
+- `oats readiness --home <abs> --json` of a provider home also carries
+  `kernelCopies: {store, differing: [{capability, differs}]}`, an optional
+  key that no other answer has and that changes the meaning of none: `store`
+  is the name of the store that holds the kernel's own copies of the home's
+  modules, and `differing` lists each module whose copy in the home is not
+  the one the kernel runs (`differs: true`), or could not be compared
+  (`differs: null`); `[]` when every home copy is the kernel's. It is
+  information: the kernel runs its own copy either way
+  ([capabilities.md](capabilities.md#what-the-kernel-trusts-in-a-provider-home)).
+  It is computed for this answer only (the files are compared), never for
+  a status row.
+
+`oats capabilities show <name> --json` carries `sandboxDomains` (the
+manifest's key, exactly as declared) and, only when there is one,
+`sandboxDomainProblems: [<message>]`.
+
+<a id="provider-sweep"></a>**The sweep.** A row of `oats session resume` for a provider home carries
+`backend`. Its outcomes: `resumed` (a lost session: the notice was sent),
+`already-running` (a session is there; also a home stopped with the host
+whose harness runs again, `running: true`, which the sweep adopts: its stop is cleared, no
+notice is sent into the running harness and nothing is counted. `oats
+session start --resume --home <abs>` of such a home does the same and
+answers `E_SESSION_RUNNING`, saying so. A `--plan` says `already-running`
+only where the listing read the harness running; a home it did not read,
+as one whose provider declares no `inspectMany`, is planned `resumed` and
+adopted by its start. A home the listing read running is adopted also
+while the delay after an earlier refused resume of it runs: an adoption
+sends nothing. Should its harness end between the listing and its start,
+that start sends the resume notice, within the delay), `refused` with `keeps-getting-lost`
+(the home's resume cap; `code: "E_SESSION_NOT_RUNNING"`, with
+`nextAttemptAt`; a `--plan` reads the same count and answers the same) or `start-refused`
+(the notice was not sent: a prompt or a claim is open, or it was queued),
+`skipped` with `unknown` (not readable, or a process of the last run still
+works in the home). A home an operator stopped has no row. `--plan
+--without-provider-inspect` asks no session provider: every provider home
+OATS has not stopped is then `skipped`, `unknown`, with its `backend`
+(`E_BAD_ARGS` without `--plan`). The switch is `oats host run`'s own: it
+lists with it at shutdown, so that a provider going down with the host cannot
+hold the listing up. A client has no use for it.
+
+**Launch preview.** `oats launch-config preview --home <abs> --json` of a
+provider home answers `command: null`, `argv: null` and `executable.path:
+null` (its launch is handed to the provider as data), `environment` by name,
+and a `backend` item in `preflight`. The preview asks the provider's `check`
+with the launch that is planned, as the start will before it stops anything:
+a launch the provider would refuse is a failed `backend` item (`code`: the
+start's refusal, `E_BACKEND_*`), and `ok` is false. So is an allowance's path
+the start would refuse to make (`E_BACKEND_SANDBOX_HOST`); `warnings` carries
+the start's `sandbox allowances: …` lines. Nothing is stopped, started or
+created.
+
 ### Input
 
 ```text
@@ -7412,7 +7798,8 @@ oats session input --home <abs> [--text-file <path>] --json
 
 Input bytes come from stdin or the named file. The existing version-1 success
 answer is `{schemaVersion: 1, ok: true, result: {home, backend: "tmux",
-present: true, state, paneId, submitted: true, verified}}`. Session input runs
+present: true, state, paneId, submitted: true, verified}}` (a provider home's
+is under [Session providers](#session-providers-feature-session-providers)). Session input runs
 on the execution host, including when the wake broker invokes it there;
 `--server` is not supported for input. The adapter sends one literal
 bracketed paste and one Enter after the existing input/authority/target checks.
@@ -7451,7 +7838,7 @@ harness receipt. See [execution targets](execution-targets.md).
 oats session start --home <abs> [--launch-config <name>|none] [--harness pi|claude|codex] [--model <id>] [--yolo|--no-yolo] [--server <id>] --json
 oats session start --resume --home <abs> --json
 oats session restart --home <abs> [the same options] [--stop-grace <1-300 s>] --json
-oats session resume [--deployment <dir>] [--plan] --json
+oats session resume [--deployment <dir>] [--plan [--without-provider-inspect]] --json
 ```
 
 Features `session-start`, `session-restart`, and `launch-config` for the
@@ -7619,7 +8006,7 @@ answer is the ordinary start answer plus one object:
 
 ### The machine sweep (`oats session resume`)
 
-`oats session resume [--deployment <dir>] [--plan] --json` (feature
+`oats session resume [--deployment <dir>] [--plan [--without-provider-inspect]] --json` (feature
 `session-resume`, OATS 0.69) starts with `--resume` every home of this
 machine's deployments whose session was lost. A client runs it once when it
 opens. It reads this computer's list of deployments without writing it

@@ -36,7 +36,8 @@
 :root, [data-theme="dark"] {
   color-scheme: dark;     /* native lists, scrollbars and pickers follow the theme */
   --bg: #1a1b26;          /* app background */
-  --surface: #1f2130;     /* cards, sidebar */
+  --surface: #1f2130;     /* cards, raised rows */
+  --sidebar: #16161e;     /* the sidebar's ground: the prototype's sunken tone, under --bg (slice 3d); the other themes' --surface */
   --surface-2: #24273a;   /* hover / raised */
   --border: #2f3244;
   --tree-line: #3b3f57; --tree-link: #7880a8; /* decorative tree edges / the dotted sibling link */
@@ -55,11 +56,12 @@
   /* Workspace v4: running dot (graphic only), amber attention (text is --warn), neutral
      reason/tag fill, and the soft border of a selected card. */
   --live: #7aa2f7; --attn-bg: #2f2b22; --attn-border: #6b5a30; --tag-bg: #292e42; --sel-border: #3d59a1; --attn-dot: #e0af68;
-  --bar-h: 48px;          /* one top-bar height everywhere — borders align across panes */
-  /* The terminal's colours stay as they were (slice 3c changes the chrome only; terminals are out of its scope). */
-  --term-bg: #0a0d12;     /* transcript surface follows the theme */
+  --bar-h: 44px;          /* one top-bar height everywhere — borders align across panes (slice 3d: the prototype's 44px tab row) */
+  /* The terminal's ground is the app's own --bg, as the prototype draws it (slice 3d, Dark only); its cell geometry is
+     untouched. Two colours moved with it to keep their ratios: ANSI black (4.5:1) and a drag's selection (3:1). */
+  --term-bg: #1a1b26;     /* transcript surface follows the theme */
   --term-fg: #e6edf3;
-  --term-sel: #2f6496;    /* a drag's selection: 3:1 on --term-bg (a UI state, WCAG 1.4.11), its text 4.5:1 */
+  --term-sel: #3570a8;    /* a drag's selection: 3:1 on --term-bg (a UI state, WCAG 1.4.11), its text 4.5:1 */
   --term-sel-fg: #f5f9ff;
   /* xterm typography: the bundled Inconsolata, then the OS monospace stack; user overrides persist via theme.mjs */
   --term-font-family: "Inconsolata", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -70,7 +72,7 @@
   --shadow-modal: 0 30px 80px rgb(0 0 0 / .35);
   --scrim: rgb(0 0 0 / .6);
   /* ── terminal ANSI set (feeds the xterm.js theme via theme.mjs) ── */
-  --ansi-black: #768390; --ansi-red: #ff7b72; --ansi-green: #4ac26b; --ansi-yellow: #d9a032;
+  --ansi-black: #7b8794; --ansi-red: #ff7b72; --ansi-green: #4ac26b; --ansi-yellow: #d9a032;
   --ansi-blue: #6cb2ff; --ansi-magenta: #c297ff; --ansi-cyan: #4ed1db; --ansi-white: #c3ccd6;
   --ansi-bright-black: #8b949e; --ansi-bright-red: #ffa198; --ansi-bright-green: #63e084;
   --ansi-bright-yellow: #edbb4a; --ansi-bright-blue: #8cc5ff; --ansi-bright-magenta: #d5b3ff;
@@ -106,6 +108,7 @@
      would fail for small text. Success stays green, errors stay red. */
   --bg: #f4f4f1;
   --surface: #ffffff;
+  --sidebar: #ffffff;     /* the sidebar's ground: --surface here */
   --surface-2: #f8f8f6;
   --border: #e3e3df;
   --tree-line: #cfcfca; --tree-link: #858580; /* tree connectors; the dotted link holds 3:1 on surface, surface-2, sel (#1312) */
@@ -161,6 +164,7 @@
      New chrome tokens below complement it without remapping the old colors. */
   --bg: #f3eddd;
   --surface: #fdf6e3;
+  --sidebar: #fdf6e3;     /* the sidebar's ground: --surface here */
   --surface-2: #f0e9d2;
   --border: #ddd4bc;
   --tree-line: #cfc6ab; --tree-link: #728384; /* the dotted link holds 3:1 on surface, surface-2, sel (#1312) */

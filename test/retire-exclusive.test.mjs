@@ -18,7 +18,7 @@ import YAML from "yaml";
 import { deferredRetireResultPath, retireInstance, retirePendingMarkerPath } from "../lib/core.mjs";
 import { readEvents } from "../lib/instance-events.mjs";
 import { processStartToken } from "../lib/worktree-hooks.mjs";
-import { CLI, v2Deployment } from "./helpers/v2-deployment.mjs";
+import { CLI, v2Deployment, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 import { hostProcessState, killAndReap, waitUntil, zombieSync } from "./helpers/host-fixture.mjs";
 
 const CORE = pathToFileURL(new URL("../lib/core.mjs", import.meta.url).pathname).href;
@@ -115,7 +115,7 @@ process.exitCode = completeDeferredRetirement(JSON.parse(process.env.OATS_RETIRE
      *  fails on a process left working in the base. */
     spawnLaunched: () => {
       const executable = join(fx.base, "harness-stand-in");
-      writeFileSync(executable, "#!/bin/sh\nexec sleep 600\n", { mode: 0o755 });
+      writeFixtureExecutable(fx.base, executable, "#!/bin/sh\nexec sleep 600\n");
       const localFile = join(fx.dep, "oats-local.yaml");
       writeFileSync(localFile, YAML.stringify({ ...YAML.parse(readFileSync(localFile, "utf8")), "launch-configs": { "stand-in": { harness: "pi", executable } } }, { lineWidth: 0 }));
       return f.spawn({ launch: true, launchConfig: "stand-in" });

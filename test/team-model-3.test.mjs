@@ -120,8 +120,8 @@ test("doctor checks local-teams-closed offline: from the cached workspace file, 
   const UNCHECKED = "local-teams-closed: whether oats-workspace.yaml allows oats-local.yaml teams/defaultTeam (localTeams: true) couldn't be checked: this deployment hasn't observed its workspace yet; run oats sync";
   let doc = JSON.parse(fx.cli(["doctor", "--json"]).stdout);
   assert.equal((doc.problems ?? []).some((p) => p.condition === "local-teams-closed"), false, "not known offline yet");
-  // Operator coverage (#671) and the hook-event check (0.49.0) report on their own lines; this test pins the local-teams line.
-  const own = (lines) => lines.filter((l) => !l.startsWith("operator-coverage-unknown:") && !l.startsWith("hook-events-unchecked:"));
+  // Other doctor checks report on their own lines; this test pins the local-teams line.
+  const own = (lines) => lines.filter((l) => l.startsWith("local-teams-closed:"));
   assert.deepEqual(own(doc.information), [UNCHECKED]);
   assert.ok(fx.cli(["doctor"]).stdout.includes(`INFO: ${UNCHECKED}`));
   ok(fx.cli(["teams", "--json"]), "teams observes the workspace");

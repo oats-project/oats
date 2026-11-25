@@ -153,6 +153,16 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
   return evidence;
 }
 
+// Serialized and executed by docker exec as the configured runtime UID.
+export function resolverCheck(fs = require("node:fs"), path = "/etc/resolv.conf") {
+  try {
+    if (fs.readFileSync(path).length === 0) throw new Error("empty resolver");
+  } catch {
+    throw Object.assign(new Error("E_AGENT_RESOLVER: /etc/resolv.conf must be readable and non-empty by the runtime UID"), { code: "E_AGENT_RESOLVER" });
+  }
+  return "resolver readable and non-empty by runtime UID";
+}
+
 function runtimeCheck(uid, gid, outboxGid) {
   const fs = require("node:fs");
   const assert = require("node:assert/strict");
@@ -406,6 +416,7 @@ export function main(args, env, { spawnSync: run = spawnSync } = {}) {
   if (label !== "local") assert.equal(arch, "x64", "target evidence requires amd64");
   report(`PASS architecture=${arch}; image=${info.Image}`);
   report(`PASS ${program(runtimeCheck, [uid, gid, env.TEAM_OUTBOX_DIR ? env.TEAM_OUTBOX_GID : null]).replaceAll("\n", `\n[${label}] PASS `)}`);
+  report(`PASS ${JSON.parse(program(resolverCheck, []))}`);
   const token = JSON.parse(program(tokenCheck, [gid, label !== "local"]));
   for (const line of token.evidence) report(line);
   if (env.AGENT_CA_FILE) report(`PASS ${JSON.parse(program(publicCACheck, []))}`);

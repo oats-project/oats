@@ -88,7 +88,7 @@ export function deriveHostTokens(colors, mode, base = () => undefined) {
   // Surfaces define the theme: the host's own, unadjusted.
   const raised = mixHex(background, foreground, 0.06);
   const tokens = {
-    "term-bg": background, surface: background, bg: canvas,
+    "term-bg": background, surface: background, sidebar: background, bg: canvas,
     "surface-2": raised, "chip-bg": raised, "tag-bg": raised,
     border: mixHex(background, foreground, 0.14),
     "tree-line": mixHex(background, foreground, 0.2),
@@ -138,7 +138,8 @@ export function deriveHostTokens(colors, mode, base = () => undefined) {
   ];
   for (const [token, start] of text) if (!hold(token, start)) return null;
   if (!hold("graph-edge", mixHex(background, foreground, 0.4))) return null;
-  // The sidebar's dotted sibling link is the only mark on its column (#1312): a meaningful graphic too.
+  // The sidebar's dotted sibling link is the only mark on its column (#1312): a meaningful graphic too. The harness
+  // mark on a row's line 2 (shell.css .ctx-row-detail > .ctx-harness, slice 3d) is in the same ink, on the same fills.
   if (!hold("tree-link", mixHex(background, foreground, 0.4))) return null;
   // Its solid lines are drawn for related work only, so they are the sign of it: a meaningful graphic as well.
   if (!hold("tree-stroke", mixHex(background, foreground, 0.4))) return null;

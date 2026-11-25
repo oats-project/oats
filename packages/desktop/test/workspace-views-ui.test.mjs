@@ -63,7 +63,7 @@ test("UI spec: no deployments block in the sidebar; the workspace list sits unde
   assert.deepEqual([...doc.getElementById("sidebar").children].map((el) => el.id || el.className), ["side-head", "ws-list", "nav", "instance-roster", "nav-foot"]);
   assert.equal(doc.getElementById("ws-current"), null, "no section around the current workspace's views and Instances");
   assert.equal(doc.getElementById("ws-list").previousElementSibling, doc.querySelector(".side-head"), "the list sits under its heading");
-  assert.equal(doc.querySelector(".side-head #ws-heading").textContent, "Workspace");
+  assert.equal(doc.querySelector(".side-head #ws-heading").textContent, "Workspaces");
   assert.equal(doc.getElementById("nav").previousElementSibling, doc.getElementById("ws-list"), "the main views are under the list of workspaces");
   assert.equal(doc.getElementById("instance-roster").previousElementSibling, doc.getElementById("nav"), "then the Instances");
   assert.equal(vd.renderDeploymentList, undefined, "the list renderer is gone");
@@ -145,7 +145,7 @@ test("roster, two deployments: a heading per deployment, by machine, in order, i
   const meta = far.querySelector(".ctx-meta.ctx-row-detail");
   assert.equal(meta.textContent, "soul · devbox", "the identity line: soul · machine");
   const near = [...list.querySelectorAll(".ctx-tree-row")].find((r) => r.querySelector(".ctx-name").dataset.name === "near");
-  assert.equal(near.querySelector(".ctx-meta").textContent, "soul · This Mac", "this computer's deployment: its machine label");
+  assert.equal(near.querySelector(".ctx-meta").textContent, "soul", "this computer's deployment: no machine (slice 3d)");
 });
 
 test("roster headings: one machine holding two deployments adds the path tail; not reached is marked in words", (t) => {
@@ -364,8 +364,9 @@ for (const name of ["light", "solarized", "dark"]) test(`${name}: roster heading
   const root = win.getComputedStyle(doc.documentElement);
   const active = '.ws-option[aria-current="true"]', inactive = `.ws-option[data-workspace-id="${marked[2].id}"]`;
   const checks = [
-    [".ctx-deployment-label", "muted", "surface"], [".ctx-deployment .deployment-mark", "warn", "surface"],
-    [`${active} .ws-option-name`, "fg", "surface"], [`${inactive} .ws-option-name`, "fg", "surface"], [".soul-inspector > .deployment-scope", "muted", "surface"],
+    // The sidebar's own ground since slice 3d: --sidebar (Dark's sunken tone, --surface elsewhere).
+    [".ctx-deployment-label", "muted", "sidebar"], [".ctx-deployment .deployment-mark", "warn", "sidebar"],
+    [`${active} .ws-option-name`, "fg", "sidebar"], [`${inactive} .ws-option-name`, "fg", "sidebar"], [".soul-inspector > .deployment-scope", "muted", "surface"],
   ];
   for (const [selector, fg, surface] of checks) {
     const el = doc.querySelector(selector); assert.ok(el, selector);

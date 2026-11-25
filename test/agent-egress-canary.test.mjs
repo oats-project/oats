@@ -193,7 +193,7 @@ function runtimeFixture(t) {
     [["image","inspect",image],[{Id:image,Config:{Env:[],Entrypoint:["node"]}}]],
     [["exec","fixture_proxy","node","-e","process.stdout.write(require('node:fs').readFileSync('/etc/egress/policy.json','utf8'))"],policy],
   ])responses[JSON.stringify(args)]=value;
-  return {dir,responses,plan:{policy,probeContainer:"fixture_probe",proxyContainer:"fixture_proxy",agentsNetwork:"fixture_agents",servicesNetwork:network,
+  return {dir,responses,plan:{schema:1,policy,probeContainer:"fixture_probe",proxyContainer:"fixture_proxy",agentsNetwork:"fixture_agents",servicesNetwork:network,
     probeImage:image,proxyImage:image,uid:20001,gid:20001,approvedProbeMounts:mounts,protectedSources:[join(dir,"private-key")],allowedPaths:{aweb:"/ready"},
     deniedBackends:[{role:"postgres",address:policy.deniedAddresses[0],port:5432},{role:"redis",address:policy.deniedAddresses[1],port:6379}]}};
 }

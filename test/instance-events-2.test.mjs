@@ -1,12 +1,12 @@
 // K7b — `instance-events-2`: the event read is bounded, addressed, incarnation-aware, and its integrity is reported independently of the window.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, symlinkSync, linkSync, realpathSync, rmSync, openSync, writeSync, closeSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, symlinkSync, linkSync, realpathSync, rmSync, openSync, writeSync, closeSync, readFileSync, existsSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { readEvents, appendEvent, EVENTS_API } from "../lib/instance-events.mjs";
+import { readEvents, appendEvent, recordStartBoundary, EVENTS_API } from "../lib/instance-events.mjs";
 
 const CLI = fileURLToPath(new URL("../bin/oats.mjs", import.meta.url));
 function ws(t) {
@@ -203,4 +203,50 @@ test("E′ — #642: two agents' logs for one retired name refuse E_AMBIGUOUS_IN
     join(w.root, "dev", "other", "dev-1"), // not an instances dir
     join(w.base, "elsewhere", "dev", "instances", "dev-1"), // not under the scope
   ]) assert.equal(eventsCli(w, "dev-1", ["--home", bad]).doc.error.code, "E_HOME_MISMATCH", bad);
+});
+
+// Both logs are where an agent can write: its home, and the deployment's events directory (which a
+// session provider's sandbox is allowed to write). The kernel that appends runs outside any sandbox.
+test("W: an append never writes through a link planted at a log's name: a symbolic link (to a file, or dangling), a hard link and a FIFO are refused, the other log still gets its row, and the linked file is untouched", (t) => {
+  const w = ws(t); w.incarnate("2026-01-01T00:00:00.000Z");
+  const homeLog = join(w.home, ".oats-events.jsonl");
+  const target = join(w.base, "operators-file"), before = "the operator's own bytes\n";
+  const reasonOf = (res, path) => res.results.find((r) => r.path === path);
+  const plant = { home: homeLog, workspace: w.wsLog };
+  mkdirSync(join(w.base, ".agents", "events"), { recursive: true });
+  for (const [which, log] of Object.entries(plant)) {
+    const other = which === "home" ? w.wsLog : homeLog;
+    // A symbolic link to a file of the operator's.
+    writeFileSync(target, before); rmSync(log, { force: true }); symlinkSync(target, log);
+    let res = appendEvent(w.home, { kind: "spawned", data: { agent: "dev" } });
+    assert.equal(readFileSync(target, "utf8"), before, `${which}: nothing is written through the symbolic link`);
+    assert.equal(reasonOf(res, log).ok, false); assert.match(reasonOf(res, log).reason, /symbolic link/);
+    assert.equal(reasonOf(res, other).ok, true, `${which}: the other log has the row`); assert.equal(res.ok, true);
+    // A dangling one creates nothing.
+    rmSync(log); rmSync(target); symlinkSync(target, log);
+    res = appendEvent(w.home, { kind: "launched" });
+    assert.equal(existsSync(target), false, `${which}: a dangling link creates no file`); assert.equal(reasonOf(res, log).ok, false);
+    // A hard link: the log is a second name of the operator's file.
+    rmSync(log); writeFileSync(target, before); linkSync(target, log);
+    res = appendEvent(w.home, { kind: "stopped" });
+    assert.equal(readFileSync(target, "utf8"), before, `${which}: nothing is written into a file with two names`);
+    assert.match(reasonOf(res, log).reason, /second name/);
+    // The start boundary's repair writes by the same rule.
+    const repaired = recordStartBoundary(w.home, { startId: `start-${which}`, startedAt: "2026-01-01T00:00:09.000Z" });
+    assert.equal(readFileSync(target, "utf8"), before); assert.equal(repaired.ok, false, "a log that could not be written is not reported written");
+    rmSync(log); rmSync(target);
+  }
+  // A FIFO is not waited on (the append would block for ever on one with no reader).
+  const fifo = spawnSync("mkfifo", [homeLog]);
+  if (fifo.status === 0) {
+    const res = appendEvent(w.home, { kind: "restarted" });
+    assert.equal(reasonOf(res, homeLog).ok, false); assert.equal(reasonOf(res, w.wsLog).ok, true);
+    rmSync(homeLog);
+  }
+  // And a plain log is appended to as before, made when it is missing.
+  rmSync(w.wsLog, { force: true });
+  const plain = appendEvent(w.home, { kind: "spawned", data: { agent: "dev" } });
+  assert.deepEqual(plain.results.map((r) => r.ok), [true, true]);
+  assert.ok(lstatSync(homeLog).isFile() && lstatSync(w.wsLog).isFile());
+  assert.equal(readFileSync(w.wsLog, "utf8").trim().split("\n").length, 1);
 });

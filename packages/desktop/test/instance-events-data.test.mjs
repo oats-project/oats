@@ -113,6 +113,21 @@ test('source byte count is total size, not bytes read; window count is observed 
   assert.equal(eventsData(value, target, 100), null, 'echo must agree with the requested limit');
   assert.equal(out.events.length, 50, 'never dedup already projected rows by guessed identity');
 });
+test('the top claim follows the kernel: the newest with a message, a newer text-less claim adding only its reason (#1502)', () => {
+  const value = data();
+  // The board's question (a message), then a harness dialog (none): the kernel's top is the board's.
+  value.waitingClaims = [{ producer: 'oats.board', waiting: true, since: '2026-09-22T01:00:00.000Z', reason: 'attention', message: 'Squash?' },
+    { producer: 'pi.harness', waiting: true, since: '2026-09-22T02:00:00.000Z', reason: 'permission', message: null }];
+  value.waitingOnYou = { producer: 'oats.board', since: '2026-09-22T01:00:00.000Z', reason: 'attention', message: 'Squash?' };
+  const out = eventsData(value, target); assert.ok(out, 'not a protocol error');
+  assert.equal(out.waitingOnYou.producer, 'oats.board'); assert.equal(out.waitingClaims[1].reason, 'permission');
+  value.waitingOnYou = { producer: 'pi.harness', since: '2026-09-22T02:00:00.000Z', reason: 'permission', message: null };
+  assert.equal(eventsData(value, target), null, 'the text-less claim is not the top');
+  // A message without a reason takes the newer text-less claim's.
+  value.waitingClaims[0].reason = null;
+  value.waitingOnYou = { producer: 'oats.board', since: '2026-09-22T01:00:00.000Z', reason: 'permission', message: 'Squash?' };
+  assert.ok(eventsData(value, target));
+});
 test('positive claims are attributed; cleared producers stay false and top must match newest positive', () => {
   const value = data();
   value.waitingClaims = [{ producer: 'provider.a', waiting: true, since: '2026-09-22T01:00:00.000Z', reason: 'review requested' },

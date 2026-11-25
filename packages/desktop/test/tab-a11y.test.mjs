@@ -57,7 +57,7 @@ test("closing the last terminal/artifact moves focus to a stable logical entry",
   assert.equal(focusAfterLastTab("terminal", { instancesEntry: doc.getElementById("instances") }), true);
   assert.equal(doc.activeElement.id, "instances");
   assert.equal(focusAfterLastTab("terminal", { instancesEntry: null }), false, "no entry: nothing moves");
-  // An empty roster's entry is its one action, the foot's Spawn instance (rosterEntry, the product owner, 2026-10-26).
+  // An empty roster's entry is its one action, New agent at the roster's end (rosterEntry, the product owner, 2026-10-26).
   doc.activeElement.blur();
   assert.equal(focusAfterLastTab("terminal", { instancesEntry: doc.getElementById("sidebar-spawn") }), true);
   assert.equal(doc.activeElement.id, "sidebar-spawn");

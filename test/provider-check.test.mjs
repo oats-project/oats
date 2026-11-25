@@ -43,6 +43,28 @@ test("a ready check with a warning passes, and the warning is relayed verbatim",
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
+test("a claude or codex home on a session provider has no pane: its harness-trust item is not-applicable, not unknown", async () => {
+  const base = mkdtempSync(join(tmpdir(), "oats-provider-check-"));
+  try {
+    const { t } = target(base, envelope({ status: "ready", problems: [] }));
+    const trustItem = async (meta) => (await readinessDocument({ ...t, meta: { ...t.meta, ...meta } })).checks.configured.items.find((i) => i.code === "harness-trust");
+    // A configuration file the launch env names: a tmux home reads it; a provider home reads none.
+    const launch = { env: { CLAUDE_CONFIG_DIR: join(base, "nowhere-claude"), CODEX_HOME: join(base, "nowhere-codex") } };
+    for (const harness of ["claude", "codex"]) {
+      const provider = { harness, backend: "fx", session: { provider: "fx.provider" }, launch };
+      const onProvider = await trustItem(provider);
+      assert.equal(onProvider.status, "not-applicable", harness);
+      assert.equal(onProvider.required, false);
+      assert.equal(onProvider.file, null);
+      assert.equal(onProvider.harness, harness);
+      assert.match(onProvider.reason, /session provider runs this launch \(backend fx\), with no OATS pane/);
+      const onTmux = await trustItem({ harness, launch });
+      assert.notEqual(onTmux.status, "not-applicable", `a tmux ${harness} home still reads its file`);
+      assert.match(String(onTmux.file), /nowhere-/, `a tmux ${harness} home reads the file its launch env names`);
+    }
+  } finally { rmSync(base, { recursive: true, force: true }); }
+});
+
 test("absent warnings read as []; malformed warnings make the whole answer unknown", () => {
   const base = mkdtempSync(join(tmpdir(), "oats-provider-check-"));
   try {

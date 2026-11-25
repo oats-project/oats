@@ -43,7 +43,8 @@ export function registryCommand(args) {
   if(args[0]==='doctor'&&args[1]==='identity') return true;
   if(args.includes('--offline')) return false;
   const [command,sub,action]=args;
-  if(command==='init'||command==='whoami'||command==='heartbeat'||command==='mail'||command==='chat'||command==='status'||command==='status-host') return true;
+  // `who` (P5) reads the registry; it has no --offline.
+  if(command==='init'||command==='whoami'||command==='who'||command==='heartbeat'||command==='mail'||command==='chat'||command==='status'||command==='status-host') return true;
   if(command==='workspace') return ['connect','delete','status'].includes(sub);
   if(command==='team') return sub==='invite';
   if(command==='id') return sub==='grant'||(sub==='team'&&action!=='list')||sub==='show';

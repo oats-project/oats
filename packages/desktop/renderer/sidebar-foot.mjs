@@ -1,11 +1,11 @@
 /* The sidebar's foot (the Desktop UI rework, slice 1): "N need you" at the left (hidden at 0; activating it focuses the
-   first row that needs you), then at the right New <instance> (Quick Open, the spawn flow) and ? (the keyboard
-   shortcuts). Its words name the agent noun through DESKTOP_NOUNS (desktop-terms.mjs), so a new word is one line there;
+   first row that needs you), then at the right ? (the keyboard shortcuts); New <instance> (Quick Open, the spawn flow)
+   sits at the roster's end since slice 3d, as the prototype has it, and is painted here too. Its words name the agent noun through DESKTOP_NOUNS (desktop-terms.mjs), so a new word is one line there;
    the empty roster's line is built here too, for the same reason. The buttons run their registry actions (shell.mjs);
    this module paints them. */
 import { iconElement } from "./shell-icons.mjs";
 
-/** "New agent": the foot's spawn button. */
+/** "New agent": the spawn button at the roster's end. */
 export const newLabel = (nouns) => `New ${nouns.instance}`;
 /** The visible count: "3 need you". */
 export const needYouText = (count) => `${count} need you`;
@@ -14,7 +14,7 @@ export const needYouName = (count, nouns) => `${count} ${count === 1 ? `${nouns.
 /** The empty roster: "No agents yet · Alt+P starts one", with the spawn action's chord when it has one. */
 export const emptyRosterText = (nouns, chord = "") => `No ${nouns.instances} yet${chord ? ` · ${chord} starts one` : ""}`;
 
-/** Wire the foot's controls in `doc`: `#sidebar-need-you` and `#sidebar-spawn`. `onNeedYou()` runs on the count's
+/** Wire `#sidebar-need-you` (the foot's count) and paint `#sidebar-spawn` (New agent, at the roster's end) in `doc`. `onNeedYou()` runs on the count's
  * activation. Returns { paint(count) }: the count of the current workspace's rows that need you (0 hides it). */
 export function createSidebarFoot(doc, { nouns, onNeedYou = () => {} }) {
   const need = doc.getElementById("sidebar-need-you"), spawn = doc.getElementById("sidebar-spawn");

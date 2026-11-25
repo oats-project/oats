@@ -80,14 +80,15 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
   const requestHost = originHost(requestOrigin), humanHost = originHost(humanOrigin);
   assert.ok(requestHost !== humanHost && isIP(address) === 4, "ingress probe needs distinct origins and an IPv4 address");
   assert.ok(Number.isInteger(port) && port > 0 && port <= 65535, "ingress probe port is invalid");
-  let routes;
+  let routes, humanRole = "signer";
   if (policy !== undefined || routeLogs !== undefined) {
     assert.ok(policy && routeLogs && typeof routeLogs === "object" && !Array.isArray(routeLogs),"policy and per-route audit inputs are required together");
     compilePolicy(policy);
-    assert.ok(policy.targets.signer,"ingress admission requires the signer role");
-    assert.equal(policy.targets.signer.origin,requestOrigin,"signer origin differs from derived policy");
+    humanRole = policy.humanRole ?? "signer";
+    assert.ok(policy.targets[humanRole],`ingress admission requires the ${humanRole} role`);
+    assert.equal(policy.targets[humanRole].origin,requestOrigin,`${humanRole} origin differs from derived policy`);
     assert.equal(policy.humanOrigin,humanOrigin,"human origin differs from derived policy");
-    assert.ok(policy.targets.signer.addresses.includes(address),"ingress address is not a pinned signer address");
+    assert.ok(policy.targets[humanRole].addresses.includes(address),`ingress address is not a pinned ${humanRole} address`);
     assert.deepEqual(Object.keys(routeLogs).sort(),Object.keys(policy.targets).sort(),"per-route audit inputs must name exactly the policy roles");
     routes=Object.entries(policy.targets).map(([role,target])=>{
       const audit=routeLogs[role];
@@ -101,9 +102,9 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
       ...routes.filter(route=>!route.external).flatMap(route=>route.addresses)]);
     for(const route of routes.filter(route=>route.external))
       assert.ok(route.addresses.every(value=>!ownedAddresses.has(value)),"external registry overlaps deployment addresses");
-    const signer=routes.find(route=>route.role==="signer");
-    if(requestLog !== undefined)assert.equal(requestLog,signer.log,"signer backend log differs from per-route audit input");
-    if(requestPath !== undefined)assert.equal(requestPath,signer.path,"signer control path differs from per-route audit input");
+    const anchor=routes.find(route=>route.role===humanRole);
+    if(requestLog !== undefined)assert.equal(requestLog,anchor.log,`${humanRole} backend log differs from per-route audit input`);
+    if(requestPath !== undefined)assert.equal(requestPath,anchor.path,`${humanRole} control path differs from per-route audit input`);
   } else routes=[{role:"signer",origin:requestOrigin,host:requestHost,addresses:[address],path:requestPath ?? path,log:requestLog}];
   for (const controlPath of [auditPath,humanPath,...routes.map(route=>route.path)]) {
     assert.ok(typeof controlPath === "string" && controlPath.startsWith("/") && !controlPath.startsWith("//")
@@ -143,7 +144,7 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
     // used by negatives. Their 4xx responses never replace readiness controls.
     for(const route of localRoutes)for(const targetAddress of route.addresses)
       await send(protocol,route,targetAddress,route.host,route.host,"coverage");
-    await send(protocol,routes.find(route=>route.role==="signer"),address,humanHost,humanHost,"human-coverage");
+    await send(protocol,routes.find(route=>route.role===humanRole),address,humanHost,humanHost,"human-coverage");
     const unknownChecked=new Set();
     for(const route of routes)for(const targetAddress of route.addresses) {
       await send(protocol,route,targetAddress,route.host,route.host,"matched");
@@ -160,8 +161,8 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
       await send(protocol,route,targetAddress,route.host,route.host,"matched");
     for(const route of localRoutes)for(const targetAddress of route.addresses)
       await send(protocol,route,targetAddress,route.host,route.host,"coverage");
-    await send(protocol,routes.find(route=>route.role==="signer"),address,humanHost,humanHost,"human-coverage");
-    await send(protocol,routes.find(route=>route.role==="signer"),address,humanHost,humanHost,"human");
+    await send(protocol,routes.find(route=>route.role===humanRole),address,humanHost,humanHost,"human-coverage");
+    await send(protocol,routes.find(route=>route.role===humanRole),address,humanHost,humanHost,"human");
   }
   const deadline=Date.now()+2000;
   let texts;
@@ -192,7 +193,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if(options.routeLogsFile)options.routeLogs=readJson(options.routeLogsFile,128*1024);
     if (options.caFile) {assert.ok(statSync(options.caFile).size<=65536,"public CA input is too large");options.ca = [...rootCertificates,readFileSync(options.caFile)];}
     await probeIngress(options);
-    if(options.routeLogs.registry.external===true)process.stderr.write("egress: registry external: positive control only; refusal not claimed\n");
+    process.stderr.write(`egress: human anchor: ${options.policy.humanRole ?? "signer"}\n`);
+    if(options.routeLogs.registry?.external===true)process.stderr.write("egress: registry external: positive control only; refusal not claimed\n");
     process.stdout.write("OATS_EGRESS_INGRESS_PASS\n");
   } catch {
     process.stderr.write("egress: ingress authority or backend non-delivery proof failed (values withheld)\n");

@@ -11,6 +11,8 @@ import { terminalKey } from "../renderer/instance-tree-view.mjs";
 import { tabShowsRow } from "../renderer/retired-tabs.mjs";
 import { iconElement } from "../renderer/shell-icons.mjs";
 import { syncWaitingRow } from "../renderer/waiting-row.mjs";
+import { createTabBoards } from "../renderer/agent-board-tabs.mjs";
+import { BOARD_FEATURE, boardData } from "../../client/instance-board.mjs";
 import { waitingClaim, waitingDetail, waitingClock } from "../../client/waiting-on-you.mjs";
 import { rowStale } from "../../client/roster-sections.mjs";
 import { remotePanel, unavailableGroups } from "../../client/remote-roster.mjs";
@@ -28,12 +30,15 @@ const claim = (extra = {}) => ({ since: SINCE, producer: "agent", reason: "atten
 const row = (name, extra = {}) => ({ instance: name, agent: "dev", home: `/ws/agents/dev/instances/${name}`, agentsRoot: "/ws/agents",
   running: true, runtimeState: "running", ...extra });
 
-function fixture(t, { stale = false } = {}) {
+function fixture(t, { stale = false, boards = null } = {}) {
   const dom = new JSDOM("<!doctype html><body><div class='strip-a'></div><div class='strip-b'></div></body>", { pretendToBeVisual: true });
   t.after(() => dom.window.close());
-  const doc = dom.window.document, tabs = new Map();
+  const doc = dom.window.document, tabs = new Map(), boardCalls = [];
   const context = { document: doc, tabs, terminalKey, tabShowsRow, waitingClaim, waitingDetail, waitingClock, syncWaitingRow, iconElement, rowStale, paintDotColor, setTabTitle,
-    contextDeployments: [], rosterStale: stale, tabNeedsInputRoster: { instances: [], workspace: null } };
+    contextDeployments: [], rosterStale: stale, tabNeedsInputRoster: { instances: [], workspace: null },
+    // The agent view's link (agent-board-tabs.mjs, its own suite agent-view.test.mjs): these rows carry no board, so it
+    // never takes the waiting row's claim; `boardCalls` shows each tab's row and claim reach it.
+    tabBoards: boards ?? { sync: (tab, row, claim) => { boardCalls.push({ tab: tab.key, row: row?.instance ?? null, claim: claim?.message ?? null }); return false; } } };
   Object.defineProperty(context, "Date", { get: () => Date, enumerable: true }); // the test realm's (mockable) clock
   const sync = runInNewContext(`${source}\nsyncTabNeedsInput`, context);
   let id = 0;
@@ -168,11 +173,28 @@ test("the title's start carries its date when the claim is not from today (#559)
   assert.match(tab.triggerEl.title, / since Oct \d{1,2}, \d\d:\d\d$/);
 });
 
-test("CSS: the glyph fits the dot's slot (the label does not move), in --warn, never animated", () => {
+test("CSS: the glyph fills the dot's 12px slot (never clipped, the name never moves), in --warn, never animated", () => {
   const rule = name => css.match(new RegExp(`${name.replace(".", "\\.")} \\{([^}]*)\\}`))?.[1] || "";
-  const px = (body, prop) => Number(body.match(new RegExp(`(?:^|[;\\s])${prop}:\\s*(-?\\d+)px`))?.[1]);
+  const px = (body, prop) => Number(body.match(new RegExp(`(?:^|[;\\s])${prop}:\\s*(-?[\\d.]+)px`))?.[1]);
   const attn = rule(".tab-attn"), dot = rule(".tab-dot");
-  assert.equal(px(attn, "width") + px(attn, "margin-right"), px(dot, "width"), "12px glyph − 5px = the 7px dot's advance");
+  // The trigger clips its overflow: a glyph overhanging its slot (the old -5px end margin) lost its end whenever it
+  // ended the line (no branch, or a branch squeezed to nothing).
+  assert.match(rule(".tab-trigger"), /overflow: hidden/);
+  assert.doesNotMatch(attn, /margin/, "the glyph advances its whole width, no overhang");
+  // The same advance in both states, so the name gets the same room whichever mark shows: a narrower dot let a
+  // constrained name grow into 5px the glyph then took back, and its visible tail jumped. The dot is centred in it.
+  const dotMargin = dot.match(/(?:^|[;\s])margin: 0 ([\d.]+)px;/)?.[1];
+  assert.equal(px(dot, "width") + 2 * Number(dotMargin), px(attn, "width"), "the 7px dot + 2.5px each side = the 12px glyph");
+  assert.match(css, /\.tab-dot, \.tab-attn \{ order: 1; \}/, "after the name");
+  // The label's flex basis reserves room for the number and its gap (7 + 8), then the gap and the slot: the glyph
+  // stays on the first line, the one the trigger shows, at every width down to the floor.
+  const reserve = Number(rule(".tab-label").match(/100% - (\d+)px/)?.[1]);
+  assert.ok(7 + 8 + 8 + px(attn, "width") <= reserve, `number, gap and slot fit the label's ${reserve}px reserve`);
+  // The slot's 5px goes on the floor of a tab that has one, in either state, and on no other tab: a file, brain or
+  // view tab (its icon leads, no slot) keeps its floor, so its strip fits as many tabs as before.
+  assert.match(css, /\n\.tab \{\n  --tab-min: 176px;/, "the floor of a tab with no status slot");
+  assert.match(css, /\n\.tab:has\(> \.tab-trigger > :is\(\.tab-dot, \.tab-attn\)\) \{ --tab-min: 181px; \}/,
+    "the floor of a tab with one, the same with the dot or the glyph");
   assert.match(attn, /flex: none/); assert.match(attn, /color: var\(--warn\)/);
   assert.doesNotMatch(attn, /animation|transition|opacity/);
   assert.match(css, /\.tab-attn > \.shell-icon \{ width: 12px; height: 12px; \}/);
@@ -206,4 +228,22 @@ test("each terminal pane carries its own waiting row (#1502): a split with one w
   assert.equal(waitingRow(a), null, "nor for a row that is not running");
   u.sync([row("dev-a"), row("dev-b", { waitingOnYou: claim() })], "A");
   assert.equal(waitingRow(a), null, "cleared"); assert.ok(waitingRow(b));
+});
+
+// The agent view (S2-D): on a row with a board, the board's own claim shows in the question zone and the waiting row
+// gives way; another producer's claim keeps today's waiting row. Without the feature the tab is as it was.
+test("the agent view: the board's claim moves from the waiting row to the question zone; any other claim stays in the row", t => {
+  const boards = createTabBoards({ features: () => [BOARD_FEATURE], post: () => new Promise(() => {}), openLink: () => {},
+    hidden: { get: () => new Map(), hide() {}, showAll() {} } });
+  const u = fixture(t, { boards }), tab = u.open(row("dev-a"));
+  const board = boardData({ facts: [], questions: [{ id: "q1", question: "Pick one?", options: ["A", "B"], hasContext: false, since: SINCE }] });
+  u.sync([row("dev-a", { board, waitingOnYou: claim({ producer: "oats.board" }) })], "A");
+  assert.equal(waitingRow(tab), null, "no waiting row for the board's own question");
+  assert.ok(tab.paneEl.querySelector(":scope > .agent-questions"), "the question zone shows it");
+  assert.ok(cue(tab), "the tab's needs-input mark stays");
+  u.sync([row("dev-a", { board, waitingOnYou: claim({ producer: "agent" }) })], "A");
+  assert.ok(waitingRow(tab), "another producer's claim keeps the waiting row");
+  u.sync([row("dev-a", { waitingOnYou: claim({ producer: "oats.board" }) })], "A");
+  assert.ok(waitingRow(tab), "a row without the field (an older kernel): today's waiting row");
+  assert.equal(tab.paneEl.querySelector(":scope > .agent-questions"), null);
 });

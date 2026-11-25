@@ -18,6 +18,7 @@ import {basename, dirname, isAbsolute, join, resolve} from 'node:path';
 import {approvedChannelPolicyWarning} from './claude-managed-policy.mjs';
 import { parseVersion, versionAtLeast } from './aw-floor.mjs';
 import { sameAwebTeamId } from "./aweb-team-id.mjs";
+import { retiredKeysMessage } from './retire-key-material.mjs';
 
 const JOINED_EVENT_CLASSES = ['mail', 'chat'];
 // Observation age is advisory; readiness does not certify recent observation.
@@ -61,11 +62,13 @@ export function recordedStart(home) {
   return {identityHome: doc?.launch?.hooks?.env?.AWEB_IDENTITY_HOME, meta: meta && typeof meta === 'object' && !Array.isArray(meta) ? meta : undefined, harness, backend: typeof doc?.backend === 'string' ? doc.backend : undefined};
 }
 
-/** The session backend a home's last start ran on: the session provider this
- *  provider recorded (it records no other backend), else the kernel's own
- *  record of the home's backend. */
+/** The session backend a home's last start ran on, read in one order by every
+ *  reader (readiness, the probe, retire, join and leave): the kernel's own
+ *  record of the home's backend, else the session provider this provider
+ *  recorded (it records no other backend), for a record the kernel wrote none
+ *  in. The two differ only in a record that contradicts itself. */
 export function recordedBackend(meta, kernelBackend) {
-  return typeof meta?.backend === 'string' ? meta.backend : kernelBackend;
+  return typeof kernelBackend === 'string' ? kernelBackend : typeof meta?.backend === 'string' ? meta.backend : undefined;
 }
 
 /** The runtime a home's last start ran under: what this provider recorded
@@ -207,7 +210,9 @@ export function wakeRegistration({home, primaryIdentityHome, delivery, runtime, 
   return doc;
 }
 
-const canon = (p) => { try { return realpathSync(p); } catch { return resolve(String(p || '')); } };
+// The on-disk spelling (realpathSync.native): on a case-insensitive filesystem (macOS)
+// two spellings of one identity home are one locator, so the overlap guards see them.
+const canon = (p) => { try { return realpathSync.native(p); } catch { return resolve(String(p || '')); } };
 
 /** Whether `aw wake status --json` lists this home; a status without an
  *  instances list proves nothing, so it counts as listed. */
@@ -288,17 +293,22 @@ function receiveRecord(home) {
   // Kernel launch receipts govern readiness. Provider meta may precede a
   // failed launch; configuration names and caller env do not identify a start.
   // Lifecycle callers retain recordedRuntime's historical cleanup semantics.
-  // The backend is read the same way: the kernel's record of the home's
-  // session backend, else the session provider this provider recorded.
-  return {meta, runtime: doc.launch?.harness ?? doc.harness ?? meta.runtime, backend: doc.backend ?? meta.backend, identityHome: doc.launch?.hooks?.env?.AWEB_IDENTITY_HOME, hooks: doc.launch?.hooks, launchPromptStatus, startedAt};
+  // The backend is read as every reader reads it (recordedBackend): the
+  // kernel's record of the home's session backend, else the session provider
+  // this provider recorded.
+  return {meta, runtime: doc.launch?.harness ?? doc.harness ?? meta.runtime, backend: recordedBackend(meta, doc.backend), identityHome: doc.launch?.hooks?.env?.AWEB_IDENTITY_HOME, hooks: doc.launch?.hooks, launchPromptStatus, startedAt};
 }
 
 /** Preserve valid retained facts even when a legacy record lacks ownership.
  * Old producers lacked delivery/runtime and kept joins only in metadata.
  * `policy` ({root}) relocates the managed-settings read for tests only. */
 export function expectedReceive(home, {delivery = 'channel', policy} = {}) {
-  const captured = receiveRecord(home);
   const fail = message => ({problems: [problem('receive-record-unavailable', message)], warnings: []});
+  // A home whose keys a retire holds, or removed, has no identity to receive as
+  // (awebai/oats-aweb#318): said as such, before its locator reads as broken.
+  const retiring = retiredKeysMessage(home, basename(home));
+  if (retiring) return fail(retiring);
+  const captured = receiveRecord(home);
   if (captured.error) return fail(captured.error);
   if (!directory(home)) return fail('instance home is missing or unreadable; it is not a legacy record');
   const {meta, runtime, backend, identityHome: launchIdentity} = captured;

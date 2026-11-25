@@ -186,8 +186,9 @@ test("the face: Omarchy's only where its stacks set the terminals' family; macOS
 
 // The product owner, 2026-10-26, on Omarchy's font: "can we make the instance name font on the sidebar and on the
 // tabs a bit smaller?" That was for a monospace chrome; since D2 the chrome is always the system sans, so the names
-// are the rules' own 12.5px in every choice (the rules still read --name-size, which nothing sets).
-test("an instance's name on its row and its tab: 12.5px in every font choice (D2)", t => {
+// are the rules' own size in every choice. Slice 3d (the prototype's frame A): a row's name is 13px and a tab's 12.5px,
+// fixed sizes, so no font choice can reach them (the rules no longer read --name-size).
+test("an instance's name on its row and its tab: 13px and 12.5px in every font choice (D2, slice 3d)", t => {
   const sizes = u => {
     const row = u.dom.window.document.createElement("span"); row.className = "ctx-name";
     const tab = u.dom.window.document.createElement("div"); tab.className = "tab";
@@ -201,18 +202,19 @@ test("an instance's name on its row and its tab: 12.5px in every font choice (D2
   for (const isMac of [false, true]) {
     const omarchy = runtime(t, { stored: { "oats.desktop.font": "omarchy" } });
     omarchy.theme.initFont(isMac, () => true);
-    assert.deepEqual(sizes(omarchy), ["12.5px", "12.5px"], `the monospace, mac=${isMac}: the chrome is not monospace`);
+    assert.deepEqual(sizes(omarchy), ["13px", "12.5px"], `the monospace, mac=${isMac}: the chrome is not monospace`);
     omarchy.theme.setFont("system");
-    assert.deepEqual(sizes(omarchy), ["12.5px", "12.5px"], "System font: as before, in place");
+    assert.deepEqual(sizes(omarchy), ["13px", "12.5px"], "System font: as before, in place");
     assert.equal(omarchy.root.style.getPropertyValue("--name-size"), "", "nothing left inline");
     const fallback = runtime(t, { stored: { "oats.desktop.font": "omarchy" } });
     fallback.theme.initFont(isMac, () => false);
-    assert.deepEqual(sizes(fallback), ["12.5px", "12.5px"], "the fallback shows System font's faces, at their size");
+    assert.deepEqual(sizes(fallback), ["13px", "12.5px"], "the fallback shows System font's faces, at their size");
   }
-  // The rules read the token as a longhand beside their other properties (never a font shorthand).
-  for (const selector of [".ctx-name", ".tab"]) {
-    assert.match(shellCSS, new RegExp(`(^|\\n)\\${selector} \\{[^}]*font-size: var\\(--name-size, 12\\.5px\\);`), selector);
+  // Fixed longhands beside their other properties (never a font shorthand), the token no longer read.
+  for (const [selector, size] of [[".ctx-name", "13px"], [".tab", "12\\.5px"]]) {
+    assert.match(shellCSS, new RegExp(`(^|\\n)\\${selector} \\{[^}]*font-size: ${size};`), selector);
   }
+
 });
 
 test("macOS: the monospace, when stored from before, sets nothing: the chrome is the system's and the terminals keep Inconsolata (D2)", t => {

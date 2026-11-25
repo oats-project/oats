@@ -138,7 +138,7 @@ test('host moves the actual inspector; its stage stays one column and shared hea
   assert.equal(record.slot.classList.contains('inspecting'), false);
   const css = el => u.dom.window.getComputedStyle(el);
   assert.equal(css(u.get('.souls-body')).gridTemplateColumns, 'minmax(0,1fr)');
-  assert.equal(css(aside.querySelector('.inspector-head')).minHeight, '48px');
+  assert.equal(css(aside.querySelector('.inspector-head')).minHeight, 'var(--bar-h)', 'the one top-bar height (slice 3d: 44px)');
   assert.equal(css(aside.querySelector(':scope > .inspector-content')).padding, '0px 14px 16px');
   assert.equal(css(aside.querySelector('button.act')).borderRadius, '7px');
 });

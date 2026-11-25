@@ -55,7 +55,8 @@ export function assertReadOnly({ workflow, source, job, steps }) {
   // (A later major of actions/setup-node caches by itself where package.json names a package
   // manager: moving off v4 needs its switch for that turned off, and this line changed with it.)
   assert.deepEqual(using(workflow, "actions/setup-node")[0].with, { "node-version": 22 });
-  assert.equal(using(read("pull-request.yml"), "actions/setup-node")[0].with["node-version"], 22, "Node as pull-request CI");
+  const ciTests = read("pull-request.yml").jobs.tests;
+  assert.equal(using({ jobs: { tests: ciTests } }, "actions/setup-node")[0].with["node-version"], 22, "Node as pull-request CI's test shards");
 }
 
 /** No input is written into a shell line: inputs appear `inputCount` times (`inputsWhy` says where),

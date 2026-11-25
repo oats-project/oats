@@ -68,7 +68,7 @@ const fx = v2Deployment({
       files: { "bin/launch.mjs": `import { writeFileSync } from "node:fs"; import { join } from "node:path";\nwriteFileSync(join(process.env.OATS_HOME, "teams-env.json"), JSON.stringify({ old: [process.env.OATS_TEAM_LABELS ?? null, process.env.OATS_TEAM_LABEL ?? null], def: process.env.OATS_DEFAULT_TEAM ?? null, source: process.env.OATS_TEAMS_SOURCE, teams: JSON.parse(process.env.OATS_TEAMS) }));\nprocess.stdout.write("{}\\n");\n` } },
     // Records, per pass, the harness variables its launch hook was given and the harness PID still running.
     "test.seen": { manifest: { launchPreview: true, hooks: { launch: "bin/launch.mjs" }, environment: [], settings: {} },
-      files: { "bin/launch.mjs": `import { appendFileSync, readFileSync } from "node:fs"; import { join } from "node:path";\nconst e = process.env; let alive = null;\ntry { const pid = Number(readFileSync(join(e.OATS_HOME, "pid.txt"), "utf8").trim()); if (pid > 1) { process.kill(pid, 0); alive = pid; } } catch { /* none running */ }\nappendFileSync(join(e.OATS_HOME, "seen.jsonl"), JSON.stringify({ preview: e.OATS_LAUNCH_PREVIEW ?? null, harness: e.OATS_HARNESS, runtime: e.OATS_RUNTIME, previousHarness: e.OATS_PREVIOUS_HARNESS, previousRuntime: e.OATS_PREVIOUS_RUNTIME, alive }) + "\\n");\nprocess.stdout.write("{}\\n");\n` } },
+      files: { "bin/launch.mjs": `import { appendFileSync, readFileSync } from "node:fs"; import { join } from "node:path";\nconst e = process.env; let alive = null;\ntry { const pid = Number(readFileSync(join(e.OATS_HOME, "pid.txt"), "utf8").trim()); if (pid > 1) { process.kill(pid, 0); alive = pid; } } catch { /* none running */ }\nappendFileSync(join(e.OATS_HOME, "seen.jsonl"), JSON.stringify({ preview: e.OATS_LAUNCH_PREVIEW ?? null, harness: e.OATS_HARNESS, runtime: e.OATS_RUNTIME, previousHarness: e.OATS_PREVIOUS_HARNESS, previousRuntime: e.OATS_PREVIOUS_RUNTIME, previousBackend: e.OATS_PREVIOUS_BACKEND ?? null, alive }) + "\\n");\nprocess.stdout.write("{}\\n");\n` } },
   },
   // Team model 3: teamed may join the shared night team (not created yet); the deployment's local teams are allowed.
   workspace: { teams: { global: { description: "Fixture team" }, night: { description: "Night shift" } }, localTeams: true, souls: { "ws/teamed": { teams: ["night"] } } },
@@ -269,7 +269,8 @@ test("#1345 --launch-config none --harness codex from a named claude recipe rest
   const r = restartInstanceSession(home, { launchConfig: "none", harness: "codex", env: env(), stopGraceMs: 5000 });
   assert.deepEqual([r.harness, r.launchConfig, r.model, r.stop.exited], ["codex", null, null, true]);
   // The launch hook was told the target harness in its preview and its real pass, the real one before the stop.
-  const told = { harness: "codex", runtime: "codex", previousHarness: "claude", previousRuntime: "claude", alive: oldPid };
+  // (And the backend the home was last launched on, from its receipt: tmux.)
+  const told = { harness: "codex", runtime: "codex", previousHarness: "claude", previousRuntime: "claude", previousBackend: "tmux", alive: oldPid };
   assert.deepEqual(seenRuns(home), [{ preview: "1", ...told }, { preview: null, ...told }]);
   assert.ok(await waitFor(() => runningPid(home) !== null && runningPid(home) !== oldPid), "the codex harness is up");
   const meta = readJson(join(home, "instance.json"));

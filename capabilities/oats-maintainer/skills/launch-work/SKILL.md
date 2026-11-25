@@ -50,7 +50,8 @@ the whole effort, across areas too, with the other areas' experts as its special
 ```bash
 oats spawn <expert> --parent "$OATS_INSTANCE" --name <effort-slug>-lead --task-file <brief.md>
 ```
-without `--same-work`: the effort is its own, not your work.
+<!-- OATS: Pepe's coordination rule (2026-11-20): a lead's children and its sibling leads get related work, the flag `--related-work` from OATS 0.69.23. -->
+without `--related-work`: the effort is its own, not your work.
 - **One lead per effort,** never one per area: it sizes its own tree. Don't split the
   work by area or surface for it.
 - **Always a fresh instance.** A live expert on another effort is never this effort's

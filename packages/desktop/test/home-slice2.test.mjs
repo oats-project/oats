@@ -83,7 +83,8 @@ test("slice2 board groups", async (t) => {
   // Needs you, newest claim first, with its message; Running in the roster's order; stopped and unknown are counted only.
   assert.deepEqual(needs(), ["waits-new", "waits-old"]);
   assert.match(u.agentButton("waits-new").textContent, /Newer question/);
-  assert.match(u.agentButton("waits-new").textContent, /oats-expert · falcon/, "soul · machine, as the roster says it");
+  assert.match(u.agentButton("waits-new").textContent, /oats-expert/, "its soul, as the roster says it (slice 3d: no machine for a local agent)");
+  assert.doesNotMatch(u.agentButton("waits-new").textContent, /· falcon/);
   assert.deepEqual([...u.el.querySelectorAll('[data-home-section="running"] [data-home-agent]')].map((b) => b.dataset.homeAgent), ["runs-new", "runs-old"]);
   assert.doesNotMatch(u.agentButton("runs-new").textContent, /\brunning\b/, "the heading says it, not each row");
   assert.equal(summary(), "7 agents · 2 running · 2 need you · 1 stopped · 2 status unknown");
@@ -113,7 +114,7 @@ test("slice2 board groups", async (t) => {
 
 test("slice2 overview counts and enter opens section, esc returns", async (t) => {
   // Slice 2b: the overview is one row of tiles, each its count; no Graph tile (the Graph is frozen), and Automations.
-  const u = fixture(t, { rows: [row("a"), row("b", { running: false })], deployments: [{ id: "/w", machine: "falcon" }, { id: "ssh://polaris/w", machine: "polaris" }] });
+  const u = fixture(t, { rows: [row("a"), row("b", { running: false })], deployments: [{ id: "/w", machine: "falcon" }, { id: "ssh://build-host/w", machine: "build-host" }] });
   assert.deepEqual([...u.el.querySelectorAll("[data-home-open]")].map((b) => b.dataset.homeOpen), TILES.map((o) => o.key));
   assert.deepEqual(TILES.map((o) => o.label), ["Agents", "Souls", "Capabilities", "Teams", "Machines", "Automations"]);
   assert.match(u.openButton("souls").textContent, /Counting…/, "a count being read says so");
@@ -153,7 +154,7 @@ test("slice2 home agents flat list", async (t) => {
   u.openButton("agents").click();
   const listed = [...u.el.querySelectorAll("[data-home-agent]")];
   assert.deepEqual(listed.map((b) => b.dataset.homeAgent), ["lone", "child", "lead-one", "plain-runs"], "every agent, running or stopped, newest first");
-  assert.match(listed[1].textContent, /Child.*oats-expert · falcon.*stopped · started by Lead one/s);
+  assert.match(listed[1].textContent, /Child.*oats-expert.*stopped · started by Lead one/s);
   // The roster's dot grammar (the lead's return): a waiting row wears the needs-input mark and says "needs you" first.
   assert.match(listed[2].textContent, /needs you · started by Joan/);
   assert.match(listed[2].querySelector(".home-row-copy").textContent, /Pick the copy/, "its claim's message, as merged (review r1, slice 2b)");
@@ -289,7 +290,7 @@ test("slice2 Souls waits for the catalog: pending is Counting…, a refusal is a
 test("slice2 a repaint keeps focus and activation on the same agent when names repeat across roots and hosts", async (t) => {
   // Each waits on you, so Home lists it (slice 2b: Home lists no running rows).
   const rows = [row("same", { home: "/one/a", createdAt: "2026-11-02T00:00:00.000Z", waitingOnYou: claim() }), row("same", { home: "/two/a", createdAt: "2026-11-01T00:00:00.000Z", waitingOnYou: claim() }),
-    row("same", { home: "/one/a", server: "polaris", createdAt: "2026-11-03T00:00:00.000Z", waitingOnYou: claim() })];
+    row("same", { home: "/one/a", server: "build-host", createdAt: "2026-11-03T00:00:00.000Z", waitingOnYou: claim() })];
   const opened = [];
   const u = fixture(t, { rows });
   u.ctx.openAgent = (r) => { opened.push(`${r.server ?? ""}${r.home}`); return true; };
@@ -301,9 +302,9 @@ test("slice2 a repaint keeps focus and activation on the same agent when names r
   u.doc.activeElement.click();
   assert.deepEqual(opened, ["/two/a"]);
   u.openButton("agents").click();
-  const remote = buttons().find((b) => b.dataset.homeAgent.startsWith("server:polaris"));
+  const remote = buttons().find((b) => b.dataset.homeAgent.startsWith("server:build-host"));
   remote.focus(); u.set({ rows: [...rows] });
-  assert.ok(u.doc.activeElement.dataset.homeAgent.startsWith("server:polaris"), "in Home › Agents too, across hosts");
+  assert.ok(u.doc.activeElement.dataset.homeAgent.startsWith("server:build-host"), "in Home › Agents too, across hosts");
 });
 
 // Review round 3 (slice 2): an unobserved deployment is no empty workspace, and a catalog still reading never becomes 0.
@@ -333,7 +334,7 @@ test("slice2 a catalog that keeps reading stays Counting…, however many retrie
   u.home.dispose();
   assert.equal(u.timers.size, 0, "disposal clears every retry");
   // A remote view's answer has no catalog of its own: its list is the count, zero included.
-  const v = fixture(t, { rows: [row("a")], api: async () => ({ workspace: { id: "remote:x", server: "polaris" }, agents: [], refreshing: false }) });
+  const v = fixture(t, { rows: [row("a")], api: async () => ({ workspace: { id: "remote:x", server: "build-host" }, agents: [], refreshing: false }) });
   await v.settle(); await v.settle();
   assert.equal(v.openButton("souls").getAttribute("aria-label"), "Souls, 0");
 });

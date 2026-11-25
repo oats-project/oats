@@ -24,10 +24,10 @@
   <div id="app">
     <aside id="sidebar">
       <!-- The sidebar (the Desktop UI rework, slice 1): the head (the Workspace heading and Add local workspace…), the
-           list of workspaces, the pinned destinations (Home, Workspace, Automations), a line, the instances, then the
-           foot: how many instances need you, Keyboard shortcuts (?) and New instance. -->
+           list of workspaces, the pinned destinations (Home, Workspace, Automations), the instances and New instance
+           after them, then the foot: how many instances need you and Keyboard shortcuts (?). -->
       <div class="side-head">
-        <span id="ws-heading" class="ws-heading">Workspace</span>
+        <span id="ws-heading" class="ws-heading">Workspaces</span>
         <button id="ws-add-open" class="ws-add-open side-icon-button icon-button" type="button" aria-label="Add local workspace…" title="Add local workspace…"></button>
       </div>
       <!-- The workspace list (workspace-switcher.mjs): always shown, one row per workspace, a list of buttons. -->
@@ -38,13 +38,14 @@
       <section id="instance-roster" aria-label="Agents">
         <div class="ctx-head"><span>Agents</span><span class="ctx-count"></span></div>
         <div class="ctx-list"></div>
+        <!-- New agent (Quick Open, the spawn flow) at the end of the roster, as the prototype has it (slice 3d). -->
+        <button id="sidebar-spawn" type="button" data-action="app.quickOpenSouls"></button>
       </section>
       <!-- The foot (sidebar-foot.mjs): "N need you" (hidden at 0; it focuses the first such row), then at the right
-           New instance (Quick Open) and ? (Keyboard shortcuts). Hide sidebar is Ctrl+Shift+B and the palette's. -->
+           ? (Keyboard shortcuts). Hide sidebar is Ctrl+Shift+B and the palette's. -->
       <div id="nav-foot">
         <div id="sidebar-bar" role="group" aria-label="Sidebar tools">
           <button id="sidebar-need-you" type="button" hidden></button>
-          <button id="sidebar-spawn" type="button" data-action="app.quickOpenSouls"></button>
           <button id="sidebar-help" class="side-icon-button icon-button" type="button" data-action="app.shortcuts"
                   title="Keyboard shortcuts" aria-label="Keyboard shortcuts"><span aria-hidden="true">?</span></button>
         </div>

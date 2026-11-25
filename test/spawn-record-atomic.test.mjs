@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSyn
 import { join } from "node:path";
 import { disposableHomeRootProblem } from "../lib/capability-contract.mjs";
 import { readHomeRecord } from "../lib/core.mjs";
-import { CLI, v2Deployment } from "./helpers/v2-deployment.mjs";
+import { CLI, v2Deployment, writeFixtureExecutable } from "./helpers/v2-deployment.mjs";
 import { waitUntil } from "./helpers/host-fixture.mjs";
 import { startGated } from "./helpers/fs-gate-preload.mjs";
 
@@ -27,7 +27,7 @@ function fixture(t) {
   const records = join(fx.base, "launches");
   mkdirSync(records);
   const executable = join(fx.base, "harness-stand-in");
-  writeFileSync(executable, `#!/bin/sh\necho "$$" > '${records}'/"$OATS_INSTANCE.$(date +%s%N).$$"\nexec sleep 600\n`, { mode: 0o755 });
+  writeFixtureExecutable(fx.base, executable, `#!/bin/sh\necho "$$" > '${records}'/"$OATS_INSTANCE.$(date +%s%N).$$"\nexec sleep 600\n`);
   const localFile = join(fx.dep, "oats-local.yaml");
   writeFileSync(localFile, `${readFileSync(localFile, "utf8")}\nlaunch-configs:\n  stand-in:\n    harness: pi\n    executable: ${JSON.stringify(executable)}\n`);
   const f = { fx };

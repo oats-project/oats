@@ -268,19 +268,22 @@ workspace on a server: `name — server`).
 
 ## Workspaces
 
-The sidebar, top to bottom: the **Workspace** heading, with **Add local
-workspace…** (the **+**) at its end, over the list of workspaces; a thin line;
-three pinned rows, **Home**, **Workspace** and **Automations**, drawn like the
-instance rows (Automations shows a red dot, and says "a run failed", while a
+The sidebar, top to bottom: the **WORKSPACES** heading, small and in
+capitals, with **Add local workspace…** (the **+**) at its end, over the list
+of workspaces; a thin line; three pinned rows, **Home**, **Workspace** and
+**Automations** (Automations says "1 failed" after its name, in red, while a
 schedule's last run failed: see [Scheduling agents](#scheduling-agents-and-wake-messages));
-another line; **Agents**, a heading with the running count over the list of
-agents; and, over a line, the foot, one bar: at its left **N need you**, the
+**AGENTS**, the same small heading with the running count, over the list of
+agents, two compact lines each (the name, then the harness's mark and the
+soul, smaller and muted, with the machine after it for an agent on another
+machine), then **+ New
+agent**, which opens the command palette on its souls (⌘P / Alt+P, named in
+its tooltip) to pick a soul and then the spawn dialog; and, over a line, the
+foot, one bar: at its left **N need you**, the
 number of this workspace's agents that need input (hidden when none does;
 it takes you to the first of them, in the roster's order, expanding a collapsed
 parent or opening the Background section to show it), and at its right
-**New agent**, which opens the command palette on its souls (⌘P / Alt+P,
-named in its tooltip) to pick a soul and then the spawn dialog, and **?**,
-which opens the keyboard shortcuts. The foot has no mark, no Hide sidebar
+**?**, which opens the keyboard shortcuts. The foot has no mark, no Hide sidebar
 button and no settings menu: ⌘B / Ctrl+Shift+B and the palette's **Sidebar:
 toggle (hide/show)** hide the sidebar, and the palette's **Appearance…** and
 **Keyboard shortcuts…** open the two sheets for the theme and the fonts, and
@@ -302,7 +305,7 @@ have. It is one centred column. Top to bottom:
   doesn't guess it.
 - **The workspace, as one row of tiles**, each a button with its count:
   **Agents**, **Souls**, **Capabilities**, **Teams**, **Machines** and
-  **Automations** (with the sidebar row's red dot while a run failed). A count
+  **Automations** (with a red dot while a run failed; the sidebar's row says "1 failed"). A count
   still being read says "Counting…", and one that couldn't be read says so;
   nothing is guessed. Enter opens that part of the Workspace page on its tab
   (Machines on its List), and Esc there comes back to Home; Automations opens
@@ -339,7 +342,9 @@ agents (the sidebar's tree, the one you used last on top), the sections
 and one **New agent: <soul>** row per soul. Type to narrow it; `>` keeps only
 the commands and `+` only the souls.
 
-**The status line** runs along the bottom of the window. It shows the three
+**The status line** runs along the bottom of the window, one quiet 28px line:
+each key in the window's own type, what it does muted after it, a small dot
+between two. It shows the three
 keys most useful where you are (in the roster: Enter, Stop and the palette;
 in a terminal: the leader, close tab and the palette); on the Workspace pages,
 their own keys: **↑↓ move · Enter open · v table · Esc Home** on Souls (**v
@@ -360,8 +365,8 @@ The instances have no search field: to find one by name, type it in the
 command palette, which opens its terminal. ⌘F / Alt+F (**Focus the
 instance roster**) and `/` in the sidebar go to the roster's current row;
 on an empty roster, which says "No agents yet · ⌘P starts one" (New
-agent's key, Alt+P off macOS, as you bound it), to its one action, the foot's **New
-agent**, where F6 lands too (a failed read's **Retry** comes first).
+agent's key, Alt+P off macOS, as you bound it), to its one action, **New
+agent** at its end, where F6 lands too (a failed read's **Retry** comes first).
 
 The sidebar is 288px wide, and you can make it wider or narrower: drag its
 right edge, between 240px and 480px (or 45% of the window, when that is
@@ -911,10 +916,16 @@ on a Soul roster card preselects that soul. Choose the task or message, repeat
 pattern and time zone; new agent jobs also offer harness, model, permissions
 and session backend. The list shows the next run, last observed outcome and
 whether the host scheduler is enabled. Pause, edit, run now and delete operate
-on that workspace's saved jobs. Launching an agent is reported separately from
+on that workspace's saved jobs. The session backend is tmux or a session
+provider the chosen soul offers (bb, where the soul has it). bb launches only
+in full mode, so choosing it sets permissions to YOLO; a schedule saved without
+it is marked **Refused at each run** or **Needs YOLO** in the list. A wake to
+an agent on a session provider is sent as its session's input and never
+starts a stopped one: it is delivered once the agent runs again. Launching an agent is reported separately from
 the end of its run; neither means its task succeeded. While a schedule's last
-run is **launch failed** or **invalid**, the sidebar's **Automations** shows a
-red dot, and a screen reader hears "Automations, a run failed"; it clears once
+run is **launch failed** or **invalid**, the sidebar's **Automations** says how
+many after its name in red ("1 failed"), and a screen reader hears "Automations,
+1 failed"; it clears once
 no last run has failed. The sidebar reads both lists when the workspace opens
 and then at most once a minute. A trigger's last run carries no outcome, so a
 trigger never marks it.
@@ -1115,6 +1126,97 @@ the operation says so, with what to do: stop it and upgrade it (`oats instance
 upgrade`), or start a new agent of its soul. The details are in
 [packages/desktop/docs/desktop-mail-sheet.md](../packages/desktop/docs/desktop-mail-sheet.md).
 
+## The agent view: facts and questions
+
+With an OATS that reports the agent's board (feature `instance-board`; the
+agent writes it with `oats instance board set` and `oats instance board ask`,
+[docs/desktop-cli-api.md](desktop-cli-api.md)), an agent's terminal tab is its
+**agent view**. Top to bottom:
+
+1. **Facts**: what the agent keeps in your view, one raised strip each, a
+   pin, then `label · value unit`, with "updated 4 min ago" at its right. At most three show; **N
+   more** unfolds the rest. While the view is open the Desktop reads each
+   fact's history once, and a number that changed draws a small sparkline.
+   A link shows as the agent's, with its host (`dev-a says: github.com…`). A
+   press shows its whole address over the top of the terminal, wrapped, the
+   host in bold, with **Open in browser** beside it: only that press opens it,
+   in your browser. Esc closes it. An address that looks like it carries a
+   secret (a token in it) is never shown: the fact shows without its link. **×**, or
+   **u** on a focused fact, hides it on this computer only: the agent's board
+   is unchanged, and the fact shows again when its value changes. **N hidden ·
+   show** brings them all back.
+2. **The agent's own terminal**, unchanged: the same viewer, the same cell
+   geometry, the only part that scrolls (a long context scrolls inside its
+   own open fold, at most twelve lines tall). The board leaves it at least
+   120 px, or 40% of the pane: in a short pane the facts give way to one (the
+   rest stay behind **N more**), then the questions drop their key hint, then
+   an open context shortens to three lines. A pane too short even for that
+   keeps its terminal smaller, and a number types only while at least two of
+   its lines show. It gives up exactly the rows the
+   facts and the questions take.
+3. **Questions**: one at a time, on a card under the terminal, so they sit right by the
+   agent's input line at the bottom of its screen: "needs you" and when it was
+   asked, the question, then its options as boxed rows, each with its number. "question 2 of 3", ‹ › and
+   the dots turn them, and so do Tab / Shift+Tab and ← / → while the questions
+   have the focus. A question with context has a **Context** fold, attributed
+   to the agent, as plain text: **c** opens or closes it and moves the focus
+   there, where Tab moves into its text. With no open question there is no zone.
+
+**What the view says when it can't show something.** History and context come
+from a second read while the view is open (`oats inspect --home <h> --board`,
+sent only when this computer's OATS, and for an agent on another machine that
+machine's OATS too, has the feature). The view reads it when it opens, when a
+fact changes and when a question with context is asked, never on the roster's
+poll. When that read fails, comes back in a shape the Desktop can't read, or
+comes from an OATS without the feature, the facts strip and the context fold
+say which. A board the Desktop can't read, or one with entries it had to leave
+out, says so too. None of these hides a question or reads as "no questions".
+
+**Answering.** The questions and the facts are focus regions: from the
+terminal, **Ctrl+Shift+F6** moves to the questions, and F6 / Shift+F6 move on
+from there (the facts come before the terminal, the questions after it). The
+palette's **Agent: questions and facts (focus)** moves through the questions,
+the facts and back to the terminal. Esc goes back to the terminal. A number, or a press on an
+option, puts `<id>: <option>` on the agent's input line, for example
+`q2: Yes, one clean commit`, and gives the terminal the focus. Nothing is sent:
+your Enter in the terminal sends it, as if you had typed it, so you see what
+goes. No bare digit is ever typed, and nothing is typed into a terminal that
+isn't on screen: a press whose terminal left the screen while the Desktop read
+the agent's claims types nothing. After a press the card says, quietly, "Typed
+on the input line: press Enter in the terminal to send it." until your next
+input in the terminal or a change on the board. The Desktop doesn't guess what
+the input line holds: the card stays until the agent clears the question once
+it has read your answer, and a second press types again, as typing would.
+
+While the terminal is in its scrollback (you scrolled up with the
+wheel or Shift+PgUp), nothing is typed either, because the scrollback would
+read the answer's first letter as its own key: the zone says "The terminal is
+in its scrollback: press q or scroll to the bottom, then press the number
+again." The Desktop checks the terminal just before it types, and types only
+when the check says it isn't in its scrollback: when it can't tell (the check
+failed), nothing is typed and the zone says "The answer wasn't typed: the Desktop
+couldn't check the terminal's scrollback. Type it there yourself, or press the
+number again." On an agent on another machine the numbers are disabled from the
+start, since its terminal can't be checked from this computer, and the zone says
+"This agent runs on another machine: type the answer in its terminal (for
+example q1: Yes)." (follow-up: #2029). The check and the typing are two steps a few milliseconds apart:
+if you enter the scrollback in exactly that moment, tmux can still read the
+answer's first letter as a scrollback key. That window is not closed.
+
+**While a dialog is open** (the agent has a live `permission` or `question`
+claim, from its harness or any other producer), the numbers are disabled and
+the zone says "The agent's terminal is showing a prompt: answer it there
+first." The Desktop reads the agent's claims for this when the view opens and
+when they change, because the roster row shows only the newest one.
+
+The board's own question is the agent's needs-input claim (reason
+`attention`), so the sidebar mark, the tab's mark and Home's "needs you" read
+it as before. In the agent view it shows in the question zone, not in the
+waiting row. Any other claim keeps the waiting row described above. Without
+the feature (an older OATS), the tab is the terminal and its waiting row, as
+before. A tab on another machine shows the board when that machine's OATS has
+the feature.
+
 ## Copy from a terminal
 
 Drag over an agent's output to select it, as in any terminal. The selection
@@ -1254,14 +1356,19 @@ command palette (which still finds the instance by its name), its terminal tab,
 a screen reader and the `oats` CLI all use the instance's real name. The TUI's
 sidebar shows the same words. A long name is cut at its end with "…".
 
-A row's second line says its soul and the machine it runs on, "oats-expert ·
-falcon", or the machine alone when its soul isn't known. This computer's rows
-name it by the host name OATS records for it (`host.name` in its
-`oats-local.yaml`); with none recorded, they say "This Mac". A limit for now:
-the Desktop learns that name from its Automations read, so these rows say
-"This Mac" until that read answers, and keep saying it where the installed
-OATS serves no automations ([#1972](https://github.com/oats-project/oats/issues/1972)
-tracks reading it from the status answer instead). That's all a row
+A row's second line starts with its harness's mark (Claude's, Codex's or Pi's,
+small, in a grey lighter than the line's text; none when the harness isn't one of
+those) and says its soul,
+"oats-expert", and, for an agent on another machine, that machine too,
+"reviewer · build-host"; the machine alone when
+its soul isn't known (this computer's rows then name it by the host name OATS
+records for it, `host.name` in its `oats-local.yaml`, else "This Mac"). This
+computer's own name shows once, at the right of the status line. A limit for
+now: the Desktop learns that name from its Automations read, so until that read
+answers the status line shows no name and a soul-less local row says "This Mac",
+and both stay so where the installed OATS serves no automations
+([#1972](https://github.com/oats-project/oats/issues/1972) tracks reading it
+from the status answer instead). That's all a row
 says: its repository, branch, pull request and harness are in the instance
 panel. Rows are 44px tall, the dot centred on the row.
 
@@ -1276,7 +1383,7 @@ Elsewhere, a dot that flags a problem is red: a keyboard shortcut that clashes
 with another (on the foot's **?**), Setup or Teams needing attention (on the
 Workspace page's tabs), the sidebar's **Automations** while a last run failed,
 and an automation that doesn't run here or a scheduler that is off.
-The row keeps its soul and machine on its second line. A screen reader
+The row keeps its second line (its soul, and another machine's name). A screen reader
 hears "Needs input" after the name, then the reason and when it started
 waiting; the instance panel's **Needs input** section gives the reason, how
 long it has waited and the agent's message. A collapsed parent shows "! N
@@ -1442,7 +1549,7 @@ letters. So `oats-desktop-expert` is DE, `oats-okf--knowledge-maintainer` KM and
 
 Soul cards, the soul page, the context panel and the spawn dialog show each
 instance's or soul's harness as a small badge, next to its name (a roster row
-doesn't: its second line is its soul and machine). The badge names the harness the CLI reports; it says nothing about
+doesn't: its second line is its soul, and its machine when that is another one). The badge names the harness the CLI reports; it says nothing about
 whether that harness is installed or signed in. Pi's badge is the official
 pi.dev press-kit mark (MIT), and Claude Code's is Anthropic's Claude spark
 in the theme's colours. The Codex badge is OATS's own drawing, not OpenAI's

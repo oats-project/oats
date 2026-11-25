@@ -227,6 +227,59 @@ test("discover: first ACCEPTABLE candidate wins — earlier rejects are recorded
   assert.equal(r.version, "0.26.0");
 });
 
+test("discover: rejected failure envelopes retain their message and discovery continues", async () => {
+  const message = "oats needs Node.js 22 or later; this is Node.js 20.19.0";
+  const failure = { schemaVersion: 1, ok: false, error: { code: "E_NODE_UNSUPPORTED", message, details: { found: "20.19.0", minimum: "22" } } };
+  const io = { persisted: () => "/unsupported/oats", env: { PATH: "/next" }, isExecutableFile: () => true };
+  const calls = [];
+  const rejected = () => Object.assign(new Error("execFile failed: " + "x".repeat(200)), { stdout: JSON.stringify(failure) });
+  const failed = await discover(io, async (path) => {
+    calls.push(path);
+    throw rejected();
+  });
+  assert.deepEqual(calls, ["/unsupported/oats", "/next/oats"]);
+  assert.deepEqual(failed, { ok: false, tried: [
+    { path: "/unsupported/oats", source: "persisted", reason: message },
+    { path: "/next/oats", source: "path", reason: message },
+  ] });
+  calls.length = 0;
+  const found = await discover(io, async (path) => {
+    calls.push(path);
+    if (path === "/unsupported/oats") throw rejected();
+    return { stdout: JSON.stringify(PROBE()) };
+  });
+  assert.deepEqual(calls, ["/unsupported/oats", "/next/oats"]);
+  assert.equal(found.ok, true);
+  assert.equal(found.bin, "/next/oats");
+});
+
+test("discover: rejected failure envelope messages are bounded diagnostics", async () => {
+  const message = "oats needs Node.js 22 or later; " + "x".repeat(300);
+  const io = { persisted: () => "/unsupported/oats", env: { PATH: "/next" }, isExecutableFile: () => true };
+  const result = await discover(io, async () => {
+    throw Object.assign(new Error("exit 1"), { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { message } }) });
+  });
+  assert.deepEqual(result, { ok: false, tried: [
+    { path: "/unsupported/oats", source: "persisted", reason: message.slice(0, 200) },
+    { path: "/next/oats", source: "path", reason: message.slice(0, 200) },
+  ] });
+});
+
+test("discover: rejected probes without a failure envelope keep the execFile diagnostic", async () => {
+  const io = { persisted: () => "/broken/oats", env: { PATH: "" }, isExecutableFile: () => true };
+  for (const stdout of [
+    JSON.stringify(PROBE()),
+    JSON.stringify({ schemaVersion: 2, ok: false, error: { message: "wrong schema" } }),
+    JSON.stringify({ schemaVersion: 1, ok: true, error: { message: "not a failure" } }),
+    JSON.stringify({ schemaVersion: 1, ok: false, error: { message: 42 } }),
+    '{"schemaVersion":1,"ok":false,"error":{"message":"first"}}\n{}',
+  ]) {
+    const result = await discover(io, async () => { throw Object.assign(new Error("exit 1"), { stdout }); });
+    assert.equal(result.ok, false);
+    assert.equal(result.tried[0].reason, "probe failed: exit 1", stdout);
+  }
+});
+
 test("discover: full failure returns per-candidate stable diagnostics", async () => {
   const io = {
     persisted: () => "/gone/oats",

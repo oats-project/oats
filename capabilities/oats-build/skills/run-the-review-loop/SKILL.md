@@ -24,9 +24,10 @@ A change is never too small for the loop. The one exception is a one-line docs f
 ## The reviewer
 Each round's reviewer is a new `code-reviewer` instance, your OATS child, attached to
 your tree to read it:
+<!-- OATS: Pepe's coordination rule (2026-11-20): a lead's children and its sibling leads get related work, the flag `--related-work` from OATS 0.69.23. -->
 ```bash
 oats spawn code-reviewer --work attached --work-dir <the consolidated worktree> \
-  --parent "$OATS_INSTANCE" --same-work --repo <the worktree's clone, absolute path> \
+  --parent "$OATS_INSTANCE" --related-work --repo <the worktree's clone, absolute path> \
   --name <change-slug>-r<round>-reviewer --task-file <review-brief.md>
 ```
 - Always give both `--work-dir` and `--repo` (`repo` in your `instance.json`, or the

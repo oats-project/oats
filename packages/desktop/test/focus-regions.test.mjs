@@ -16,8 +16,9 @@ import { captureFocusReturn } from "../renderer/focus-return.mjs";
 
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
 
-/** The foot's buttons, in order (slice 1): N need you (shown while a row needs you), New agent and ?. */
-const FOOT = ["sidebar-need-you", "sidebar-spawn", "sidebar-help"];
+/** The foot's buttons, in order (slice 1; slice 3d: New agent moved to the roster's end): N need you (shown while a row
+ * needs you) and ?. */
+const FOOT = ["sidebar-need-you", "sidebar-help"];
 
 function shell(t, { tabs = false } = {}) {
   const dom = new JSDOM(read("index.html"));
@@ -31,7 +32,7 @@ function shell(t, { tabs = false } = {}) {
     ? `<button class="nav-item active" data-view="${v.name}" aria-current="page">${v.label}</button>`
     : `<button class="nav-item" data-view="${v.name}">${v.label}</button>`).join("");
   doc.querySelector("#instance-roster .ctx-list").innerHTML = `<div class="ctx-tree-row"><button class="ctx-inst" tabindex="-1" data-tree-instance="a">a</button></div><div class="ctx-tree-row active"><button class="ctx-inst active" tabindex="0" data-tree-instance="b">b</button></div><div class="ctx-tree-row ctx-spawn-row ctx-spawn-unknown"><button class="ctx-inst pending" tabindex="-1" aria-disabled="true" data-tree-instance="c">c</button><span class="ctx-row-tools ctx-spawn-tools"><button class="act ctx-start ctx-spawn-check">Check result</button></span></div>`;
-  // The foot as the shell paints it while one row needs you (sidebar-foot.mjs): its count shown, New agent's words.
+  // The foot's count while one row needs you, and New agent's words at the roster's end, as sidebar-foot.mjs paints them.
   const need = doc.getElementById("sidebar-need-you"); need.hidden = false; need.textContent = "1 need you";
   doc.getElementById("sidebar-spawn").textContent = "New agent";
   doc.getElementById("stagehost").innerHTML = `<div><div class="workspace-tabs"><button role="tab" aria-selected="true" tabindex="0">Souls</button></div><input class="filter"></div>`;
@@ -56,7 +57,9 @@ function shell(t, { tabs = false } = {}) {
 // above the roster. "nav" and "footer" are no region names any more.
 test("F6 order: workspaces → views → roster → main → panel → workspaces, each on its current item", t => {
   const s = shell(t);
-  assert.deepEqual(REGIONS, ["workspaces", "views", "roster", "main", "panel"]);
+  // The agent view's facts and questions (S2-D) sit either side of main; they are in the cycle only while the active tab
+  // shows them (agent-view.test.mjs), so this window, with no agent view, walks the five below.
+  assert.deepEqual(REGIONS, ["workspaces", "views", "roster", "facts", "main", "questions", "panel"]);
   for (const old of ["nav", "footer"]) {
     assert.equal(s.regions.visible(old), false, `the old region name ${old} is gone`);
     assert.equal(s.regions.focusRegion(old), false);
@@ -95,8 +98,9 @@ test("workspaces lands on the list's tab stop, else Add local workspace…; view
 });
 
 // The head's control belongs to the list it heads: Add local workspace… to the workspaces. The views are the nav. The
-// Instances heading holds no control; the foot (the bar: N need you, New agent and ?, slice 1) is no region.
-test("regionOfFocus: the head's + and the rows are workspaces; the nav items are views; the foot, New agent with it, is none", t => {
+// Instances heading holds no control; the foot (the bar: N need you and ?, slice 1) is no region; New agent, at the
+// roster's end since slice 3d, is the roster's.
+test("regionOfFocus: the head's + and the rows are workspaces; the nav items are views; New agent is the roster's; the foot is none", t => {
   const s = shell(t);
   assert.equal(s.doc.getElementById("sidebar-tools"), null, "no tools row");
   const head = s.doc.querySelector("#sidebar > .side-head");
@@ -109,13 +113,16 @@ test("regionOfFocus: the head's + and the rows are workspaces; the nav items are
   const bar = s.doc.getElementById("sidebar-bar");
   assert.equal(bar.getAttribute("role"), "group"); assert.equal(bar.getAttribute("aria-label"), "Sidebar tools");
   assert.deepEqual([...s.doc.getElementById("nav-foot").children], [bar], "the foot holds only the bar");
-  assert.deepEqual([...bar.children].map(el => el.id), ["sidebar-need-you", "sidebar-spawn", "sidebar-help"],
-    "the bar (slice 1): N need you, then New agent and ? at the right; no mark, no toggle, no cog");
+  assert.deepEqual([...bar.children].map(el => el.id), ["sidebar-need-you", "sidebar-help"],
+    "the bar: N need you, then ? at the right; no mark, no toggle, no cog (slice 3d: New agent is the roster's)");
+  const spawn = s.doc.getElementById("sidebar-spawn");
+  assert.equal(spawn.parentElement, s.doc.getElementById("instance-roster")); spawn.focus();
+  assert.equal(s.regions.regionOfFocus(), "roster", "New agent, at the roster's end, is the roster's");
   assert.equal(s.doc.querySelector("#sidebar-spawn kbd, #nav-foot kbd"), null, "no chord hint in New agent: its chord is in its tooltip");
   const foot = [...s.doc.querySelectorAll("#nav-foot button")].map(b => b.id);
   assert.deepEqual(foot, FOOT, "the foot's buttons");
   for (const el of s.doc.querySelectorAll("#nav-foot button")) { el.focus(); assert.equal(s.regions.regionOfFocus(), null, `${s.where()}: no region`); }
-  // With rows to land on; an empty roster's stop is the foot's New agent (below).
+  // With rows to land on; an empty roster's stop is the roster's New agent (below).
   assert.equal(REGIONS.some(name => s.regions.visible(name) && s.regions.currentItem(name)?.closest("#nav-foot")), false, "no region lands in the foot");
 });
 
@@ -204,27 +211,27 @@ test("a closed panel is out of the cycle (Spec B), the hidden-region rule; main 
 });
 
 // The roster's fallback after its tab stop: a control it shows (a failed read's Retry), else, on an empty roster,
-// its one action, the foot's New agent (2026-10-26; rosterEntry in shell.mjs agrees). From there F6 goes on as
+// its one action, the roster's New agent (2026-10-26; rosterEntry in shell.mjs agrees). From there F6 goes on as
 // from the roster and Shift+F6 back as from the roster, not as from the foot.
-test("the roster without a row stop lands on a control it shows (a Retry), else the foot's New agent, else it is passed over: it has no filter", t => {
+test("the roster without a row stop lands on a control it shows (a Retry), else the roster's New agent, else it is passed over: it has no filter", t => {
   const s = shell(t);
   const roster = s.doc.getElementById("instance-roster"), list = s.doc.querySelector(".ctx-list");
   assert.equal(roster.querySelector(".ctx-filter, input"), null, "the shipped roster has no filter field");
-  assert.deepEqual([...roster.children].map(el => el.className), ["ctx-head", "ctx-list"], "its head, then its list");
-  assert.deepEqual([...roster.querySelectorAll("button")].map(b => b.id || b.textContent), ["a", "b", "c", "Check result"], "no control of its own besides the rows (and a pending row's Check result)");
+  assert.deepEqual([...roster.children].map(el => el.className || el.id), ["ctx-head", "ctx-list", "sidebar-spawn"], "its head, its list, then New agent (slice 3d)");
+  assert.deepEqual([...roster.querySelectorAll("button")].map(b => b.id || b.textContent), ["a", "b", "c", "Check result", "sidebar-spawn"], "no control of its own besides the rows (and a pending row's Check result) and New agent");
   // A failed first read: no rows, only the failed block's Retry.
   list.innerHTML = `<div class="loading-failed"><button type="button" class="act">Retry</button></div>`;
   assert.equal(s.regions.focusRegion("roster"), true);
-  assert.equal(s.where(), "Retry", "the Retry, not the foot's New agent");
+  assert.equal(s.where(), "Retry", "the Retry, not the roster's New agent");
   // A stale notice's Retry sits between the heading and the list (instance-tree-view.mjs createRosterLoading).
   list.innerHTML = `<div class="ctx-empty">No agents yet</div>`;
   const notice = s.doc.createElement("div"); notice.className = "ctx-status"; notice.innerHTML = '<button type="button" class="act">Retry</button>';
   list.before(notice);
   assert.equal(s.regions.focusRegion("roster"), true); assert.equal(s.doc.activeElement, notice.firstElementChild, "a stale notice's Retry");
   notice.remove();
-  // An empty roster: its one action, the foot's New agent.
+  // An empty roster: its one action, New agent, at its end (slice 3d).
   const spawn = s.doc.getElementById("sidebar-spawn");
-  assert.ok(s.doc.getElementById("nav-foot").contains(spawn), "New agent is the foot's");
+  assert.ok(roster.contains(spawn), "New agent is the roster's");
   s.doc.querySelector("#nav button").focus();
   s.regions.cycle(1);
   assert.equal(s.doc.activeElement, spawn, "from the views, the empty roster's New agent");

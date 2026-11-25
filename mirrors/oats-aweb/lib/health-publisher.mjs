@@ -14,6 +14,7 @@ export {healthSettings} from './health-settings.mjs';
 import {assessHealth, combineSeats, retiredHealth} from './health-vocabulary.mjs';
 import {checkDocument} from './status-document.mjs';
 import {sessionProviderBackend} from './wake-receive.mjs';
+import {HELD_RELATIVE, heldEntries} from './retire-key-material.mjs';
 
 export const VALIDITY_MS = 300 * 1000;
 const DEFAULT_BUDGET_MS = 45 * 1000;
@@ -35,6 +36,10 @@ const isoSeconds = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString().
 function identitiesOf(row, settings) {
   const meta = row.capabilityMeta?.['oats.aweb'];
   if (!meta) return {identities: []};
+  // A retire that did not finish held this home's key material (awebai/oats-aweb#318):
+  // it has no identity to publish as until that retire runs again, which is not a failure.
+  const held = heldEntries(row.home);
+  if (held.problem || held.names.length) return {skip: `its aweb key material is held in ${join(row.home, HELD_RELATIVE)} by a retire that did not finish`};
   if (meta.retained) return {skip: 'a seat that holds its resident identity itself, without a grant, is not published in v1'};
   const id = meta.identity ?? {};
   // A Claude or pi home on channel delivery receives through its own channel,

@@ -167,9 +167,10 @@ test("flat and grouped strips share their width: tabs shrink evenly to a floor, 
       assert.deepEqual([style.flexGrow, style.flexShrink, style.flexBasis], ["1", "1", "0px"], "equal shares from one zero basis");
       assert.equal(style.maxWidth, "fit-content", "never wider than its natural width");
       assert.equal(style.minWidth, "var(--tab-min)", "the floor holds in group strips too");
-      assert.equal(style.getPropertyValue("--tab-min"), "168px", "the dot, \"oats-…\" and an 8-character tail stay visible");
+      assert.equal(style.getPropertyValue("--tab-min"), tabEl.querySelector(".tab-dot") ? "181px" : "176px",
+        "the number, the status slot (a terminal tab's), \"oats-…\" and an 8-character tail stay visible");
       assert.equal(style.getPropertyValue("--tab-max"), "280px", "the Redesign v3 long-label cap");
-      assert.equal(style.getPropertyValue("--tab-chrome"), "51px", "padding 14 + 8, gap 8, the 20px close and the 1px border");
+      assert.equal(style.getPropertyValue("--tab-chrome"), "44px", "padding 12 + 4, gap 8 and the 20px close (slice 3d's pills: no border)");
       assert.equal(style.whiteSpace, "nowrap");
       assert.equal(window.getComputedStyle(triggerEl).maxWidth, "calc(var(--tab-max) - var(--tab-chrome))", "the cap rides on the trigger");
       assert.equal(window.getComputedStyle(triggerEl.querySelector(".tab-label")).textOverflow, "ellipsis", "long labels ellipsize");
@@ -268,8 +269,8 @@ test("the tab floor budgets the chrome, the dot, the name's start and the widest
   host.append(tabEl);
   const px = name => Number.parseFloat(window.getComputedStyle(tabEl).getPropertyValue(name));
   const MEASURED_BOLD = { start: 43.7 /* "oats-…" */, tail: 56.5 /* "awn-flow", the widest real 8-character tail */ };
-  const DOT_AND_GAP = 7 + 8;
-  const need = px("--tab-chrome") + DOT_AND_GAP + MEASURED_BOLD.start + MEASURED_BOLD.tail;
+  const DOT_AND_GAP = 12 + 8, NUMBER_AND_GAP = 7 + 8; // the status slot (the dot or the Needs input glyph); slice 3d: the number leads every numbered tab
+  const need = px("--tab-chrome") + NUMBER_AND_GAP + DOT_AND_GAP + MEASURED_BOLD.start + MEASURED_BOLD.tail;
   assert.ok(px("--tab-min") >= need, `--tab-min ${px("--tab-min")}px holds ${need.toFixed(1)}px`);
   assert.ok(px("--tab-min") - need < 4, "and no more than rounding: the strip keeps as many tabs as it can");
 });

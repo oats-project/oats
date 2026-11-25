@@ -11,19 +11,25 @@
    lead after five review rounds (2026-11-19): a line that takes every key while it waits decides when a keystroke
    stops an agent, and wants a design of its own. Stop, Start and Restart keep their dialogs.
 
-   It never takes focus. Its surface is --surface-2 with --fg and --muted text, inventoried pairs. */
+   It never takes focus. Its surface is the window's --bg with --fg and --muted text, inventoried pairs (slice 3d: the
+   prototype's key bar: 28px, the keys in the chrome's sans, a small --muted dot between two, no fill of its own). */
+
+import { shownLine } from "../../client/roster-row-facts.mjs";
 
 const MODIFIERS = new Set(["Shift", "Control", "Alt", "AltGraph", "Meta", "OS", "Super", "Hyper", "CapsLock", "NumLock", "ScrollLock", "Fn", "FnLock"]);
 
 export const statusLineCSS = `
-.status-line { flex:none; display:flex; align-items:center; gap:14px; min-height:26px; box-sizing:border-box; padding:3px 12px; border-top:1px solid var(--border); background:var(--surface-2); color:var(--muted); font-size:11.5px; line-height:1.4; overflow:hidden; white-space:nowrap; }
+.status-line { flex:none; display:flex; align-items:center; gap:14px; min-height:28px; box-sizing:border-box; padding:0 16px; border-top:1px solid var(--border); background:var(--bg); color:var(--muted); font-size:12px; line-height:18px; overflow:hidden; white-space:nowrap; }
 .status-line[hidden] { display:none; }
-.status-keys { display:flex; gap:14px; min-width:0; overflow:hidden; }
+.status-keys { display:flex; align-items:center; min-width:0; overflow:hidden; }
 .status-keys[hidden] { display:none; }
 .status-key { display:inline-flex; gap:5px; align-items:baseline; }
-.status-key kbd { font:inherit; font-family:var(--mono); color:var(--fg); }
+.status-key + .status-key::before { content:""; align-self:center; width:3px; height:3px; margin:0 9px 0 8px; border-radius:50%; background:var(--muted); }
+.status-key kbd { font:inherit; font-weight:500; color:var(--fg); }
 .status-message { min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--fg); }
 .status-message[data-tone=error] { color:var(--danger); }
+.status-machine { flex:none; margin-left:auto; color:var(--muted); }
+.status-machine:empty { display:none; }
 `;
 
 /**
@@ -43,7 +49,9 @@ export function createStatusLine({ doc, host, before = null, keysFor = () => [],
   const keys = doc.createElement("div"); keys.className = "status-keys";
   // The live region: a message is announced as it is put here.
   const live = doc.createElement("div"); live.className = "status-live"; live.setAttribute("role", "status");
-  el.append(keys, live);
+  // This machine's name at the line's right (slice 3d, the prototype's "falcon"): what the kernel reports, else nothing.
+  const machine = doc.createElement("span"); machine.className = "status-machine";
+  el.append(keys, live, machine);
   host.insertBefore(el, before && before.parentNode === host ? before : null);
   let message = null, timer = null, armed = false, alive = true;
 
@@ -98,6 +106,9 @@ export function createStatusLine({ doc, host, before = null, keysFor = () => [],
     say,
     /** Repaint the keys (the focus or the keymap changed). */
     refresh: paintKeys,
+    /** Show this machine's name at the right, by the roster's rule (roster-row-facts.mjs `shownLine`: one display
+     * line; null, empty, not text or withheld: nothing). */
+    setMachine(name) { machine.textContent = shownLine(name) ?? ""; },
     /** What the line says now: the message, or null. */
     text: () => message?.text ?? null,
     hideMessage: clearMessage,
