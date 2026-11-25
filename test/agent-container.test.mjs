@@ -1387,10 +1387,12 @@ test("acceptance admits the credentials mount only when declared, read-only, and
   for (const source of ["/srv/work", "/srv/work/credentials", "/srv"]) {
     assert.throws(() => inspectAgent(...at(work, workEnv, source), image), /credentials must stay outside/, source);
   }
-  const inputs = structuredClone(credentials), inputsEnv = {...credentialsEnv, TEAM_INPUT_DIR: "/srv/inputs"};
+  // Each read-only source sits under /operator, apart from the fixture's writable /srv/team/state: its parent case
+  // reaches the check against that source alone.
+  const inputs = structuredClone(credentials), inputsEnv = {...credentialsEnv, TEAM_INPUT_DIR: "/operator/inputs"};
   mount(inputs, inputsEnv.TEAM_INPUT_DIR, "/inputs", false);
   assert.doesNotThrow(() => inspectAgent(inputs, inputsEnv, image));
-  for (const source of ["/srv/inputs", "/srv/inputs/credentials", "/srv"]) {
+  for (const source of ["/operator/inputs", "/operator/inputs/credentials", "/operator"]) {
     assert.throws(() => inspectAgent(...at(inputs, inputsEnv, source), image), /credentials must stay outside/, source);
   }
   const outbox = structuredClone(credentials), outboxEnv = {...credentialsEnv, TEAM_OUTBOX_DIR: "/srv/outbox", TEAM_OUTBOX_GID: "20002"};
@@ -1401,17 +1403,17 @@ test("acceptance admits the credentials mount only when declared, read-only, and
     assert.throws(() => inspectAgent(...at(outbox, outboxEnv, source), image), /must stay outside/, source);
   }
   // Read-only, but the operator may mount them into every group: the credentials source stays apart from them too.
-  const mirrors = structuredClone(credentials), mirrorsEnv = {...credentialsEnv, AGENT_MIRRORS_DIR: "/srv/mirrors"};
+  const mirrors = structuredClone(credentials), mirrorsEnv = {...credentialsEnv, AGENT_MIRRORS_DIR: "/operator/mirrors"};
   mount(mirrors, mirrorsEnv.AGENT_MIRRORS_DIR, "/mirrors", false);
   assert.doesNotThrow(() => inspectAgent(mirrors, mirrorsEnv, image));
-  for (const source of ["/srv/mirrors", "/srv/mirrors/credentials", "/srv"]) {
+  for (const source of ["/operator/mirrors", "/operator/mirrors/credentials", "/operator"]) {
     assert.throws(() => inspectAgent(...at(mirrors, mirrorsEnv, source), image), /credentials must stay outside agent-writable sources, \/inputs, \/outbox, \/mirrors and the trust CA/, source);
   }
-  const trust = structuredClone(credentials), trustEnv = {...credentialsEnv, AGENT_CA_FILE: "/srv/trust/ca.pem"};
+  const trust = structuredClone(credentials), trustEnv = {...credentialsEnv, AGENT_CA_FILE: "/operator/trust/ca.pem"};
   trust.Config.Env.push("SSL_CERT_FILE=/etc/agent-trust/ca.pem", "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem");
   mount(trust, trustEnv.AGENT_CA_FILE, "/etc/agent-trust/ca.pem", false);
   assert.doesNotThrow(() => inspectAgent(trust, trustEnv, image));
-  for (const source of ["/srv/trust", "/srv"]) {
+  for (const source of ["/operator/trust", "/operator"]) {
     assert.throws(() => inspectAgent(...at(trust, trustEnv, source), image), /credentials must stay outside agent-writable sources, \/inputs, \/outbox, \/mirrors and the trust CA/, source);
   }
   // The CA file inside the credentials directory: the same overlap from the other side.
