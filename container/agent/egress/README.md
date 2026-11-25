@@ -465,7 +465,15 @@ role HTTPS controls, backend controls, denied unlisted DNS/TLS, denied host
 gateway and direct backend/upstream access, then rejects an alternate-network
 mutant. Only the fixture TLS frontend mounts its disposable key. The fixture
 owns and removes its resources; run Docker qualification in CI, not against an
-operator's daemon. `test/agent-egress-roles.test.mjs` pins all 31 nonempty subsets,
+operator's daemon. The `split` argument runs the split leg on the same runner:
+the probe and the witness from the deploy copy extracted from the built egress
+image, a second Compose project with Redis and PostgreSQL fixtures on its own
+disjoint network, unreachable from the agent project, and `192.0.2.10` (unassigned and unrouted) as the
+services-host address, in bundled and external modes. It also proves that a
+services address inside a Docker subnet refuses and that the witness refuses a
+published port. The shared-front :443 case is pinned by unit tests; the
+two-host rehearsal is the consumer's evidence for the topology.
+`test/agent-egress-roles.test.mjs` pins all 31 nonempty subsets,
 legacy output bytes, refusal cases and fail-closed network observations.
 
 `python3 test/agent-egress-ingress-image.py IMAGE` exercises the packaged ingress
@@ -507,7 +515,7 @@ The runtime JSON is derived by the deployment wrapper. Its fields are:
 
 | Field | Runtime value |
 | --- | --- |
-| `schema` | Required integer `1`. Missing or unknown schemas refuse before engine access with `E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1; found none; regenerate the plan with schema: 1` (an unknown numeric schema replaces `none` with its value; other types report `invalid <type>`). Update plan writers to emit `"schema": 1`. |
+| `schema` | Required integer: `1` on one engine (local mode), `2` for [split agent/services hosts](#split-agentservices-hosts). Missing or unknown schemas refuse before engine access with `E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1 (local) or 2 (split); found none; regenerate the plan with schema: 1 or schema: 2` (an unknown numeric schema replaces `none` with its value; other types report `invalid <type>`). A probe older than schema 2 refuses a schema-2 plan with its own schema-1 text. |
 | `probeContainer`, `proxyContainer` | Existing running container name or ID. The deployment wrapper owns the probe's creation/removal. |
 | `agentsNetwork`, `servicesNetwork` | Existing bundle network names. No replacement agents network is created. |
 | `probeImage`, `proxyImage` | Reviewed repository digest references; a local content ID is also accepted for a disposable image test. |
@@ -516,7 +524,9 @@ The runtime JSON is derived by the deployment wrapper. Its fields are:
 | `protectedSources` | Canonical private service/database directories or key paths, plus the engine socket. |
 | `policy` | The same derived policy object mounted in the live proxy. |
 | `allowedPaths` | Exactly the declared roles (all five without a declaration), with an existing harmless HTTP 200 control path per API; for example `/ready`, signer `/readyz`, registry `/health`. |
-| `deniedBackends` | Two `{role,address,port,controlNetwork?}` records, roles `postgres` and `redis`; each address is in `policy.deniedAddresses`. `controlNetwork` selects an existing backend network for its live control, otherwise `servicesNetwork`. |
+| `deniedBackends` | Schema 1 only. Two `{role,address,port,controlNetwork?}` records, roles `postgres` and `redis`; each address is in `policy.deniedAddresses`. `controlNetwork` selects an existing backend network for its live control, otherwise `servicesNetwork`. |
+| `remoteBackends` | Schema 2 only, in place of `deniedBackends`: `{servicesAddress, backends}`. `backends` is `{role:"redis",port}` and either `{role:"postgres",port}` or `{role:"postgres",port,address,external:true}`. See [Split agent/services hosts](#split-agentservices-hosts). |
+| `run` | Schema 2 only: `{id, policyHash, servicesDeployment}`, supplied by the wrapper. `id` and `servicesDeployment` are 1–128 characters of `A-Za-z0-9._:-`; `policyHash` must equal `policyHash(policy)` or the probe refuses with `E_EGRESS_POLICY_HASH`. |
 | `caFile` | Optional public CA path inside the probe. The supported agent trust fragment uses `/etc/agent-trust/ca.pem` and exactly its two fixed trust settings. An explicit CA at another public probe path remains probe-only evidence. No private key in the file. |
 | `namePrefix` | Optional caller-owned prefix for every temporary canary and TCP control. Use 2–64 Docker-safe characters, starting with an alphanumeric and ending in `-`; for example `lab-probe-`. |
 | `protectedPaths` | Optional additional service-private paths that must not exist inside the probe. Standard secret/socket/custody paths are always checked. |
@@ -591,9 +601,15 @@ Add `--json` to the command for machine-readable stdout. Success returns
 The error is static; stderr retains the diagnostic and receipt lines in either
 mode. Without `--json`, success keeps the `OATS_EGRESS_BOUNDARY_PASS` token and
 refusal leaves stdout empty. The exported `probeComposeBoundary(plan)` returns
-`{passed:true,receipts}` and thrown failures carry `.receipts`.
+`{passed:true,receipts}` for schema 1 and the split document in
+[Split agent/services hosts](#split-agentservices-hosts) for schema 2; thrown
+failures carry `.receipts`.
 The helper `tcpFromNetwork` returns `{reachable,receipt}`; callers must check
-`.reachable`. `withGatewayCanary` and `checkDockerGateway` return the canary and
+`.reachable`. With `classify: true` it returns `{result,receipt}` instead, where
+`result` is exactly `CONNECTED`, `DENIED` (ECONNREFUSED, EHOSTUNREACH,
+ENETUNREACH, or no connection inside the program's own deadline) or
+`ERROR <code>`. Any other output, a non-zero exit or an unconfirmed cleanup
+throws with the receipt. `withGatewayCanary` and `checkDockerGateway` return the canary and
 two TCP control receipts, and failures carry partial receipts too.
 These host-side helpers ship under `/opt/oats/deploy/egress/` with their
 complete local import closure; `/opt/egress` retains only the runtime files.
@@ -607,3 +623,166 @@ supply and verify its admitted pod, mounts, enforcing CNI and live backend/node
 canary controls. Emitting the program is not a boundary PASS. The smoke test
 creates disposable networks for its regression; the deployment probe uses the
 bundle's actual network and does not infer enforcement from metadata.
+
+## Split agent/services hosts
+
+Plan schema 2 runs the same boundary on an agent-only host, whose services
+(aweb, Secrets, Logs, Redis and, optionally, PostgreSQL) run on another host's
+Docker engine. It runs only from a deploy copy extracted from the reviewed egress
+image: the probe reads `manifest.json` beside `egress/`, checks the SHA256 of
+every file it lists, and reports its `source` as `sourceCommit`. From a source
+checkout, or a copy whose files no longer match, it refuses with
+`E_EGRESS_SOURCE_MANIFEST` and names the extraction to run instead.
+
+What a split pair must prove, and the scope of each claim:
+
+1. **Agent-host isolation.** The isolated agent reaches only the proxy, and the proxy reaches only pinned :443 targets. The universal checks and the in-container runtime program prove this, unchanged.
+2. **Agent-host negative.** From exactly two vantage points, the isolated agent and the proxy's outward bridge (`servicesNetwork`), the declared services-host address does not accept TCP on the declared PostgreSQL and Redis ports. The claim covers those two vantage points, that one address and those two ports. It says nothing about other networks on the agent host, privileged host processes, or other ports.
+3. **Services-host witness.** The selected PostgreSQL and Redis containers are running and healthy. Docker publishes none of their ports, and neither uses host network mode. Each accepts TCP on its port from its own private network. The claim covers what Docker publishes for those containers. It does not prove the services host has no independent listener or forwarding rule. Item 2 covers that for the declared address and ports.
+4. **Ingress.** The unchanged ingress probe, run services-side.
+
+For an external database the proof is that the isolated agent cannot open TCP to it and the proxy will not forward to it. It does not prove the database refuses other hosts; its credentials, which the agent host never holds, are the control.
+
+`remoteBackends` declares exactly one `servicesAddress`; a second address, in
+any form, refuses with `E_EGRESS_REMOTE_ADDRESSES: split mode v1 takes exactly
+one services-host address`. The address need not be in
+`policy.deniedAddresses`, and it may equal a declared target's pinned address:
+on a shared front, one public IPv4 serves aweb, Secrets and Logs over :443. The
+database denial is per address and port, never IP-wide; schema 1 keeps its
+IP-wide deny and `compilePolicy` is unchanged.
+
+The services-host address, and an external PostgreSQL address, must not be
+local to the agent host, or the probe refuses with `E_EGRESS_REMOTE_LOCAL`.
+"Local to the agent host" means: inside any IPv4 Docker IPAM subnet on this
+engine, or exactly equal to an IPv4 address on one of the host's own interfaces
+(`ip -j address show`). An address merely inside an interface's prefix is not
+local, so a services host in the same VPC subnet is accepted. The probe reads
+these on the Linux engine host through a local Docker endpoint, as the network
+preflight does.
+
+Redis is always on the services host. PostgreSQL runs there too, or is
+`external:true` at its own pinned IPv4 `address`. An external address must be
+in `policy.deniedAddresses` (the proxy can never connect to it) and differ from
+`servicesAddress`, or the probe refuses with `E_EGRESS_EXTERNAL_DB_DENIED`; a
+declared target address refuses with `E_EGRESS_EXTERNAL_DB_TARGET`.
+
+The probe classifies each `(address, port)` tuple from both vantage points with
+the tri-state control. The outward-bridge controls run once, after the opening
+:443 positive controls, from temporary canaries on `servicesNetwork`; the
+isolated agent's controls run inside the probe container (`remoteEndpoints` in
+the runtime program, with no `deniedAddresses` membership requirement). Only `DENIED` passes, from a
+canary that exited 0 with its cleanup confirmed. The one exception: an external
+PostgreSQL from the outward bridge is recorded, not required, and may also be
+`CONNECTED`; `ERROR` or malformed output still refuses. The isolated agent must
+get `DENIED` from an external PostgreSQL too. Split mode creates no live
+positive control for the backends, which run on another engine; the :443 target
+controls, the gateway canary and every other universal check are unchanged.
+
+`--json` on success returns:
+
+```json
+{"passed":true,"mode":"split","receipts":[],
+ "run":{"id":"…","policyHash":"sha256:…","servicesDeployment":"…"},
+ "sourceCommit":"<40-hex source commit of the deploy copy>",
+ "remote":{"servicesAddress":"…","vantage":["isolated-agent","outward-bridge"],
+   "results":[{"role":"postgres","port":5432,"vantage":"isolated-agent","result":"DENIED","required":true}]}}
+```
+
+`remote.results` always has exactly four rows, in this order: postgres from
+the isolated agent, postgres from the outward bridge, redis from the isolated
+agent, redis from the outward bridge. Each row is
+`{role,port,vantage,result,required}`. Every row is `required:true` and
+`DENIED`, except postgres from the outward bridge in external mode, which is
+`required:false` and `DENIED` or `CONNECTED`. Schema 1's JSON has no `mode`
+field and is unchanged; refusal JSON is the same in both modes. A wrapper admits
+on this JSON (`passed:true`, `mode:"split"`, its own `run`), not on the stdout
+PASS line, and derives `required` from its own inventory.
+
+### Canonical policy hash
+
+`policy.mjs` exports `policyHash(policy)`: `"sha256:" + hex(sha256(utf8(canonical(policy))))`.
+`canonical` is JSON with object keys sorted by UTF-16 code unit, recursively;
+arrays in their given order; no whitespace; `JSON.stringify` string and number
+encoding, with non-ASCII string values emitted raw (UTF-8). It refuses inputs
+that are not portable JSON values: undefined, functions, symbols, BigInts,
+non-finite numbers, non-integer numbers, integers beyond ±(2^53−1), non-ASCII
+object keys, strings that are not well-formed UTF-16, cycles, and objects other
+than plain objects and arrays. Python's
+`json.dumps(policy, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`
+produces the same text. Test vector (for the helper only; not a valid
+`compilePolicy` input):
+
+```json
+{"schema":1,"humanOrigin":"https://approve.example.invalid","frontAddress":"172.30.0.2","privateIngressAddresses":[],"deniedAddresses":["10.20.0.11"],"targets":{"signer":{"origin":"https://prepare.example.invalid","addresses":["203.0.113.10"]},"aweb":{"origin":"https://aweb.example.invalid","addresses":["203.0.113.10"]}},"note":"é\u2028"}
+```
+
+hashes to `sha256:89ccf024cd7fc89c045b95339895dc3f044eb248cf09159cdb876d787055b5d4`.
+
+### Services-host witness
+
+Run `node egress/probe-services-backends.mjs --plan <witness.json> [--json]`
+from the extracted deploy copy on the services host's Linux Docker engine. Like
+split mode, it refuses with `E_EGRESS_SOURCE_MANIFEST` outside an extracted copy.
+The plan:
+
+```json
+{"schema":1,
+ "run":{"id":"…","policyHash":"sha256:…","servicesDeployment":"…"},
+ "servicesAddress":"…","composeProject":"…","policy":{},
+ "backends":[{"role":"postgres","service":"…","port":5432},{"role":"redis","service":"…","port":6379}],
+ "canaryImage":"…@sha256:…","namePrefix":"…-"}
+```
+
+`schema` is `1`; any other value refuses with `E_EGRESS_PLAN_SCHEMA: this
+witness reads plan schema 1; found <x>; regenerate the plan with schema: 1`.
+`policy` is the same derived policy the agent-side plan carries; the witness
+recomputes `policyHash(policy)`, refuses a mismatch with `E_EGRESS_POLICY_HASH`
+and does not otherwise use it. `backends` is exactly `[postgres, redis]` with
+PostgreSQL on the services host, or exactly `[redis]` with an external
+PostgreSQL. `composeProject` follows Compose's project-name rule.
+`canaryImage` is the reviewed egress image pinned by digest, the same image as
+the agent host's `proxyImage`; `namePrefix` is optional, as in the boundary plan.
+
+The witness selects containers itself and does not trust a caller's container
+name: for each role exactly one running container labelled
+`com.docker.compose.project=<composeProject>` and
+`com.docker.compose.service=<service>`; none or several refuses. For each it
+requires running and healthy, a network mode other than `host` or
+`container:`, no `HostConfig.PortBindings` and no host binding in
+`NetworkSettings.Ports`, the declared port in `Config.ExposedPorts`, and a
+classify-mode control returning `CONNECTED` from a canary on every network the
+container joins, aimed at its address there, with cleanup confirmed. It reads
+containers through an inspect template that selects only those fields: no
+environment, command, mount or healthcheck log is read or printed. It reports
+whether `servicesAddress` is among the services host's IPv4 interface addresses
+(`addressOnHost`), an observation and not a refusal, because a NAT'd public
+address is legitimately absent.
+
+`--json` on success returns:
+
+```json
+{"passed":true,"run":{},"sourceCommit":"…","servicesAddress":"…","canaryImage":"…",
+ "observed":{"composeProject":"…","hostAddresses":["…"],"addressOnHost":false},
+ "backends":[{"role":"postgres","service":"…","containerId":"…","image":"…","imageId":"sha256:…",
+   "networks":["…"],"port":5432,"health":"healthy","published":false,"control":"CONNECTED"}],
+ "receipts":[]}
+```
+
+Refusal returns `{"passed":false,"receipts":[...],"error":"services witness refused"}`
+and exits 1. Without `--json`, success prints `OATS_SERVICES_WITNESS_PASS`.
+stderr carries `services witness receipt:` lines and the refusal diagnostic.
+
+### Pairing
+
+The wrapper supplies one run ID and the policy hash to the boundary probe, the
+witness and the ingress probe. It admits only when the boundary is
+`mode:"split"` and `passed:true`, the witness passed, ingress printed PASS, all
+three carry the same `run.id`, `run.policyHash` and source commit, the
+boundary's and witness's `servicesDeployment`, `servicesAddress` and role/port
+inventory match, the witness's observed Compose project, services and address
+match the wrapper's own inventory for the selected services operator
+(`run.servicesDeployment` is correlation only, never proof of identity), and
+the four-row result set has `DENIED` on every row the wrapper's own inventory
+marks required. In external mode the wrapper checks the external address against
+the database endpoint the services operator configured. Each receipt comes fresh
+over its operator's established route; there is no new signature format.
