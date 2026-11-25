@@ -136,16 +136,16 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
     return { source: resolve(source), target, rw, type: "bind" };
   });
   // A credential group's directory is one person's credential: it shares no source with anything an agent writes,
-  // nor with the inputs every agent of the group reads.
+  // nor with a read-only source the operator may mount into every group (inputs, mirrors, the trust CA).
   for (const input of mounts.filter(m => m.target === "/etc/agent-trust/ca.pem" || m.target === "/mirrors" || m.target === "/inputs" || m.target === "/outbox" || m.target === "/etc/agent-credentials")) {
     const credentials = input.target === "/etc/agent-credentials";
-    for (const writable of mounts.filter(m => m.target !== input.target && (m.rw || input.target === "/outbox" || (credentials && m.target === "/inputs")))) {
+    for (const writable of mounts.filter(m => m.target !== input.target && (m.rw || input.target === "/outbox" || (credentials && ["/inputs", "/mirrors", "/etc/agent-trust/ca.pem"].includes(m.target))))) {
       let source, protectedSource;
       try { source = hostPath(input.source); protectedSource = hostPath(writable.source); }
       catch { assert.fail(credentials ? "credentials require resolvable Docker-host sources (paths withheld)" : "optional inputs and outbox require resolvable Docker-host sources (paths withheld)"); }
       const overlaps = source === protectedSource || source.startsWith(protectedSource.endsWith("/") ? protectedSource : protectedSource + "/")
         || protectedSource.startsWith(source.endsWith("/") ? source : source + "/");
-      assert.ok(!overlaps, credentials ? "credentials must stay outside agent-writable sources, /inputs and /outbox" : "optional inputs and outbox must stay outside agent-writable sources");
+      assert.ok(!overlaps, credentials ? "credentials must stay outside agent-writable sources, /inputs, /outbox, /mirrors and the trust CA" : "optional inputs and outbox must stay outside agent-writable sources");
     }
   }
   equal("writable bind destinations", info.Mounts.filter(m => m.Type === "bind" && m.RW).map(m => m.Destination).sort(),
