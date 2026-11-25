@@ -5,7 +5,7 @@
 // key, local only. Its trace is a private, bounded file. Real CLI runs in real deployments.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { v2Deployment } from "./helpers/v2-deployment.mjs";
 import { fakeFiles, fakeManifest, providerDeployment } from "./helpers/session-provider-fixture.mjs";
@@ -187,11 +187,52 @@ test("a YAML file keeps its comments, its other entries and their order, line by
   fx.ok(["unset", CAP, "trust"]);
   fx.ok(["set", CAP, "hostDaemonPort", "38887"]);
   assert.equal(fx.text(), original);
-  // Unset the capability's last keys: its mapping goes, the other capability's stays, in order.
+  // Unset the capability's last keys: its mapping carries a person's comment, so it stays, empty, with
+  // the comment; every other line is the file's own, the other capability's in order.
   fx.ok(["unset", CAP, "hostDaemonPort"]);
   fx.ok(["unset", CAP, "version"]);
-  assert.deepEqual(lines(fx.text()), lines(original).filter((l) => !/acme\.bb|how this host|hostDaemonPort|version: "0\.50\.1"/.test(l)));
+  assert.deepEqual(lines(fx.text()), lines(original).flatMap((l) => (/hostDaemonPort/.test(l) ? ["    {}"] : /version: "0\.50\.1"/.test(l) ? [] : [l])));
   assert.ok(fx.text().indexOf("zeta: last") < fx.text().indexOf("alpha: 1"), "the other capability's order");
+});
+
+test("an unset that empties a mapping keeps a person's comments: the mapping stays when one is attached, and goes when none is", (t) => {
+  const fx = deployment(t);
+  const head = fx.text();
+  const unset = (tail) => { writeFileSync(fx.local, head + tail); assert.equal(fx.ok(["unset", CAP, "trust"]).changed, true); return fx.text().slice(head.length); };
+  // `settings:` is the file's last key, with a comment above it and one after it: both stay.
+  const above = unset(`# Host settings: hand-written notes\nsettings:\n  ${CAP}:\n    trust: container\n# end note\n`);
+  assert.match(above, /# Host settings: hand-written notes\n/);
+  assert.match(above, /# end note\n/);
+  assert.doesNotMatch(above, /trust/);
+  // A comment inside the capability's mapping, and one above the capability: they stay, and the file still reads.
+  const inside = unset(`settings:\n  # above the capability\n  ${CAP}:\n    trust: container\n    # a note inside\n  acme.other:\n    z: 1\n`);
+  assert.match(inside, /# above the capability\n/);
+  assert.match(inside, /# a note inside\n/);
+  assert.deepEqual({ ...loadLocal(fx.dep).local.settings["acme.other"] }, { z: 1 });
+  assert.deepEqual({ ...loadLocal(fx.dep).local.settings[CAP] }, {}, "the commented mapping stays, empty");
+  // A later set fills the mapping that stayed.
+  assert.equal(fx.ok(["set", CAP, "trust", "single-user"]).changed, true);
+  assert.match(fx.text(), /# a note inside\n/);
+  // No comment anywhere: the emptied mappings go, and a comment on the removed key's own line goes with it.
+  assert.equal(unset(`settings:\n  ${CAP}:\n    trust: container # beside the key\n`), "");
+});
+
+test("a set to the value the file holds, and an unset of a key it does not set, leave the file untouched: bytes, time and trace", (t) => {
+  const fx = deployment(t);
+  const ref = fx.text().match(/^workspace: .*$/m)[0];
+  // A file the writer would re-render (three spaces before a comment, a comment beside a mapping's key).
+  const original = `schemaVersion: 2\n${ref}\nsettings:\n  ${CAP}: # beside the mapping's key\n    trust: single-user   # three spaces before\n`;
+  writeFileSync(fx.local, original);
+  const old = new Date("2026-01-01T00:00:00Z");
+  utimesSync(fx.local, old, old);
+  const stat = () => { const s = statSync(fx.local); return [s.mtimeMs, s.ino, s.size]; };
+  const before = stat();
+  assert.deepEqual(fx.ok(["set", CAP, "trust", "single-user"]), { capability: CAP, key: "trust", previous: "single-user", value: "single-user", effective: "single-user", changed: false, file: fx.local });
+  assert.deepEqual(fx.ok(["unset", CAP, "version"]), { capability: CAP, key: "version", previous: null, value: null, effective: "0.50.1", changed: false, file: fx.local });
+  assert.equal(fx.text(), original, "not a byte changed, so not re-rendered");
+  assert.deepEqual(stat(), before, "the same file, its modification time as it was: no write, no rename");
+  assert.deepEqual(fx.trace(), [], "no trace line");
+  assert.equal(existsSync(settingsTracePath(fx.dep)), false);
 });
 
 test("what the kernel's writer re-renders of a YAML file: spacing before a comment and a comment beside a mapping's own key, never its words or its entries", (t) => {

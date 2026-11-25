@@ -2356,9 +2356,13 @@ Both answer `{capability, key, previous, value, effective, changed, file}`:
 - `previous`: the value the FILE held for the key before, or `null` when it
   set none. Never a manifest default, nor another layer's value.
 - `value`: what the file holds now; `null` after an unset.
-- `effective`: what the resolver now gives for the key in this deployment:
-  the file's value, or the capability's manifest default where the file
-  sets none, or `null`. A client need not guess what an unset falls back to.
+- `effective`: the host layer over the manifest default: the file's value,
+  or the capability's manifest default where the file sets none, or `null`.
+  For a `hostOnly` key that is what every soul resolves, so a client need
+  not guess what an unset falls back to. A committed payload (the
+  workspace's `messaging:` or `tasks:`, a soul's slot payload) is not
+  counted: where one sets a key that is not `hostOnly`, a soul resolves
+  that value while the file sets none.
 - `changed`: `false` when the file already held that value, and for an unset
   of a key the file does not set. Nothing is written then, and the command
   succeeds.
@@ -2429,7 +2433,9 @@ characters, stored as a hand edit of the YAML would be read:
 3. a whole number (`38890`) as a number, and `true` or `false` as a boolean;
 4. anything else as text (`0.50.1` stays text).
 
-The answer's `value` shows what was stored.
+The answer's `value` shows what was stored. A value cannot begin with `-`:
+the command reads such a word as a flag (`E_BAD_ARGS`), so a negative
+number cannot be given, and no declared setting needs one today.
 
 **The writer.** The file is rewritten by the kernel's one writer of
 `oats-local.yaml`, under the deployment's local lock, as
@@ -2445,7 +2451,12 @@ The answer's `value` shows what was stored.
   indentation.
 - A file the kernel cannot decode is refused (`E_WORKSPACE_SCHEMA`).
 - An unset that empties `settings.<capability>`, or `settings`, removes the
-  empty mapping.
+  empty mapping, unless a comment is attached to it (above its key, beside
+  it or inside it): that one stays, as an empty mapping with its comments.
+  A comment on the removed key's own line goes with the key.
+- A set to the value the file already holds, and an unset of a key it does
+  not set, leave the file untouched: nothing is rendered, written or
+  renamed, and no trace line is added.
 
 **When it takes effect.** At the next read that resolves settings: the next
 spawn, start or restart, and the next readiness or `capabilities show`. A
