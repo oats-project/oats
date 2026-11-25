@@ -14,7 +14,7 @@ WORKDIR /opt/egress
 COPY --chmod=644 egress/policy.mjs egress/supervisor.mjs egress/external.mjs egress/health.mjs egress/probe-ingress.mjs ./
 ARG TEAM_IMAGE_SOURCE_SHA
 COPY --chmod=644 accept.mjs supervisor.mjs compose.agent.yaml /opt/oats/deploy/
-COPY --chmod=644 egress/compose.egress.yaml egress/compose.minimal.yaml egress/probe-compose-boundary.mjs egress/boundary.mjs egress/policy.mjs egress/canary.mjs egress/probe-runtime.mjs egress/preflight-network.mjs /opt/oats/deploy/egress/
+COPY --chmod=644 egress/compose.egress.yaml egress/compose.minimal.yaml egress/probe-compose-boundary.mjs egress/boundary.mjs egress/policy.mjs egress/canary.mjs egress/probe-runtime.mjs egress/preflight-network.mjs egress/split.mjs /opt/oats/deploy/egress/
 COPY --chmod=644 deploy-manifest.mjs /usr/local/lib/oats-deploy-manifest.mjs
 RUN node /usr/local/lib/oats-deploy-manifest.mjs egress /opt/oats/deploy "$TEAM_IMAGE_SOURCE_SHA" \
     && chmod 755 /opt/oats /opt/oats/deploy /opt/oats/deploy/egress

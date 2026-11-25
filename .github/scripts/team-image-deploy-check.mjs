@@ -33,11 +33,11 @@ export function checkExtractedScripts(directory, image) {
     assert.match(result.stderr, /usage: accept.sh CONTAINER --evidence/);
   } else {
     const plan = join(directory, "schema-validation.json");
-    writeFileSync(plan, '{"schema":2}\n');
+    writeFileSync(plan, '{"schema":3}\n');
     try {
       const result = spawnSync(process.execPath, [join(directory, "egress/probe-compose-boundary.mjs"), "--plan", plan], { cwd: directory, env, encoding: "utf8", timeout: 10000 });
       assert.equal(result.status, 1, result.stderr);
-      assert.match(result.stderr, /E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1; found 2;/);
+      assert.match(result.stderr, /E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1 \(local\) or 2 \(split\); found 3;/);
       assert.equal(result.stdout, "");
     } finally { rmSync(plan); }
     for (const [name, diagnostic] of [
