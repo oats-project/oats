@@ -13,6 +13,10 @@ The sections after the lane's own cover release-notes entries, the
 post-publish Desktop check, mirroring a released `oats.okf` and releasing
 `oats.framework`.
 
+The GitHub Actions [release workflow](../.github/workflows/release.yml)
+gives test and build jobs read-only repository access. Jobs which publish
+declare their own permissions in the workflow.
+
 ## When to use it
 
 - **Runner outage.** GitHub Actions is down, queued, or a runner image has

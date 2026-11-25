@@ -211,8 +211,33 @@ test("the workflow token may open the bump PR it creates", () => {
   const prBlock = yml.slice(yml.indexOf("Open the version-bump PR"));
   assert.match(prBlock, /gh pr create /, "the bump step opens a pull request");
   assert.match(prBlock, /GH_TOKEN: \$\{\{ github\.token \}\}/, "with the workflow token");
-  const top = yml.slice(yml.indexOf("\npermissions:"), yml.indexOf("\nconcurrency:"));
-  assert.match(top, /^\s+pull-requests: write$/m, "workflow permissions list pull-requests: write");
+  const publish = parseConfigData(yml).value.jobs.publish;
+  assert.equal(publish.permissions["pull-requests"], "write", "publish permissions list pull-requests: write");
+});
+
+test("release test and build jobs inherit read-only permissions; publishing jobs declare their own", () => {
+  const workflow = parseConfigData(yml).value;
+  assert.deepEqual({ ...workflow.permissions }, { contents: "read" });
+  for (const name of ["tests", "build-and-test", "desktop-build"]) {
+    assert.equal(workflow.jobs[name].permissions, undefined, `${name} inherits the workflow default`);
+  }
+  for (const [name, job] of Object.entries(workflow.jobs)) {
+    if (name === "publish" || name === "publish-team-image") continue;
+    assert.notEqual(job.permissions, "write-all", `${name} may not grant all write permissions`);
+    for (const [permission, access] of Object.entries(job.permissions ?? {})) {
+      assert.notEqual(access, "write", `${name} may not grant ${permission}: write`);
+    }
+  }
+  assert.deepEqual({ ...workflow.jobs.publish.permissions }, {
+    contents: "write",
+    "pull-requests": "write",
+    "id-token": "write",
+    attestations: "write",
+  });
+  assert.deepEqual({ ...workflow.jobs["publish-team-image"].permissions }, {
+    contents: "write",
+    packages: "write",
+  });
 });
 
 test("the release run opens the bump PR and never merges it", () => {
