@@ -119,6 +119,19 @@ export function checkReferenceClosure(skillRoot) {
   return [...seen].sort();
 }
 
+// The curriculum ships inside oats.framework, so a framework version it names is out of
+// date at the next framework tag, and scripts/check-catalog-references.mjs would make each
+// pin round change oats.knowledge-theory after its tag (#498). Its example uses vX.Y.Z.
+// The pattern covers what that check matches: `oats.framework: vN.N.N`, `oats.framework
+// vN.N.N` and `oats-framework/vN.N.N`.
+export const CONCRETE_FRAMEWORK_VERSION = /\boats\.framework(?::\s*|\s+)v\d+\.\d+\.\d+\b|\boats-framework\/v\d+\.\d+\.\d+\b/;
+export function checkNoFrameworkVersion(root, files = treeFiles(root)) {
+  for (const file of files.filter((f) => f.endsWith(".md"))) {
+    const match = CONCRETE_FRAMEWORK_VERSION.exec(readFileSync(join(root, file), "utf8"));
+    assert.ok(!match, `${file} names a framework version (${match?.[0]}); the curriculum ships inside oats.framework, so write a placeholder such as vX.Y.Z`);
+  }
+}
+
 function referenceSources(repoRoot) {
   const refRoot = join(repoRoot, "docs/knowledge-reference");
   return ["knowledge-capability-authoring.md", ...treeFiles(refRoot).map((f) => join("knowledge-reference", f))];
@@ -238,8 +251,10 @@ export function checkKnowledgeTheoryPackage({ repoRoot = REPO_ROOT, packageRoot 
   }
   const skill = join(capRoot, SKILL_PATH);
   const closure = checkReferenceClosure(skill);
+  checkNoFrameworkVersion(capRoot);
   if (parity) {
     const expected = referenceSources(repoRoot).sort();
+    checkNoFrameworkVersion(join(repoRoot, "docs"), expected);
     const refs = join(skill, "references");
     assert.deepEqual(treeFiles(refs), expected, "generated reference file set differs from canonical docs");
     for (const file of expected) {

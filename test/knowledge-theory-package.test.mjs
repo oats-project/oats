@@ -48,6 +48,26 @@ test("canonical references regenerate byte-for-byte; drift and extra copies fail
   assert.throws(() => checkKnowledgeTheoryPackage({ repoRoot: base }), /unreachable curriculum/);
 });
 
+test("the curriculum names no concrete framework version, in the canonical docs or the package copy (#498)", (t) => {
+  const base = temp(t);
+  cpSync(PACKAGE_ROOT, join(base, "oats-package"), { recursive: true, verbatimSymlinks: true });
+  cpSync(join(REPO_ROOT, "docs/knowledge-reference"), join(base, "docs/knowledge-reference"), { recursive: true });
+  const canonical = join(base, "docs/knowledge-capability-authoring.md");
+  const original = readFileSync(join(REPO_ROOT, "docs/knowledge-capability-authoring.md"), "utf8");
+  assert.match(original, /^ {2}oats\.framework: vX\.Y\.Z /m, "the example pins a placeholder");
+  write(canonical, original);
+  assert.equal(checkKnowledgeTheoryPackage({ repoRoot: base }).ok, true);
+  for (const pin of ["oats.framework: v1.31.0", "oats.framework v1.31.0", "oats-framework/v1.31.0"]) {
+    write(canonical, original.replace("oats.framework: vX.Y.Z", pin));
+    assert.throws(() => checkKnowledgeTheoryPackage({ repoRoot: base }), /knowledge-capability-authoring\.md names a framework version/, pin);
+    syncKnowledgeTheoryReferences(base);
+    assert.throws(() => checkKnowledgeTheoryPackage({ packageRoot: join(base, "oats-package"), parity: false }), /references\/knowledge-capability-authoring\.md names a framework version/, pin);
+    write(canonical, original);
+    syncKnowledgeTheoryReferences(base);
+  }
+  assert.equal(checkKnowledgeTheoryPackage({ repoRoot: base }).ok, true);
+});
+
 test("closure traversal rejects missing, escaping, remote and stale-anchor references", (t) => {
   const base = temp(t);
   const copied = copyPackage(base);
