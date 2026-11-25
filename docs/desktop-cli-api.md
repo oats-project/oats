@@ -3930,7 +3930,7 @@ its absence.
     |---|---|---|---|
     | Claude Code (oats.core's hooks) | `UserPromptSubmit`, a launch prompt's included | `Stop`; `StopFailure`; the `idle_prompt` notification, for a turn whose end no hook reported | with an oats.core from before the record; from 30 minutes after a turn start with no end |
     | pi (`@awebai/oats-pi`) | the agent's start, a launch prompt's included | the agent's end, an abort included | with a bridge from before the record |
-    | Codex | never | never | always: its notify hook reports turn ends only, which would read `"idle"` while it works |
+    | Codex | never | never | always, whatever stands in the file: its notify hook reports turn ends only, which would read `"idle"` while it works |
 
     **The first turn of a start reads `"working"`:** the launch prompt
     (`TASK.md`, or a wake's or an input's text) is a turn start like any
@@ -3964,12 +3964,16 @@ its absence.
     on.
   - **The file is the agent's own home's,** and in full mode its user can
     write any file there: a record written by hand gives a wrong value and
-    nothing else. A second pi in the home (a nested one, a subagent's
-    process) writes nothing while the home's own pi lives, and a Claude Code
-    subagent writes nothing. A second Claude Code started inside the home
-    with the home's environment (a nested `claude -p`) does write its own
-    boundaries: its end reads `"idle"` while the home's own turn goes on,
-    until the next prompt there.
+    nothing else.
+  - **A second harness inside the home.** The row is the turn of the home's
+    own session. A second pi session in the home's pi (a subagent's or a
+    workflow agent's) and a pi process started below it (a nested `pi`)
+    write nothing while the home's own pi lives, and a Claude Code subagent
+    writes nothing. Two cases do write their own boundaries, and their end
+    reads `"idle"` while the home's own turn goes on, until the next prompt
+    there: a second Claude Code started inside a Claude Code home with the
+    home's environment (a nested `claude -p`), and a pi started inside a
+    home whose harness is not pi (a Codex row reads `null` all the same).
   - **How it stands beside the row's other session fields:**
 
     | field | means | source | which acts read it |

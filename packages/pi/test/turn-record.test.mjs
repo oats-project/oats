@@ -102,9 +102,12 @@ test("each write replaces the file whole, leaves no draft, and is not work to th
 
 test("a record a pi left when it was killed mid-turn is not this start's: it reads null until this start's first boundary", async (t) => {
   const home = homeOf(t);
-  await session(home, { at: STARTED - 60_000 })("agent_start");
+  const killed = session(home, { at: STARTED - 60_000 });
+  await killed("agent_start");
   assert.equal(recordOf(home).event, "turn-start");
   assert.equal(activityOf(home), null, "from before startedAt");
+  // (The killed pi's process is gone, and its bridges with it: here, its session ends.)
+  await killed("session_shutdown");
   await session(home, { at: STARTED + 1 })("agent_start");
   assert.equal(activityOf(home), "working");
 });
@@ -167,12 +170,53 @@ test("a second pi in the home writes nothing while the home's own pi lives: its 
   assert.equal(child.stdout, env[TURN_WRITER], "the mark stays the outer pi's");
   assert.equal(readFileSync(turnPath(home), "utf8"), outer);
   assert.equal(activityOf(home), "working", "the outer turn goes on");
-  // A second bridge in this same process (a /reload, a replaced session) is the same writer.
-  clock.at += 1000;
-  await session(home, clock, env)("agent_start");
-  assert.equal(recordOf(home).at, new Date(clock.at).toISOString());
   await fire("agent_end");
   assert.equal(activityOf(home), "idle");
+});
+
+test("a second session in the same process (a subagent's, a workflow agent's) writes nothing while the home's own session lives; a reload hands the writer on", async (t) => {
+  const home = homeOf(t), clock = { at: STARTED + 1000 }, env = {};
+  // The home's own session: the first bridge the process loads.
+  const main = session(home, clock, env);
+  await main("agent_start");
+  const outer = readFileSync(turnPath(home), "utf8");
+  // A subagent's session, made inside the main run, in this process: pi loads the bridge again for it.
+  clock.at += 1000;
+  const sub = session(home, clock, env);
+  await sub("agent_start");
+  await sub("agent_end");
+  assert.equal(readFileSync(turnPath(home), "utf8"), outer, "the subagent's whole turn wrote nothing");
+  assert.equal(activityOf(home), "working", "the main turn goes on");
+  // Two more at once, and their sessions ending, change nothing: none of them held the writer.
+  const others = [session(home, clock, env), session(home, clock, env)];
+  for (const other of others) await other("agent_start");
+  for (const other of others) { await other("agent_end"); await other("session_shutdown"); }
+  await sub("session_shutdown");
+  assert.equal(readFileSync(turnPath(home), "utf8"), outer);
+  clock.at += 1000;
+  await main("agent_end");
+  assert.deepEqual(recordOf(home), { event: "turn-end", at: new Date(clock.at).toISOString() });
+  // A subagent that works on after the main turn ended is not the home's turn.
+  await sub("agent_start");
+  assert.equal(activityOf(home), "idle");
+
+  // A /reload, or a replaced session: the next bridge loads, the holder's session shuts down
+  // (in either order), and the next bridge is the writer from its next run.
+  const next = session(home, clock, env);
+  await next("agent_start");
+  assert.equal(activityOf(home), "idle", "the holder still lives: the next bridge waits");
+  await next("agent_end");
+  await main("session_shutdown");
+  clock.at += 1000;
+  await next("agent_start");
+  assert.deepEqual(recordOf(home), { event: "turn-start", at: new Date(clock.at).toISOString() });
+  // The session that shut down writes nothing more, and takes nothing back.
+  await main("agent_start");
+  await main("agent_end");
+  assert.equal(recordOf(home).event, "turn-start");
+  await next("agent_end");
+  assert.equal(activityOf(home), "idle");
+  await next("session_shutdown");
 });
 
 test("the mark is the home's and its holder's: one for another home, of a process that is gone, of a reused pid, or that is no mark, is not in the way", async (t) => {

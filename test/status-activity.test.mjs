@@ -106,7 +106,7 @@ test("a tmux home's record: counted from startedAt, and anything that is not a r
   assert.equal(read(), null, "a linked .oats");
 });
 
-test("Claude Code: a turn that started and wrote no end reads working for 30 minutes, then null; an ended one stays idle, and no other harness is bounded", (t) => {
+test("Claude Code: a turn that started and wrote no end reads working for 30 minutes, then null; an ended one stays idle; pi is not bounded, and Codex reads null always", (t) => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), "oats-turn-")));
   t.after(() => rmSync(home, { recursive: true, force: true }));
   mkdirSync(join(home, ".oats"));
@@ -117,7 +117,14 @@ test("Claude Code: a turn that started and wrote no end reads working for 30 min
   assert.equal(read("claude", 0), "working");
   assert.equal(read("claude", CLAUDE_OPEN_TURN_MAX_MS), "working", "at 30 minutes");
   assert.equal(read("claude", CLAUDE_OPEN_TURN_MAX_MS + 1), null, "past 30 minutes: an interrupt fires no hook, so OATS cannot tell");
-  for (const harness of ["pi", "codex", null, undefined]) assert.equal(read(harness, 24 * 60 * 60 * 1000), "working", `${harness}: its end is always written`);
+  for (const harness of ["pi", null, undefined]) assert.equal(read(harness, 24 * 60 * 60 * 1000), "working", `${harness}: its end is always written`);
+  // Codex reads null, always: nothing is written for it, and a record that stands in its home
+  // (written by hand, or by a pi started inside it) is never read as its turn.
+  for (const event of [TURN_EVENT.START, TURN_EVENT.END]) {
+    turn(home, event, at);
+    assert.equal(read("codex", 0), null, `codex: ${event}`);
+  }
+  turn(home, TURN_EVENT.START, at);
   turn(home, TURN_EVENT.END, at);
   assert.equal(read("claude", 24 * 60 * 60 * 1000), "idle", "a turn that ended is idle however long ago");
 });
@@ -208,6 +215,10 @@ test("tmux rows: the key is on a row that runs and on no other; it reads the rec
   assert.equal(said(rowOf(fx, "live")), null);
   record(live, { harness: "pi" });
   assert.equal(said(rowOf(fx, "live")), "working");
+  // A Codex row that runs carries the key, and it is null whatever the record says.
+  record(live, { harness: "codex" });
+  assert.equal(said(rowOf(fx, "live")), null);
+  record(live, { harness: "pi" });
 
   // The key is only ever the listing's own read: one written into the home's record is not on a row.
   record(homes.never, { activity: "working" });

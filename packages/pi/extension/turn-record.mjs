@@ -18,19 +18,28 @@
  * not know which it runs on); on a session provider's home the kernel never
  * reads it. A kernel from before the feature never reads it either.
  *
- * Only the home's own pi writes. A second pi in the home (a nested one, a
- * subagent's or a workflow agent's process) carries the home's
- * OATS_INSTANCE_HOME and loads this bridge too, and its runs end while the
- * home's own turn goes on: its turn-end would read idle for the rest of that
- * turn. So the bridge that records marks its own process environment,
- * `OATS_PI_TURN_WRITER=<pid>:<process start>:<home>`, which a pi started below
- * it inherits: a bridge that finds the mark of another process that is still
- * alive, for this home, writes nothing. The mark is this package's alone: no
- * kernel, hook or launch environment reads or sets it. It is looked at when a
- * run starts, so a pi whose writer has gone takes over at its next run, and a
- * run's end is written by the bridge that wrote its start. A second session in
- * one process (a /reload, a replaced session) is the same writer. A mark for
- * another home (an instance spawned from inside this pi) is not this home's.
+ * Only the home's own pi session writes. A second pi in the home carries the
+ * home's OATS_INSTANCE_HOME and loads this bridge too, and its runs end while
+ * the home's own turn goes on: its turn-end would read idle for the rest of
+ * that turn. There are two kinds, and a rule for each:
+ * - a session in the same process (a subagent's or a workflow agent's, which
+ *   pi-extensible-workflows runs in the pi that started it): the first bridge
+ *   of a process to load is the home's session, and holds the process's
+ *   writer until its session shuts down. While it holds it, every other
+ *   bridge in the process writes nothing. A /reload or a replaced session
+ *   shuts the holder down, and the bridge that follows takes the writer.
+ * - a pi in another process (a nested `pi`, a subagent run as a command): the
+ *   writing bridge marks its own process environment,
+ *   `OATS_PI_TURN_WRITER=<pid>:<process start>:<home>`, which a pi started
+ *   below it inherits: a bridge that finds the mark of another process that
+ *   is still alive, for this home, writes nothing. The mark is this package's
+ *   alone: no kernel, hook or launch environment reads or sets it. A mark for
+ *   another home (an instance spawned from inside this pi) is not this
+ *   home's.
+ * Both are looked at when a run starts, so a bridge whose writer has gone takes
+ * over at its next run, and a run's end is written by the bridge that wrote
+ * its start. A subagent that works on after the home's own turn has ended is
+ * not the home's turn: the row reads idle.
  *
  * A retried turn has an agent_end and an agent_start for each attempt, so the
  * record reads idle between two attempts, for the length of pi's backoff.
@@ -88,16 +97,33 @@ export function takeTurnWriter(home, env = process.env) {
   return true;
 }
 
-/** Record this pi's turn boundaries in `home`, where it is the home's writer (takeTurnWriter). */
+/** The sessions that hold the writer in this process, by home: home → the holding bridge's token.
+ *  Shared by every copy of this module pi loads (a /reload and a subagent's session load it again
+ *  in the same process). */
+const SESSION_WRITERS = (globalThis[Symbol.for("@awebai/oats-pi/turn-record/session-writers")] ??= new Map());
+
+/** Record this pi session's turn boundaries in `home`, where it is the home's writer: the session
+ *  that holds the writer in this process, in a process that holds it for the home (takeTurnWriter). */
 export function recordTurns(pi, home, { now, env = process.env } = {}) {
+  const token = randomUUID();
+  /** Whether this bridge holds the process's writer, taking it when no session does. */
+  const holds = () => {
+    if (!SESSION_WRITERS.has(home)) SESSION_WRITERS.set(home, token);
+    return SESSION_WRITERS.get(home) === token;
+  };
+  // The first bridge to load is the home's own session: a subagent's loads inside one of its runs.
+  holds();
   // Whether this bridge wrote the start of the run under way: its end is then this bridge's too.
   let wrote = false;
   pi.on("agent_start", () => {
-    wrote = takeTurnWriter(home, env);
+    wrote = holds() && takeTurnWriter(home, env);
     if (wrote) writeTurn(home, TURN_START, { now });
   });
   pi.on("agent_end", () => {
     if (wrote) writeTurn(home, TURN_END, { now });
     wrote = false;
+  });
+  pi.on("session_shutdown", () => {
+    if (SESSION_WRITERS.get(home) === token) SESSION_WRITERS.delete(home);
   });
 }
