@@ -208,3 +208,21 @@ test("the run binding requires the recomputed policy hash and bounded identifier
     {...run,servicesDeployment:7}, {...run,policyHash:"sha256:ABC"}])
     assert.throws(() => admitRun(bad, policy), /run binding is invalid/);
 });
+
+test("the proxy records the hash of the exact policy it compiled before starting any child", async t => {
+  const { prepareProxyFiles } = await import("../container/agent/egress/supervisor.mjs");
+  const { mkdtempSync, readFileSync, rmSync, statSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = mkdtempSync(join(tmpdir(), "oats-proxy-files-")); t.after(() => rmSync(root, {recursive:true,force:true}));
+  const directory = join(root, "egress"), policy = splitPolicy();
+  prepareProxyFiles(policy, directory);
+  assert.equal(readFileSync(join(directory, "policy.hash"), "utf8"), policyHash(policy));
+  assert.equal(statSync(join(directory, "policy.hash")).mode & 0o777, 0o400);
+  assert.equal(statSync(directory).mode & 0o777, 0o700);
+  for (const name of ["allow.zone","nginx.conf","Corefile"]) assert.equal(statSync(join(directory, name)).mode & 0o777, 0o600);
+  // A restart in the same tmpfs replaces the read-only record with the new policy's hash.
+  const changed = {...policy, deniedAddresses:["10.20.0.11","10.20.0.12"]};
+  prepareProxyFiles(changed, directory);
+  assert.equal(readFileSync(join(directory, "policy.hash"), "utf8"), policyHash(changed));
+});

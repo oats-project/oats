@@ -178,7 +178,10 @@ read-only public JSON policy, regular file at most 64 KiB, readable by UID 10001
 and provisioned by the operator; it contains no service credentials. There is
 no writable state bind. `/tmp` is a writable 16 MiB tmpfs, mode 1777, with
 `nosuid,nodev`; generated DNS/proxy configuration goes into `/tmp/egress`
-(directory 0700, files 0600).
+(directory 0700, files 0600). Before starting any child, the supervisor also
+writes `/tmp/egress/policy.hash` (0400): the canonical `policyHash` of the exact
+policy it compiled, and nothing else. The proxy compiles the policy once, so a
+changed policy file needs the proxy recreated.
 ([Dockerfile](../container/agent/egress/Dockerfile),
 [Compose](../container/agent/egress/compose.egress.yaml),
 [policy loader](../container/agent/egress/policy.mjs),

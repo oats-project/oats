@@ -145,6 +145,18 @@ def run_split(plan, policy, proxy_image, prefix):
     assert json.loads(result.stdout) == {"passed":False,"receipts":[],"error":"services witness refused"}
     print("PASS published port mutant", flush=True)
 
+    # The proxy compiled its policy at startup. Rewrite the mounted file in place
+    # (same inode, so the bind mount shows it) and regenerate the plan from it:
+    # the file comparison now agrees, and only the proxy's loaded record refuses.
+    changed = {**policy, "deniedAddresses":[*policy["deniedAddresses"], "192.0.2.12"]}
+    assert write("policy.json", json.dumps(changed)) == policy_file
+    plan.update(policy=changed, run={**run_binding, "policyHash":policy_hash(changed)},
+                remoteBackends={"servicesAddress":services_address,"backends":[{"role":"postgres","port":5432},{"role":"redis","port":6379}]})
+    result = subprocess.run(["node",probe,"--plan",write("split-stale.json",json.dumps(plan)),"--json"], env=env, text=True, capture_output=True)
+    assert result.returncode == 1 and "E_EGRESS_POLICY_STALE" in result.stderr, result.stderr
+    assert json.loads(result.stdout) == {"passed":False,"receipts":[],"error":"boundary probe refused"}
+    print("PASS stale proxy policy mutant", flush=True)
+
 try:
     proxy_image = json.loads(docker("image", "inspect", sys.argv[1]))[0]["Id"]
     agent_image = json.loads(docker("image", "inspect", sys.argv[2]))[0]["Id"]

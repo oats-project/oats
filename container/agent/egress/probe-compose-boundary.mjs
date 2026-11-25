@@ -102,6 +102,15 @@ async function runBoundary(plan,receipts,split) {
   assertPublicMountSource(policySource,plan.protectedSources,"proxy");
   const livePolicy=json(["exec",plan.proxyContainer,"node","-e","process.stdout.write(require('node:fs').readFileSync('/etc/egress/policy.json','utf8'))"]);
   assert.deepEqual(livePolicy,plan.policy,"live proxy policy differs from derived policy");
+  if(split) {
+    // The proxy compiled its policy once at startup; the mounted file can have
+    // changed since. Bind the proof to the policy the running proxy loaded.
+    let loaded;
+    try {loaded=docker(["exec",plan.proxyContainer,"node","-e","process.stdout.write(require('node:fs').readFileSync('/tmp/egress/policy.hash','utf8'))"]);}
+    catch {loaded=undefined;}
+    if(loaded!==split.run.policyHash)
+      throw Object.assign(new Error("E_EGRESS_POLICY_STALE: the running proxy loaded a different policy than this plan; recreate the proxy, then prove again"),{code:"E_EGRESS_POLICY_STALE"});
+  }
   const report = boundaryControls(plan);
   const controls=[];
   // Split-host backends live on another engine: no live positive control here.

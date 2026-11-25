@@ -55,8 +55,12 @@ function splitFixture(t, mode = "bundled") {
 
 // Only the external Docker CLI and `ip` are doubled, at their wire contract.
 // `classify(address,port)` answers each outward-bridge control.
+// `loaded` is what the running proxy's /tmp/egress/policy.hash holds: the hash
+// of the policy it compiled at startup, or null when the file is missing.
+const loadedHashCommand = ["exec","split_proxy","node","-e","process.stdout.write(require('node:fs').readFileSync('/tmp/egress/policy.hash','utf8'))"];
 function splitDocker(t, responses, { classify = () => ({stdout:"DENIED\n"}), runtime = {status:0,stdout:"OATS_EGRESS_BOUNDARY_PASS\n"},
-  absent = () => true, links = [{ifname:"eth0",addr_info:[{family:"inet",local:"10.0.0.4",prefixlen:24}]}] } = {}) {
+  absent = () => true, links = [{ifname:"eth0",addr_info:[{family:"inet",local:"10.0.0.4",prefixlen:24}]}],
+  loaded = policyHash(splitPolicy()) } = {}) {
   const calls = [], programs = [], original = childProcess.spawnSync;
   const ok = stdout => ({status:0,signal:null,stdout,stderr:""});
   childProcess.spawnSync = (command, args, settings) => {
@@ -67,6 +71,8 @@ function splitDocker(t, responses, { classify = () => ({stdout:"DENIED\n"}), run
     }
     assert.equal(command, "docker");
     if (Object.hasOwn(responses, JSON.stringify(args))) return ok(JSON.stringify(responses[JSON.stringify(args)]));
+    if (JSON.stringify(args) === JSON.stringify(loadedHashCommand))
+      return loaded === null ? {status:1,signal:null,stdout:"",stderr:"ENOENT"} : ok(loaded);
     if (args[0] === "context") return ok('"unix:///var/run/docker.sock"');
     if (args[0] === "network" && args[1] === "ls") return ok("agents-id\nservices-id\n");
     if (args[0] === "network" && args[1] === "inspect") {
@@ -232,6 +238,31 @@ test("an outward-bridge control whose cleanup is unconfirmed refuses", async t =
   await assert.rejects(probeComposeBoundary(fixture.plan), error => {
     assert.equal(error.receipts.find(r => r.name === classifyName).absentVerified, false); return true;
   });
+});
+
+for (const [label, loaded] of [["a different policy", policyHash({...splitPolicy(),deniedAddresses:[]})], ["a missing record", null],
+  ["a malformed record", "sha256:not-a-hash"], ["a record with trailing data", policyHash(splitPolicy()) + "\n"]]) {
+  test(`a running proxy that loaded ${label} refuses before any network control`, async t => {
+    const {probeComposeBoundary} = await stagedProbe(t);
+    const fixture = splitFixture(t);
+    const double = splitDocker(t, fixture.responses, {loaded});
+    quiet(t);
+    await assert.rejects(probeComposeBoundary(fixture.plan), error => {
+      assert.equal(error.message, "E_EGRESS_POLICY_STALE: the running proxy loaded a different policy than this plan; recreate the proxy, then prove again");
+      assert.equal(error.code, "E_EGRESS_POLICY_STALE"); assert.deepEqual(error.receipts, []); return true;
+    });
+    assert.ok(double.calls.some(call => JSON.stringify(call.slice(1)) === JSON.stringify(loadedHashCommand)));
+    assert.ok(!double.calls.some(call => call[1] === "run" || (call[1] === "exec" && call[2] === "-i")), "no control or runtime body runs");
+  });
+}
+test("a passing split proof read the running proxy's loaded policy hash", async t => {
+  const {probeComposeBoundary} = await stagedProbe(t);
+  const fixture = splitFixture(t);
+  const double = splitDocker(t, fixture.responses);
+  quiet(t);
+  assert.equal((await probeComposeBoundary(fixture.plan)).passed, true);
+  const order = double.calls.map(call => JSON.stringify(call.slice(1)) === JSON.stringify(loadedHashCommand) ? "hash" : call[1]);
+  assert.ok(order.indexOf("hash") >= 0 && order.indexOf("hash") < order.indexOf("run"), "the loaded policy is read before the first control");
 });
 
 test("split plans refuse a local services address, a second address, a hash mismatch and a schema-1 backend list", async t => {

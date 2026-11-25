@@ -643,6 +643,18 @@ What a split pair must prove, and the scope of each claim:
 
 For an external database the proof is that the isolated agent cannot open TCP to it and the proxy will not forward to it. It does not prove the database refuses other hosts; its credentials, which the agent host never holds, are the control.
 
+The proof is bound to the policy the running proxy loaded, not only to the
+mounted file. The supervisor compiles `/etc/egress/policy.json` once at
+startup and, before starting any child, writes the `policyHash` of that exact
+policy to `/tmp/egress/policy.hash` (mode 0400). In split mode the adapter reads
+it through `docker exec` in the proxy container, after its mounted-file
+comparison and before any network control; it must equal `run.policyHash`.
+Missing, unreadable, malformed or different refuses with
+`E_EGRESS_POLICY_STALE: the running proxy loaded a different policy than this
+plan; recreate the proxy, then prove again`. A changed policy therefore needs
+the proxy recreated before it is proved. Schema 1 neither reads nor requires
+the record.
+
 `remoteBackends` declares exactly one `servicesAddress`; a second address, in
 any form, refuses with `E_EGRESS_REMOTE_ADDRESSES: split mode v1 takes exactly
 one services-host address`. The address need not be in
