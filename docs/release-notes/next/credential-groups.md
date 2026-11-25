@@ -8,7 +8,8 @@
   file is root:group 0440 in a root:group 0750 `credentials` directory, and
   the value is opaque, at most 65,536 bytes. An entry whose path or
   directory another entry or a `teams` destination also names is refused. Without `--credential` the
-  receiver is unchanged; a host that wants the mode reinstalls it
+  receiver is unchanged, except that it refuses a destination a personal
+  credential owns; a host that wants the mode reinstalls it
   ([servers.md](../servers.md#personal-credentials)). The team image ships
   `compose.agent.credentials.yaml`, which binds `TEAM_CREDENTIALS_DIR`
   read-only at `/etc/agent-credentials`. Acceptance admits that mount only
