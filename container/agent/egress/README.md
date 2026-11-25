@@ -32,7 +32,8 @@ With external roles disabled, its field set is:
 
 Without `roles`, `targets` contains exactly those five roles; compilation and
 route order remain unchanged. An optional `roles` array declares a nonempty
-subset of `aweb`, `logs`, `registry`, `secrets` and `signer`. Order does not affect
+subset of `aweb`, `logs`, `registry`, `secrets` and `signer`, or is empty for
+[hosted services](#hosted-services). Order does not affect
 route indexes. Missing targets, undeclared targets, unknown/duplicate roles and
 extra policy fields are refused. Do not invent stand-in services.
 
@@ -65,7 +66,9 @@ The new field changes no zone, Corefile or nginx bytes for existing policies.
 A bundle setting `humanRole` must use the new egress image; older images refuse
 that field. Existing deployments need change nothing.
 `authorityRecords` is required with registry and refused without registry,
-independently of signer. The full default keeps both fields. Namespace authority
+independently of signer, unless the policy declares external roles: then the
+registry can be one of them, and the records stay optional
+([hosted services](#hosted-services)). The full default keeps both fields. Namespace authority
 is needed for registry discovery and sender verification in messaging-only
 deployments too: this resolver is authoritative for the root and has no
 forwarding fallback for `_awid.<domain>`. A subset without signer uses its
@@ -85,7 +88,8 @@ not a general recursive resolver.
 
 The wrapper's `egress.external.source` and `.model` booleans enable exactly
 `https://github.com` and `https://api.anthropic.com`, respectively. Both default
-false. The operator does not supply arbitrary origins. When either is enabled,
+false. These booleans select fixed origins; a deployment names other origins
+as [named external roles](#deployment-named-external-roles). When either is enabled,
 the wrapper adds these derived fields, omitting disabled roles:
 
 ```json
@@ -201,6 +205,81 @@ is the complete existing AWID record, without zone-file quotes. This component
 serializes those public records into the authoritative zone. It does not invent
 namespace controllers or change the AWID verification protocol. Unknown names
 receive negative answers. Controller rotation follows the same profile update.
+
+### Deployment-named external roles
+
+Every key of `externalTargets` is a role name matching `^[a-z][a-z0-9-]{0,31}$`,
+with at most 16 roles in all. Three names have fixed origins: `source`
+(`https://github.com`), `model` (`https://api.anthropic.com`) and `forge`
+(`https://api.github.com`, the GitHub API role the
+[sandboxes design](../../../docs/design/2026-11-19-sandboxes.md) decided). Any
+other key is an origin the deployment names, written as `{"origin":
+"https://<dns-name>"}`:
+
+```json
+{
+  "externalTargets": {
+    "model": {"origin": "https://api.anthropic.com"},
+    "ms-graph": {"origin": "https://graph.microsoft.com"},
+    "ms-login": {"origin": "https://login.microsoftonline.com"}
+  },
+  "externalResolverAddresses": ["1.1.1.1"]
+}
+```
+
+A named origin is exactly `https://` and a lowercase DNS name, with no port,
+path, query, userinfo, IP literal, wildcard or trailing dot. Its host is distinct
+from every other external host and from every target and `humanOrigin` host.
+Each role gets the same mechanism as source and model: an exact-SNI entry in the
+nginx map, its own loopback connector, resolution through
+`externalResolverAddresses`, and refusal of any mixed, internal or deployment
+answer. The agent always reaches a role on port 443 by name. The connector's
+loopback port is internal: `source` 10443 and `model` 10444; every other role,
+`forge` included, from 10445 upward in sorted role order. Named roles leave a
+policy that names only source and model unchanged: its compiled files and its
+policy hash are pinned by the unit tests. Adding or removing a role changes the
+[policy hash](#canonical-policy-hash).
+
+The guarantee is the external roles' own: exact declared SNI and a validated
+public destination, never a path, method or account. A service that redirects to
+another host, such as a regional or legacy sign-in authority, gets that host only
+when the deployment names it as another role; there are no wildcard hosts.
+Each refusal has a stable message:
+
+| Message | Refused |
+| --- | --- |
+| `egress policy external targets must name at least one role` | `externalTargets` not an object with at least one key |
+| `egress policy allows at most 16 external roles` | more than 16 keys |
+| `egress policy external role names must match ^[a-z][a-z0-9-]{0,31}$` | a key outside that pattern |
+| `egress policy external role origin is fixed` | `source`, `model` or `forge` with another origin or another field |
+| `egress policy external target has an invalid field set` | a named role with a field other than `origin` |
+| `egress policy external origin must be exactly https://<lowercase DNS name>` | a named origin in any other form |
+| `egress policy external hostnames must be distinct` | two roles with the same host |
+| `egress policy external hostname overlaps deployment origins` | a host equal to a target or `humanOrigin` host |
+
+`test/agent-egress-named-origins-image.py <proxy-image-id> <agent-image-id>`
+is the live check, run by team-image CI on dispatch and on pull requests that
+change this component or the script. A policy with `ms-graph` completes a TLS
+handshake to `graph.microsoft.com` through the proxy, the client verifying the
+chain and the name; a policy without it refuses that name at DNS and SNI and logs
+both refusals. It uses no credentials. The unit tests prove the refusal of
+private, mixed, deployment and malformed answers through the connector's DNS
+seam.
+
+### Hosted services
+
+When every service is hosted elsewhere, for example aweb at
+`https://app.aweb.ai` and the AWID registry at `https://api.awid.ai`, the policy
+declares `"roles": []`, `"targets": {}` and only external roles, such as
+`aweb-hosted` and `awid`. Empty `roles` needs at least one external role
+(`egress policy empty roles require an external origin`), and admits no
+`humanOrigin` or `humanRole`. The zone's SOA and NS use the first external host
+in role order, and the healthcheck asks for that host.
+
+With external roles declared, `authorityRecords` are allowed without the
+registry role, so the agent still resolves `_awid.<namespace>` TXT from the
+proxy; they stay required with registry. The runtime boundary probe applies the
+same rule.
 
 ## Network and ingress contract
 
