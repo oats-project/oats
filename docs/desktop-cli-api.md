@@ -7874,6 +7874,11 @@ first Enter: the agent got both texts as one message, and both callers read
 - The lock frees itself when its holder dies: a holder that was killed is
   taken over by the next input, never waited for. A lock that cannot be read
   or taken over refuses at once, the same way, naming the file.
+- The lock, and the kernel's note of a paste with no Enter yet, are files
+  under the kernel's state directory
+  (`$OATS_HOME_DIR/session-resume/session-inputs`, `~/.oats` by default). An
+  input from a process that may not write there (a sandbox that keeps
+  `~/.oats` read-only) is refused `E_SESSION_INPUT_FAILED`, nothing sent.
 - **Text pasted and never submitted.** An input that is killed between its
   paste and its Enter (or whose Enter fails) leaves its text in the agent's
   input line. The next input to that home submits that text first, with an
