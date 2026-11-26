@@ -1,0 +1,10 @@
+{
+  "capability": "oats.aweb-design",
+  "private": true,
+  "version": "1.0.0",
+  "compatibility": { "oats": ">=0.69.7" },
+  "description": "The design rules for every screen and every text of Agent Web (aweb): its two faces (the aweb app and the bb extension), the twelve rules, agents and threads, needs you, commands and keys, the voice, and how a design is made and checked. One skill, aweb-design, with its references. The briefing gives every soul that holds it the aweb voice. For the souls that design aweb and check its designs (aweb-designer, aweb-design-qa).",
+  "requires": [],
+  "inject": "injects/aweb-design.md",
+  "skills": ["skills/aweb-design"]
+}
