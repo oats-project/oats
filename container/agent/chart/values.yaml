@@ -1,0 +1,36 @@
+# The operator supplies an image digest and existing login/key objects.
+image:
+  repository: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+uid: 20001
+gid: 20001
+fsGroup: 20001
+storage:
+  size: 10Gi
+  # Empty means omit storageClassName and let the cluster choose its default.
+  className: ""
+loginSecret: ""
+authorizedKeys:
+  kind: ConfigMap
+  name: ""
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+    ephemeral-storage: 256Mi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+    ephemeral-storage: 1Gi
+tmpSize: 128Mi
+service:
+  enabled: false
+forwarder:
+  enabled: false
+  resolverIP: ""
+  networkPolicy: false
+  # When enabled, select the forwarder/resolver's actual pods and namespace.
+  namespaceLabels: {}
+  podLabels: {}
