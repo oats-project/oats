@@ -50,8 +50,8 @@ Each rule is tied to the evidence above. "Palette" = the app's one list of comma
    Evidence: 2.2 (`FilterInput.qml:9`, `Menu.qml:1422`, `:729`, `:1574`); `GalleryPanel.qml:1626`.
 4. **One key lists every key, as a filterable list whose rows run.** Generate it from the registry; order it by importance; chord in a fixed-width column, then 2 to 4 words. In the app, `?`.
    Evidence: 2.5 (`omarchy-menu-keybindings:478-481`, `:564-567`, `:823`); `SKILL-APP:112`.
-5. **Show the key beside the act wherever there is room, in a short notation, leaving out the modifier every key shares.** Omarchy's shell does not do this inside panels; Joan added it himself.
-   Evidence: `~/.local/bin/app-keybinding-hints:2-4`; `DeedButton.qml:16`; herdr footers (3.3); the gap in 2.5.
+5. **Show the key beside the act wherever there is room, in a short notation, leaving out the modifier every key shares.** Omarchy's shell does not do this inside panels; the setup this was read from adds it itself.
+   Evidence: that setup's own key-hint script; `DeedButton.qml:16`; herdr footers (3.3); the gap in 2.5.
 6. **Give each modifier layer one meaning and keep it.** Plain = go or act; Shift = the reverse, or move the thing, or one level up; Alt = the variant or the finer step; Ctrl = the bigger step or the system surface. Put all acts on one object on one key.
    Evidence: table (C); comma family (`BIND/utilities.lua:24-29`); herdr c/r/k/p/n with Shift (3.2).
 7. **Letters are mnemonics; digits jump to the nth place in the order drawn; arrows are directions.** Add j/k/h/l only where typing is not filtering.
@@ -66,7 +66,7 @@ Each rule is tied to the evidence above. "Palette" = the app's one list of comma
     Evidence: 2.8 (`Clipboard.qml:369-371`; `ConfirmDialog.qml:27-36,97-106`; `Menu.qml:1327-1332`, `:1376`).
 12. **A toggle is one row naming the act available now; a choice marks the current option with a check; an unavailable row stays, dim.** No switch to aim at.
     Evidence: MENU:60-61, 17-21; `Menu.qml:1499`.
-13. **Feedback is a glyph and 2 to 4 words, auto-dismissed; a failure says what and what next; a repeat replaces the last one; nothing changes width or position; persistent state is a small mark that exists only while the state does.** Assume toasts are off (Joan's are).
+13. **Feedback is a glyph and 2 to 4 words, auto-dismissed; a failure says what and what next; a repeat replaces the last one; nothing changes width or position; persistent state is a small mark that exists only while the state does.** Assume toasts are off (they are in the setup this was read from).
     Evidence: 2.11; section 5; 4.7 "nothing jumps"; `notifications-off:2`.
 14. **A row of many agents is a dot, then the task's name, then where it runs, dimmer;** the name is set once, 3 to 5 words, and elides on the right; rows are dense with fixed height; a cut list shows part of the next row; order can switch to "who needs me"; the dot alone carries the state (idle, working, blocked, done until looked at).
     Evidence: 3.4 (`config.toml:106-114`; `machine-setup/SKILL.md:290`; `AGENTS.md:14`; herdr `row_gap`, `agent_panel_sort`); `Menu.qml:131-133`.
@@ -103,7 +103,7 @@ Rules that cut across the layers (OBSERVED):
 | Two keys for one act are allowed for a habit (W and Q both close; Return and B both open the browser) | tiling.lua:1-2; applications.lua:3,6 |
 | A key that would collide is rebound, and the user is told what it used to do | SKILL-OM/hyprland.md:50-51 |
 
-## herdr (Joan's config; 3.1)
+## herdr (one person's config; 3.1)
 
 | Layer | Meaning | Examples (config.toml line) |
 |---|---|---|
