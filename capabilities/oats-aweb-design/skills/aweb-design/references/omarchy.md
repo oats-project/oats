@@ -1,7 +1,7 @@
 # Omarchy: the command-first way
 
 We don't take Omarchy's look. The aweb app looks like bb, and a theme can change that.
-We take how Omarchy is driven: everything by a key or a typed command. bb has the base for it (one command registry, a palette) but is still pointer-led, and Octolens has keys only in its onboarding. This file is what they don't give.
+We take how Omarchy is driven: everything by a key or a typed command. bb has the base for it (one command registry, a palette) but is still pointer-led. This file is what it doesn't give.
 
 Read from Omarchy as installed, and from herdr's config, 26 Nov 2026. Nothing was run. The complete extraction, look included, is `full/omarchy-principles.md`.
 

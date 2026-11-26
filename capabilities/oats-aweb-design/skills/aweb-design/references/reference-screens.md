@@ -1,7 +1,6 @@
 # Reference screens
 
-A live prototype of the bb extension:
-https://octolens.dsp.so/iIl0jTlJ-oats-in-bb-the-end-state-live
+There is a live prototype of the bb extension. Your task gives its link. If it doesn't, ask your person.
 
 It was made before this skill, when the product was called OATS. Read "OATS" in it as "aweb". Its colours are its own: ignore them. The look is bb's, from theme tokens. It is mostly click-first: don't copy that. The prototype as a whole is not approved. These elements are:
 

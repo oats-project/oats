@@ -12,7 +12,7 @@ Agent Web, known as aweb, has two faces. Know which one you are designing before
 **The aweb app.** Our own app. We own its design.
 - It looks like bb: bb's tokens, sizes and components. Anyone who wants another look makes a theme. See `references/bb.md`.
 - It is moldable, like bb: a small core, and the user asks the aweb agent for the rest.
-- It behaves like Octolens: quiet, exact, nothing jumps. See `references/octolens.md`.
+- It behaves quietly: exact, and nothing jumps. See `references/behaviour.md`.
 - It is driven like Omarchy: by commands and keys. See `references/omarchy.md`.
 
 **The bb extension.** aweb inside bb. We own no design there.
@@ -123,7 +123,7 @@ Words:
 - The user asks the aweb agent for a page, a panel or a command, and the app adds it.
 - Our pages use the same slots as theirs. The design must hold when a user has added 20 things we never saw.
 
-**Behaviour** (`references/octolens.md`)
+**Behaviour** (`references/behaviour.md`)
 - Hairlines and white space make the structure. No box in a box.
 - Say a thing once, in one sentence. The explanation goes behind an (i).
 - Asking the agent is an element on the page: the dock at the bottom right.
@@ -161,9 +161,9 @@ Details in `references/bb.md`.
 ## References
 
 - `references/voice.md`: where the voice comes from, with before and after.
-- `references/omarchy.md`: Omarchy's command-first way: what bb and Octolens don't give.
+- `references/omarchy.md`: Omarchy's command-first way: what bb doesn't give.
 - `references/bb.md`: bb in 20 rules, what gives a foreign screen away, what a plugin can and can't do.
-- `references/octolens.md`: Octolens's taste in 12 rules, the dock and the ask bar.
+- `references/behaviour.md`: how aweb acts, in 10 rules, the dock and the ask bar.
 - `references/claude-code-input.md`: how Claude Code asks for input.
 - `references/reference-screens.md`: the prototype and the approved elements.
 - `references/full/`: the complete extractions, every rule with its file and line.
