@@ -1,0 +1,10 @@
+schemaVersion: 2
+name: aweb-designer
+description: The aweb designer. It designs the screens and the text of Agent Web (the aweb app and the bb extension) by the aweb-design rules, as live prototypes a person can click. It asks the bb lead "can bb do this?" before it shows a bb design, and it asks a fresh design QA to check each design.
+work: directory
+# No knowledge slot yet: the design rules are the aweb-design skill, not a node.
+knowledge: none
+# oats.core, oats.bb and messaging come from the workspace defaults.
+capabilities:
+  oats.aweb-design: { from: here }             # the design rules, and the aweb voice
+launch: { harness: pi, model: github-copilot/claude-fable-5.2 }   # the role's preference; each machine may override it
