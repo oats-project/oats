@@ -1776,7 +1776,7 @@ async function instanceCmd() {
     console.log(`${d.file.origPath ? `${d.file.origPath} -> ` : ""}${d.file.path} (${d.file.kind}, against ${d.against})${d.binary ? " [binary]" : ""}${d.truncated ? ` [truncated at ${d.limit} bytes]` : ""}`);
     if (!d.binary) process.stdout.write(d.patch);
   } catch (e) {
-    bail(e.code || "E_GIT_FAILED", e.message, e.observation ? { observation: e.observation } : undefined);
+    bail(e.code || "E_GIT_FAILED", e.message, e.observation ? { observation: e.observation } : e.details);
   }
 }
 /** `oats readiness (--soul <name> [--agents-root <abs>] [--dir <d>] | --home <abs>) [--policy] --json` — readinessApi 2. */

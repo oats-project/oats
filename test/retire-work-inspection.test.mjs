@@ -8,6 +8,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { capabilityFiles } from "./helpers/v2-deployment.mjs";
+import { NO_LAZY_FETCH_GIT } from "../lib/instance-git.mjs";
 import { pathLimitSkip } from "./helpers/path-limit.mjs";
 import { workRecoveryLines } from "../lib/retire-output.mjs";
 import { lifecyclePlan } from "../packages/client/lifecycle-contract.mjs";
@@ -509,10 +510,10 @@ test("#679 --discard-worktree that Git refuses (a locked worktree) is a refusal:
   }
 });
 
-// GIT_NO_LAZY_FETCH is Git 2.44's; an older Git ignores it, and the retire then has no protection to test.
+// Exercise a missing-object read only where the shared no-lazy-fetch floor admits a partial clone.
 const [gitMajor, gitMinor] = (/(\d+)\.(\d+)/.exec(execFileSync("git", ["--version"], { encoding: "utf8" })) || []).slice(1).map(Number);
-const gitHasNoLazyFetch = gitMajor > 2 || (gitMajor === 2 && gitMinor >= 44);
-test("#662 a retire's read of an object the repository lacks never fetches it: a promisor remote that the work's own configuration names does not run, and the copy refuses", { skip: !gitHasNoLazyFetch && "Git before 2.44 has no GIT_NO_LAZY_FETCH" }, () => {
+const gitHasNoLazyFetch = gitMajor > NO_LAZY_FETCH_GIT[0] || (gitMajor === NO_LAZY_FETCH_GIT[0] && gitMinor >= NO_LAZY_FETCH_GIT[1]);
+test("#662 a retire's read of an object the repository lacks never fetches it: a promisor remote that the work's own configuration names does not run, and the copy refuses", { skip: !gitHasNoLazyFetch && `Git before ${NO_LAZY_FETCH_GIT.join(".")} refuses partial-clone reads` }, () => {
   const f = fixture();
   const spawned = spawn(f, "lazy");
   const work = join(spawned.home, "work");

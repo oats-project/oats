@@ -5127,13 +5127,16 @@ that name: `E_AMBIGUOUS_INSTANCE {candidates: [{root, agent, home}]}` (pass
 tree: `E_NO_WORKTREE`.
 
 `E_NO_WORKTREE` is answered when nothing is at `<home>/work`, when it is not
-inside a Git work tree, and (0.53.0, #962) when it is a real directory that
+inside a Git work tree (including when Git is unavailable or times out
+during classification), and (0.53.0, #962) when it is a real directory that
 is not the top level Git names for it. Git answers for any directory inside
 a work tree, so a plain `work/` in a home whose deployment directory is a
 Git checkout was read as that checkout before: its branch and its files,
 none of them the instance's. The rule is the path, in every work mode: a
 `directory` instance in such a deployment has no work tree, and one whose
 `work/` is the top level of a repository of its own is observed as before.
+Git's top-level answer decides this even when the gitdir is outside `work/`;
+an owned tree still gets the configuration checks and filter overrides below.
 A `work/` that is a link is read as what it leads to, wherever that is: a
 `workspace` instance's leads to the deployment directory, which is above its
 home, and is observed as before. A [stop plan](#stop)'s and a
@@ -5187,8 +5190,27 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
 - The read runs without external diff, textconv, fsmonitor, hooks, lazy
   fetch, the caller's Git environment or global config, and writes nothing
   (`readOnly`). An object a partial clone lacks is not fetched: the read
-  fails with `E_GIT_FAILED` (with Git 2.44 or later; an older Git ignores
-  `GIT_NO_LAZY_FETCH`).
+  fails with `E_GIT_FAILED`. Before reading objects, a partial clone needs
+  Git 2.45 or later. Older or unparseable Git versions refuse with
+  `E_GIT_UNSUPPORTED`, message `this repository is a partial clone, and
+  reading it safely needs Git 2.45 or later; this is Git <found>`, and
+  `details: {found, minimum: "2.45", reason: "partial-clone"}`. `found` is
+  `"an unknown version"` when unparseable. The configuration read below also
+  detects partial clones (`extensions.partialClone` set, or
+  `remote.<name>.promisor` true); the version is probed once per observation
+  or diff, with no cache across calls. Every populated submodule is checked
+  recursively too, across the whole top level even when `work/` links into
+  a subdirectory. A repository with populated submodules probes the version;
+  below the floor or on an unknown version, the same check reads their configs.
+  At or above the floor it reads no submodule config. A refusal names
+  `details.submodule`, the path relative to the outer repository with `/`
+  separators, and uses `the submodule <path> is a partial clone, and reading
+  it safely needs Git 2.45 or later; this is Git <found>`. The key is absent
+  for a partial clone at the root. Full clones without populated submodules
+  work as before, without a version probe when discovery succeeds. If the
+  populated-submodule listing fails, the read probes once: modern Git proceeds
+  under its own guard; older or unknown Git refuses with `E_GIT_FAILED`.
+  An incomplete listing never proves that no submodules exist.
 - **Filter drivers are not run.** Git runs a `filter.<name>.clean` or
   `.process` command when a status or a diff compares a work-tree file that
   carries the `filter` attribute, and it has no switch that turns filters
@@ -6301,6 +6323,7 @@ had begun.
 | `E_REMOTE_INCOMPATIBLE` | yes | yes |
 | `E_AMBIGUOUS` | yes | yes |
 | `E_SNAPSHOT_UNKNOWN` | yes | yes |
+| `E_GIT_UNSUPPORTED` | | yes |
 
 `E_UNIDENTIFIED_INSTANCE_HOME` includes cleanup-hook admission in both retire
 plan and apply; the refusal returns no work facts when the home cannot be identified.
@@ -7340,6 +7363,7 @@ none), `reached`, and a message that ends with the sentence the typed refusals a
 |---|---|---|
 | before the home's retire begins (the resolution, the plan a guarded apply reads) | `E_LIFECYCLE_FAILED`, no `reached` | `Nothing was done: <instance> is not retired.` |
 | the claim cannot be taken (its directory cannot be made, its file cannot be written) | `E_LIFECYCLE_FAILED`, no `reached` | `the claim <path> could not be taken (…); nothing was done` |
+| a repository the retire reads is a partial clone, and Git is below 2.45 or its version cannot be parsed | `E_GIT_UNSUPPORTED` | `nothing was done`; `details` carries `found`, `minimum: "2.45"` and `reason: "partial-clone"`. For a populated partial-clone submodule, `details.submodule` names its path relative to the outer repository with `/` separators, and the message starts `the submodule <path> is a partial clone`. No hooks, copy, removal or recovery write; the home, worktree and branch stay unchanged. `--plan` refuses the same way. |
 | an inspection of the home or the work meets an entry it cannot read, or one that is gone when it is read | `E_WORK_INSPECTION_FAILED` | the sentence of its phase: `Nothing was stopped, run or removed.` (or, once it has signalled the hook group an interrupted spawn left, `The worktree hook process group <pgid> that an interrupted spawn left was ended; no session was stopped, no retire hook was run and nothing was removed.`, with `was signalled and may still run` when it is not seen to have ended); `No retire hook has run and nothing was deleted: <instance> is not retired and its home and work are kept; …`; `The retire hooks have run; the home, its work and the pre-hook recovery (if any) are kept; …` |
 | anything else before the removal | `E_LIFECYCLE_FAILED` | the sentence of its phase; once the retire has begun to remove or re-home trees, `The retire hooks have run; the home is kept, and so is any recovery the retire wrote; …` and what it has already done with them |
 | the removal of the home (a directory that is written into while it is removed, or that cannot be emptied) | `E_LIFECYCLE_FAILED`, `reached.home: "partial"` | `<instance>: the directory at <home> could not be removed: … The retire hooks have run; its recovery (complete) is at <path>; its retired event is recorded; what is left at <home> may not be a whole instance home; …` |

@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { filterOverrides, gitRead, gitRepoRun, parsePorcelainV2, parseRemoteUrl } from "../lib/instance-git.mjs";
+import { NO_LAZY_FETCH_GIT, filterOverrides, gitRead, gitRepoRun, parsePorcelainV2, parseRemoteUrl } from "../lib/instance-git.mjs";
 import { deploymentsImported } from "./helpers/host-fixture.mjs";
 
 const CLI = resolve(new URL("../bin/oats.mjs", import.meta.url).pathname);
@@ -293,10 +293,10 @@ test("hardening: a filter driver whose name Git's -c cannot carry refuses the ob
   assert.equal(existsSync(fx.sentinel), false, "the filter was not run");
 });
 
-// GIT_NO_LAZY_FETCH is Git 2.44's; an older Git ignores it, and there is no protection to test.
+// Exercise a missing-object read only where the shared no-lazy-fetch floor admits a partial clone.
 const [gitMajor, gitMinor] = (/(\d+)\.(\d+)/.exec(execFileSync("git", ["--version"], { encoding: "utf8" })) || []).slice(1).map(Number);
-const gitHasNoLazyFetch = gitMajor > 2 || (gitMajor === 2 && gitMinor >= 44);
-test("hardening: an object the repository lacks is never fetched, so a promisor remote its configuration names never runs; the observation fails instead", { skip: !gitHasNoLazyFetch && "Git before 2.44 has no GIT_NO_LAZY_FETCH" }, () => {
+const gitHasNoLazyFetch = gitMajor > NO_LAZY_FETCH_GIT[0] || (gitMajor === NO_LAZY_FETCH_GIT[0] && gitMinor >= NO_LAZY_FETCH_GIT[1]);
+test("hardening: an object the repository lacks is never fetched, so a promisor remote its configuration names never runs; the observation fails instead", { skip: !gitHasNoLazyFetch && `Git before ${NO_LAZY_FETCH_GIT.join(".")} refuses partial-clone reads` }, () => {
   const work = repo(join(base, "r-lazy"));
   write(join(work, "later.txt"), "later\n"); git(work, "add", "later.txt"); git(work, "commit", "-qm", "a commit only this repository has");
   const head = git(work, "rev-parse", "HEAD");

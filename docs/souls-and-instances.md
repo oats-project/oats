@@ -768,8 +768,30 @@ or external diff that the repository's own configuration names runs, and
 with `GIT_NO_LAZY_FETCH=1`: an object the repository lacks (a promisor
 repository's) is a read that fails, never a fetch through the remote, remote
 helper, ssh command or credential helper its configuration names. That
-protection needs Git 2.44 or later; an older Git ignores the variable, so it
-gets none, and nothing else changes. The
+protection needs Git 2.45 or later. Before reading objects, retire (including
+`--plan`) refuses a partial clone on older Git or when its version cannot be
+read, with `E_GIT_UNSUPPORTED`: nothing was done, and the home, worktree,
+branch and recovery are unchanged. A repository is a partial clone when its
+effective configuration sets `extensions.partialClone` or sets a remote
+`promisor` to true. This includes populated submodules at any depth: their
+configs are checked only below that floor or when the version is unknown,
+and a refusal names the submodule's path relative to the outer repository
+in `details.submodule`. At or above the floor no submodule config is read
+for this check. Only inspected working trees recurse into their submodules;
+object/ref-only sources (the recorded repository, for example) check their
+own config, and do not inspect that checkout's submodules. For a tree-reading
+source, one Git metadata read resolves the gitdir and the top level Git
+walks. A `.git` entry admits its own config only when Git resolves that
+directory or gitfile target; an invalid empty `.git` does not admit an
+enclosing checkout. A nested source whose working tree is elsewhere still
+has that tree inspected by the copier: its populated submodules are checked
+there, with paths relative to that top level in `details.submodule`. Full
+clones without populated submodules need no version probe when discovery
+succeeds. Failed discovery probes once: a modern Git proceeds under its own
+guard, and older or unknown Git refuses inspection. A plain work directory
+does not admit an enclosing checkout's config as its own: Git's top-level
+answer classifies the tree.
+An incomplete listing never proves that no submodules exist. The
 caller's repository-local Git variables are not passed: Git's own list
 (`git rev-parse --local-env-vars`: `GIT_DIR`, `GIT_WORK_TREE`,
 `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, the object directories, `GIT_CONFIG`,
@@ -1732,6 +1754,13 @@ leaves `work/` untouched. For each tree:
   `detached-<12 hex>` when HEAD is detached. A target that exists gets `-2`,
   `-3`, and so on. A tree whose HEAD cannot be read is re-homed too.
   `work/` is re-homed under the same rule.
+
+  The status is checked again after the hooks. If a hook adds a populated
+  partial submodule that Git cannot read safely, that status is not run and
+  the tree is kept as unreadable. Its `reason` stays a string, including
+  `E_GIT_UNSUPPORTED: <message>`. If Git refuses the move because the tree
+  has submodules, the existing preservation refusal keeps the home and tree
+  in place and includes that reason.
 
   The leaf is one path component, so it is bounded: at most 231 bytes before
   its `-N` (NAME_MAX, 255, less a 16-byte margin and 8 bytes kept for `-N`;
