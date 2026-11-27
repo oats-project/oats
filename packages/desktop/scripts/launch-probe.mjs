@@ -4,18 +4,21 @@
 // Pure/injected: no Electron, no real processes.
 
 // Phase budgets the smoke's watchdog must exceed. The launch path is the
-// long pole: readiness poll + CDP evaluate, on top of inventory and the ABI
-// probe (which re-execs the packaged binary and eats the same cold-start
-// cost). The watchdog is DERIVED from these so it can never fire before a
-// legitimately-slow-but-succeeding run completes (review ee04a44-r2
+// long pole: readiness poll + CDP evaluate, on top of inventory, Rosetta's
+// first start and the ABI probe. The watchdog is DERIVED from these so it can
+// never fire before a legitimately-slow-but-succeeding run completes (review ee04a44-r2
 // finding 1); a test asserts WATCHDOG_MS > sum(phase budgets).
 export const PHASE_BUDGET_MS = {
   inventory: 10_000,
   // The Linux glibc floor (linux-floor.mjs): unpack the DEB and the AppImage
   // and read every ELF file's version needs. A few seconds on a CI runner.
   linuxFloor: 120_000,
-  // Rosetta's first x64 translation/start on a fresh arm64 CI runner can
-  // exceed 30s. Keep one bounded phase budget that covers native + Rosetta.
+  // Rosetta's first translation/start of the packaged x64 app on arm64 macOS,
+  // before any JS runs: 71–74s (Build Installers runs 45528030186, 45530061857),
+  // 47s on a re-run, and beyond 90s (45551595575, 45554527800 attempt 1).
+  rosettaWarmup: 240_000,
+  // Loading node-pty and spawning its shell under the packaged Electron ABI,
+  // including process startup after the separate Rosetta warm-up on the x64 leg.
   abiProbe: 90_000,
   // The headless backend phase (smoke-probes.mjs runBackendProbe): the
   // packaged backend's first answer (a cold start, under Rosetta on the x64

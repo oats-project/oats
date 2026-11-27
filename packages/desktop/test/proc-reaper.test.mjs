@@ -221,6 +221,104 @@ test("smoke probe contract: runAbiProbe refuses to run without a reaper runTrack
   assert.equal(tR.ok, false); assert.match(tR.detail, /timed out/);
 });
 
+test("Rosetta warm-up: tracked first start reports elapsed seconds and reaps the group", async (t) => {
+  const { runRosettaWarmup } = await import("../scripts/smoke-probes.mjs");
+  const calls = [], killed = [], ticks = [1000, 64_000];
+  const reaper = createReaper({
+    spawn: (exe, args, opts) => {
+      const child = fakeChild();
+      calls.push({ exe, args, opts, pid: child.pid });
+      queueMicrotask(() => { child.emit("exit", 0); child.emit("close", 0); });
+      return child;
+    },
+    killGroup: (pid) => killed.push(pid),
+  });
+  t.after(() => reaper.reapAll());
+  const result = await runRosettaWarmup(reaper, "/pkg/x64/App", {
+    platform: "darwin", hostArch: "arm64", targetArch: "x64", env: { KEEP: "yes", ELECTRON_RUN_AS_NODE: "0" },
+    now: () => ticks.shift(),
+  });
+  assert.deepEqual(result, { ok: true, detail: "Rosetta x86_64 first start of the packaged app: 63 s" });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].exe, "/usr/bin/arch");
+  assert.deepEqual(calls[0].args, ["-x86_64", "/pkg/x64/App", "-e", "process.exit(0)"]);
+  assert.deepEqual(calls[0].opts.env, { KEEP: "yes", ELECTRON_RUN_AS_NODE: "1" });
+  assert.equal(calls[0].opts.detached, true);
+  assert.deepEqual(killed, [calls[0].pid]);
+  assert.equal(reaper.pendingGroups().size, 0);
+});
+
+test("Rosetta warm-up: native legs skip without calling runTracked", async () => {
+  const { runRosettaWarmup } = await import("../scripts/smoke-probes.mjs");
+  let calls = 0;
+  const reaper = { runTracked: () => { calls++; throw new Error("native warm-up must not run"); } };
+  for (const how of [
+    { platform: "darwin", hostArch: "arm64", targetArch: "arm64" },
+    { platform: "darwin", hostArch: "x64", targetArch: "x64" },
+    { platform: "linux", hostArch: "x64", targetArch: "x64" },
+    { platform: "linux", hostArch: "arm64", targetArch: "x64" },
+    { platform: "darwin", hostArch: "arm64" },
+  ]) {
+    const result = await runRosettaWarmup(reaper, "/pkg/App", how);
+    assert.equal(result.ok, true);
+    assert.match(result.detail, /Rosetta warm-up skipped/);
+  }
+  assert.equal(calls, 0);
+});
+
+test("Rosetta warm-up: requires runTracked and reports its own timeout and non-zero exit", async (t) => {
+  const { runRosettaWarmup } = await import("../scripts/smoke-probes.mjs");
+  const how = { platform: "darwin", hostArch: "arm64", targetArch: "x64" };
+  for (const bad of [undefined, {}, { runTracked: "not-a-fn" }]) {
+    const result = await runRosettaWarmup(bad, "/pkg/App", how);
+    assert.equal(result.ok, false);
+    assert.match(result.detail, /warm-up.*requires.*runTracked/);
+  }
+  for (const timeout of [true, false]) {
+    let child;
+    const reaper = createReaper({
+      spawn: () => {
+        child = fakeChild();
+        if (!timeout) queueMicrotask(() => {
+          child.stderr.emit("data", "translation failed");
+          child.emit("exit", 7); child.emit("close", 7);
+        });
+        return child;
+      },
+      killGroup: () => { if (timeout) queueMicrotask(() => { child.emit("exit", null); child.emit("close", null); }); },
+    });
+    t.after(() => reaper.reapAll());
+    const result = await runRosettaWarmup(reaper, "/pkg/App", { ...how, timeout: 20 });
+    assert.equal(result.ok, false);
+    assert.match(result.detail, timeout ? /Rosetta warm-up.*timed out \(group killed\)/ : /Rosetta warm-up.*failed \(exit 7\): translation failed/);
+    assert.doesNotMatch(result.detail, /node-pty/);
+    assert.equal(reaper.pendingGroups().size, 0);
+  }
+});
+
+test("Rosetta warm-up: real reaper executes the trivial Node source and leaves no group", async (t) => {
+  const { runRosettaWarmup } = await import("../scripts/smoke-probes.mjs");
+  // Only the cross-architecture launcher is substituted at the process boundary.
+  const reaper = createReaper({ spawn: (_exe, args, opts) => spawn(process.execPath, args.slice(2), opts) });
+  t.after(() => reaper.reapAll());
+  const result = await runRosettaWarmup(reaper, process.execPath, {
+    platform: "darwin", hostArch: "arm64", targetArch: "x64", timeout: 10_000,
+  });
+  assert.equal(result.ok, true, result.detail);
+  assert.match(result.detail, /first start of the packaged app: \d+(\.\d+)? s$/);
+  assert.equal(reaper.pendingGroups().size, 0);
+});
+
+test("smoke warm-up precedes the ABI probe and uses its own phase budget", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../scripts/dist-smoke.mjs", import.meta.url), "utf8");
+  const warmup = src.indexOf("await runRosettaWarmup(reaper"), abi = src.indexOf("await runAbiProbe(reaper");
+  assert.ok(warmup >= 0 && warmup < abi);
+  assert.match(src.slice(warmup, abi), /timeout: PHASE_BUDGET_MS\.rosettaWarmup/);
+  assert.match(src.slice(warmup, abi), /if \(!r\.ok\) fail\(r\.detail\)/);
+  assert.match(src.slice(warmup, abi), /ok\(r\.detail\)/);
+});
+
 // ---- the smoke itself must not regress to synchronous probing --------------
 test("smoke source contract: dist-smoke has no synchronous child execution and probes via runAbiProbe", async () => {
   const { readFileSync } = await import("node:fs");
