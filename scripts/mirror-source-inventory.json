@@ -921,13 +921,13 @@
     "oats.bb": {
       "pin": {
         "url": "https://github.com/oats-project/oats-bb.git",
-        "ref": "v0.5.1",
+        "ref": "v0.8.0",
         "path": "oats-package"
       },
-      "commit": "563e53a001e2e24872c40e99e3f5253efe48b868",
-      "tagObject": "283b17355a91c5ab1fe89d7cde82db72d6fce346",
-      "manifestText": "{\n  \"package\": \"oats.bb\",\n  \"version\": \"0.5.1\",\n  \"compatibility\": {\n    \"oats\": \">=0.70.5\"\n  },\n  \"description\": \"OATS on bb: the bb session provider (an instance as one bb thread).\",\n  \"capabilities\": [\n    \"capabilities/oats-bb\"\n  ]\n}\n",
-      "manifestSha256": "8ae17e68609ad7e3e8f4fae2f6d7e5c947cefdd79140c68442d049fa81921eb3",
+      "commit": "fd3e6798bf8343c9903446612978b4503d118fa5",
+      "tagObject": "a3c192d28881aa15a5916e3fe288995a3210b089",
+      "manifestText": "{\n  \"package\": \"oats.bb\",\n  \"version\": \"0.8.0\",\n  \"compatibility\": {\n    \"oats\": \">=0.70.5\"\n  },\n  \"description\": \"OATS on bb: the bb session provider (an instance as one bb thread).\",\n  \"capabilities\": [\n    \"capabilities/oats-bb\"\n  ]\n}\n",
+      "manifestSha256": "b9f21cf7220eb20022ca403ddbbf4dd632a9938d7c4a4f26b2d6684856d0954f",
       "entries": [
         {
           "path": "capabilities/oats-bb",
@@ -1107,7 +1107,7 @@
           "type": "file",
           "mode": "100644",
           "size": 4377,
-          "sha256": "95bb6c256dc0bcaa48988d8468437139b5a0747751703b4217909cd6662cb032"
+          "sha256": "fb0f53832358edd02b4754607ed4b817bddde47db509dbc9041853248256a76f"
         }
       ]
     },
