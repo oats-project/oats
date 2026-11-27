@@ -1,7 +1,7 @@
 {
   "capability": "oats.bb",
   "command": "bb",
-  "version": "0.5.1",
+  "version": "0.8.0",
   "compatibility": {
     "oats": ">=0.70.5"
   },
