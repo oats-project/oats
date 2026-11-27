@@ -20,7 +20,8 @@ export function boundaryControls(plan) {
   return {
     universal: ["unlisted DNS name refused", "unlisted TLS host refused", "sole isolated agents network",
       "IPv4 IPAM gateway required", "host gateway denied with live canary", "direct upstream access denied",
-      "PostgreSQL and Redis denied with live controls", "secret and socket paths absent"],
+      plan.schema === 2 ? "PostgreSQL and Redis tuples DENIED from the isolated agent and, where required, the outward bridge"
+        : "PostgreSQL and Redis denied with live controls", "secret and socket paths absent"],
     declared: roles.map(role => `${role}: proxy DNS and verified HTTPS 200`)
       .concat(roles.includes("registry") ? ["registry: exact namespace authority TXT"] : [])
       .concat(plan.policy.humanOrigin ? [`${plan.policy.humanRole ?? "signer"}: human DNS/TLS refusal; separate ingress admission required`] : []),

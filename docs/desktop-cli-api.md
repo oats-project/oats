@@ -194,6 +194,14 @@ see the [official catalog](official-catalog.md) for current pins.
 | `spawn-task-stdin` | `oats spawn <soul> --task-file -` reads the task from standard input. A spawn routed with `--server` sends its `--task` or `--task-file` text that way, to the preview and to the apply, to a host that lists this, and not as an argument; a host that does not list it gets the text as an argument, and the answer's `warnings` gains one line that says it was readable in both machines' process lists ([servers.md](servers.md#a-routed-spawns-task)) |
 | `session-providers` | session backends a capability supplies ([Session providers](#session-providers-feature-session-providers)): `--backend <provider>` on `oats spawn` (a schedule's `backend`, a trigger's `spawn.backend`); a provider home's `backend`, `session` and `open` on its status row (the endpoint only on its local inspect, spawn and start answers; nothing of it relayed); `backend: "tmux"` on a tmux home's status row; `sessionProviders` in `oats inspect` and `oats capabilities show`; a provider's readiness in `oats readiness`; `backends` on a capability's `requires` row; the codes `E_BACKEND_UNKNOWN`, `E_BACKEND_AMBIGUOUS`, `E_BACKEND_HARNESS`, `E_BACKEND_LAUNCH_ARG`, `E_BACKEND_NOT_READY`, `E_SESSION_NO_TERMINAL`, `E_SESSION_PROMPT_OPEN`, `E_SESSION_INPUT_QUEUED`; `backend` on the sweep's rows of provider homes; `oats session resume --plan --without-provider-inspect`, which is `oats host run`'s own switch for its shutdown listing, not a client's. A routed `--backend <provider>` is sent only to a host that lists it. |
 | `provider-outside-oats` | a harness that runs in a provider home an operator stopped is reported: `outsideOats: {code: "running-outside-oats", backend, message}` on that home's `oats status --json` row and its `oats server roster --json` row, present only when it applies: a home an operator stopped ([`outsideOats`](#row-outside-oats)). The row's `running`, `runtimeState` and `sessionEnd` stay what OATS recorded. A home stopped with the host whose harness runs again has no key: it reads running, and the sweep adopts it. The provider's `stop` input carries `reason: "host"` for every stop of a recorded session after which the home stays stopped with the host: the host shutdown's, the stop after a failed resume notice of such a home, and the stop after an input that crossed a stop with the host; never a stop with `endpoint: null`. A row from a kernel or a host without the feature never carries the key, so its absence says nothing there. `oats instance upgrade` refuses such a home (`E_SESSION_RUNNING`). |
+| `launch-model-and-check-warnings` | a session provider's `check` is handed the model of the launch that is planned, `launch.model`, present only when the launch names one; and what a `ready` check warned of is relayed, one string per warning, in the `warnings` of `oats spawn --preview`, `oats launch-config preview --home`, and the answers of `oats spawn`, `oats session start` and `oats session restart` ([Relayed check warnings](#relayed-check-warnings)). The lines are text for a person: show them, never parse them. A kernel without the feature hands no model and drops those warnings; nothing else differs, so a client needs no gate, and a provider gates on it what it can judge only from the model | |
+| `status-activity` | the turn fact: `activity` (`"working"`, `"idle"` or `null`) on `oats status --json` instance rows and `oats server roster --json` rows, present only on a row whose session is there ([`activity`](#row-activity)). A tmux row reads it from the turn boundaries its harness's hooks write (oats.core for Claude Code, `@awebai/oats-pi` for pi; a Codex row reads `null`); a provider row carries its provider's answer, the optional `activity` key of `inspect` and `inspectMany` ([capabilities.md](capabilities.md#inspect-and-inspectmany)). Display only: no act reads it. A row from a kernel or a host without the feature never carries the key, so its absence says nothing there. |
+| `session-input-permission-refusal` | `oats session input` to a tmux home whose session holds a `permission` claim is refused `E_SESSION_PROMPT_OPEN`, with nothing typed, as a session provider refuses it ([Input](#input)). On a kernel without the feature that input is typed and its Enter answers the prompt, so read the code as "a prompt is open, nothing was sent" for a tmux home only where the feature is listed | |
+| `wake-starts-provider-home` | a due `wake` starts a home on a session provider that OATS stopped, at its due minute, in a new session, as it starts a stopped tmux home; its message is delivered once the session runs ([schedules.md](schedules.md#kinds)). The run's record is a tmux start's (`action: "started"`, then `delivered`), with no new field. A kernel without the feature never starts such a home: the run stays `skipped`, `errorCode: "E_SESSION_NOT_RUNNING"`, until a person starts it. A client that tells a person what a wake to a provider home will do reads this feature | |
+| `launch-choices` | provider-declared launch choices: `--launch-choice <name>=<value>` (repeatable) on `oats spawn`, `oats session start` and `oats session restart`, for a name the home's session provider declares in its manifest (`sessionProviders.<name>.launchChoices`); refused `E_BAD_ARGS`, never dropped, for any other name, on a tmux home, and for a recorded choice the provider no longer declares ([Launch choices](#launch-choices-feature-launch-choices)). No answer gains a key: a recorded choice is in no row, receipt or inspect answer. A routed command with the flag needs the host's feature (`E_REMOTE_INCOMPATIBLE`, nothing sent). `launchOptions` in the probe is the kernel's own list and is unchanged | |
+| `trigger-failure-history` | a trigger's failed spawns as rows: `failures` (newest first, at most 50, `{attempt, at, key, event, subject, number, code, message, instance?, home?, resolved?}`) and `failuresTotal` on each row of `oats trigger status --json` ([`oats trigger`](#oats-trigger)). Every text is bounded and made safe to show as text; a row gains `resolved: {at, instance}` when a later attempt of its key spawns. Absent: neither key, and `lastError` holds only the last failure | |
+| `status-automation` | the schedule or trigger that made an instance: `automation` (`{kind: "schedule" \| "trigger", id, qualifiedId}` or `null`) in `instance.json`, on the `spawned` event and on `oats status --json` rows; on a remote row only from a host that lists the feature ([Made by an automation](#made-by-an-automation)). A label, never proof. Absent: no `automation` key anywhere | |
+| `settings-set` | `oats settings set <capability> <key> <value>` and `oats settings unset <capability> <key>`: one host setting recorded in the deployment's `oats-local.yaml` by the kernel's own writer and the resolver's own checks, answering `{capability, key, previous, value, effective, changed, file}` ([`oats settings`](#oats-settings)). An operator's command: `E_SETTINGS_OPERATOR_ONLY` inside an instance. Absent: no such command (`E_UNKNOWN_COMMAND`), and a host setting is a hand edit | |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
 `workspaceStatusApi: 1`, `capabilitiesApi: 1`, the `oats souls` document's
@@ -332,7 +340,7 @@ for `--no-recursive`) is never ignored.
 | Command | Arguments | Flags that take a value | Switches | Refused in their own words | Its own answers |
 |---|---|---|---|---|---|
 | `oats retire` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir`, `--server` | `--plan`, `--self`, `--discard-worktree`, `--keep-dir`, `--force`, `--json` | `--delete-branch` | none |
-| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-config`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--related-work`, `--same-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral` | an unknown flag, an argument after the last |
+| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-choice`, `--launch-config`, `--made-by-automation`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--related-work`, `--same-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral` | an unknown flag, an argument after the last |
 | `oats sync` | none | `--dir` | `--plan`, `--json` | `--approve` | none |
 | `oats instance stop` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--grace-ms`, `--home`, `--dir`, `--server` | `--plan`, `--apply`, `--no-recursive`, `--json` | none | none |
 | `oats instance upgrade` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir` | `--undo`, `--plan`, `--json` | `--server` | none |
@@ -350,8 +358,8 @@ for `--no-recursive`) is never ignored.
 | `oats instance suggest-name` | none | `--soul`, `--task`, `--task-file`, `--harness`, `--model`, `--launch-config`, `--dir` | `--json` | `--server` | none |
 | `oats worktree add` | none | `--purpose`, `--branch`, `--base`, `--repo` | `--preview`, `--json` | `--server`, `--dir`, `--home` | none |
 | `oats worktree remove` | none | `--purpose` | `--json` | `--server`, `--dir`, `--home` | none |
-| `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | `--native-record` | none |
-| `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--native-record`, `--resume` | none |
+| `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--launch-choice` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | `--native-record` | none |
+| `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--launch-choice`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--native-record`, `--resume` | none |
 | `oats session resume` | none | `--deployment` | `--plan`, `--without-provider-inspect`, `--json` | `--native-record`, `--server` | none |
 | `oats session input` | none | `--home`, `--text-file` | `--json` | `--native-record` | none |
 | `oats session receive` | none | `--home`, `--name` | `--json` | `--native-record` | none |
@@ -374,6 +382,8 @@ for `--no-recursive`) is never ignored.
 | `oats trigger remove` | `<id>` | `--dir` | `--json` | none | none |
 | `oats trigger enable` | `<id>` | `--dir` | `--json` | none | none |
 | `oats trigger disable` | `<id>` | `--dir` | `--json` | none | none |
+| `oats settings set` | `<capability>` `<key>` `<value>` | `--dir` | `--json` | `--server` | none |
+| `oats settings unset` | `<capability>` `<key>` | `--dir` | `--json` | `--server` | none |
 | `oats teams` | none | `--dir`, `--max-age` | `--json` | none | an unknown flag, an argument after the last |
 | `oats teams add` | `<label>` | `--dir`, `--team`, `--description` | `--no-default`, `--json` | none | an unknown flag |
 | `oats teams remove` | `<label>` | `--dir` | `--json` | none | an unknown flag |
@@ -444,6 +454,7 @@ kernel command.
 |---|---|
 | `E_NODE_UNSUPPORTED` | Node.js is older than 22: before every command, exit 1 with `details: {found: "<process.versions.node>", minimum: "22"}` and message `oats needs Node.js 22 or later; this is Node.js <found>`. With `--json` anywhere in argv, stdout is one failure envelope; otherwise the message is on stderr. This includes the `version --json` probe, whose success shape is not the envelope: on unsupported Node it answers this failure envelope with exit 1. Node 18 and 20 get this refusal; a Node too old to parse the entry can fail with a SyntaxError first |
 | `E_UNKNOWN_COMMAND` | No kernel command or capability namespace matches; an unknown capability subcommand; a [removed verb](#removed-verbs-and-flags) (`details: {removed, replacement}`) |
+| `E_SETTINGS_OPERATOR_ONLY` | [`oats settings set\|unset`](#oats-settings) run by a process that carries an instance's identity (an instance variable, or a working directory inside a home): `details: {evidence: "environment" \| "cwd", variable?, home?, instance?}`. Nothing is written. A guard against an agent doing it by accident, not a security boundary |
 | `E_CAPABILITY_INACTIVE` | In a home: the namespace's module is not one of the home's recorded capabilities |
 | `E_CAPABILITY_BLOCKED` | In a home: the manifest claiming the namespace is not a workspace module copy of that home. There is no package trust gate |
 | `E_CAPABILITY_BROKEN` | The manifest command is not a non-empty string, its script is missing or outside the module, or the dispatcher failed |
@@ -1134,6 +1145,19 @@ Its `result`:
   names the missing ones in `unreadableConversations` (conversation ids,
   present only with that code, the list's tail dropped first if the 256 KiB
   bound needs it, so it may name fewer than failed, or none).
+- **An identity that couldn't be read.** In an `identities[]` entry,
+  `alias` and `identity` may be `""` only where `error` is non-null: the
+  provider couldn't read who that identity is. With `error: null` both are
+  non-empty, and an answer with an empty one is unreadable whole. `team` is
+  non-empty always. The rule names no provider's codes and holds for every
+  messaging provider; `error` stays the provider's opaque word. A client
+  words such an entry from `team` and `error` alone ("Mail from `<team>`
+  can't be read"), shows the rest of the mail, and never addresses, sends
+  from, replies as or matches messages to an empty `alias` or `identity`.
+  Message parties (`from`, `to`) are unchanged: their `alias` and `identity`
+  are non-empty always. `mailApi` stays 1: the rule widens what a reader
+  admits. A Desktop released before the rule refuses the whole answer when an
+  entry has an empty `alias` or `identity`, and upgrading it mends that.
 - **Whole failures.** The operation fails whole, with no answer, in two
   cases: `E_MAIL_UNREADABLE` when no identity can be read
   (`details.identities` holds the rows), and `E_MAIL_TOO_LARGE` when even an
@@ -2309,6 +2333,156 @@ One closed answer for `set`, `remove` and their plans.
   spawn of that soul selects; and each key that still names no soul, with
   the command that removes it.
 
+<a id="oats-settings"></a>
+### `oats settings`
+
+Feature `settings-set`. The supported writer of one host setting of a
+capability: `oats-local.yaml` `settings.<capability>.<key>`, the layer the
+resolver reads as the host's ([capabilities.md](capabilities.md#host-only-settings)).
+It records a choice a person made (on a first-time screen, or at a
+terminal) without a hand edit of the file.
+
+```sh
+oats settings set <capability> <key> <value> [--dir <deployment>] [--json]
+oats settings unset <capability> <key>       [--dir <deployment>] [--json]
+```
+
+Both answer `{capability, key, previous, value, effective, changed, file}`:
+
+```json
+{"schemaVersion":1,"ok":true,"result":{"capability":"oats.bb","key":"trust",
+ "previous":null,"value":"single-user","effective":"single-user","changed":true,
+ "file":"/srv/team/oats-local.yaml"}}
+```
+
+- `previous`: the value the FILE held for the key before, or `null` when it
+  set none. Never a manifest default, nor another layer's value.
+- `value`: what the file holds now; `null` after an unset.
+- `effective`: the host layer over the manifest default: the file's value,
+  or the capability's manifest default where the file sets none, or `null`.
+  For a `hostOnly` key that is what every soul resolves, so a client need
+  not guess what an unset falls back to. A committed payload (the
+  workspace's `messaging:` or `tasks:`, a soul's slot payload) and a
+  spawn's `--provider` flag are not counted: where one sets a key that is
+  not `hostOnly`, a soul resolves that value while the file sets none.
+- `changed`: `false` when the file already held that value, and for an unset
+  of a key the file does not set. Nothing is written then, and the command
+  succeeds.
+- `file`: the `oats-local.yaml` that was, or would have been, written.
+- `warnings` (only when there is one): the change was written and its line
+  in the trace was not (below).
+
+**Who may run it: an operator.** It is refused, with nothing written, when
+the process carries an instance's identity, by the evidence the kernel
+already reads: an instance variable (`OATS_INSTANCE`, `OATS_INSTANCE_HOME`,
+`OATS_HOME`, `PI_AGENT_INSTANCE`, `PI_AGENT_HOME`), or a working directory
+inside a home. That is `E_SETTINGS_OPERATOR_ONLY`, for every key, with
+`details: {evidence: "environment" | "cwd", variable?, home?, instance?}`.
+
+- The refusal names the evidence it saw and the way out: run it from a shell
+  outside any home, without the instance's variables, for example
+  `cd <deployment> && oats settings set …`.
+- A person whose shell stands inside a home is refused like an agent: from
+  the outside the kernel cannot tell them apart.
+- `--dir <deployment>` does not lift it: `--dir` says which deployment, not
+  who is asking.
+- **It is a guard against an agent changing a host setting by accident or
+  as a convenience, not a security boundary.** The variables and the working
+  directory are evidence a process can shed (unset them, change directory).
+  A host's protection against its own agents is file permissions and the
+  sandbox, and the safety of a choice like `oats.bb`'s `trust` rests on the
+  person making it, not on this refusal.
+
+**Never a secret.** A credential-shaped key is refused `E_BAD_ARGS`
+(`details.reason: "credential-key"`), for `set` and `unset`, before the file
+or the catalog is read, and its value is never repeated. A secret belongs in
+the capability's own setup command (for example `oats aweb setup`) or in the
+host's secret store, never in `oats-local.yaml`. The key's name is the whole
+rule, because no manifest marks a setting as a secret today: the name is cut
+into words at `-`, `_`, `.` and at a step from a lower-case letter or a
+digit to a capital, and it is refused when a word is `secret`, `token`,
+`password`, `passwd`, `passphrase`, `credential`, `apikey`, `privatekey` or
+`auth` (or its plural), or two words in a row are `api key` or
+`private key`. So `authToken`, `api_key` and `clientSecret` are refused, and
+`author` is not.
+
+**What is checked, before anything is written.** The edited document is
+checked as a spawn would read it, by the resolver's own code, and any
+refusal writes nothing:
+
+- the capability is one of the workspace's catalog (`oats capabilities`),
+  else `E_CAPABILITY_UNKNOWN`;
+- the key is one its manifest declares under `settings`, else `E_BAD_ARGS`
+  naming the declared ones. It is one top-level key: no dotted path;
+- the local schema, as for every command that edits the file
+  (`E_WORKSPACE_SCHEMA`);
+- the host layer's rules: a `committedOnly` key is refused
+  (`E_WORKSPACE_SCHEMA`, reason `committed-only-key`);
+- the manifest's declared `values` (`E_WORKSPACE_SCHEMA`, reason
+  `setting-value`).
+
+When two catalog rows carry the capability's name (a member's and a
+package's), the file's payload reaches whichever one a soul resolves, so
+the edit must pass every row's checks, and `effective` is the default only
+where the rows agree on it.
+
+**The value's type.** The value is one line of text of at most 1024
+characters, stored as a hand edit of the YAML would be read:
+
+1. where the manifest declares `values` for the key, the declared value
+   that matches the text (in its own type);
+2. where the key's manifest default is text, text;
+3. a whole number (`38890`) as a number, and `true` or `false` as a boolean;
+4. anything else as text (`0.50.1` stays text).
+
+The answer's `value` shows what was stored. A value cannot begin with `-`:
+the command reads such a word as a flag (`E_BAD_ARGS`), so a negative
+number cannot be given, and no declared setting needs one today.
+
+**The writer.** The file is rewritten by the kernel's one writer of
+`oats-local.yaml`, under the deployment's local lock, as
+[`oats soul launch`](#oats-soul-launch) does (`E_LOCAL_BUSY`,
+`E_LOCAL_CHANGED`): two writers never drop each other's change.
+
+- A YAML file keeps its comments, its other entries and their order. It is
+  the YAML library's rendering of the edited document, not a byte copy: the
+  spaces before a comment become one, and a comment beside a mapping's own
+  key moves to the line below it.
+- A file that opens with `{` is JSON to the kernel's reader and is written
+  back as JSON: its keys in order, its final newline kept, two-space
+  indentation.
+- A file the kernel cannot decode is refused (`E_WORKSPACE_SCHEMA`).
+- An unset that empties `settings.<capability>`, or `settings`, removes the
+  empty mapping, unless a comment is attached to it (above its key, beside
+  it or inside it): that one stays, as an empty mapping with its comments.
+  A comment beside the removed key, or on the line above it, goes with the
+  key (above a mapping's first key it belongs to the mapping, and stays).
+  A later set fills such a mapping as a block, one key a line.
+- A set to the value the file already holds, and an unset of a key it does
+  not set, leave the file untouched: nothing is rendered, written or
+  renamed, and no trace line is added.
+
+**When it takes effect.** At the next read that resolves settings: the next
+spawn, start or restart, and the next readiness or `capabilities show`. A
+running session is not changed.
+
+**The trace.** Each changed write appends one line to
+`<deployment>/.agents/events/settings.jsonl`: `{at, verb: "set" | "unset",
+capability, key, previous, value}`.
+
+- It is private to its user (mode 0600) and bounded: it keeps its last 1000
+  lines, and older ones are dropped.
+- Every text in it is bounded (a value is cut to 500 characters) and has
+  control, bidi, invisible and tag characters replaced. No line carries a
+  secret: a credential-shaped key never gets this far.
+- It is written after the file, best effort: a line that cannot be written
+  is a `warnings` entry in the answer, never a failed set.
+- Nothing reads it yet, and no home's digest covers it (it is in no home).
+  It is in the deployment's events directory, which that user's agents can
+  write, so it is a trace for a person, not an audit record.
+
+The command is local: `--server` is refused (`E_BAD_ARGS`).
+
 ### The messaging provider's teams document
 
 The messaging provider's `teams` operation (`messaging:teams`) is produced by
@@ -2850,6 +3024,10 @@ planned ([check](capabilities.md#check-optional)). No key changes meaning:
   same way. A provider in a **member module** runs only from a spawned home,
   so it is not asked, and `warnings` carries one line that says so; the spawn
   still asks it.
+- The planned launch carries the spawn's model, `launch.model`, when the
+  spawn names one, and what a `ready` check warned of is in `warnings`
+  (feature `launch-model-and-check-warnings`,
+  [Relayed check warnings](#relayed-check-warnings)).
 - A provider that declares no `check`, a tmux launch and a `--no-launch`
   spawn ask nothing.
 
@@ -2906,6 +3084,9 @@ planned ([check](capabilities.md#check-optional)). No key changes meaning:
   `launchPromptAnswers` notice when the host file still has that key, and (0.49.0) the message of each
   [capability warning](#capability-warnings-hook-event-unsupported-oats-0490)
   of the resolved modules. The apply's `warnings` carries the same messages.
+  On a session provider it also carries what the provider's `ready` check
+  warned of ([Relayed check warnings](#relayed-check-warnings)), as the
+  apply's will.
 
 **Launch.**
 - `harness`, `model`, `modelSource`, `launchConfig`, `backend`, `yolo`
@@ -3496,6 +3677,49 @@ Limits:
 Spawn hooks get it as `OATS_SPAWNER_HOME` when it is not `null`
 ([capabilities.md](capabilities.md#commands-and-hooks)).
 
+<a id="made-by-an-automation"></a>
+### Made by an automation
+
+From feature `status-automation`, every new home records `automation`: the
+schedule or trigger whose run made it, `{kind, id, qualifiedId}`, or `null`.
+`kind` is `schedule` or `trigger`; `id` and `qualifiedId` are that
+automation's own, as `oats schedule list` and `oats trigger list` give them
+(a local schedule's `id` is bare, every other one is qualified:
+[shared row fields](#automations-shared-rows)). `instance.json` and the `spawned` event's `data`
+carry it as recorded, and every `oats status --json` row of a home whose
+record is read has the key, in that shape only: anything else (a
+hand-edited record, a home spawned before the feature) reads `null`. The
+row of a home with no readable record has no such key.
+
+It is beside `spawnedBy`, for the other kind of maker, and **at most one of
+the two is set**: `spawnedBy` names an instance, `automation` a schedule or
+a trigger, and a person's spawn has both `null`.
+
+- A schedule's spawn job and a trigger's spawn name themselves to their
+  `oats spawn` child with `--made-by-automation <schedule|trigger>:<qualifiedId>`,
+  an **internal flag, for automations** (it is in spawn's usage as that).
+  `oats schedule run` records the schedule the same way.
+- It is recorded only when this deployment has that schedule or trigger: a
+  local one in `oats-schedules.json`, a workspace one in the automations
+  snapshot. A value that names none, one of the other kind or a malformed
+  one is not recorded, and never refuses the spawn.
+- A spawn that an instance runs (`spawnedBy` non-null) records
+  `automation: null`, whatever flag it is given.
+- A tick or a run started from inside an instance (an agent that runs
+  `oats schedule tick` or `oats schedule run`) still records the
+  automation, with `spawnedBy: null` and `spawnOrigin: "operator"`: the
+  automation's child is started without the caller's instance environment,
+  so no instance is its spawner.
+- It is written once, at spawn. Removing the schedule or the trigger doesn't
+  clear it: the row keeps the ids it was made with, and a client that finds
+  the id in neither list shows it as removed.
+
+**It is a label, never proof**, as `spawnedBy` is informational attribution:
+any process of the same OS user can pass the flag, it is not hook
+environment, and no kernel decision reads it (no permission, lifecycle act,
+retire, wake or schedule decision). A client shows it as a label ("started
+by schedule X").
+
 <a id="spawn-errors"></a>
 ### Spawn errors
 
@@ -3902,6 +4126,92 @@ its absence.
   An older kernel's `running` is the window's presence, and it checks a row
   with a claim against its session (as `oats session inspect` observes it),
   reading `null` unless a harness runs there.
+- <a id="row-activity"></a>**`activity`** (feature `status-activity`): the
+  turn fact, for a row whose session is there: `"working"` (the agent's
+  harness started a turn that has not ended), `"idle"` (its last turn ended
+  and no new one has started) or `null` (OATS cannot tell). It is display
+  only: no act reads it, and a client shows it as reported and infers nothing
+  where it is absent or `null`. It is never stale, by one rule per backend:
+  - **A tmux row carries the key only with `running: true`,** read from
+    `<home>/.oats/turn.json`: the last turn boundary the harness's own hooks
+    wrote, `{"event": "turn-start" | "turn-end", "at": "<ISO>"}`, replaced
+    whole at each boundary. Every other tmux row has no key: stopped, lost,
+    exited, at its fallback shell (`runtimeState: "shell"`), unknown
+    (`running: null`), never launched, and one with `retirePending`,
+    [`retire`](#row-retire), `rollbackIncomplete` or `spawnInProgress`. So a
+    harness killed mid-turn never reads `"working"`: its row does not run.
+  - **A boundary counts only from the row's `startedAt`.** A start begins
+    only after the previous harness is gone, so a record dated before it is
+    the last session's and reads `null`. While a start is under way, the
+    new harness runs before the row's `startedAt` moves: the start's own
+    instant, which its pending receipt in the home holds, counts from then
+    on, so the previous session's record reads `null` there too. A clock
+    set back makes a boundary read `null`, never a wrong value, until the
+    next one.
+  - **`null` on a tmux row that runs:** no file yet, a file that is not a
+    record (bad JSON, no `event` or `at`, an unknown event, not a regular
+    file of at most 4 KiB), or a record from before `startedAt`. Who writes
+    it:
+
+    | harness | turn start | turn end | reads `null` |
+    |---|---|---|---|
+    | Claude Code (oats.core's hooks) | `UserPromptSubmit`, a launch prompt's included | `Stop`; `StopFailure`; the `idle_prompt` notification, for a turn whose end no hook reported | with an oats.core from before the record; from 30 minutes after a turn start with no end |
+    | pi (`@awebai/oats-pi`) | the agent's start, a launch prompt's included | the agent's end, an abort included | with a bridge from before the record |
+    | Codex | never | never | always, whatever stands in the file: its notify hook reports turn ends only, which would read `"idle"` while it works |
+
+    **The first turn of a start reads `"working"`:** the launch prompt
+    (`TASK.md`, or a wake's or an input's text) is a turn start like any
+    other, dated after `startedAt`.
+    **Claude Code fires no hook when a person interrupts a turn** (Esc):
+    neither `Stop` nor, afterwards, its idle notification (Claude Code
+    2.1.332). The row then reads `"working"` until the next prompt, so a
+    Claude Code row whose turn started more than 30 minutes ago and wrote no
+    end reads `null`: OATS cannot tell a long turn from an interrupted one. A
+    compaction runs inside a turn and ends with it; a `/compact` a person
+    types is no turn, and the row keeps its value. A subagent's stop writes
+    nothing: the main turn goes on.
+  - **A provider row carries its provider's own answer at that read,** the
+    optional `activity` key of its `inspect` or `inspectMany` result
+    ([capabilities.md](capabilities.md#inspect-and-inspectmany)), never
+    stored: wherever the provider answers the session present, and not at
+    its `shell`, on a home OATS started, whatever its `running`, and `null`
+    where the provider sends none. `<home>/.oats/turn.json` is never read on a provider home.
+
+    | a provider row | `activity` |
+    |---|---|
+    | `running: true` | the provider's answer at this read (`"working"`, `"idle"`, or `null` where it cannot tell) |
+    | `running: null` (an agent waiting on a person, or one whose harness the provider cannot see) | the provider's answer at this read; typically `"idle"` for an agent waiting on a person |
+    | `running: false`, `runtimeState: "unknown"`: the session present (the provider unloaded the harness between turns, or after its own restart) | the provider's answer at this read (`"idle"` for a session it lists as idle) |
+    | `runtimeState: "shell"`: the harness ended and something else holds the session | no key: there is no turn to report, whatever the provider sent |
+    | stopped, lost (the session is gone), `retirePending` or [`retire`](#row-retire), a provider that failed or answered outside the contract | no key |
+    | [`outsideOats`](#row-outside-oats) (a harness OATS did not start) | no key: OATS reports only on the sessions it started |
+
+    A provider row that is present and does not run does carry the key: an
+    idle agent whose harness its provider unloaded reads `"idle"`. The key
+    says only whether a turn runs, never which act carries a conversation
+    on.
+  - **The file is the agent's own home's,** and in full mode its user can
+    write any file there: a record written by hand gives a wrong value and
+    nothing else.
+  - **A second harness inside the home.** The row is the turn of the home's
+    own session. A second pi session in the home's pi (a subagent's or a
+    workflow agent's) and a pi process started below it (a nested `pi`)
+    write nothing while the home's own pi lives, and a Claude Code subagent
+    writes nothing. Two cases do write their own boundaries, and their end
+    reads `"idle"` while the home's own turn goes on, until the next prompt
+    there: a second Claude Code started inside a Claude Code home with the
+    home's environment (a nested `claude -p`), and a pi started inside a
+    home whose harness is not pi (a Codex row reads `null` all the same).
+  - **How it stands beside the row's other session fields:**
+
+    | field | means | source | which acts read it |
+    |---|---|---|---|
+    | `running` | a harness is loaded for the current start (tmux: the agent's pane runs its harness; provider: the provider's `running`) | the session backend | the clients' act choice (Restart or Start); input and wake refuse when `false` |
+    | `runtimeState` | the backend's word for the session (`unknown`, `shell`, `stopped`, `unreachable`) | the backend | display; `shell` means the harness left its pane |
+    | `sessionEnd` | how the last session ended, on a row that does not run (`lost`, `stopped`, `exited`) | the kernel's records | the resume sweep; `--resume` (only `lost`) |
+    | `waitingOnYou` | a person's answer is awaited (`question`, `permission`, `attention`) | needs-input claims (oats.core's hooks, the pi bridge, the agent, the kernel) | the clients' "Needs you"; a scheduled wake holds while a `question` or `permission` claim is set |
+    | `midTask` (a stop plan only) | a running harness, or uncommitted work | the plan: `running` and the work's counts | the Stop dialog's warning |
+    | `activity` | the turn: working or idle. tmux: only with `running: true`, from the hooks' file; provider: the provider's answer at that read, on a present session OATS started | the harness's turn boundaries (tmux), or the provider | display only; no act reads it |
 - <a id="row-session-end"></a>**`sessionEnd`** (feature `session-resume`, OATS
   0.69): how the last session of a launched home that does not run ended:
   `lost` (the host went down, its tmux server died, the harness was killed
@@ -4268,6 +4578,12 @@ route target:
   the [local row's](#attributed-human) label rule again on this side, and
   `spawnedBy` the [local row's](#spawned-by) shape rule: a value either
   refuses is `null`.
+- **`automation`** (feature `status-automation`,
+  [Made by an automation](#made-by-an-automation)) is on a row only when
+  the host's kernel lists the feature and its row has the key: a row from a
+  host without it, and a saved route the host did not list, have no such
+  key. When present it passes the local row's shape rule again on this
+  side, and a value that rule refuses is `null`.
 - **`waitingOnYou`** (0.40.2, [Waiting on you](#waiting-on-you)) is on a row
   only when the host's kernel reports it: a row from a host before 0.40.0,
   and a saved route the host did not list, have no such key. Absent means
@@ -4325,6 +4641,16 @@ route target:
   that reads `running: false`, `runtimeState: "stopped"` with that
   `backend`. Anything else drops the key, and nothing is added to the row of
   a host without the feature.
+- **`activity`** (feature `status-activity`) is on a row only when the host
+  lists the feature and its row has the key, with the host's value
+  (`"working"`, `"idle"` or `null`), as the host's status gave it: its
+  meaning is the [local row's](#row-activity). A value that is not one of
+  the three drops the key, and so does a row that cannot carry it: a tmux
+  row that does not read `running: true`, a provider row that reads
+  `runtimeState: "shell"`, a row with `sessionEnd`,
+  `outsideOats`, `retirePending` or `retire`. A host without the feature, a
+  saved route the host did not list and a host that was not reached carry
+  none: a row this roster did not read says nothing of the turn.
 - **`addressable`** (0.31): `true` for every row the host reports. Routed
   session and lifecycle commands reach it by `--home`, or by name when the
   name is unique on the host ([addressing](servers.md#run-there); a shared
@@ -4993,6 +5319,9 @@ oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--
   is dated at the receipt's launch time. The boundary is complete per log: a
   log that missed it gets a copy of the same row (same time and data), never
   a second one.
+- `spawned` carries `automation` in its `data` (feature `status-automation`,
+  [Made by an automation](#made-by-an-automation)): the home's record, or
+  `null`.
 - `spawned` carries `worktreeHooks` (the receipt `[{capability, ok,
   required, log, exitCode, …}]`) in its `data` only when the spawn ran
   `worktree` hooks (0.49.0).
@@ -5119,9 +5448,11 @@ permission prompt, a question, an agent asking for an answer) says so through
 a producer's claim. **A claim authorizes nothing; it may only withhold an
 automated keystroke.** A scheduled wake holds while the home has a live
 `permission`, `question` or unknown-reason claim ([A held
-wake](schedules.md#a-held-wake), feature `wake-hold`), and nothing else in the
-kernel acts on a claim. In particular `oats session input` behaves exactly as
-before whether or not a claim is set. `attention` never marks a screen an Enter
+wake](schedules.md#a-held-wake), feature `wake-hold`), and `oats session
+input` is refused while a tmux home has a live `permission` claim
+([Input](#input), feature `session-input-permission-refusal`). Nothing else in
+the kernel acts on a claim: `oats session input` types whatever other claim is
+set. `attention` never marks a screen an Enter
 answers: a producer that wants one uses `question`, and review catches that.
 
 ```text
@@ -7672,6 +8003,115 @@ Its refusals: `E_RESUME_NOT_LOST` (not a lost session), `E_SESSION_NOT_RUNNING`
 the session cannot be read), `E_SESSION_PROMPT_OPEN` (a claim or a prompt is
 open) and `E_SESSION_INPUT_QUEUED`.
 
+<a id="launch-choices-feature-launch-choices"></a>
+**Launch choices** (feature `launch-choices`). A session provider can take
+choices of one launch that only it understands (a reasoning level, a
+service tier). It declares their names in its manifest
+([capabilities.md](capabilities.md#launch-choices-launchchoices)); the
+kernel knows no choice's meaning.
+
+```text
+oats spawn <soul> --backend <provider> --launch-choice <name>=<value> [--launch-choice <name>=<value>]…
+oats session start|restart --home <abs> [--launch-choice <name>=<value>]…
+```
+
+- **The flag** is repeatable, each name once. A name is 1 to 40 lowercase
+  letters, digits and dashes, starting with a letter; a value 1 to 40
+  lowercase letters, digits, underscores and dashes. A client passes a
+  value as it has it and never parses one.
+- **Which names a home takes**: the ones its provider declares, with a
+  one-line `description` each, a client may show as text. Read them from
+  `oats capabilities show <capability> --json`, `sessionProviders.<name>.launchChoices`
+  (the manifest as declared).
+- **Recorded and reused.** A spawn's choices are kept in the home's launch
+  record. A later start or restart with no flag launches with them again. A
+  flag replaces that name's value; the value `default` clears it, so the
+  provider's own default applies (`default` reaches no provider).
+- **Refused, never dropped**: `E_BAD_ARGS`, before anything is created,
+  stopped or started, for
+  - a name the home's provider does not declare (the message lists the ones
+    it declares);
+  - a tmux home: `the tmux backend takes no launch choices yet; for pi, the
+    model's own :level sets its thinking`;
+  - a malformed flag, or a name given twice;
+  - a recorded choice the provider no longer declares, at a plain start or
+    restart: the message names `--launch-choice <name>=default`, which
+    clears it. `oats launch-config preview --home` shows the same as a
+    failed `launch-choices` item of its `preflight`;
+  - `--resume`, which runs the recorded launch as it is.
+
+  A value the provider does not take is the provider's to refuse, in its
+  check, with its own `E_BACKEND_*` code: nothing was stopped or started.
+- **Routed** (`--server`): the flag travels to a host that lists the
+  feature. A host that does not is refused `E_REMOTE_INCOMPATIBLE` before
+  anything is sent, as for every flag a host must know
+  ([decided](https://github.com/oats-project/oats/issues/2122#issuecomment-7163227475)).
+- **No answer gains a key, and a person cannot see a recorded choice in a
+  client yet.** The spawn's, the start's and the restart's answers, their
+  `launch` recipe, the status row, the remote roster row, `oats session
+  inspect`, `oats inspect --home` and the events are the keys they were,
+  with no choice in them. A client that sent a choice knows what it sent.
+  The one place a recorded choice can be read is the home's own
+  `instance.json` on its host, `launch.choices`. Showing it back is a later
+  item.
+- **Nowhere else yet.** A launch configuration, a soul, a host default, a
+  schedule's job and a trigger's spawn carry no launch choice.
+- **A spawn's decision binds its choices.** The preview's
+  `decision.revision` covers the choices the preview was given, with no key
+  for them in `decision`: an apply (`--expect-decision`) with other choices
+  is `E_DECISION_STALE`, and a replay of an idempotency key with other
+  choices than the ones it confirmed is `E_IDEMPOTENCY_CONFLICT`. A replay
+  is held to what the key confirmed, never to the home's choices now, which
+  a later start may have changed. A decision with no choice has the
+  revision it always had.
+- **Moving a kernel back** below the feature starts a home that holds
+  recorded choices without them: the one place a choice can drop
+  ([capabilities.md](capabilities.md#launch-choices-launchchoices)).
+
+<a id="relayed-check-warnings"></a>
+**The planned launch's model, and relayed check warnings** (feature
+`launch-model-and-check-warnings`). Before a spawn, a start or a restart
+launches on a session provider, and in their previews, the kernel asks the
+provider's `check` with the launch that is planned
+([capabilities.md](capabilities.md#check-optional)):
+
+- **`launch.model`** is the model the launch will pass, a non-empty string,
+  when the launch names one: `--model`, a launch configuration's, the soul's
+  or the host's resolved one, a home's recorded one at a start. It is absent
+  when none is named and the harness is left to its own default: never
+  `null`, never `""`, never that default.
+- **A restart's check runs before its stop.** A provider that refuses in its
+  check (any code, a model its harness cannot resolve included) leaves the
+  running agent running: the refusal says `nothing was stopped or started`,
+  and the home's record does not move.
+- **What a `ready` check warned of is relayed** in `warnings`: of
+  `oats spawn --preview` (`result.warnings`), of `oats launch-config preview
+  --home`, and of the answers of `oats spawn`, `oats session start` and
+  `oats session restart`. One string per warning:
+
+  ```text
+  <capability>'s session provider <name> (check) warns <code>: <message>
+  ```
+
+  The code and the message are the provider's own, the message made safe to
+  print and cut at 500 characters. At most 32 are relayed for one launch;
+  past that, one last line says how many more the check gave
+  (`… (check) gave <n> more warnings, not shown here`). They come after the
+  answer's other warnings and never take `warnings` past 512 entries, the
+  most a client's reader takes: where the answer's own warnings leave room
+  for fewer, the relayed ones are dropped first, that last line counts
+  them, and none of the answer's own is dropped; with no room, none is
+  relayed. Four of the 512 entries stay free of relayed lines, for what a
+  command adds after the kernel's answer (a spawn's unsaved wake, and a
+  routed spawn's three notices, the unsaved route among them). A start and
+  a restart also record each as a `launch-warning` event.
+- **The lines are text for a person. Show them; never parse them**, and take
+  no decision from one: the wording is not a contract. `warnings` holds
+  strings only, here as everywhere: a reader that shows the kernel's own
+  warnings shows these with no change.
+- A refusal is unchanged: its message names the provider's problems, and no
+  warning is relayed beside it. A check with no warning adds no line.
+
 **A launch with no recorded outcome** (the lifecycle's
 [design record](design/2026-11-20-provider-home-lifecycle.md)). From the
 moment a spawn or a start sends the provider's launch until its endpoint is
@@ -7811,8 +8251,9 @@ with the launch that is planned, as the start will before it stops anything:
 a launch the provider would refuse is a failed `backend` item (`code`: the
 start's refusal, `E_BACKEND_*`), and `ok` is false. So is an allowance's path
 the start would refuse to make (`E_BACKEND_SANDBOX_HOST`); `warnings` carries
-the start's `sandbox allowances: …` lines. Nothing is stopped, started or
-created.
+the start's `sandbox allowances: …` lines and what a `ready` check warned of
+([Relayed check warnings](#relayed-check-warnings)). Nothing is stopped,
+started or created.
 
 ### Input
 
@@ -7828,10 +8269,99 @@ on the execution host, including when the wake broker invokes it there;
 `--server` is not supported for input. The adapter sends one literal
 bracketed paste and one Enter after the existing input/authority/target checks.
 
-**Session input takes no hold.** It types whether or not a claim is set, and
-its Enter can answer an open dialog, so don't run it from a script or an agent
-at a session that may show one. A person who can see the screen is its intended
-caller.
+**One input at a time per tmux home.** An input holds the home's input lock
+from before its paste to the end of its Enter's observation, so two inputs
+sent at the same moment are two messages, each with its own Enter, in the
+order they took the lock. (Before, the second paste could land ahead of the
+first Enter: the agent got both texts as one message, and both callers read
+`verified: true`.)
+
+- An input that finds another being sent waits for it, at most 8 seconds,
+  and is then refused `E_SESSION_INPUT_FAILED` with a message that ends
+  `nothing was sent`: no paste, no key. Send it again. A scheduled wake
+  keeps such a delivery pending, as for every refused input.
+- The lock frees itself when its holder dies: a holder that was killed is
+  taken over by the next input, never waited for. A lock that cannot be read
+  or taken over refuses at once, the same way, naming the file.
+- The lock, and the kernel's note of a paste with no Enter yet, are files
+  under the kernel's state directory
+  (`$OATS_HOME_DIR/session-resume/session-inputs`, `~/.oats` by default). An
+  input from a process that may not write there (a sandbox that keeps
+  `~/.oats` read-only) is refused `E_SESSION_INPUT_FAILED`, nothing sent.
+- **Text pasted and never submitted.** An input that is killed between its
+  paste and its Enter (or whose Enter fails) leaves its text in the agent's
+  input line. The next input to that home submits that text first, with an
+  Enter of its own, as the message it was, and then pastes its own: the
+  leftover is never run into the new message. **So a crashed sender's text
+  may reach the agent at the next input**, late; its sender got no answer
+  and may send it again. That Enter is an input's Enter like any other:
+  sent only under the lock, and never while a permission prompt is open
+  (below), when the whole input is refused. It is sent only while the text
+  is still taken to be in the line: the agent's pane runs the same process
+  as at the paste, and the paste is less than 2 minutes old. Otherwise no
+  key is sent for it (the session was restarted and the line is gone, tmux
+  names no process for the pane, or a person at the terminal may have sent
+  or deleted the text since), and text still in the line then goes with the
+  next message, as before this lock. The kernel keeps its note of such a
+  paste on a best effort: a note it cannot write or remove never fails an
+  input.
+- **What the lock does not cover:** keys a person types in an attached
+  terminal (`oats session attach`, a client's terminal), another tool that
+  types into the pane itself, without `oats session input`, and a home on a
+  session provider, whose inputs the provider orders itself. It serializes
+  the kernel's `session input` alone: a scheduled wake's delivery, and the
+  aweb host wake broker's, which delivers through this command.
+  Text a person has typed and not sent is submitted by an input's Enter, as
+  before.
+
+**Never over a permission prompt** (feature
+`session-input-permission-refusal`). While a tmux home's session holds a
+claim with reason `permission` ([Waiting on you](#waiting-on-you)), an input
+is refused `E_SESSION_PROMPT_OPEN` and nothing is typed, no paste and no
+Enter, as a session provider refuses it: the Enter would answer the prompt,
+and approve a command nobody saw. There is no override. The person answers
+the prompt where they can see it, in the agent's terminal (`oats session
+attach --home <abs>`) or through their client's own prompt card, and the
+input is sent again.
+
+**A permission claim that outlived its dialog refuses like a live one.** A
+claim has no expiry ([A claim can outlive its dialog](schedules.md#a-held-wake)),
+and a refused dialog is the usual case: Claude Code fires no hook on Esc or
+"No", so the claim stays until the session's next prompt. Every input is
+refused until then. The refusal's message says so and prints the way out:
+send a prompt in the agent's terminal, or `oats instance waiting clear
+--producer <producer> --home <abs>`.
+
+Who meets the refusal: whatever runs `oats session input`. That is an agent
+or a script; a client that sends input through the kernel; and a messaging
+layer that delivers through it, such as the aweb host wake broker, whose
+mail and chat deliveries are refused the same way. What a caller does with
+the refusal (`E_SESSION_PROMPT_OPEN`, or the wait's
+`E_SESSION_INPUT_FAILED`) is its own: both say nothing was sent, so sending
+again later is safe; the kernel does not say what the aweb broker does with
+one (see oats.aweb). A scheduled
+wake already holds while a claim stands and does not reach it; should a
+prompt open right then, its delivery stays pending, as for every refused
+input. A trigger sends no input (it spawns). `--server` does not route
+input, so no server route meets it. The Desktop and the TUI do not call
+`session input`.
+
+**Session input takes no other hold.** It types whatever other claim is set,
+and its Enter can answer an open dialog, so don't run it from a script or an
+agent at a session that may show one:
+
+- a `question` claim: the input is typed. Where the dialog takes text
+  (Claude's AskUserQuestion), the text is the answer; where it takes a key
+  (pi's extension confirm), the Enter picks its default option and the text
+  is lost;
+- an `attention` claim is the agent asking for input: typing is the answer;
+- a dialog that raises no claim (Claude's folder trust at startup) is
+  answered by the Enter;
+- a permission prompt that opens between the kernel's read of the claims and
+  its paste is answered too. The read is made under the home's input lock,
+  right before the paste, which narrows that moment and cannot close it;
+- claims that cannot be read are not treated as a permission: the input is
+  typed.
 
 `submitted` means terminal-operation success, **not model acceptance or
 processing**. `verified` is display observation only: `true` means a bounded
@@ -7847,7 +8377,8 @@ timeouts and sleeps use the remaining budget. Observation failures produce
 command timeouts and `E_SESSION_INPUT_FAILED` errors remain; the observation
 budgets do not bound those commands, failed buffer cleanup or OS scheduling.
 No busy-pane submission or exactly-once guarantee is provided. Generic command
-errors can still be uncertain after partial effects.
+errors can still be uncertain after partial effects; the two refusals above
+(a wait past its bound, a permission prompt) say `nothing was sent`.
 
 The Desktop terminal's authorized PTY writes are a separate stream; they do not
 consume this `verified` field. The Pi bridge does not interpret this result.
@@ -8633,7 +9164,12 @@ capability declares ([schedules.md](schedules.md#capability-sources)).
   {at, ok: true, prs, matching} | {at, ok: false, error} | null, nextPollAt,
   nextDue, pending: [{key, event, number, subject, url, observedAt}], fired:
   [{key, at, instance, home, event, number, subject}] (newest 50), firedTotal,
-  lastError: {at, code, message, key?} | null}]}`. It writes nothing.
+  lastError: {at, code, message, key?} | null, failures: [{attempt, at, key,
+  event, subject, number, code, message, instance?, home?, resolved?: {at,
+  instance}}] (newest 50), failuresTotal}]}`. It writes nothing.
+  `failures` and `failuresTotal` (feature `trigger-failure-history`) are
+  the trigger's failed spawns, [one row per attempt](schedules.md#failed-spawns);
+  `lastError` is unchanged.
   `subject` (0.49.0) is the event's subject, the thing `perKey` counts: a
   PR's number, as a string. A record written before 0.49.0 has none, and
   its number is reported.

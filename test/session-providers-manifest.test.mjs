@@ -39,7 +39,8 @@ test("sessionProviders: a sound provider is normalized; each rule's breach is on
   const ok = sessionProvidersOf(manifest({ fake: sound }));
   assert.deepEqual(ok.problems, []);
   assert.deepEqual(ok.providers.fake, {
-    name: "fake", description: "A fake session backend for tests", harnesses: ["claude"], wire: "1.3",
+    // (`launchChoices`, feature launch-choices: the choices it declares, none here; test/launch-choices.test.mjs.)
+    name: "fake", description: "A fake session backend for tests", harnesses: ["claude"], wire: "1.3", launchChoices: {},
     commands: {
       launch: { command: "session-launch", script: "bin/session.mjs", args: ["launch"] }, inspect: { command: "session-inspect", script: "bin/session.mjs", args: ["inspect"] },
       input: { command: "session-input", script: "bin/session.mjs", args: ["input"] }, stop: { command: "session-stop", script: "bin/session.mjs", args: ["stop"] },
@@ -139,8 +140,8 @@ test("the records' and the answers' rules: an endpoint, a receipt's runtime, an 
   ]) assert.equal(providerRuntimeOf(broken), undefined, what);
 
   const open = { label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_1" };
-  assert.deepEqual(judgeInspect({ present: true, state: "unknown", running: null, open }), { present: true, state: "unknown", running: null, open });
-  assert.deepEqual(judgeInspect({ present: false, state: "stopped", running: false }), { present: false, state: "stopped", running: false, open: null });
+  assert.deepEqual(judgeInspect({ present: true, state: "unknown", running: null, open }), { present: true, state: "unknown", running: null, open, activity: null });
+  assert.deepEqual(judgeInspect({ present: false, state: "stopped", running: false }), { present: false, state: "stopped", running: false, open: null, activity: null });
   for (const [what, answer] of [
     ["a missing key", { present: true, state: "unknown" }], ["present that is no boolean", { present: "yes", state: "unknown", running: true }],
     ["a state outside the words", { present: true, state: "idle", running: null }], ["running that is a string", { present: true, state: "unknown", running: "true" }],

@@ -23,18 +23,24 @@ compatibility. Composing this capability selects no knowledge provider.
 
 `oats.knowledge-theory` ships in the `oats.framework` package, read from Git
 (npm omits the package's `CLAUDE.md -> AGENTS.md` symlink, so an npm copy is
-not a supported distribution). Pin the framework and give the capability to
-an author soul:
+not a supported distribution). Pin the framework at the release the official
+catalog names (the `oats.framework` entry of `package-catalog.json` in the
+OATS repository; its `ref` is `oats-framework/v<version>`), and give the
+capability to an author soul:
 
 ```yaml
 # oats-workspace.yaml
 packages:
-  oats.framework: v1.30.0            # provides oats.core, oats.setup, oats.knowledge-theory
+  oats.framework: vX.Y.Z             # the catalog's release; provides oats.core, oats.setup, oats.knowledge-theory
 
 # souls/<author-soul>/soul.yaml
 capabilities:
   oats.knowledge-theory: { from: package }
 ```
+
+The example names no version on purpose: this page ships inside the
+framework, so a version written here would be out of date at the next
+framework release.
 
 The expert is the framework's package soul `knowledge-theory-expert`, which
 reads `oats.knowledge-theory` from its own package. Spawn it in the author's

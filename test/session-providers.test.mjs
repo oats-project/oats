@@ -259,7 +259,7 @@ test("T4: after oats instance stop, inspect answers stopped and input is refused
   assert.equal((await fx.inEnv(() => inputInstanceSession(home, "hello again"))).submitted, true);
 });
 
-test("T4: a stop the provider does not confirm leaves the home recorded as stopped; a scheduled wake to it is refused", async (t) => {
+test("T4: a stop the provider does not confirm leaves the home recorded as stopped and its input refused; a scheduled wake starts it", async (t) => {
   const fx = providerDeployment(t);
   const { home } = await fx.launch("stuck");
   fx.control({ stop: { exit: 1 } });
@@ -273,15 +273,18 @@ test("T4: a stop the provider does not confirm leaves the home recorded as stopp
   assert.deepEqual(fx.verbs().map((c) => [c.verb, c.request.input.endpoint]), [["stop", endpointOf("stuck", 1)]]);
   fx.clearCalls();
   assert.equal(await codeOf(() => fx.inEnv(() => inputInstanceSession(home, "hello"))), "E_SESSION_NOT_RUNNING");
-  // A wake is its session's input: refused for a home OATS stopped, which a wake never starts.
+  assert.deepEqual(fx.verbs(), [], "the input did not reach the provider");
+  // A wake starts a home OATS stopped, as it starts a stopped tmux home (KP-1, oats-project/oats#2122;
+  // test/provider-schedules-triggers.test.mjs has its guards): a plain start, and no input yet.
   const added = fx.cli(["schedule", "add", "--spec-json", JSON.stringify({ id: "nudge", kind: "wake", cron: "* * * * *", tz: "UTC", home, message: "wake up" }), "--json"]).json();
   assert.equal(added.ok, true, JSON.stringify(added));
   fx.clearCalls();
   const ran = fx.cli(["schedule", "run", "nudge", "--json"]).json();
   assert.equal(ran.ok, true, JSON.stringify(ran));
-  assert.deepEqual([ran.result.run.action, ran.result.run.errorCode, ran.result.run.pending], ["skipped", "E_SESSION_NOT_RUNNING", true], JSON.stringify(ran.result));
-  assert.deepEqual(fx.verbs(), [], "neither the wake nor the input reached the provider");
-  assert.equal(fx.hooks().length, 0, "the wake did not start the home");
+  assert.deepEqual([ran.result.run.action, ran.result.run.pending, ran.result.run.startedHarness], ["started", true, true], JSON.stringify(ran.result));
+  assert.deepEqual(fx.verbs().map((c) => c.verb).filter((v) => v !== "inspect" && v !== "inspectMany"), ["stop", "launch"], "the home was started: its last stop asked once more, then a launch, and no input");
+  assert.deepEqual(fx.hooks("launch").map((h) => h.instance), ["stuck"]);
+  assert.equal(runtimeOf(home).stoppedAt, null, "it runs again");
 });
 
 test("T5: input relays submitted:true, and the provider's E_SESSION_PROMPT_OPEN and E_SESSION_INPUT_QUEUED with ok:false", async (t) => {

@@ -1,0 +1,10 @@
+schemaVersion: 2
+name: aweb-design-qa
+description: The aweb design QA. A fresh agent checks one aweb design at one version against the aweb-design rules, asks the bb lead whether bb can do what a bb design needs, reports a verdict with each finding and what it checked, then retires itself.
+work: directory
+# Stateless across designs: no knowledge slot, nothing to promote.
+knowledge: none
+# oats.core, oats.bb and messaging come from the workspace defaults.
+capabilities:
+  oats.aweb-design: { from: here }             # the design rules it checks against, and the aweb voice
+launch: { harness: pi, model: github-copilot/gpt-6.2-astra }   # the role's preference: another model family than the designer's; each machine may override it

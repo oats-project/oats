@@ -2,7 +2,7 @@
  * platform adapter. The plan is derived runtime data, not operator config. */
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { tcpReachable } from "./canary.mjs";
+import { tcpClassify, tcpReachable } from "./canary.mjs";
 import { compilePolicy, policyRoles } from "./policy.mjs";
 import { publicCACheck, mirrorsCheck } from "../accept.mjs";
 
@@ -35,7 +35,7 @@ export async function probeRuntime(plan, io = {}) {
   const fs = io.fs || await import("node:fs");
   const net = await import("node:net");
   const expect = (ok, label) => { if (!ok) { const error = new Error(label); error.name = "BoundaryFailure"; throw error; } };
-  const {policy,allowedPaths,deniedBackends,gateway,caFile} = plan;
+  const {policy,allowedPaths,deniedBackends,remoteEndpoints,gateway,caFile} = plan;
   let roles;
   try { roles=policyRoles(policy); } catch { expect(false,"runtime policy is incomplete"); }
   expect(policy && roles.every(role => policy.targets?.[role])
@@ -45,7 +45,8 @@ export async function probeRuntime(plan, io = {}) {
     && Object.keys(allowedPaths).sort().join(",") === [...roles].sort().join(","), "control paths must match declared roles exactly");
   expect(roles.includes("registry")
     ? Array.isArray(policy.authorityRecords) && policy.authorityRecords.length > 0 && policy.authorityRecords.length <= 64
-    : !Object.hasOwn(policy,"authorityRecords"), "namespace authority records are required with registry and refused without it");
+    : !Object.hasOwn(policy,"authorityRecords") || Object.hasOwn(policy,"externalTargets"),
+  "namespace authority records are required with registry, and refused without registry or an external role");
   const identity = io.identity ? io.identity() : { uid:process.getuid(), gid:process.getgid() };
   expect(plan.uid > 0 && plan.gid > 0 && identity.uid === plan.uid && identity.gid === plan.gid, "probe identity differs from configured non-root user");
   const status = fs.readFileSync("/proc/self/status","utf8");
@@ -134,12 +135,25 @@ export async function probeRuntime(plan, io = {}) {
     try { reachable=await tlsReachable({host}); } catch { expect(false,"unlisted TLS refusal was not established"); }
     expect(!reachable,host === humanHost ? "human TLS origin is reachable" : "unlisted TLS origin is reachable");
   }
-  expect(Array.isArray(deniedBackends) && deniedBackends.length === 2
-    && deniedBackends.map(item=>item.role).sort().join(",") === "postgres,redis", "live backend control inventory is incomplete");
   const endpoints=[];
-  for(const backend of deniedBackends) {
-    expect(policy.deniedAddresses.includes(backend.address),"backend control is not in denied policy inventory");
-    endpoints.push(backend);
+  if (remoteEndpoints !== undefined) {
+    expect(deniedBackends === undefined,"runtime plan needs exactly one backend inventory");
+    // Split hosts: each (address, role, port) tuple is denied on its own, never
+    // IP-wide, so it need not be in deniedAddresses.
+    expect(Array.isArray(remoteEndpoints) && remoteEndpoints.length === 2
+      && remoteEndpoints.map(item=>item?.role).sort().join(",") === "postgres,redis"
+      && remoteEndpoints.every(item=>net.isIP(item.address) === 4 && Number.isInteger(item.port) && item.port > 0 && item.port <= 65535),
+    "remote backend endpoint inventory is invalid");
+    const classify=io.tcpClassify || tcpClassify;
+    for(const endpoint of remoteEndpoints)
+      expect(await classify(endpoint.address,endpoint.port,{timeoutMs:800}) === "DENIED","isolated agent did not get DENIED from a services-host backend");
+  } else {
+    expect(Array.isArray(deniedBackends) && deniedBackends.length === 2
+      && deniedBackends.map(item=>item.role).sort().join(",") === "postgres,redis", "live backend control inventory is incomplete");
+    for(const backend of deniedBackends) {
+      expect(policy.deniedAddresses.includes(backend.address),"backend control is not in denied policy inventory");
+      endpoints.push(backend);
+    }
   }
   for(const target of Object.values(policy.targets)) for(const address of target.addresses)endpoints.push({address,port:443});
   endpoints.push(gateway);
@@ -155,7 +169,7 @@ export async function probeRuntime(plan, io = {}) {
 
 export function runtimeProgram(plan) {
   compilePolicy(plan.policy);
-  return `const assert=(await import("node:assert/strict")).default;const policyRoles=(${policyRoles.toString()});const httpsStatus=(${httpsStatus.toString()});const tcpReachable=(${tcpReachable.toString()});const publicCACheck=(${publicCACheck.toString()});const mirrorsCheck=(${mirrorsCheck.toString()});const probeRuntime=(${probeRuntime.toString()});try{await probeRuntime(JSON.parse(${JSON.stringify(JSON.stringify(plan))}));process.stdout.write("OATS_EGRESS_BOUNDARY_PASS\\n");}catch(error){const label=error?.name==="BoundaryFailure"?error.message:"input or runtime operation failed";process.stderr.write("egress boundary: "+label+"\\n");process.exitCode=1;}`;
+  return `const assert=(await import("node:assert/strict")).default;const policyRoles=(${policyRoles.toString()});const httpsStatus=(${httpsStatus.toString()});const tcpReachable=(${tcpReachable.toString()});const tcpClassify=(${tcpClassify.toString()});const publicCACheck=(${publicCACheck.toString()});const mirrorsCheck=(${mirrorsCheck.toString()});const probeRuntime=(${probeRuntime.toString()});try{await probeRuntime(JSON.parse(${JSON.stringify(JSON.stringify(plan))}));process.stdout.write("OATS_EGRESS_BOUNDARY_PASS\\n");}catch(error){const label=error?.name==="BoundaryFailure"?error.message:"input or runtime operation failed";process.stderr.write("egress boundary: "+label+"\\n");process.exitCode=1;}`;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

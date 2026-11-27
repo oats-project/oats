@@ -64,6 +64,43 @@ test("team image verification builds the fixture child image from the accepted i
   assert.doesNotMatch(read(".github/workflows/release.yml"), /agent-child|AGENT_CHILD|agent-bb|AGENT_BB/, "publication includes the base image alone");
 });
 
+test("team image verification proves the credential receiver as root, never skipping it", () => {
+  const job = workflow("team-image.yml").jobs.verify;
+  const steps = job.steps.filter((s) => s.run?.includes("test/credential-receiver-root.py"));
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].run, "sudo -n python3 -I test/credential-receiver-root.py");
+  assert.equal(steps[0].if, undefined, "it runs on every pull request");
+  assert.match(read("test/credential-receiver-root.py"), /\nif os\.geteuid\(\) != 0:\n    raise SystemExit\(/, "without root it fails");
+});
+
+test("team image verification proves credential groups isolated, with every mutant leg caught", () => {
+  const job = workflow("team-image.yml").jobs.verify;
+  const at = job.steps.findIndex((s) => s.run === 'python3 test/agent-credential-groups-image.py "$AGENT_IMAGE"');
+  assert.ok(at > 0, "the proof runs in the verify job");
+  assert.equal(job.steps[at].if, undefined, "it runs on every pull request");
+  assert.ok(job.steps.findIndex((s) => s.run === "bash .github/scripts/team-image-accept.sh") < at, "after the image is built and accepted");
+  const script = read("test/agent-credential-groups-image.py");
+  assert.match(script, /OATS_CREDENTIAL_GROUPS_PASS groups=\{len\(GROUPS\)\} pairs=\{len\(pairs\)\}/);
+  assert.match(script, /len\(pairs\) != 12/, "all twelve ordered pairs");
+  assert.match(script, /GROUPS = \[Group\("shared", 20001, 101, False\), Group\("cred-a", 20002, 102, True\),\n\s+Group\("cred-b", 20003, 103, True\), Group\("cred-c", 20004, 104, True\)\]/);
+  for (const [mutant, row] of [["uid", "cred-a -> cred-b host list state"], ["mount", "cred-a -> cred-b credential mount"],
+    ["network", "cred-a -> cred-b sshd"], ["docker", "shared docker socket"]]) {
+    assert.ok(script.includes(`"${mutant}": (`) && script.includes(`"${row}"),`), mutant);
+  }
+  assert.match(script, /OATS_CREDENTIAL_GROUPS_MUTANTS_CAUGHT/);
+  assert.match(script, /container\/agent\/compose\.agent\.credentials\.yaml/, "the real Compose fragment");
+  assert.match(script, /"--credential", group\.team/, "markers go through the receiver's credential mode");
+  // What it finds on the runner stays: a refused preflight removes nothing.
+  const found = job.steps.findIndex((s) => s.name === "Prove the credential groups proof leaves what it finds");
+  assert.ok(found > 0 && found < at, "before the proof itself");
+  for (const line of ["/etc/oats-login/receiver.json already exists on this runner", 'test "$(sudo sha256sum /etc/oats-login/receiver.json)" = "$found"',
+    "group 20003 already exists on this runner", 'test "$(getent group 20003 | cut -d: -f1)" = oats-found-group']) {
+    assert.ok(job.steps[found].run.includes(line), line);
+  }
+  assert.match(script, /def cleanup\(\):\n    \"\"\"Remove what this run created, and nothing it found/);
+  assert.match(script, /O_CREAT \| os\.O_EXCL \| os\.O_NOFOLLOW/, "the receiver configuration is created exclusively");
+});
+
 test("the shared acceptance fixture runs the image owner's acceptance against Compose", () => {
   const script = read(".github/scripts/team-image-accept.sh");
   assert.match(script, /docker compose/);
@@ -372,4 +409,59 @@ test("every image build receives its source SHA and CI verifies both extracted d
   const release = workflow("release.yml").jobs["publish-team-image"].steps.find(s => s.run?.startsWith("docker build "));
   assert.match(release.run, /--build-arg "TEAM_IMAGE_SOURCE_SHA=\$TEAM_IMAGE_SOURCE_SHA"/);
   assert.equal(release.env.TEAM_IMAGE_SOURCE_SHA, "${{ github.sha }}");
+});
+
+test("the live named-origins check runs on dispatch and on PRs that change the egress component or its script", () => {
+  const steps = workflow("team-image.yml").jobs.verify.steps;
+  const egress = steps.findIndex((s) => s.name === "Build the reviewed egress image");
+  const scope = steps.findIndex((s) => s.id === "named-origins");
+  const leg = steps.findIndex((s) => s.run?.trim() === 'python3 test/agent-egress-named-origins-image.py "$EGRESS_IMAGE" "$AGENT_IMAGE"');
+  assert.ok(egress >= 0 && scope > egress && leg > scope, "the decision follows the egress build and precedes the live check");
+  assert.equal(steps[leg].if, "${{ steps.named-origins.outputs.run == 'true' }}");
+  assert.deepEqual(steps[scope].env, { EVENT_NAME: "${{ github.event_name }}", BASE_SHA: "${{ github.event.pull_request.base.sha }}" });
+  assert.ok(existsSync(new URL("./agent-egress-named-origins-image.py", import.meta.url)));
+  // The step's own text decides over a disposable repository standing in for the PR checkout.
+  const dir = mkdtempSync(join(tmpdir(), "named-origins-scope-"));
+  const env = { PATH: process.env.PATH, HOME: dir, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1",
+    GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid", GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@example.invalid" };
+  const git = (...args) => {
+    const result = spawnSync("git", args, { cwd: join(dir, "repo"), env, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  try {
+    mkdirSync(join(dir, "repo"));
+    git("init", "-q");
+    writeFileSync(join(dir, "repo", "README.md"), "base\n");
+    git("add", "README.md");
+    git("commit", "-q", "-m", "base");
+    const base = git("rev-parse", "HEAD");
+    git("remote", "add", "origin", join(dir, "repo"));
+    const decide = (event, files) => {
+      git("checkout", "-q", "--detach", base);
+      for (const file of files) {
+        mkdirSync(join(dir, "repo", file, ".."), { recursive: true });
+        writeFileSync(join(dir, "repo", file), "change\n");
+        git("add", file);
+      }
+      if (files.length) git("commit", "-q", "-m", "change");
+      const output = join(dir, "output");
+      writeFileSync(output, "");
+      const result = spawnSync("bash", ["-e", "-c", steps[scope].run], { cwd: join(dir, "repo"), encoding: "utf8",
+        env: { ...env, EVENT_NAME: event, BASE_SHA: event === "pull_request" ? base : "", GITHUB_OUTPUT: output } });
+      assert.equal(result.status, 0, result.stderr);
+      return readFileSync(output, "utf8");
+    };
+    for (const [event, files, expected] of [
+      ["pull_request", ["docs/container.md"], "run=false\n"],
+      ["pull_request", ["container/agent/accept.mjs"], "run=false\n"],
+      ["pull_request", ["test/agent-egress.test.mjs"], "run=false\n"],
+      ["pull_request", ["container/agent/egress/policy.mjs"], "run=true\n"],
+      ["pull_request", ["docs/container.md", "container/agent/egress/README.md"], "run=true\n"],
+      ["pull_request", ["test/agent-egress-named-origins-image.py"], "run=true\n"],
+      ["workflow_dispatch", [], "run=true\n"],
+    ]) assert.equal(decide(event, files), expected, `${event} ${files.join(" ")}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

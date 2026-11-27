@@ -148,3 +148,26 @@ test("a malformed default is refused before a routed set, never dropped", () => 
   assert.throws(() => launchConfigRemote("s", { action: "set", name: "personal", definition: { harness: "claude", default: "true" } }, old), e => e.code === "E_LAUNCH_CONFIG_INVALID");
   assert.equal(old.calls.length, 1, "only the version probe ran");
 });
+
+test("launch choices travel to a host that lists launch-choices, one <name>=<value> word each; a host without the feature is refused before anything is sent, never sent without them", () => {
+  const withFeature = transport([...allFeatures, "launch-choices"]);
+  restartRemote("s", { home: "/original/home", launchChoices: { "reasoning-level": "high", "service-tier": "fast_2" } }, withFeature);
+  assert.equal(withFeature.calls[1].command, "/installed/oats session restart --home /original/home --launch-choice reasoning-level=high --launch-choice service-tier=fast_2 --json");
+  startRemote("s", { instance: "dev-one", model: "m", launchChoices: { "reasoning-level": "default" } }, withFeature);
+  assert.equal(withFeature.calls.at(-1).command, "/installed/oats session start --home /original/home --model m --launch-choice reasoning-level=default --json", "the clearing value travels too: the host clears");
+  for (const fn of [startRemote, restartRemote]) {
+    const old = transport(allFeatures);
+    assert.throws(() => fn("s", { instance: "dev-one", launchChoices: { "reasoning-level": "high" } }, old),
+      (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.22.17 at original-host does not advertise launch-choices; upgrade it there; nothing was sent");
+    assert.equal(old.calls.length, 1, "only the probe"); assert.match(old.calls[0].command, /version --json/);
+    // With none given the same host starts as before.
+    fn("s", { instance: "dev-one" }, old);
+    assert.doesNotMatch(old.calls.at(-1).command, /launch-choice/);
+  }
+  // A choice outside the grammar never leaves this machine.
+  for (const launchChoices of [{ "Reasoning": "high" }, { "reasoning-level": "a b" }, { "reasoning-level": "$(id)" }, ["reasoning-level=high"]]) {
+    const io = transport([...allFeatures, "launch-choices"]);
+    assert.throws(() => startRemote("s", { instance: "dev-one", launchChoices }, io), (e) => e.code === "E_BAD_ARGS", JSON.stringify(launchChoices));
+    assert.equal(io.calls.filter((c) => !/version --json/.test(c.command)).length, 0);
+  }
+});

@@ -268,6 +268,20 @@
           "description": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*$" },
           "wire": { "type": "string", "pattern": "^[0-9]{1,3}\\.[0-9]{1,3}$", "description": "The version of the session-provider wire this provider speaks (docs/capabilities.md, The call). A kernel calls only a provider that declares its own version: one that declares another, or none (a provider from before the key, wire 1.2), is refused E_BACKEND_WIRE, naming both." },
           "harnesses": { "type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$" }, "description": "The harnesses this backend runs. A spawn or a start on another is refused E_BACKEND_HARNESS before anything is created or stopped." },
+          "launchChoices": {
+            "description": "Launch choices (feature launch-choices): the choices of one launch this provider takes, by name. `oats spawn`, `oats session start` and `oats session restart` take `--launch-choice <name>=<value>` for a declared name only (any other is refused E_BAD_ARGS, never dropped), and the provider's check and launch are handed `choices: { <name>: <value> }`. The kernel knows no choice's meaning and no value's: the provider refuses a value it does not take. A kernel from before the feature refuses the manifest for this key.",
+            "type": "object",
+            "maxProperties": 8,
+            "propertyNames": { "pattern": "^[a-z][a-z0-9-]{0,39}$" },
+            "additionalProperties": {
+              "type": "object",
+              "required": ["description"],
+              "additionalProperties": false,
+              "properties": {
+                "description": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069\\u200b\\u2060\\ufeff\\u{E0000}-\\u{E007F}]*$", "description": "What the choice is, for a person: one line of safe text (no control or bidi character). A client may show it; nothing parses it." }
+              }
+            }
+          },
           "commands": {
             "type": "object",
             "required": ["launch", "inspect", "input", "stop"],
@@ -275,7 +289,7 @@
             "description": "The provider's verbs, each naming one of this manifest's commands.",
             "properties": {
               "launch": { "type": "string", "minLength": 1, "description": "Starts the instance's session; answers the endpoint the kernel records." },
-              "inspect": { "type": "string", "minLength": 1, "description": "Answers one session's { present, state, running, open? }." },
+              "inspect": { "type": "string", "minLength": 1, "description": "Answers one session's { present, state, running, open?, activity? }." },
               "input": { "type": "string", "minLength": 1, "description": "Sends one text to the session; answers { submitted: true, verified } only when it was dispatched." },
               "stop": { "type": "string", "minLength": 1, "description": "Stops the session; answers { stopped: true }." },
               "inspectMany": { "type": "string", "minLength": 1, "description": "Optional: inspects several homes' sessions in one call (oats status)." },

@@ -90,8 +90,8 @@ const HOME = "../client";
 const posix = (p) => p.split(sep).join("/");
 const exists = (p) => existsSync(join(PKG, p));
 const deps = Object.keys(JSON.parse(read("package.json")).dependencies);
-/** Build products that no checkout holds until `npm ci` (postinstall: build-vendor.mjs). They ship by their pattern; nothing reads them here. */
-const GENERATED = new Set(["renderer/vendor/highlight.mjs"]);
+/** Build products from postinstall. The preload's sandbox and surface are checked in preload-sandbox.test.mjs. */
+const GENERATED = new Set(["renderer/vendor/highlight.mjs", "generated/preload.cjs"]);
 
 /** A glob as electron-builder's patterns use it here: `**`, `*`, `?` and literals. Anything else fails rather than be guessed. */
 function globRegExp(glob) {
@@ -216,9 +216,9 @@ function outsideApp(target) {
 
 test("inventory: the builder's patterns ship the app and not its tests or tools", () => {
   // The reader of the patterns is this file's own: check it against what the comments in the config promise.
-  for (const path of ["main.mjs", "preload.cjs", "package.json", "server/oats-web.mjs", "renderer/index.html", "renderer/views/common.mjs", "renderer/vendor/highlight.mjs"])
+  for (const path of ["main.mjs", "generated/preload.cjs", "package.json", "server/oats-web.mjs", "renderer/index.html", "renderer/views/common.mjs", "renderer/vendor/highlight.mjs"])
     assert.ok(shippedBy(path), `${path} ships`);
-  for (const path of ["renderer/harness.html", "renderer/harness-server.mjs", "test/inventory.test.mjs", "build-vendor.mjs", "electron-builder.config.cjs", "scripts/dist-smoke.mjs", "assets/brand/oats-logo.png", "README.md", "renderer/.DS_Store", "renderer/x.test.mjs"])
+  for (const path of ["preload.cjs", "terminal-bridge.cjs", "build-preload.mjs", "renderer/harness.html", "renderer/harness-server.mjs", "test/inventory.test.mjs", "build-vendor.mjs", "electron-builder.config.cjs", "scripts/dist-smoke.mjs", "assets/brand/oats-logo.png", "README.md", "renderer/.DS_Store", "renderer/x.test.mjs"])
     assert.ok(!shippedBy(path), `${path} does not ship`);
   for (const path of GENERATED) assert.ok(shippedBy(path), `${path}: a build product, shipped by its pattern`);
 });

@@ -15,13 +15,15 @@ function connectTlsPort() {
 }
 
 export async function probeProxy({policy = loadPolicy(),resolve4,connect = connectTlsPort} = {}) {
-  compilePolicy(policy);
+  const {external} = compilePolicy(policy), roles = policyRoles(policy);
   if (!resolve4) {
     const resolver = new Resolver({timeout:1000,tries:1});
     resolver.setServers(["127.0.0.1"]);
     resolve4 = name => resolver.resolve4(name);
   }
-  const answers = await resolve4(new URL(policy.targets[policyRoles(policy)[0]].origin).hostname);
+  // Hosted services declare no internal role; probe the first external host.
+  const host = roles.length ? new URL(policy.targets[roles[0]].origin).hostname : external[0].host;
+  const answers = await resolve4(host);
   assert.ok(answers.length === 1 && answers[0] === policy.frontAddress,"egress DNS address differs from policy");
   let refused = false;
   try { await resolve4(`denied-${randomUUID()}.invalid`); }

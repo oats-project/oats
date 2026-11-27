@@ -101,6 +101,9 @@ const FORM = `
     <p class="schedule-form-error schedule-error" role="alert"></p>
   </form>`;
 
+/** The kernel feature of a wake that starts a provider home OATS stopped (docs/desktop-cli-api.md, Features). */
+const WAKE_STARTS_PROVIDER_HOME = "wake-starts-provider-home";
+
 export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = onCliChange, frame = null } = {}) {
   const doc = el.ownerDocument;
   el.innerHTML = `<style>${CSS}</style><div class="oats-view schedules-page"><div class="schedule-sheet" hidden>${FORM}</div><div class="schedule-sheet schedule-delete-sheet" hidden><div class="schedule-confirm" role="alertdialog" aria-modal="true" aria-labelledby="schedule-delete-title" aria-describedby="schedule-delete-text"><h3 id="schedule-delete-title">Delete schedule</h3><p id="schedule-delete-text"></p><div class="schedule-actions"><button class="act danger schedule-delete-confirm" type="button">Delete schedule</button><button class="act schedule-delete-cancel" type="button">Cancel</button></div></div></div><div class="schedule-stage" style="height:100%"></div></div>`;
@@ -159,10 +162,16 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   }
   const setNote = (selector, text, warn = false) => { const note = q(selector); note.textContent = text; note.hidden = !text; note.classList.toggle("schedule-warn", !!text && warn); };
   /** A wake to a home on a session provider is a wake as any other; what differs is said: it goes to the session
-   * as input, and it never starts a stopped home (lib/schedule.mjs performWake starts a tmux home only). */
+   * as input, and what it does with a stopped home is the kernel's rule (lib/schedule.mjs performWake). A kernel
+   * that lists the feature `wake-starts-provider-home` starts a home OATS stopped at the due minute, in a fresh
+   * conversation, as it starts a tmux home, and leaves one stopped with the host to its resume. A kernel without
+   * the feature never starts a stopped home there: the note says which of the two this kernel does. */
   function syncHome() {
     const row = field("kind").value === "wake" ? instances.find(i => i.home === field("home").value) : null, provider = row ? sessionProvider(row) : null;
-    setNote(".schedule-home-note", provider ? `This home runs on ${sessionProviderName(provider) ? provider : "a session provider"}, not in a terminal: the wake is sent as its session's input. A wake never starts a stopped home there: it waits, and is delivered once the home runs again.` : "");
+    const stopped = cli()?.features?.includes(WAKE_STARTS_PROVIDER_HOME)
+      ? "A home OATS stopped is started at the wake's due minute, in a fresh conversation, and gets the message once it runs; one stopped with the host waits until it is resumed."
+      : "A wake never starts a stopped home there: it waits, and is delivered once the home runs again.";
+    setNote(".schedule-home-note", provider ? `This home runs on ${sessionProviderName(provider) ? provider : "a session provider"}, not in a terminal: the wake is sent as its session's input. ${stopped}` : "");
   }
   /** The Session backend's provider options: `names`, after "Soul default" and "tmux". A choice that is no longer
    * offered falls back to the soul's default. */

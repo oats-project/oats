@@ -54,6 +54,14 @@ what the kernel reads and writes.
    configuration does not lose or corrupt work. They are robustness, not
    access control.
 
+A **credential group** is a trust group that holds one person's credential
+([container.md](container.md#credential-groups)): its agents can read it, and
+no other agent can. On a host with credential groups, every agent runs in a
+container group, including the agents that were there before and those that
+hold no credential, and never as the operator's user. An agent that runs as
+the operator, or holds the Docker socket or the docker group, is on the
+operator's side of the line and can read every group.
+
 ## What OATS does not promise
 
 Inside one trust group, none of these hold:

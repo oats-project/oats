@@ -41,6 +41,11 @@ jobs:
         with:
           node-version: 22
 
+      # The receiver's --credential mode against a real root-owned tree. sudo -n
+      # fails the step where root is unavailable: it never skips.
+      - name: Prove the credential receiver against a root-owned tree
+        run: sudo -n python3 -I test/credential-receiver-root.py
+
       - name: Check packed inputs and workflow contracts for the manual proof
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.default_payload_proof }}
         run: |
@@ -83,11 +88,65 @@ jobs:
           python3 test/agent-egress-ingress-image.py "$EGRESS_IMAGE"
           python3 test/agent-egress-humanrole-ingress-image.py "$EGRESS_IMAGE"
 
+      # The live check depends on public origins' availability, so a PR runs it
+      # only when it changes the egress component or the check itself.
+      - name: Decide whether the live named-origins check runs
+        id: named-origins
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" != pull_request ]; then echo run=true >> "$GITHUB_OUTPUT"; exit 0; fi
+          git fetch --quiet --no-tags --depth=1 origin "$BASE_SHA"
+          changed=$(git diff --name-only "$BASE_SHA" HEAD -- container/agent/egress test/agent-egress-named-origins-image.py)
+          if [ -n "$changed" ]; then echo run=true >> "$GITHUB_OUTPUT"; else echo run=false >> "$GITHUB_OUTPUT"; fi
+
+      - name: Prove deployment-named external origins over real public TLS
+        if: ${{ steps.named-origins.outputs.run == 'true' }}
+        run: python3 test/agent-egress-named-origins-image.py "$EGRESS_IMAGE" "$AGENT_IMAGE"
+
       - name: Prove full and declared-role Compose boundaries
         run: |
           for roles in full aweb,registry aweb,registry,secrets aweb,logs,registry,secrets; do
             python3 test/agent-egress-boundary-image.py "$EGRESS_IMAGE" "$AGENT_IMAGE" "$roles"
           done
+
+      # One runner, two Compose projects on disjoint networks. The probe and the
+      # witness run from the deploy copy extracted from the reviewed egress image.
+      - name: Prove the split agent/services boundary and services witness
+        run: python3 test/agent-egress-boundary-image.py "$EGRESS_IMAGE" "$AGENT_IMAGE" split
+
+      # The proof refuses a runner that already holds what it would create, and
+      # leaves what it found exactly as it was: a receiver configuration, a group.
+      - name: Prove the credential groups proof leaves what it finds
+        run: |
+          sudo install -d -o root -g root -m 755 /etc/oats-login
+          printf '{"teams": {}}\n' | sudo tee /etc/oats-login/receiver.json > /dev/null
+          found=$(sudo sha256sum /etc/oats-login/receiver.json)
+          if python3 test/agent-credential-groups-image.py "$AGENT_IMAGE" > "$RUNNER_TEMP/found-config.log" 2>&1; then
+            echo 'The proof ran over an existing receiver configuration' >&2
+            exit 1
+          fi
+          grep -F '/etc/oats-login/receiver.json already exists on this runner' "$RUNNER_TEMP/found-config.log"
+          test "$(sudo sha256sum /etc/oats-login/receiver.json)" = "$found"
+          sudo rm -f /etc/oats-login/receiver.json
+          sudo rmdir /etc/oats-login
+          sudo groupadd -g 20003 oats-found-group
+          if python3 test/agent-credential-groups-image.py "$AGENT_IMAGE" > "$RUNNER_TEMP/found-group.log" 2>&1; then
+            echo 'The proof ran over an existing group' >&2
+            exit 1
+          fi
+          grep -F 'group 20003 already exists on this runner' "$RUNNER_TEMP/found-group.log"
+          test "$(getent group 20003 | cut -d: -f1)" = oats-found-group
+          test ! -e /etc/oats-login
+          test ! -e /srv/oats-team
+          sudo groupdel oats-found-group
+
+      # Four container groups on one runner: shared plus three that each hold
+      # one credential installed through the receiver. Every ordered pair is
+      # proved isolated, then four mutant legs must each fail a named row.
+      - name: Prove credential groups isolate each other
+        run: python3 test/agent-credential-groups-image.py "$AGENT_IMAGE"
 
       - name: Compare the default installed payload across the mount seam
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.default_payload_proof }}

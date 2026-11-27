@@ -18,8 +18,8 @@ import * as deployCheck from "../.github/scripts/team-image-deploy-check.mjs";
 
 const source = fileURLToPath(new URL("../container/agent/", import.meta.url));
 const sha = "a".repeat(40);
-const agentFiles = ["accept.mjs", "accept.sh", "compose.agent.inputs.yaml", "compose.agent.mirrors.yaml", "compose.agent.outbox.yaml", "compose.agent.trust.yaml", "compose.agent.work.yaml", "compose.agent.yaml", "supervisor.mjs"];
-const egressFiles = ["accept.mjs", "compose.agent.yaml", "egress/boundary.mjs", "egress/canary.mjs", "egress/compose.egress.yaml", "egress/compose.minimal.yaml", "egress/policy.mjs", "egress/preflight-network.mjs", "egress/probe-compose-boundary.mjs", "egress/probe-runtime.mjs", "supervisor.mjs"];
+const agentFiles = ["accept.mjs", "accept.sh", "compose.agent.credentials.yaml", "compose.agent.inputs.yaml", "compose.agent.mirrors.yaml", "compose.agent.outbox.yaml", "compose.agent.trust.yaml", "compose.agent.work.yaml", "compose.agent.yaml", "supervisor.mjs"];
+const egressFiles = ["accept.mjs", "compose.agent.yaml", "egress/boundary.mjs", "egress/canary.mjs", "egress/compose.egress.yaml", "egress/compose.minimal.yaml", "egress/policy.mjs", "egress/preflight-network.mjs", "egress/probe-compose-boundary.mjs", "egress/probe-runtime.mjs", "egress/probe-services-backends.mjs", "egress/split.mjs", "supervisor.mjs"];
 const installed = { agent: { oats: "0.70.7", aw: "1.36.59", claude: "2.1.322" }, egress: { coredns: "1.15.0", nginx: "1.22.1" } };
 
 function stage(t, image) {
@@ -39,10 +39,10 @@ function stage(t, image) {
 }
 
 test("Compose boundary refuses missing and unknown plan schemas before engine access", async () => {
-  for (const [plan, found] of [[{}, "none"], [{ schema: 2 }, "2"], [{ schema: "1" }, "invalid string"], [null, "none"]]) {
+  for (const [plan, found] of [[{}, "none"], [{ schema: 3 }, "3"], [{ schema: "1" }, "invalid string"], [null, "none"]]) {
     await assert.rejects(probeComposeBoundary(plan), error => {
       assert.equal(error.code, "E_EGRESS_PLAN_SCHEMA");
-      assert.equal(error.message, `E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1; found ${found}; regenerate the plan with schema: 1`);
+      assert.equal(error.message, `E_EGRESS_PLAN_SCHEMA: this probe reads runtime plan schema 1 (local) or 2 (split); found ${found}; regenerate the plan with schema: 1 or schema: 2`);
       return true;
     });
   }
@@ -120,7 +120,7 @@ test("every fragment path resolves within the extracted set or an explicit host 
 
 test("egress build context admits only pinned runtime and deploy inputs", () => {
   const rules = readFileSync(join(source, "egress/Dockerfile.dockerignore"), "utf8").trim().split("\n");
-  assert.deepEqual(rules, ["**", "!egress/", "egress/**", "!egress/Dockerfile", "!egress/policy.mjs", "!egress/supervisor.mjs", "!egress/external.mjs", "!egress/health.mjs", "!egress/probe-ingress.mjs", "!egress/compose.egress.yaml", "!egress/compose.minimal.yaml", "!egress/probe-compose-boundary.mjs", "!egress/boundary.mjs", "!egress/canary.mjs", "!egress/probe-runtime.mjs", "!egress/preflight-network.mjs", "!accept.mjs", "!supervisor.mjs", "!compose.agent.yaml", "!deploy-manifest.mjs"]);
+  assert.deepEqual(rules, ["**", "!egress/", "egress/**", "!egress/Dockerfile", "!egress/policy.mjs", "!egress/supervisor.mjs", "!egress/external.mjs", "!egress/health.mjs", "!egress/probe-ingress.mjs", "!egress/compose.egress.yaml", "!egress/compose.minimal.yaml", "!egress/probe-compose-boundary.mjs", "!egress/boundary.mjs", "!egress/canary.mjs", "!egress/probe-runtime.mjs", "!egress/preflight-network.mjs", "!egress/split.mjs", "!egress/probe-services-backends.mjs", "!accept.mjs", "!supervisor.mjs", "!compose.agent.yaml", "!deploy-manifest.mjs"]);
   const dockerfile = readFileSync(join(source, "egress/Dockerfile"), "utf8");
   const runtimeCopy = dockerfile.split("\n").find(line => line.startsWith("COPY --chmod=") && line.endsWith(" ./"));
   assert.equal(runtimeCopy, "COPY --chmod=644 egress/policy.mjs egress/supervisor.mjs egress/external.mjs egress/health.mjs egress/probe-ingress.mjs ./");
@@ -151,7 +151,7 @@ test("committed image pins pass the unchanged release and packed baseline guards
 });
 
 test("every extracted egress CLI entrypoint is exercised", t => {
-  for (const script of ["preflight-network.mjs", "probe-runtime.mjs"]) {
+  for (const script of ["preflight-network.mjs", "probe-runtime.mjs", "probe-services-backends.mjs"]) {
     const directory = stage(t, "egress");
     appendFileSync(join(directory, "egress", script), '\nif (process.argv[2] === "--help" && import.meta.url === pathToFileURL(process.argv[1]).href) process.stderr.write("broken entrypoint\\n");\n');
     assert.throws(() => checkExtractedScripts(directory, "egress"), /broken entrypoint/, `${script} must be executed`);

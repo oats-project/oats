@@ -128,20 +128,24 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
     ...(env.TEAM_INPUT_DIR ? [["TEAM_INPUT_DIR", "/inputs", false]] : []),
     ...(env.TEAM_OUTBOX_DIR ? [["TEAM_OUTBOX_DIR", "/outbox", true]] : []),
     ...(env.TEAM_WORK_DIR ? [["TEAM_WORK_DIR", "/work", true]] : []),
+    ...(env.TEAM_CREDENTIALS_DIR ? [["TEAM_CREDENTIALS_DIR", "/etc/agent-credentials", false]] : []),
   ].map(([name, target, rw]) => {
     const source = required(env, name);
     assert.ok(source.startsWith("/"), `${name} must be absolute`);
     assert.ok(!source.includes("docker.sock"), "no Docker socket source");
     return { source: resolve(source), target, rw, type: "bind" };
   });
-  for (const input of mounts.filter(m => m.target === "/etc/agent-trust/ca.pem" || m.target === "/mirrors" || m.target === "/inputs" || m.target === "/outbox")) {
-    for (const writable of mounts.filter(m => m.target !== input.target && (m.rw || input.target === "/outbox"))) {
+  // A credential group's directory is one person's credential: it shares no source with anything an agent writes,
+  // nor with a read-only source the operator may mount into every group (inputs, mirrors, the trust CA).
+  for (const input of mounts.filter(m => m.target === "/etc/agent-trust/ca.pem" || m.target === "/mirrors" || m.target === "/inputs" || m.target === "/outbox" || m.target === "/etc/agent-credentials")) {
+    const credentials = input.target === "/etc/agent-credentials";
+    for (const writable of mounts.filter(m => m.target !== input.target && (m.rw || input.target === "/outbox" || (credentials && ["/inputs", "/mirrors", "/etc/agent-trust/ca.pem"].includes(m.target))))) {
       let source, protectedSource;
       try { source = hostPath(input.source); protectedSource = hostPath(writable.source); }
-      catch { assert.fail("optional inputs and outbox require resolvable Docker-host sources (paths withheld)"); }
+      catch { assert.fail(credentials ? "credentials require resolvable Docker-host sources (paths withheld)" : "optional inputs and outbox require resolvable Docker-host sources (paths withheld)"); }
       const overlaps = source === protectedSource || source.startsWith(protectedSource.endsWith("/") ? protectedSource : protectedSource + "/")
         || protectedSource.startsWith(source.endsWith("/") ? source : source + "/");
-      assert.ok(!overlaps,"optional inputs and outbox must stay outside agent-writable sources");
+      assert.ok(!overlaps, credentials ? "credentials must stay outside agent-writable sources, /inputs, /outbox, /mirrors and the trust CA" : "optional inputs and outbox must stay outside agent-writable sources");
     }
   }
   equal("writable bind destinations", info.Mounts.filter(m => m.Type === "bind" && m.RW).map(m => m.Destination).sort(),
@@ -345,6 +349,48 @@ export function outboxCheck(enabled, uid, gid, fs = require("node:fs")) {
   } catch { throw new Error("outbox must match the optional setgid writable queue with private state (contents withheld)"); }
 }
 
+// Serialized inside the container as the runtime user: a credential group's directory, written only by
+// oats-login-receive --credential. Names and contents stay private; no file is opened.
+export function credentialsCheck(enabled, gid, fs = require("node:fs")) {
+  const root = "/etc/agent-credentials";
+  const refuse = (reason) => { throw new Error(`credentials must be a read-only root:${gid} 0750 directory of root:${gid} 0440 files: ${reason} (names and contents withheld)`); };
+  let directory;
+  try { directory = fs.lstatSync(root); }
+  catch (error) {
+    if (error.code === "ENOENT" && !enabled) return "credentials: absent without the optional fragment";
+    refuse(error.code === "ENOENT" ? "absent" : "unreadable");
+  }
+  if (!enabled) refuse("present without the optional fragment");
+  if (!directory.isDirectory()) refuse("not a directory");
+  if (directory.uid !== 0 || directory.gid !== Number(gid)) refuse("directory owner");
+  if ((directory.mode & 0o7777) !== 0o750) refuse("directory mode");
+  let names;
+  try { names = fs.readdirSync(root); }
+  catch { refuse("directory unreadable"); }
+  for (const name of names) {
+    const path = `${root}/${name}`;
+    let file;
+    try { file = fs.lstatSync(path); }
+    catch { refuse("file unreadable"); }
+    if (!file.isFile()) refuse("not a regular file");
+    if (file.uid !== 0 || file.gid !== Number(gid)) refuse("file owner");
+    if ((file.mode & 0o7777) !== 0o440) refuse("file mode");
+    let writable = true;
+    try { fs.accessSync(path, fs.constants.W_OK); }
+    catch (error) {
+      if (error.code !== "EROFS" && error.code !== "EACCES") refuse("file unreadable");
+      writable = false;
+    }
+    if (writable) refuse("writable file");
+  }
+  const probe = `${root}/.oats-read-only-probe-${process.pid}`;
+  let wrote = false;
+  try { fs.writeFileSync(probe, "probe", {flag: "wx", mode: 0o600}); wrote = true; }
+  catch (error) { if (error.code !== "EROFS" && error.code !== "EACCES") refuse("write probe failed"); }
+  if (wrote) { fs.unlinkSync(probe); refuse("writable directory"); }
+  return `credentials: read-only root:${gid} 0750 directory; ${names.length} root:${gid} 0440 file(s); names and contents withheld`;
+}
+
 // Validate the mount even before a token is provisioned; never create a placeholder.
 export function tokenCheck(gid, strict) {
   const fs = require("node:fs"), assert = require("node:assert/strict");
@@ -439,6 +485,7 @@ export function main(args, env, { spawnSync: run = spawnSync } = {}) {
   }
   report(`PASS ${JSON.parse(program(inputsCheck, [!!env.TEAM_INPUT_DIR]))}`);
   report(`PASS ${JSON.parse(program(outboxCheck, [!!env.TEAM_OUTBOX_DIR, uid, env.TEAM_OUTBOX_GID || null]))}`);
+  report(`PASS ${JSON.parse(program(credentialsCheck, [!!env.TEAM_CREDENTIALS_DIR, gid]))}`);
   report(`PASS ${program(credentialScan, [["/"], ["/proc", "/sys", "/dev", "/state", "/tmp", "/run", "/work", "/inputs", "/outbox"]], true)}`);
   const writableRoots = [...(env.TEAM_OUTBOX_DIR ? ["/outbox"] : []), "/state", "/tmp", "/run", "/work", "/dev/shm", "/dev/mqueue"];
   report(`PASS ${program(credentialScan, [[...writableRoots, ...(env.TEAM_INPUT_DIR ? ["/inputs"] : [])]])}`);

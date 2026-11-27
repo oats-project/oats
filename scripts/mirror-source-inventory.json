@@ -251,13 +251,13 @@
     "oats.aweb": {
       "pin": {
         "url": "https://github.com/awebai/oats-aweb.git",
-        "ref": "v1.49.1",
+        "ref": "v1.49.2",
         "path": "oats-package"
       },
-      "commit": "afdf0e2c925ef79a701b5e9496865d0beed2a39a",
-      "tagObject": "9bdf58d8646aa260315290bd87994f70f43ce994",
-      "manifestText": "{\n  \"package\": \"oats.aweb\",\n  \"version\": \"1.49.1\",\n  \"description\": \"Official OATS messaging and tasks integrations for team-scoped aweb identities, mail, chat, roster discovery, and task coordination.\",\n  \"compatibility\": {\n    \"oats\": \">=0.70.0\"\n  },\n  \"capabilities\": [\n    \"capabilities/oats-aweb\",\n    \"capabilities/oats-aweb-tasks\"\n  ]\n}\n",
-      "manifestSha256": "7f1c3ae92b0d5a8bcc79726b754896d46dde2f4297a6f03ceb08335de714d059",
+      "commit": "1c5c972382bcdc729d519103214516de193d31bd",
+      "tagObject": "f488ff9ac6c8f54f6201a66097e971b97696e734",
+      "manifestText": "{\n  \"package\": \"oats.aweb\",\n  \"version\": \"1.49.2\",\n  \"description\": \"Official OATS messaging and tasks integrations for team-scoped aweb identities, mail, chat, roster discovery, and task coordination.\",\n  \"compatibility\": {\n    \"oats\": \">=0.70.0\"\n  },\n  \"capabilities\": [\n    \"capabilities/oats-aweb\",\n    \"capabilities/oats-aweb-tasks\"\n  ]\n}\n",
+      "manifestSha256": "ddde7d5eec87af983bbabcbaaba5e45840aa3b99956484be62e3c6e336ffce4a",
       "entries": [
         {
           "path": "capabilities/oats-aweb",
@@ -340,7 +340,7 @@
           "type": "file",
           "mode": "100644",
           "size": 1583,
-          "sha256": "e18c3082294022a3c619967d7c2958d2a7c7515b46b7d24812031a542ac00746"
+          "sha256": "108959e27517e9756a30dbd637b5e91e32617bc753d6a2dd83c1a1fe0df424da"
         },
         {
           "path": "capabilities/oats-aweb-tasks/skills",
@@ -548,8 +548,8 @@
           "path": "capabilities/oats-aweb/lib/health-vocabulary.mjs",
           "type": "file",
           "mode": "100644",
-          "size": 6545,
-          "sha256": "7ebf4d419a2b39e8080ca91b09e0d4061bf33564abe5a4c222bd38940dd1262f"
+          "size": 6934,
+          "sha256": "a1bd329c64e946e50bc1337d6c1930603cb93d2aae30a5effe348568b6f1c543"
         },
         {
           "path": "capabilities/oats-aweb/lib/health.mjs",
@@ -779,8 +779,8 @@
           "path": "capabilities/oats-aweb/lib/wake-receive.mjs",
           "type": "file",
           "mode": "100644",
-          "size": 49489,
-          "sha256": "8d05ec432e4e32f16b7607761d15dc94b1b8150ab107b62af88ed05ffa18d704"
+          "size": 50311,
+          "sha256": "9e2edc969970d0910f1935096368c0db3b8c25210e38ec6c607653f94833e79e"
         },
         {
           "path": "capabilities/oats-aweb/lib/wake-service.mjs",
@@ -794,7 +794,7 @@
           "type": "file",
           "mode": "100644",
           "size": 14477,
-          "sha256": "9b6334f66985e456f40a6a3992a5419c7a38a4df987db29ee8dd0682f435b2d7"
+          "sha256": "40044025d8cd2742c7881df214d9edc9b35e3850476e42e2b9b042805a812d38"
         },
         {
           "path": "capabilities/oats-aweb/phrases",
@@ -915,6 +915,199 @@
           "mode": "100644",
           "size": 5958,
           "sha256": "93b9b20919693df255e1cfa99186494dd21ab3a7b6fc5faccafb818e4a73bb4c"
+        }
+      ]
+    },
+    "oats.bb": {
+      "pin": {
+        "url": "https://github.com/oats-project/oats-bb.git",
+        "ref": "v0.8.0",
+        "path": "oats-package"
+      },
+      "commit": "fd3e6798bf8343c9903446612978b4503d118fa5",
+      "tagObject": "a3c192d28881aa15a5916e3fe288995a3210b089",
+      "manifestText": "{\n  \"package\": \"oats.bb\",\n  \"version\": \"0.8.0\",\n  \"compatibility\": {\n    \"oats\": \">=0.70.5\"\n  },\n  \"description\": \"OATS on bb: the bb session provider (an instance as one bb thread).\",\n  \"capabilities\": [\n    \"capabilities/oats-bb\"\n  ]\n}\n",
+      "manifestSha256": "b9f21cf7220eb20022ca403ddbbf4dd632a9938d7c4a4f26b2d6684856d0954f",
+      "entries": [
+        {
+          "path": "capabilities/oats-bb",
+          "type": "directory"
+        },
+        {
+          "path": "capabilities/oats-bb/bin",
+          "type": "directory"
+        },
+        {
+          "path": "capabilities/oats-bb/bin/oats-bb.mjs",
+          "type": "file",
+          "mode": "100755",
+          "size": 9453,
+          "sha256": "cf5d8961664e9ab13e7a84d32122dc4d2ff910312280bd6406a4fb9361567904"
+        },
+        {
+          "path": "capabilities/oats-bb/lib",
+          "type": "directory"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/bb.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 19973,
+          "sha256": "1f7c075618e966682aa2d5fd05b1301b3874e9f57b52f11a422c55962f7cc0b3"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/commands.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 4148,
+          "sha256": "d6c37dbcc7cbd0b723162e317b211eeb84eb350450e3501c2ca51db6a6194f5f"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/deny.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 19135,
+          "sha256": "d3bf56b5251779c2506bc5ffa4ab8cef4f3949b221038f269af1bb541aa203a5"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/errors.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 2047,
+          "sha256": "a42e38e42912dfac7d1d55a112a1252b36f6ae6d3e77db7dcdd14449dbb2130f"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/exposure.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 2330,
+          "sha256": "ea9cc6b8ca2b8fec78c88a0822c3cb0b3ba68097b91c9ef4b7784f48bd3e31f2"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/halt.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 9581,
+          "sha256": "aba4064d6dbe620baa37397ac3b7a8049369a5df12400a7cdacb4adad1a067f8"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/input.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 5034,
+          "sha256": "af87684442a9ab5fef53d38c70d32ae412488f30d942313e2c815a89e0035695"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/inspect.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 4450,
+          "sha256": "13394276e364d33d7504f2a3618ef32ec0522be915b9da11ed897c9ef346a100"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/launch.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 22307,
+          "sha256": "4aa215f3e4c279f1c0443a5b7be21b220df24c576abc8ccdd88596f55c20348c"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/local-settings.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 33594,
+          "sha256": "c263b13880382c81504d79de4d5dba34a2e6709523519e79e26b7c60db501a7b"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/mode.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 8660,
+          "sha256": "3c715f5e8fb7d7e022bc43e0c2a36538c30176aa4f7a606d0e89e745500b026c"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/pi-config.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 14292,
+          "sha256": "cc893b6b68e2d0d06573b203512aeb7ea7e405ca335f1b34e4eb347058efb968"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/pi-model.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 8271,
+          "sha256": "6c586ba83230126ae3431579531d308f6b82973593859faa5184d8486f75e33c"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/processes.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 12307,
+          "sha256": "fd5ad11fda9c2764fe0f042d5a5607cee0185367c4d56b2ed0a58c2a61c73a52"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/project-env.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 16329,
+          "sha256": "961c50233151acd8d806c7b4de26e3eb70a458c65f26f8e51fc7d64dadef078c"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/readiness.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 36845,
+          "sha256": "87f04e41e7e5de82892dec04f7c72c799737cf21ee0eb03b6405f71a6c5c0dee"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/record.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 13171,
+          "sha256": "7ba9e2ed9f4366aa7a0019644c78c15937b5c941f69b002bcc196b2432bba24a"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/settings.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 7004,
+          "sha256": "b8e152dded74628744b5c62932264b1184e82b00ce869999875f02dd42d8df67"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/stop.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 27427,
+          "sha256": "2e136549417cbf45e6fbab427c63c5254b1823a1833729a494880828da3fcae4"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/threads.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 11346,
+          "sha256": "882e6383c912c584163b8047bd5c9ffaefcb9d84fa7ebede28db89edfd6582b2"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/title.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 1285,
+          "sha256": "f98a4e9de177e674eb5be1f8ffdc006cb9676c9a756b8442065023231fafda36"
+        },
+        {
+          "path": "capabilities/oats-bb/lib/wire.mjs",
+          "type": "file",
+          "mode": "100644",
+          "size": 5722,
+          "sha256": "36e640f38f738fe7743b0bfe15b6dd1abdffa8c96a49132d868b3463e0aa20c2"
+        },
+        {
+          "path": "capabilities/oats-bb/oats.json",
+          "type": "file",
+          "mode": "100644",
+          "size": 4377,
+          "sha256": "fb0f53832358edd02b4754607ed4b817bddde47db509dbc9041853248256a76f"
         }
       ]
     },

@@ -55,12 +55,13 @@ function checkoutRemote() {
 // compose it `from: github.com/awebai/oats`, as the template's ADAPTING.md says.
 const TEMPLATE_COPY = ["oats.build", "oats.code-review", "oats.developer", "oats.dispatcher", "oats.engineering-expert", "oats.landing-rules", "oats.maintainer"];
 
-test("member discovery over this repository lists its two private member capabilities and its seven-capability copy of the engineering template; every package mirror comes from its package", async () => {
+test("member discovery over this repository lists its three private member capabilities and its seven-capability copy of the engineering template; every package mirror comes from its package", async () => {
   const d = await discoverRepo("git:github.com/awebai/oats", { remote: checkoutRemote() });
   assert.equal(d.key, "github.com/awebai/oats");
   assert.deepEqual(d.problems, []);
   assert.deepEqual(d.capabilities.map((c) => ({ name: c.name, path: c.path, private: c.private })),
-    [{ name: "oats.build", path: "capabilities/oats-build", private: false },
+    [{ name: "oats.aweb-design", path: "capabilities/oats-aweb-design", private: true },
+     { name: "oats.build", path: "capabilities/oats-build", private: false },
      { name: "oats.code-review", path: "capabilities/oats-code-review", private: false },
      { name: "oats.desktop-ui", path: "capabilities/oats-desktop-ui", private: true },
      { name: "oats.developer", path: "capabilities/oats-developer", private: false },
@@ -78,7 +79,7 @@ test("member discovery over this repository lists its two private member capabil
   const catalog = JSON.parse(readFileSync(join(ROOT, "package-catalog.json"), "utf8"));
   const declared = YAML.parse(readFileSync(join(ROOT, "oats-workspace.yaml"), "utf8")).packages;
   const mirrors = execFileSync("git", ["ls-files", "--", "mirrors/*/oats.json"], { cwd: ROOT, encoding: "utf8" }).split("\n").filter(Boolean);
-  assert.equal(mirrors.length, 10, `the ten official package mirrors, saw ${mirrors.join(", ")}`);
+  assert.equal(mirrors.length, 11, `the eleven official package mirrors, saw ${mirrors.join(", ")}`);
   for (const file of mirrors) {
     const id = JSON.parse(readFileSync(join(ROOT, file), "utf8")).capability;
     const alias = catalog.capabilities[id];

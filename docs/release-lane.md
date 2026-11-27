@@ -13,6 +13,10 @@ The sections after the lane's own cover release-notes entries, the
 post-publish Desktop check, mirroring a released `oats.okf` and releasing
 `oats.framework`.
 
+The GitHub Actions [release workflow](../.github/workflows/release.yml)
+gives test and build jobs read-only repository access. Jobs which publish
+declare their own permissions in the workflow.
+
 ## When to use it
 
 - **Runner outage.** GitHub Actions is down, queued, or a runner image has
@@ -414,8 +418,8 @@ native module fails that leg.
 
 CI launches the packaged window on the Linux leg only: `release.yml` and
 `build-installers.yml` run the smoke once more with its launch phase, under
-xvfb, and a window that does not reach the shell fails the leg. That is the
-unpacked Linux build, not an installed AppImage or DEB. CI does **not** gate
+xvfb, and a window that does not reach the shell fails the leg. The GUI phase
+uses the AppImage's extract-and-run launch. CI does **not** gate
 the macOS launch: ad-hoc-signed, non-notarized Electron apps do not
 have a reliable interactive windowserver in headless CI. The lane does not
 launch the window: see
@@ -519,7 +523,11 @@ When the diff is not empty:
    (`ref`) and `oats-workspace.yaml`; update current documentation and skill
    recommendations to match the catalog, then run
    `node scripts/check-mirrors.mjs --verify` and `npm run validate`. Tests
-   read the catalog instead of carrying another release literal.
+   read the catalog instead of carrying another release literal. The
+   `oats.knowledge-theory` curriculum names no framework version (its
+   example writes `vX.Y.Z`, and `scripts/check-knowledge-theory-package.mjs`
+   refuses a concrete one), so the pin leaves that capability as its tag
+   has it.
    The pin does not ride the first PR:
    the tag needs the bumped manifest on `main` first, and CI reads the
    catalog's ref from the remote. Two tests in

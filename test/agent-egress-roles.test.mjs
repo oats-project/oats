@@ -171,6 +171,19 @@ test("registry runtime refuses missing or incorrect authority TXT evidence", asy
   }
 });
 
+test("runtime checks authority TXT without registry only when external roles are declared", async () => {
+  const policy={...subset(["aweb"]),authorityRecords:full().authorityRecords,
+    externalTargets:{awid:{origin:"https://api.awid.ai"}},externalResolverAddresses:["1.1.1.1"]};
+  const {plan,io,calls}=runtime(policy),internalResolve4=io.resolver.resolve4;
+  io.resolver.resolve4=async host=>host==="api.awid.ai"?[policy.frontAddress]:internalResolve4(host);
+  assert.equal(await probeRuntime(plan,io),true);
+  assert.deepEqual(calls.txt,["_awid.team.example.invalid"]);
+  const {externalTargets:_targets,externalResolverAddresses:_resolvers,...internal}=policy;
+  const withoutExternal=runtime(internal);
+  await assert.rejects(probeRuntime(withoutExternal.plan,withoutExternal.io),{name:"BoundaryFailure",
+    message:"namespace authority records are required with registry, and refused without registry or an external role"});
+});
+
 test("subset cannot drop universal controls or add an undeclared allowed path", async () => {
   const {plan,io} = runtime();
   await assert.rejects(probeRuntime(plan, {...io,tlsReachable:async()=>true}), /TLS.*reachable/);

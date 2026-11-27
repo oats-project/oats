@@ -86,7 +86,7 @@ const { attachArgv, checkRemote, connectServer, forgetSnapshot, getServer, inspe
 const { readSessionViewer } = await kernelImport("session-viewer", () => import("../lib/session-viewer.mjs"));
 const { tickTriggers } = await kernelImport("triggers", () => import("../lib/triggers.mjs"));
 const A = await kernelImport("automations", () => import("../lib/automations.mjs"));
-const { parseEnvelopeText, SCHEDULE_SLOT_UNREADABLE, SCHEDULE_SLOT_ORPHANED, unresolvedScheduleAttempts, scheduleScopeOf, listSchedules, describe: describeSchedule, testSchedule, addSchedule, updateSchedule, updateScheduleDescription, setEnabled: setScheduleEnabled, removeSchedule, runNow: runScheduleNow, reconcile: reconcileSchedule, tickHost, tickWorkspace, scopeAutomations, scheduleKind, registerWorkspace, unregisterWorkspace, readRegistry, schedulerStatus, saveWakeForHome, removeWakeForHome, wakeFromFlags, withHostLock, scheduleError, SCHEDULE_API } = await kernelImport("schedule", () => import("../lib/schedule.mjs"));
+const { parseEnvelopeText, SCHEDULE_SLOT_UNREADABLE, SCHEDULE_SLOT_ORPHANED, unresolvedScheduleAttempts, scheduleScopeOf, madeByAutomation, listSchedules, describe: describeSchedule, testSchedule, addSchedule, updateSchedule, updateScheduleDescription, setEnabled: setScheduleEnabled, removeSchedule, runNow: runScheduleNow, reconcile: reconcileSchedule, tickHost, tickWorkspace, scopeAutomations, scheduleKind, registerWorkspace, unregisterWorkspace, readRegistry, schedulerStatus, saveWakeForHome, removeWakeForHome, wakeFromFlags, withHostLock, scheduleError, SCHEDULE_API } = await kernelImport("schedule", () => import("../lib/schedule.mjs"));
 const { hostUnitFiles, hostUnitStatus, installHostUnit, uninstallHostUnit } = await kernelImport("schedule-host", () => import("../lib/schedule-host.mjs"));
 const { kernelNode, stableNode } = await kernelImport("stable-node", () => import("../lib/stable-node.mjs"));
 const { receiveAttachment, uploadAttachment, readStreamBounded, MAX_ATTACHMENT_BYTES } = await kernelImport("attachments", () => import("../lib/attachments.mjs"));
@@ -109,13 +109,14 @@ const { callSession, parseMaxAge, readBudget } = await kernelImport("read-call",
 const { cachedWorkspace, legacyLayoutProblems, statusAnswer, statusView } = await kernelImport("roster-read", () => import("../lib/roster-read.mjs"));
 const { memberLabel, memberRows, packageRows, standaloneCatalogVersion, standalonePackages, workspaceName, workspaceStatusAnswer, workspaceStatusView } = await kernelImport("workspace-read", () => import("../lib/workspace-read.mjs"));
 const { expandInlineValues, flagValue } = await kernelImport("argv", () => import("../lib/argv.mjs"));
+const { launchChoicesOfFlags } = await kernelImport("launch-choices", () => import("../lib/launch-choices.mjs"));
 const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, HOST_RUN_USAGE, RESUME_LOCAL_ONLY, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, BOARD_USAGE, commandArgvProblem, commandFlags, sameWorkDeprecation } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
 
 const rawArgs = process.argv.slice(2);
 const { argv: args, problem: argvProblem, inline: inlineValues } = expandInlineValues(rawArgs);
 let cmd = args[0];
 const HELP_WORDS = new Set(["help", "--help", "-h"]);
-const KERNEL_COMMANDS = new Set(["harness", "automations", "trigger", "capture", "capabilities", "deployments", "doctor", "inspect", "instance", "operation", "package", "readiness", "souls", "soul", "teams", "launch-config", "experimental", "host", "onboard", "pane", "reader", "recall", "retire", "root", "schedule", "server", "session", "setup", "spawn", "status", "sync", "tui", "update", "version", "workspace", "worktree"]);
+const KERNEL_COMMANDS = new Set(["harness", "automations", "trigger", "capture", "capabilities", "deployments", "doctor", "inspect", "instance", "operation", "package", "readiness", "souls", "soul", "teams", "settings", "launch-config", "experimental", "host", "onboard", "pane", "reader", "recall", "retire", "root", "schedule", "server", "session", "setup", "spawn", "status", "sync", "tui", "update", "version", "workspace", "worktree"]);
 /** Commands whose argv another parser reads (packages/record, packages/experimental and packages/tui parse process.argv). */
 const OWN_ARGV_COMMANDS = new Set(["capture", "recall", "setup", "experimental", "tui"]);
 /** Commands `--server <id>` runs on a registered server. */
@@ -124,6 +125,14 @@ const flag = (name) => flagValue(args, inlineValues, name);
 function yoloFlag() {
   if (args.includes("--yolo") && args.includes("--no-yolo")) cmdFail("E_BAD_ARGS", "choose --yolo or --no-yolo, not both");
   return args.includes("--yolo") ? true : args.includes("--no-yolo") ? false : undefined;
+}
+/** `--launch-choice <name>=<value>`, given any number of times (feature launch-choices): the launch's
+ *  choices as `{ <name>: <value> }`, undefined when the flag is not given. A value that is missing or
+ *  malformed, and a name given twice, are refused E_BAD_ARGS (lib/launch-choices.mjs). */
+function launchChoiceFlags() {
+  const values = [];
+  for (let i = 0; i < args.length; i++) if (args[i] === "--launch-choice") values.push(args[i + 1] !== undefined && !args[i + 1].startsWith("--") ? args[++i] : true);
+  try { return launchChoicesOfFlags(values); } catch (e) { cmdFail(e.code, e.message); }
 }
 function valueFlag(name) {
   const value = flag(name);
@@ -2421,6 +2430,64 @@ async function teamsCmd() {
   for (const p of doc.problems) console.log(`${p.severity === "failure" ? "problem" : "warning"}   ${p.code}  ${p.message} — ${p.fix}`);
 }
 
+/** `oats settings set <capability> <key> <value> | unset <capability> <key> [--dir <deployment>] [--json]`
+ *  (feature settings-set, lib/settings-set.mjs): one host setting of a capability, recorded in this
+ *  deployment's oats-local.yaml. An operator's command: refused inside an instance, before anything is read. */
+async function settingsCmd() {
+  const bail = (code, msg, details) => (JSON_MODE ? jsonFail(code, msg, details) : die(msg));
+  const usage = "usage: oats settings set <capability> <key> <value> | unset <capability> <key>  [--dir <deployment>] [--json]";
+  const verb = positional(1);
+  if (verb !== "set" && verb !== "unset") return bail("E_USAGE", usage);
+  // The words after the verb, a value flag's value set aside (the dispatch checked the flags and their count).
+  const words = [];
+  for (let i = 2; i < args.length; i++) {
+    if (args[i] === "--dir") { i++; continue; }
+    if (!args[i].startsWith("--")) words.push(args[i]);
+  }
+  const [capability, key, text] = words;
+  if (words.length !== (verb === "set" ? 3 : 2)) return bail("E_BAD_ARGS", `oats settings ${verb} needs ${verb === "set" ? "a capability, a key and a value" : "a capability and a key"} — ${usage}`);
+  const S = await import("../lib/settings-set.mjs");
+  const caller = (await import("../lib/caller-instance.mjs")).callerInstance();
+  if (caller) {
+    // Where to run it from: this deployment, when it can be told without acting on anything.
+    let deployment = null, instance = null;
+    try { deployment = dirname(loadLocal(dirFlag()).path); } catch { /* unknown: the sentence says "<deployment>" */ }
+    if (caller.home) { try { instance = JSON.parse(readFileSync(join(caller.home, "instance.json"), "utf8")).instance ?? null; } catch { /* named by its home alone */ } }
+    const e = S.operatorOnly(caller, { verb, deployment, instance: typeof instance === "string" ? instance : null });
+    return bail(e.code, e.message, e.details);
+  }
+  let result;
+  try {
+    // Before anything is read: a credential-shaped key never gets as far as the file or the catalog.
+    S.assertNotCredential(capability, key);
+    const { ctx, discovery, lock, items } = await catalogRows("capabilities", bail);
+    const rows = items.filter((r) => r.name === capability);
+    const C = await import("../lib/capability-show.mjs");
+    if (!rows.length) C.selectCapabilityRow(items, capability); // E_CAPABILITY_UNKNOWN, in the catalog's own words
+    const remote = memoizedRemote(remoteModule);
+    const catalog = (() => { try { return officialPackageCatalog(); } catch { return null; } })();
+    const sources = [];
+    for (const row of rows) {
+      const source = await C.capabilitySource(row, { discovery, lock, catalog, remote, remoteOptions: ctx.remoteOptions });
+      sources.push({ manifest: source.manifest, layer: source.manifest?.layer ?? row.layer ?? null, origin: row.origin });
+    }
+    const value = verb === "set" ? S.settingValueOf(text, sources, key) : undefined;
+    result = S.editSetting({ deployment: ctx.deploymentDir, localPath: ctx.localPath }, { capability, key, value, sources });
+    if (result.changed) {
+      // The trace is best effort: a line that cannot be written is a warning, never a failed set.
+      try { S.appendSettingsTrace(ctx.deploymentDir, { at: new Date().toISOString(), verb, capability, key, previous: result.previous, value: result.value }); }
+      catch (e) { result = { ...result, warnings: [`the change was written, and its line in ${S.settingsTracePath(ctx.deploymentDir)} was not: ${e.message}`] }; }
+    }
+  } catch (e) { if (typeof e?.code === "string" && e.code.startsWith("E_")) return bail(e.code, e.message, e.details ?? e.provenance); throw e; }
+  if (JSON_MODE) { jsonOk(result); return; }
+  const shown = (v) => (v === null ? "(not set)" : JSON.stringify(v));
+  if (!result.changed) console.log(verb === "unset" ? `${shortPath(result.file)} does not set ${capability}.${key}: nothing to change` : `${capability}.${key} is already ${shown(result.value)} in ${shortPath(result.file)}: nothing to change`);
+  else console.log(`${verb === "set" ? `Set ${capability}.${key} to ${shown(result.value)}` : `Unset ${capability}.${key}`} in ${shortPath(result.file)} (was ${shown(result.previous)})`);
+  console.log(`effective  ${shown(result.effective)}${result.value === null && result.effective !== null ? " (the capability's default)" : ""}`);
+  if (result.changed) console.log("It takes effect at the next spawn, start, restart or readiness read; a running session is not changed.");
+  for (const w of result.warnings ?? []) console.error(`warning  ${w}`);
+}
+
 /** The `oats soul teams` edit flags team model 3 removed (0.38.0): a soul's teams are the workspace's `souls:`. */
 const SOUL_TEAMS_REMOVED_FLAGS = ["--add", "--remove", "--default", "--clear-default"];
 const SOUL_TEAMS_REPLACEMENT = "souls: in oats-workspace.yaml (a PR to the workspace file)";
@@ -3015,6 +3082,12 @@ async function spawnCmd() {
     if (process.stdin.isTTY) bail("E_BAD_ARGS", "--task-file - reads the task from stdin");
     try { stdinTask = (await readStreamBounded(process.stdin, MAX_ATTACHMENT_BYTES)).toString("utf8"); } catch (e) { bail("E_BAD_ARGS", `--task-file -: the task could not be read from stdin (${e.message})`); }
   } else if (taskFileFlag && !existsSync(taskFileFlag)) bail("E_BAD_ARGS", `--task-file not found: ${taskFileFlag}`);
+  // --made-by-automation <schedule|trigger>:<qualifiedId> (internal, feature status-automation): the
+  // schedule or trigger whose tick runs this spawn, recorded as instance.json.automation when this
+  // deployment has that automation (lib/schedule.mjs madeByAutomation). A label: nothing reads it to
+  // decide anything, and a value that names no automation is not recorded and refuses nothing.
+  const madeBy = valueFlag("made-by-automation");
+  const automation = madeBy === undefined ? null : madeByAutomation(scheduleScopeOf(workspaceOf(root)), madeBy, {});
   // --trigger-event <file>: the event a trigger spawns this instance for (lib/triggers.mjs). It is
   // copied to <home>/.oats/trigger-event.json (OATS_TRIGGER_EVENT_FILE) and recorded as instance.json.trigger.
   let triggerEvent;
@@ -3087,6 +3160,7 @@ async function spawnCmd() {
   try {
     if (args.includes("--allow-child-spawns") && args.includes("--no-child-spawns")) bail("E_BAD_ARGS", "--allow-child-spawns and --no-child-spawns contradict");
     if (flag("base") === true) bail("E_BAD_ARGS", "--base needs a ref");
+    const launchChoices = launchChoiceFlags();
     { const spawnOpts = {
       prepared,
       purpose: flag("purpose"), ...(nameFlag !== undefined ? { name: String(nameFlag) } : {}), task: taskText ?? stdinTask, taskFile: stdinTask === undefined ? taskFileFlag : undefined, relation, relativeTo, relativeRoot,
@@ -3102,10 +3176,13 @@ async function spawnCmd() {
         ? repo : repo || defaultRepo(workspaceOf(root)) || defaultRepo(process.cwd()),
       work: requestedWork, workDir, harness: harnessFlag(), backend, yolo, model: flag("model"), branch,
       launchConfig: valueFlag("launch-config"),
+      // Feature launch-choices: what the backend's provider is handed for this launch, or the spawn is refused.
+      ...(launchChoices !== undefined ? { launchChoices } : {}),
       // Feature instance-background: the flag wins over the soul's `background:`.
       ...(args.includes("--background") ? { background: true } : args.includes("--no-background") ? { background: false } : {}),
       launch: !args.includes("--no-launch"),
       ...(triggerEvent ? { triggerEvent } : {}),
+      ...(automation ? { automation } : {}),
       // K6: --preview decides everything and touches nothing; --base <ref>
       // selects a worktree's start point; --model @native-default is the
       // explicit "harness's own default" (distinct from omitting --model).
@@ -3701,7 +3778,7 @@ async function sessionCmd() {
       // refused with a launch choice before anything of the home is read.
       const resume = args.includes("--resume");
       if (resume) {
-        const chosen = ["--launch-config", "--harness", "--model", "--yolo", "--no-yolo", "--reselect-launch"].filter((f) => args.some((a) => a === f || a.startsWith(`${f}=`)));
+        const chosen = ["--launch-config", "--harness", "--model", "--yolo", "--no-yolo", "--reselect-launch", "--launch-choice"].filter((f) => args.some((a) => a === f || a.startsWith(`${f}=`)));
         if (chosen.length) bad(`--resume runs the launch this home recorded; it cannot be combined with ${chosen.join(", ")}; nothing was read or started`);
       }
       // Refuse before launch selection or live-team discovery can prepare this home. Every start
@@ -3709,7 +3786,9 @@ async function sessionCmd() {
       // upgrade that runs (it holds the claim) the start is busy, not a partial upgrade: that one is
       // left to the claim. A resume is always refused under the claim.
       if (!resume && !upgradeHoldsClaim(home)) assertNoPartialUpgrade(home);
-      const opts = { model: model || undefined, launchConfig, harness, yolo: yoloFlag(), ...(resume ? {} : await homeSandboxSourceOf(home)), ...(reselectLaunch ? { reselectLaunch: true, launchOffered: await homeLaunchOffered(home, { named: harness !== undefined }) } : {}), ...(resume ? { resume: true } : {}), env: process.env, ...(await homeLiveTeams(home)) };
+      // Feature launch-choices: this start's own choices, over the ones the home records.
+      const launchChoices = resume ? undefined : launchChoiceFlags();
+      const opts = { model: model || undefined, launchConfig, harness, yolo: yoloFlag(), ...(launchChoices !== undefined ? { launchChoices } : {}), ...(resume ? {} : await homeSandboxSourceOf(home)), ...(reselectLaunch ? { reselectLaunch: true, launchOffered: await homeLaunchOffered(home, { named: harness !== undefined }) } : {}), ...(resume ? { resume: true } : {}), env: process.env, ...(await homeLiveTeams(home)) };
       if (args[1] === "restart") {
         const grace = flag("stop-grace");
         if (grace !== undefined) { if (grace === true || !/^\d+$/.test(String(grace)) || Number(grace) < 1 || Number(grace) > 300) bad("--stop-grace needs a number of seconds (1..300) to wait for the harness after SIGTERM"); opts.stopGraceMs = Number(grace) * 1000; }
@@ -4777,7 +4856,8 @@ async function serverRouteCmd() {
     }
     if (args[1] === "start" || args[1] === "restart") {
       const value = (name) => { const v = flag(name); if (v === true) bail("E_BAD_ARGS", `--${name} needs a value`); return v; };
-      const choices = { ...addr, model: value("model"), launchConfig: value("launch-config"), harness: harnessFlag(value), yolo: yoloFlag() };
+      const launchChoices = launchChoiceFlags();
+      const choices = { ...addr, model: value("model"), launchConfig: value("launch-config"), harness: harnessFlag(value), yolo: yoloFlag(), ...(launchChoices !== undefined ? { launchChoices } : {}) };
       if (flag("stop-grace") !== undefined) bail("E_BAD_ARGS", "--stop-grace is currently supported on the execution host; omit it to use the remote restart's default wait");
       let out;
       try { out = (args[1] === "restart" ? restartRemote : startRemote)(id, choices); } catch (e) { bail(e.code || "E_SSH", e.message, e.details); }
@@ -4987,7 +5067,7 @@ try {
 // the canonical root when the command resolved one (lib/resolved-deployment.mjs; lib/deployments.mjs
 // listResolved): a listed deployment costs one bounded read of the list. Never on --server (the remote's path is not this computer's), never for
 // help, and silent: no output, no change to the command's answer or exit status.
-const LISTS_ITS_DEPLOYMENT = new Set(["automations", "capabilities", "doctor", "harness", "inspect", "instance", "launch-config", "operation", "package", "pane", "readiness", "retire", "schedule", "session", "soul", "souls", "spawn", "status", "sync", "teams", "trigger", "update", "workspace", "worktree"]);
+const LISTS_ITS_DEPLOYMENT = new Set(["automations", "capabilities", "doctor", "harness", "inspect", "instance", "launch-config", "operation", "package", "pane", "readiness", "retire", "schedule", "session", "settings", "soul", "souls", "spawn", "status", "sync", "teams", "trigger", "update", "workspace", "worktree"]);
 // `instance suggest-name` records nothing (#1490 §2): the oats-local.yaml it reads is not listed.
 // `session resume` reads the list and never writes it (#1559).
 if (LISTS_ITS_DEPLOYMENT.has(cmd) && flag("server") === undefined && !(cmd === "instance" && args[1] === "suggest-name") && !(cmd === "session" && args[1] === "resume") && !args.slice(1).some((a) => a === "--help" || a === "-h")) observeResolvedDeployment(listResolved);
@@ -5032,6 +5112,7 @@ else if (cmd === "package") await packageCmd();
 else if (cmd === "workspace") await workspaceCmd();
 else if (cmd === "capabilities" || cmd === "souls") await itemsCmd(cmd);
 else if (cmd === "teams") await teamsCmd();
+else if (cmd === "settings") await settingsCmd();
 else if (cmd === "soul") await soulCmd();
 else if (cmd === "status") await status();
 else if (cmd === "pane") await paneCmd();
@@ -5234,6 +5315,9 @@ Usage:
       [--reselect-launch]                   applies the launch preferences now (oats-local.yaml
                                             souls.launch, the soul's launch); a changed preference
                                             never reaches an existing home without it or a respawn
+      [--launch-choice <name>=<value>]…     a choice the home's session provider declares, for
+                                            this start and the ones after it; <name>=default
+                                            clears a recorded one; refused on tmux
   oats session start --resume --home <abs>   start a home whose session was LOST (a reboot, a dead
                                             tmux server) in its own last conversation, the
                                             recorded launch as is; fresh on TASK.md when none is
@@ -5287,6 +5371,9 @@ Usage:
       [--model <id>|@native-default]        override the selected model; @native-default
                                             selects the harness's own model default
       [--backend tmux|<provider>] [--yolo|--no-yolo]  session backend (tmux, or a session provider of the soul's capabilities) and launch permission option
+      [--launch-choice <name>=<value>]…     a launch choice the backend's session provider declares
+                                            (a reasoning level, a service tier); refused, never
+                                            dropped, for a name it does not declare and on tmux
       [--background|--no-background]        list the instance under Background (presentation
                                             only); default: the soul's background:, else no
       [--no-launch] [--json]                 scaffold without launching; JSON result envelope
@@ -5325,6 +5412,11 @@ Usage:
                                             <home>/.oats/trigger-event.json, exposed through
                                             OATS_TRIGGER_EVENT_FILE and recorded in
                                             instance.json.trigger (docs/schedules.md)
+      --made-by-automation <kind>:<qualifiedId>  internal, for automations: a schedule's or a trigger's
+                                            tick names itself (schedule:<qualifiedId> or
+                                            trigger:<qualifiedId>), recorded as
+                                            instance.json.automation when this deployment has it.
+                                            A label, never proof or permission
       [--help|-h]                            global help switches: show usage and exit
   oats spawn <agent> ... --server <id>        routed spawn on the server's installed oats;
                                             --server is consumed before the local flag scanner
@@ -5404,6 +5496,14 @@ Usage:
       [--max-age <s>]                       (souls have no private mode), with origin
                                             (member <key> @ <commit> | package <id> v<ver>) and its
                                             teams on this deployment
+  oats settings set <capability> <key> <value> | unset <capability> <key>
+      [--dir <d>] [--json]                  record one host setting of a capability in this
+                                            deployment's oats-local.yaml (settings.<capability>),
+                                            checked as a spawn reads it; comments and order kept.
+                                            An operator's command: refused inside an instance
+                                            (E_SETTINGS_OPERATOR_ONLY; a guard against an agent
+                                            doing it by accident, not a security boundary), and
+                                            never for a credential-shaped key. Local only
   oats teams [--json] | add <label> --team <id> [--description <d>] [--no-default] | remove <label>
       | default <label> [--if-absent | --expect <label>]
       [--dir <d>]                           this deployment's teams (shared + local), the

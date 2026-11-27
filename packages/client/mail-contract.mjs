@@ -54,10 +54,15 @@ const UNREADABLE = 'unreadableConversations';
 function identity(i) {
   const listed = record(i) && Object.hasOwn(i, UNREADABLE);
   if (listed && !(i.error === 'conversation-unreadable' && Array.isArray(i[UNREADABLE]) && i[UNREADABLE].every(opaque))) return false;
-  return exact(i, listed ? [...IDENTITY_KEYS, UNREADABLE] : IDENTITY_KEYS) && opaque(i.team) && opaque(i.alias) && opaque(i.identity) && typeof i.primary === 'boolean'
+  if (!exact(i, listed ? [...IDENTITY_KEYS, UNREADABLE] : IDENTITY_KEYS) || !opaque(i.team) || typeof i.primary !== 'boolean'
     // An identity's error: the provider's word for it (oats.aweb: identity-missing, identity-unreadable, no-mail-read,
     // threads-unreadable, conversation-unreadable, too-many-threads), opaque: a client words the ones it knows.
-    && (i.error === null || opaque(i.error));
+    || !(i.error === null || opaque(i.error))) return false;
+  // An entry with an error may carry an empty alias and identity: its provider couldn't read who it is (#2138). Such an
+  // entry is worded from its team and its error alone; nothing addresses, sends from, replies as or matches messages to
+  // its alias or identity. With no error, both are the identity's own non-empty values.
+  const empty = i.error !== null;
+  return text(i.alias, empty) && text(i.identity, empty);
 }
 function message(m) {
   return exact(m, MESSAGE_KEYS) && opaque(m.id) && (m.conversationId === null || opaque(m.conversationId)) && text(m.threadTitle, true)

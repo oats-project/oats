@@ -3307,7 +3307,7 @@ test("the package mirrors carry the versions package-catalog.json pins", () => {
   // each capability; a capability a package exports under another identity is
   // mapped, not assumed.
   const expected = { "oats-okf": "oats.okf", "oats-aweb": "oats.aweb", "oats-aweb-tasks": "oats.aweb", "oats-jira": "oats.jira", "oats-linear": "oats.linear", "oats-authoring": "oats.authoring",
-    "oats-folio": "oats.apps", "oats-library": "oats.apps" };
+    "oats-folio": "oats.apps", "oats-library": "oats.apps", "oats-bb": "oats.bb" };
   for (const [slug, pkg] of Object.entries(expected)) {
     const ref = catalog.packages[pkg]?.ref;
     assert.ok(ref, `package-catalog.json pins no ref for ${pkg}`);

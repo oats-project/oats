@@ -242,6 +242,104 @@ alias uses its separate account and key. The receiver creates credential
 files root-owned, group-readable and mode 0440; the login directory is mode
 0750, and its parents must be root-owned, not writable by others and not
 symlinks. Neither the caller's command nor stdin chooses a destination path.
+A destination that shares the file or the directory of a personal credential
+([Personal credentials](#personal-credentials)), by any spelling or through
+any symlink that exists, is refused with `configured path is shared with
+another entry`, for `install`, `status` and `remove`.
+
+### Personal credentials
+
+The same receiver installs one person's credential for one credential group
+([container.md](container.md#credential-groups)). The person sends it from
+their own machine, so the operator never handles the value. Each entry has a
+dedicated key, and that key decides the destination. Root's
+`authorized_keys` holds one line per entry:
+
+```text
+restrict,command="/usr/local/sbin/oats-login-receive --credential <entry-id>" <entry-key>
+```
+
+An entry id is lowercase letters, digits and dashes, starting with a letter
+or digit, at most 63 characters. `SSH_ORIGINAL_COMMAND` is only `install`,
+`status` or `remove`, with no name and no path. Without `--credential`, the
+receiver is the harness-credential receiver above, unchanged.
+
+Each entry is in the optional `credentials` object of the same root-owned
+`/etc/oats-login/receiver.json`, beside `teams` or without it:
+
+```json
+{
+  "credentials": {
+    "mail-a": {
+      "group": "oats-cred-a",
+      "path": "/srv/oats-team/cred-a/credentials/mail",
+      "access": "read-only"
+    }
+  }
+}
+```
+
+- `group` is an existing unix group: the credential group's runtime GID.
+- `path` is required, absolute and normalized, and its parent is a
+  directory named `credentials`, the directory the group's
+  `TEAM_CREDENTIALS_DIR` binds. Neither the file nor that directory may be
+  the path or the directory of another entry or of any `teams` destination,
+  by any spelling or through any symlink that exists: each person's key
+  reaches only their own file. Harness mode makes the same check from its
+  side, at every action, so an alias made after an install is refused too.
+- `access` must be `"read-only"`, the only access this receiver writes.
+
+The person sends the credential with the entry's key:
+
+```bash
+credential-source | ssh -i <entry-key> root@<host> install
+ssh -i <entry-key> root@<host> status
+ssh -i <entry-key> root@<host> remove
+```
+
+`credential-source` supplies the value on stdout, as above, so the value
+never passes through a terminal: that pipe is what keeps it off one. Under
+`restrict`, sshd allocates no pty, so the receiver's own check for a terminal
+on stdin never fires on this route; it guards only a direct invocation. The
+value is opaque: at most 65,536 bytes of strict UTF-8 with no NUL, with
+surrounding whitespace stripped. It may span lines, since a client-credential
+bundle may be JSON, and nothing checks its shape. It writes the file
+root:group 0440, atomically. It creates a missing
+`credentials` directory root:group 0750, with missing parents root:root
+0755. It refuses an existing directory with any other owner, group or mode,
+and never changes it. Every existing component must be root-owned, not
+writable by group or others, and not a symlink.
+
+The answer is one JSON line, `{"ok", "entry", "fingerprint", "replacedAt"}`,
+with `"error"` when `ok` is false. It never contains the value. Syslog
+records only the validated action, the entry id, the fingerprint and the
+client address. Removal deletes the delivered file; revoke the credential
+with its provider too.
+
+The fingerprint is the first 64 bits of an unsalted SHA-256 of the value. It
+reaches the auth log and every `status` answer, so it identifies a
+high-entropy value without revealing it, but it would let anyone who reads
+it confirm a guess of a low-entropy one. An entry must hold a high-entropy
+secret, such as a generated client secret, never a password or a short
+token. The refusals:
+
+| Error | Cause |
+|---|---|
+| `bad entry id` | The key's `--credential` id breaks the grammar. |
+| `usage: oats-login-receive [--credential <entry-id>]` | The forced command has other arguments. |
+| `usage: install\|remove\|status` | The command is anything but one action. |
+| `stdin is a terminal` | An install from a terminal. |
+| `receiver config absent`, `receiver config unreadable: <type>` | The configuration is missing or is not JSON. |
+| `<path> is not root-owned or is group/other-writable`, `<path> is a symlink` | The configuration, a directory on the path or an existing file. |
+| `receiver config has no credentials` | The configuration has no `credentials` object. |
+| `entry not configured on this host` | The configuration has no such entry. |
+| `access not supported by this receiver` | `access` is absent or not `"read-only"`. |
+| `configured group absent` | The group does not exist. |
+| `configured path is not absolute and normalized`, `configured path is not in a credentials directory` | The configured `path`. |
+| `configured path is shared with another entry` | The `path`, or its directory, is the path or directory of another entry or of a `teams` destination. |
+| `credentials directory is not root:<group> 0750` | An existing `credentials` directory. |
+| `credential too large`, `empty credential`, `credential contains NUL`, `credential is not UTF-8` | The value. |
+| `no credential installed` | `status` with no file. |
 
 ## Connect a machine
 

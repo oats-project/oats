@@ -6,12 +6,14 @@
  * pre-workspace oats-getting-started bootstrap outside one, and drives the
  * memory session events. Inside an instance it also reports what the session
  * waits on a person for (an open dialog, a turn that failed) as the home's
- * waiting claim. Ambient skills coexist with the OATS-composed set.
+ * waiting claim, and records each turn's start and end for the home's status
+ * row. Ambient skills coexist with the OATS-composed set.
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { appendLogEntry, PACKAGED_SKILLS_DIR } from "./core-loader.mjs";
 import { reportFailedTurn } from "./failed-turn.mjs";
 import { reportUiPrompt } from "./ui-prompt.mjs";
+import { recordTurns } from "./turn-record.mjs";
 import { waitingClaim } from "./waiting-claim.mjs";
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -34,6 +36,7 @@ export default function (pi: ExtensionAPI) {
     const claim = waitingClaim(pi, agentHome!);
     reportFailedTurn(pi, claim);
     reportUiPrompt(pi, claim);
+    recordTurns(pi, agentHome!);
 
     pi.on("session_compact", async (event) => {
       if (!existsSync(join(agentHome!, "STATE.md"))) return;

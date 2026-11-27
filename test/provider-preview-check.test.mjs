@@ -11,6 +11,7 @@ import { writeLock } from "../lib/packages.mjs";
 import { contentDigest } from "../lib/remote.mjs";
 import { git } from "./helpers/v2-deployment.mjs";
 import { FAKE_CAPABILITY, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
+import { previewWarningsOf } from "../packages/client/capability-warnings-contract.mjs";
 
 const CHECKED = fakeManifest({ fake: fakeProvider({ check: true }) });
 const REFUSES = { check: { result: { status: "unavailable", problems: [{ code: "E_BACKEND_SANDBOXED_MODE", message: "this provider launches only in full mode, and this launch would be sandboxed" }] } } };
@@ -184,4 +185,77 @@ test("a launch preview refuses what the start refuses of the allowances' paths: 
   assert.deepEqual([fx.verbs(), readdirSync(join(fx.dep, "elsewhere"))], [[], []], "nothing was asked, and nothing made through the link");
   const started = fx.cli(["session", "start", "--home", home, "--json"]).json();
   assert.deepEqual([started.ok, started.error.code], [false, "E_BACKEND_SANDBOX_HOST"], JSON.stringify(started));
+});
+
+// Feature launch-model-and-check-warnings (test/provider-launch-model.test.mjs has the spawn's, the
+// start's and the restart's side).
+const WARNS = [{ code: "session-provider-pi-model-unchecked", message: "the model's provider is not one this check can resolve: it is checked at the launch" }, { code: "second", message: "a second thing" }];
+const relayed = (w) => `acme.fake's session provider fake (check) warns ${w.code}: ${w.message}`;
+
+test("a spawn preview's check is handed the model the spawn names and no model key when it names none; a refusal on the model fails the preview, as the spawn", (t) => {
+  const fx = packagedProvider(t);
+  const bare = preview(fx);
+  assert.equal(bare.status, 0, bare.stderr);
+  assert.equal(Object.hasOwn(fx.verbs("check")[0].request.input.launch, "model"), false, "none named: no key, never null or an empty string");
+  assert.equal(bare.json().result.model, null);
+  fx.clearCalls();
+  const named = preview(fx, ["--model", "opus"]);
+  assert.equal(named.status, 0, named.stderr);
+  const { launch } = fx.verbs("check")[0].request.input;
+  assert.equal(launch.model, named.json().result.model, "the model the preview answers, which the spawn launches with");
+  assert.ok(typeof launch.model === "string" && launch.model.length > 0);
+  // The spawn it previews asks with the same model.
+  fx.clearCalls();
+  const spawned = fx.cli(["spawn", "dev", "--name", "seat", "--backend", "fake", "--launch-config", "claude", "--model", "opus", "--json"]).json();
+  assert.equal(spawned.ok, true, JSON.stringify(spawned));
+  assert.deepEqual([fx.verbs("check")[0].request.input.launch.model, fx.verbs("launch")[0].request.input.model], [launch.model, launch.model]);
+
+  // A provider that cannot resolve it refuses in the preview, with the spawn's code; nothing is created.
+  fx.control({ check: { refuseModel: launch.model } });
+  fx.clearCalls();
+  const refused = fx.cli(["spawn", "dev", "--name", "other", "--backend", "fake", "--launch-config", "claude", "--model", "opus", "--preview", "--json"]);
+  assert.equal(refused.status, 1);
+  assert.deepEqual([refused.json().ok, refused.json().error.code], [false, "E_BACKEND_LAUNCH_ARG"], refused.stdout);
+  assert.match(refused.json().error.message, /other would not be launched: .*cannot resolve the model .*; nothing was created$/);
+  assert.equal(existsSync(join(fx.root, "dev", "instances", "other")), false);
+  // With no model named it has nothing to refuse.
+  assert.equal(fx.cli(["spawn", "dev", "--name", "other", "--backend", "fake", "--launch-config", "claude", "--preview", "--json"]).status, 0);
+});
+
+test("a ready check's warnings are in the spawn preview's warnings, verbatim and tagged, as strings a client shows; a launch preview has them too", async (t) => {
+  const fx = packagedProvider(t);
+  fx.control({ check: { result: { status: "ready", problems: [], warnings: WARNS } } });
+  const previewed = preview(fx);
+  assert.equal(previewed.status, 0, previewed.stderr);
+  const doc = previewed.json();
+  assert.deepEqual([doc.ok, doc.result.preflight.status], [true, "complete"]);
+  assert.deepEqual(doc.result.warnings, WARNS.map(relayed));
+  // An older reader: the clients' reader of a preview's warnings (which drops an entry that is no
+  // string) keeps each, with its text.
+  assert.deepEqual(previewWarningsOf(doc.result.warnings), WARNS.map(relayed));
+  nothingCreated(fx);
+  // The preview a person reads prints them.
+  const text = fx.cli(["spawn", "dev", "--name", "seat", "--backend", "fake", "--launch-config", "claude", "--preview"]);
+  assert.equal(text.status, 0, text.stderr);
+  for (const w of WARNS) assert.ok(`${text.stdout}${text.stderr}`.includes(relayed(w)), text.stdout);
+
+  // The spawn that preview decided, applied as a client applies it (bound to the decision, with a
+  // key): its answer carries the same lines, within what the clients' reader of a creation receipt
+  // takes of `warnings` (packages/client/spawn-apply-contract.mjs spawnCreationReceipt: at most 512
+  // strings of at most 4096 characters). That reader itself cannot be run on this answer: its
+  // decision is a tmux spawn's only (spawn-decision.mjs spawnEffective), so it reads no spawn on a
+  // session provider, with or without a warning.
+  const applied = fx.cli(["spawn", "dev", "--name", "seat", "--backend", "fake", "--launch-config", "claude", "--expect-decision", doc.result.decision.revision, "--idempotency-key", "a".repeat(64), "--json"]).json();
+  assert.equal(applied.ok, true, JSON.stringify(applied).slice(0, 600));
+  assert.deepEqual(applied.result.warnings, WARNS.map(relayed), "the apply's answer");
+  assert.ok(applied.result.warnings.length <= 512 && applied.result.warnings.every((w) => typeof w === "string" && w.length <= 4096));
+  const home = applied.result.home;
+
+  // A launch's preview (of a stopped home) says what its start will say.
+  await fx.inEnv(() => stopInstanceSession(home, {}));
+  const launch = fx.cli(["launch-config", "preview", "--home", home, "--json"]).json();
+  assert.deepEqual([launch.ok, launch.result.ok], [true, true], JSON.stringify(launch).slice(0, 600));
+  assert.deepEqual(launch.result.warnings.filter((w) => w.includes("(check) warns")), WARNS.map(relayed));
+  const started = fx.cli(["session", "start", "--home", home, "--json"]).json();
+  assert.deepEqual(started.result.warnings.filter((w) => w.includes("(check) warns")), WARNS.map(relayed));
 });

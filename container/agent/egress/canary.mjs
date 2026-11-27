@@ -19,6 +19,24 @@ export async function tcpReachable(address, port, { payload = false, timeoutMs =
   });
 }
 
+/** Tri-state TCP control for split-host negatives. A refusal, an unreachable
+ * host or network, or no answer inside the deadline is DENIED; every other
+ * socket error is reported, never read as a denial. */
+export async function tcpClassify(address, port, { timeoutMs = 3000 } = {}) {
+  const { createConnection, isIP } = await import("node:net");
+  if (isIP(address) !== 4 || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error("invalid probe endpoint");
+  return new Promise(resolve => {
+    let ended = false;
+    const socket = createConnection({ host:address, port });
+    const finish = result => { if (!ended) { ended = true; socket.destroy(); resolve(result); } };
+    socket.setTimeout(timeoutMs, () => finish("DENIED"));
+    socket.once("connect", () => finish("CONNECTED"));
+    socket.once("error", error => finish(["ECONNREFUSED","EHOSTUNREACH","ENETUNREACH"].includes(error.code) ? "DENIED"
+      : "ERROR " + (/^[A-Z0-9_]{1,64}$/.test(error.code ?? "") ? error.code : "UNKNOWN")));
+  });
+}
+const classifyLine = /^(?:CONNECTED|DENIED|ERROR [A-Z0-9_]{1,64})$/;
+
 export async function serveCanary(address, probeAddress = address) {
   const { createServer } = await import("node:net");
   const onConnection = socket => {
@@ -45,6 +63,7 @@ export async function serveCanary(address, probeAddress = address) {
 }
 
 export const tcpProgram = `const tcpReachable=(${tcpReachable.toString()});const ok=await tcpReachable(process.argv[1],Number(process.argv[2]),{payload:process.argv[3]==="canary"});process.stdout.write(ok?"CONNECTED\\n":"DENIED\\n");`;
+export const classifyProgram = `const tcpClassify=(${tcpClassify.toString()});process.stdout.write(await tcpClassify(process.argv[1],Number(process.argv[2]))+"\\n");`;
 
 function dockerResult(args) {
   try { return spawnSync("docker", args, { encoding:"utf8", timeout:45000, maxBuffer:1024*1024 }); }
@@ -55,6 +74,16 @@ export function docker(args) {
   const result = dockerResult(args);
   assert.ok(completed(result), "Docker boundary operation failed (output withheld)");
   return result.stdout;
+}
+
+/** One stderr receipt line per attempt, plus a leftover or unowned line when
+ * absence was not verified. `label` names the calling check. */
+export function reportReceipt(receipt, unowned, label = "egress boundary") {
+  process.stderr.write(label+" receipt: "+JSON.stringify(receipt)+"\n");
+  if (!receipt.absentVerified) {
+    const classification=receipt.created && !unowned ? "leftover" : "unowned or unverified";
+    process.stderr.write(label+" "+classification+": "+receipt.name+"\n");
+  }
 }
 
 const safeName = value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value);
@@ -121,16 +150,25 @@ function releaseContainer(attempt) {
   return failure;
 }
 
-export function tcpFromNetwork({ image, network, address, port, payload = false, namePrefix }) {
-  let attempt, reachable, failure;
+/** Local mode returns `{reachable,receipt}`. Classify mode returns
+ * `{result,receipt}`, where result is exactly CONNECTED, DENIED or
+ * `ERROR <code>`; any other output, a non-zero exit or an unconfirmed cleanup
+ * throws with the receipt. */
+export function tcpFromNetwork({ image, network, address, port, payload = false, classify = false, namePrefix }) {
+  let attempt, reachable, result, failure;
   try {
     assert.ok(safeName(network), "control network name is invalid");
+    assert.ok(!(classify && payload), "classify mode takes no payload");
     attempt=ownedContainer({image,network,namePrefix},"oats-egress-tcp-");
-    reachable=startContainer(attempt,"--rm",["--input-type=module","-e",tcpProgram,address,String(port),payload ? "canary" : "tcp"]).trim() === "CONNECTED";
+    if (classify) {
+      const output=startContainer(attempt,"--rm",["--input-type=module","-e",classifyProgram,address,String(port)]);
+      assert.ok(output.endsWith("\n") && classifyLine.test(output.slice(0,-1)),"TCP classify control returned unexpected output");
+      result=output.slice(0,-1);
+    } else reachable=startContainer(attempt,"--rm",["--input-type=module","-e",tcpProgram,address,String(port),payload ? "canary" : "tcp"]).trim() === "CONNECTED";
   } catch (error) { failure=error; }
   const cleanup=attempt && releaseContainer(attempt);
   if (failure || cleanup) throw withReceipts(failure || cleanup,attempt ? [attempt.receipt] : [],cleanup);
-  return {reachable,receipt:attempt.receipt};
+  return classify ? {result,receipt:attempt.receipt} : {reachable,receipt:attempt.receipt};
 }
 
 export async function withGatewayCanary({ image, controlNetwork, gatewayAddress, controlAddress = gatewayAddress, expectedProbeHits = 0, namePrefix }, run) {
